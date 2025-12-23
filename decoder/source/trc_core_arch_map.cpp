@@ -65,6 +65,7 @@ static ap_map_elem_t ap_map_array[] =
     { "Cortex-R5", { ARCH_V7, profile_CortexR } },
     { "Cortex-R4", { ARCH_V7, profile_CortexR } },
     { "Cortex-M33", { ARCH_V8, profile_CortexM } },
+    { "Cortex-M55", { ARCH_V8, profile_CortexM } },
     { "Cortex-M23", { ARCH_V8, profile_CortexM } },
     { "Cortex-M0", { ARCH_V7, profile_CortexM } },
     { "Cortex-M0+", { ARCH_V7, profile_CortexM } },

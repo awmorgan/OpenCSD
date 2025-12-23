@@ -51,23 +51,25 @@ SNAPSHOT_DIR=./snapshots
 BIN_DIR=./bin/linux64/rel/
 
 # directories for tests using full decode
-declare -a test_dirs_decode=( "juno-ret-stck"
+declare -a test_dirs_decode=( 
+                              "Snowball"
+                              "TC2"
                               "a57_single_step"
+                              "armv8_1m_branches"
                               "bugfix-exact-match"
+                              "itm_only_csformat"                              
+                              "itm_only_raw"
+                              "juno-ret-stck"
                               "juno-uname-001"
                               "juno-uname-002"
                               "juno_r1_1"
-                              "tc2-ptm-rstk-t32"
-                              "trace_cov_a15"
+                              "stm-issue-27"
                               "stm_only"
                               "stm_only-2"
                               "stm_only-juno"
-                              "stm-issue-27"
-                              "TC2"
-                              "Snowball"
+                              "tc2-ptm-rstk-t32"
                               "test-file-mem-offsets"
-                              "itm_only_raw"
-                              "itm_only_csformat"                              
+                              "trace_cov_a15"
                             )
 
 
