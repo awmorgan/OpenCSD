@@ -33,6 +33,7 @@
 * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <new>
 #include "common/ocsd_gen_elem_stack.h"
 
 OcsdGenElemStack::OcsdGenElemStack() :

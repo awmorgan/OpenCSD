@@ -32,6 +32,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */ 
 
+#include <new>
 #include "common/trc_component.h"
 
 class errLogAttachMonitor : public IComponentAttachNotifier

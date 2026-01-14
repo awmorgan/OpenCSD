@@ -33,6 +33,7 @@
  */ 
 
 #include <cstring>
+#include <new>
 
 /* pull in the C++ decode library */
 #include "opencsd.h"
@@ -44,7 +45,6 @@
 /** MSVC2010 unwanted export workaround */
 #ifdef WIN32
 #if (_MSC_VER == 1600)
-#include <new>
 namespace std { const nothrow_t nothrow = nothrow_t(); }
 #endif
 #endif

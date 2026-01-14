@@ -37,6 +37,7 @@
 
 //#include <iostream>
 #include <sstream>
+#include <new>
 
 ocsdDefaultErrorLogger::ocsdDefaultErrorLogger() :
     m_Verbosity(OCSD_ERR_SEV_ERROR),

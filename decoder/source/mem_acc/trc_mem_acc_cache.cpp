@@ -35,6 +35,7 @@
 #include <cstring>
 #include <sstream>
 #include <iomanip>
+#include <new>
 #include "mem_acc/trc_mem_acc_cache.h"
 #include "mem_acc/trc_mem_acc_base.h"
 #include "interfaces/trc_error_log_i.h"

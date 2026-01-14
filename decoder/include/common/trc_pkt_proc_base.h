@@ -36,6 +36,8 @@
 #ifndef ARM_TRC_PKT_PROC_BASE_H_INCLUDED
 #define ARM_TRC_PKT_PROC_BASE_H_INCLUDED
 
+#include <new>
+
 #include "interfaces/trc_data_raw_in_i.h"
 #include "interfaces/trc_pkt_in_i.h"
 #include "interfaces/trc_pkt_raw_in_i.h"

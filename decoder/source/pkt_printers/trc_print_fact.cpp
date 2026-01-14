@@ -33,6 +33,7 @@
 * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <new>
 #include "pkt_printers/trc_print_fact.h"
 
 RawFramePrinter * PktPrinterFact::createRawFramePrinter(std::vector<ItemPrinter *> &printer_list, ocsdMsgLogger *pMsgLogger /*= 0*/)

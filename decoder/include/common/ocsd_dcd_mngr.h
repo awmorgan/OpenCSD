@@ -35,6 +35,8 @@
 #ifndef ARM_OCSD_DCD_MNGR_H_INCLUDED
 #define ARM_OCSD_DCD_MNGR_H_INCLUDED
 
+#include <new>
+
 #include "opencsd/ocsd_if_types.h"
 #include "common/ocsd_dcd_mngr_i.h"
 #include "common/ocsd_lib_dcd_register.h"

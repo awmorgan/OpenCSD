@@ -40,6 +40,7 @@
 
 #include <sstream>
 #include <iomanip>
+#include <new>
 
  /** Accessor Creation */
 ocsd_err_t TrcMemAccFactory::CreateBufferAccessor(TrcMemAccessorBase **pAccessor, const ocsd_vaddr_t s_address, const uint8_t *p_buffer, const uint32_t size)

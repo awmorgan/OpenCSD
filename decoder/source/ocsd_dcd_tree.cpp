@@ -33,6 +33,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */ 
 
+#include <new>
 #include "common/ocsd_dcd_tree.h"
 #include "common/ocsd_lib_dcd_register.h"
 #include "mem_acc/trc_mem_acc_mapper.h"

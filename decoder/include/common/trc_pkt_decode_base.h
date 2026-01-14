@@ -35,6 +35,8 @@
 #ifndef ARM_TRC_PKT_DECODE_BASE_H_INCLUDED
 #define ARM_TRC_PKT_DECODE_BASE_H_INCLUDED
 
+#include <new>
+
 #include "trc_component.h"
 #include "comp_attach_pt_t.h"
 

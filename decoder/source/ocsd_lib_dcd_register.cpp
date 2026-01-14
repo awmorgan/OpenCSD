@@ -32,6 +32,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */ 
 
+#include <new>
 #include "common/ocsd_lib_dcd_register.h"
 
 // include built-in decode manager headers

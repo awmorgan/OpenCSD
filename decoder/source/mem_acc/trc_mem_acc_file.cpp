@@ -35,6 +35,7 @@
 
 #include <sstream>
 #include <iomanip>
+#include <new>
 
 /***************************************************/
 /* protected construction and reference counting   */

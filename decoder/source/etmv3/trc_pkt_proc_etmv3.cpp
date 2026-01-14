@@ -33,6 +33,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */ 
 
+#include <new>
 #include "opencsd/etmv3/trc_pkt_proc_etmv3.h"
 #include "trc_pkt_proc_etmv3_impl.h"
 #include "common/ocsd_error.h"

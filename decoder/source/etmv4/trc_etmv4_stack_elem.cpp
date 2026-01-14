@@ -33,6 +33,7 @@
 * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <new>
 #include "opencsd/etmv4/trc_etmv4_stack_elem.h"
 
 /* implementation of P0 element stack in ETM v4 trace*/

@@ -33,6 +33,7 @@
  */ 
 
 /* pull in the C++ decode library */
+#include <new>
 #include "opencsd.h"
 
 #include "opencsd/c_api/opencsd_c_api.h"

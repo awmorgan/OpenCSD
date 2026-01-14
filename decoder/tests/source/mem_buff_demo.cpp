@@ -43,6 +43,7 @@
 #include <iostream>
 #include <sstream>
 #include <cstring>
+#include <new>
 
 #include "opencsd.h"              // the library
 
