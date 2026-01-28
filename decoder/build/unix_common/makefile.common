@@ -137,7 +137,11 @@ install_man:
 ################################
 # build  OpenCSD trace decode library
 #
+ifdef DISABLE_SHARED_LIBS
+$(LIB_BASE_NAME)_lib: $(LIB_TARGET_DIR)/lib$(LIB_BASE_NAME).a
+else
 $(LIB_BASE_NAME)_lib: $(LIB_TARGET_DIR)/lib$(LIB_BASE_NAME).a $(LIB_TARGET_DIR)/lib$(LIB_BASE_NAME).$(SHARED_LIB_SUFFIX)
+endif
 
 $(LIB_TARGET_DIR)/lib$(LIB_BASE_NAME).$(SHARED_LIB_SUFFIX): $(LIB_BASE_NAME)_all
 $(LIB_TARGET_DIR)/lib$(LIB_BASE_NAME).a: $(LIB_BASE_NAME)_all
@@ -150,7 +154,11 @@ $(LIB_BASE_NAME)_all:
 ################################
 # build OpenCSD trace decode C API library 
 #
+ifdef DISABLE_SHARED_LIBS
+$(LIB_CAPI_NAME)_lib: $(LIB_TARGET_DIR)/lib$(LIB_CAPI_NAME).a
+else
 $(LIB_CAPI_NAME)_lib: $(LIB_TARGET_DIR)/lib$(LIB_CAPI_NAME).a $(LIB_TARGET_DIR)/lib$(LIB_CAPI_NAME).$(SHARED_LIB_SUFFIX)
+endif
 
 $(LIB_TARGET_DIR)/lib$(LIB_CAPI_NAME).$(SHARED_LIB_SUFFIX): $(LIB_CAPI_NAME)_all
 $(LIB_TARGET_DIR)/lib$(LIB_CAPI_NAME).a:  $(LIB_CAPI_NAME)_all

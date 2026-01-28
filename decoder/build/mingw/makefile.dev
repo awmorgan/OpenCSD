@@ -1,0 +1,40 @@
+
+
+## Set up some additional parameters for development environment builds. ##
+
+## define arch/build sub-dirs for non installed dev builds
+ifndef ARCH
+ARCH := $(shell gcc -dumpmachine | sed 's/-.*//g' || echo x86_64)
+endif
+
+# platform bit size variant
+ifeq ($(ARCH),i686)
+   MFLAG:="-m32"
+   BIT_VARIANT=32
+else ifeq ($(ARCH),x86_64)
+   MFLAG:="-m64"
+   BIT_VARIANT=64
+else ifeq ($(ARCH),aarch64)
+   MFLAG:=
+   BIT_VARIANT=-arm64
+else
+   MFLAG:=
+   BIT_VARIANT=
+endif
+
+CXXFLAGS += $(MFLAG)
+CFLAGS += $(MFLAG)
+LDFLAGS += $(MFLAG)
+
+ifdef GCCDIR
+GCCVER:= $(shell $(CROSS_COMPILE)gcc -dumpversion | sed 's/\([0-9]*\.[0-9]*\).*/\1/')
+PLAT_DIR=builddir/mingw$(BIT_VARIANT)/GCC_$(GCCVER)
+else
+PLAT_DIR=mingw$(BIT_VARIANT)/$(BUILD_VARIANT)
+endif
+
+# for dev env, enable static link build test
+export TEST_STATIC_LINKING=1
+
+# include the main makefile
+include makefile

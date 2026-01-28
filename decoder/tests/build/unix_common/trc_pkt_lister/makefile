@@ -74,8 +74,12 @@ build_dir:
 ifdef TEST_STATIC_LINKING
 copy_libs: $(BIN_TEST_TARGET_DIR)/$(PROG_S) 
 endif
+ifdef DISABLE_SHARED_LIBS
 copy_libs: $(BIN_TEST_TARGET_DIR)/$(PROG)
-	cp $(LIB_TARGET_DIR)/*.$(SHARED_LIB_SUFFIX)* $(BIN_TEST_TARGET_DIR)/.
+else
+copy_libs: $(BIN_TEST_TARGET_DIR)/$(PROG)
+	-cp $(LIB_TARGET_DIR)/*.$(SHARED_LIB_SUFFIX)* $(BIN_TEST_TARGET_DIR)/.
+endif
 
 
 
