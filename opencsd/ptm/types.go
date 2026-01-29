@@ -6,13 +6,16 @@ import "fmt"
 type PacketType int
 
 const (
-	PacketTypeUnknown    PacketType = iota
-	PacketTypeASYNC                 // A-Sync packet (0x00 x5 + 0x80)
-	PacketTypeISYNC                 // I-Sync packet
-	PacketTypeATOM                  // Atom packet
-	PacketTypeBranchAddr            // Branch address packet
-	PacketTypeTimestamp             // Timestamp packet
-	PacketTypeWaypoint              // Waypoint update packet
+	PacketTypeUnknown         PacketType = iota
+	PacketTypeASYNC                      // A-Sync packet (0x00 x5 + 0x80)
+	PacketTypeISYNC                      // I-Sync packet
+	PacketTypeATOM                       // Atom packet
+	PacketTypeBranchAddr                 // Branch address packet
+	PacketTypeTimestamp                  // Timestamp packet
+	PacketTypeWaypoint                   // Waypoint update packet
+	PacketTypeContextID                  // Context ID packet (0x6E)
+	PacketTypeVMID                       // VMID packet (0x3C)
+	PacketTypeExceptionReturn            // Exception return packet (0x76)
 )
 
 func (t PacketType) String() string {
@@ -29,6 +32,12 @@ func (t PacketType) String() string {
 		return "TIMESTAMP"
 	case PacketTypeWaypoint:
 		return "WAYPOINT"
+	case PacketTypeContextID:
+		return "CONTEXT_ID"
+	case PacketTypeVMID:
+		return "VMID"
+	case PacketTypeExceptionReturn:
+		return "EXCEPTION_RETURN"
 	default:
 		return "UNKNOWN"
 	}
@@ -81,6 +90,7 @@ type Packet struct {
 	Hypervisor  bool
 	ContextID   uint32
 	CycleCount  uint32
+	VMID        uint8
 
 	// Atom specific fields
 	AtomBits  uint8 // E/N pattern
@@ -105,6 +115,12 @@ func (p *Packet) Description() string {
 		return fmt.Sprintf("Atom packet; %s", atomPattern(p.AtomBits, p.AtomCount))
 	case PacketTypeTimestamp:
 		return fmt.Sprintf("Timestamp packet; TS=0x%x", p.Timestamp)
+	case PacketTypeContextID:
+		return fmt.Sprintf("Context ID packet; CtxtID=0x%08x", p.ContextID)
+	case PacketTypeVMID:
+		return fmt.Sprintf("VMID packet; VMID=0x%02x", p.VMID)
+	case PacketTypeExceptionReturn:
+		return "Exception Return packet"
 	default:
 		return "Unknown packet type"
 	}
@@ -214,6 +230,21 @@ func (d *Decoder) parseNextPacket(buf []byte) (Packet, int, error) {
 		return d.parseBranchAddress(buf)
 	}
 
+	// Context ID: header = 0x6E
+	if header == 0x6E {
+		return d.parseContextID(buf)
+	}
+
+	// VMID: header = 0x3C
+	if header == 0x3C {
+		return d.parseVMID(buf)
+	}
+
+	// Exception Return: header = 0x76
+	if header == 0x76 {
+		return d.parseExceptionReturn(buf)
+	}
+
 	// Unknown packet - consume one byte and continue
 	return Packet{
 		Type: PacketTypeUnknown,
@@ -283,12 +314,12 @@ func (d *Decoder) parseTimestamp(buf []byte) (Packet, int, error) {
 	maxBytes := 9 // Maximum 9 bytes for full 56-bit timestamp (7 bits per byte), index 1-9
 	for size < len(buf) && size-1 < maxBytes {
 		currByte := buf[size]
-		
+
 		// Extract 7 bits (bits 6:0)
 		tsVal |= uint64(currByte&0x7F) << shift
 		shift += 7
 		size++
-		
+
 		// Check continuation bit (bit 7)
 		if (currByte & 0x80) == 0 {
 			// No continuation - we have the complete timestamp
@@ -393,4 +424,83 @@ func (d *Decoder) parseBranchAddress(buf []byte) (Packet, int, error) {
 	// TODO: Extract actual address value and exception info
 
 	return pkt, size, nil
+}
+
+// parseContextID parses a Context ID packet (header 0x6E)
+// Context ID packets have variable length based on configuration:
+// - Header byte (0x6E)
+// - 0-4 bytes of context ID data (depends on configuration)
+// For now, we parse up to 4 bytes to handle the maximum size
+func (d *Decoder) parseContextID(buf []byte) (Packet, int, error) {
+	// Minimum: just header (if ContextID size is 0)
+	// Maximum: header + 4 bytes
+	if len(buf) < 1 {
+		return Packet{Type: PacketTypeUnknown, Data: buf[0:1]}, 1, nil
+	}
+
+	pkt := Packet{Type: PacketTypeContextID}
+
+	// For simplicity, we'll try to read up to 4 bytes of context ID
+	// In a full implementation, this should be based on the PTM configuration
+	// For now, we read what's available up to 4 bytes
+	size := 1
+	ctxtID := uint32(0)
+	numBytes := 0
+
+	// Try to read up to 4 context ID bytes
+	for size < len(buf) && numBytes < 4 {
+		// Read context ID bytes (little endian)
+		ctxtID |= uint32(buf[size]) << (numBytes * 8)
+		size++
+		numBytes++
+
+		// Check if this looks like the start of another packet
+		// We use a simple heuristic: if we've read at least 1 byte and
+		// the next byte looks like a packet header, we stop
+		if size < len(buf) && numBytes >= 1 {
+			nextByte := buf[size]
+			// Common packet headers: 0x00, 0x08, 0x42, 0x46, 0x6E, 0x3C, 0x76, 0x0C, 0x66
+			// or high bit set for atoms/branches
+			if nextByte == 0x00 || nextByte == 0x08 || nextByte == 0x42 ||
+				nextByte == 0x46 || nextByte == 0x6E || nextByte == 0x3C ||
+				nextByte == 0x76 || nextByte == 0x0C || nextByte == 0x66 {
+				break
+			}
+		}
+	}
+
+	pkt.ContextID = ctxtID
+	pkt.Data = buf[0:size]
+
+	return pkt, size, nil
+}
+
+// parseVMID parses a VMID packet (header 0x3C)
+// VMID packets have a fixed format:
+// - Header byte (0x3C)
+// - 1 payload byte containing the VMID value
+func (d *Decoder) parseVMID(buf []byte) (Packet, int, error) {
+	if len(buf) < 2 {
+		return Packet{Type: PacketTypeUnknown, Data: buf[0:1]}, 1, nil
+	}
+
+	pkt := Packet{
+		Type: PacketTypeVMID,
+		VMID: buf[1],
+		Data: buf[0:2],
+	}
+
+	return pkt, 2, nil
+}
+
+// parseExceptionReturn parses an Exception Return packet (header 0x76)
+// Exception Return packets have a fixed format:
+// - Header byte (0x76) only, no payload
+func (d *Decoder) parseExceptionReturn(buf []byte) (Packet, int, error) {
+	pkt := Packet{
+		Type: PacketTypeExceptionReturn,
+		Data: buf[0:1],
+	}
+
+	return pkt, 1, nil
 }

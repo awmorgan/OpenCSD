@@ -79,7 +79,7 @@ func TestPTMDecoder_FirstChunkFromSnapshot(t *testing.T) {
 	}
 
 	t.Logf("Parsed %d packets from %d bytes", len(packets), len(raw))
-	
+
 	// First packet should be A-Sync based on C++ output
 	if packets[0].Type != PacketTypeASYNC {
 		t.Errorf("expected first packet to be ASYNC, got %s", packets[0].Type)
@@ -253,7 +253,7 @@ func TestTC2_FileExists(t *testing.T) {
 	// Quick check that TC2 reference file exists
 	pplPath := filepath.Join(resultsPath, "TC2.ppl")
 	t.Logf("Looking for TC2.ppl at: %s", pplPath)
-	
+
 	info, err := os.Stat(pplPath)
 	if err != nil {
 		t.Fatalf("TC2.ppl not found: %v", err)
@@ -264,17 +264,17 @@ func TestTC2_FileExists(t *testing.T) {
 func TestTC2_TimestampPackets(t *testing.T) {
 	// Test against TC2 snapshot which contains Timestamp packets
 	// TC2 has PTM traces - check .ppl file for actual IDs
-	
+
 	// Load C++ reference output - first try to get all packets to see what IDs are present
 	pplPath := filepath.Join(resultsPath, "TC2.ppl")
 	t.Logf("Loading TC2 reference from: %s", pplPath)
-	
+
 	// Try with ID 13 (from the .ppl output "ID:13")
 	cppPackets, err := LoadCppReference(pplPath, 13)
 	if err != nil {
 		t.Fatalf("Failed to load TC2 reference: %v", err)
 	}
-	
+
 	t.Logf("Loaded %d packets for trace ID 13", len(cppPackets))
 
 	// Filter for TIMESTAMP packets only
@@ -296,11 +296,11 @@ func TestTC2_TimestampPackets(t *testing.T) {
 	if len(timestampPackets) < limit {
 		limit = len(timestampPackets)
 	}
-	
+
 	for i := 0; i < limit; i++ {
 		cpp := timestampPackets[i]
 		t.Logf("Timestamp packet %d raw data: %x", i, cpp.Bytes)
-		
+
 		// Parse the C++ reference bytes with our decoder
 		decoder := NewDecoder(0x13)
 		packets, err := decoder.Parse(cpp.Bytes)
@@ -332,3 +332,89 @@ func TestTC2_TimestampPackets(t *testing.T) {
 	}
 }
 
+func TestContextIDPacket(t *testing.T) {
+	// Context ID packet: header 0x6E + 4 bytes of context ID
+	// Example: 0x6E 0x12 0x34 0x56 0x78 = ContextID 0x78563412 (little endian)
+	raw := []byte{0x6E, 0x12, 0x34, 0x56, 0x78}
+
+	decoder := NewDecoder(0)
+	packets, _ := testParseSuccess(t, decoder, raw)
+
+	if len(packets) != 1 {
+		t.Fatalf("expected 1 packet, got %d", len(packets))
+	}
+
+	pkt := packets[0]
+	assertEqual(t, PacketTypeContextID, pkt.Type, "packet type")
+	assertEqual(t, uint32(0x78563412), pkt.ContextID, "context ID value")
+	t.Logf("ContextID packet: %s", pkt.Description())
+}
+
+func TestVMIDPacket(t *testing.T) {
+	// VMID packet: header 0x3C + 1 byte VMID value
+	// Example: 0x3C 0xAB = VMID 0xAB
+	raw := []byte{0x3C, 0xAB}
+
+	decoder := NewDecoder(0)
+	packets, _ := testParseSuccess(t, decoder, raw)
+
+	if len(packets) != 1 {
+		t.Fatalf("expected 1 packet, got %d", len(packets))
+	}
+
+	pkt := packets[0]
+	assertEqual(t, PacketTypeVMID, pkt.Type, "packet type")
+	assertEqual(t, uint8(0xAB), pkt.VMID, "VMID value")
+	t.Logf("VMID packet: %s", pkt.Description())
+}
+
+func TestExceptionReturnPacket(t *testing.T) {
+	// Exception Return packet: header 0x76 only (no payload)
+	raw := []byte{0x76}
+
+	decoder := NewDecoder(0)
+	packets, _ := testParseSuccess(t, decoder, raw)
+
+	if len(packets) != 1 {
+		t.Fatalf("expected 1 packet, got %d", len(packets))
+	}
+
+	pkt := packets[0]
+	assertEqual(t, PacketTypeExceptionReturn, pkt.Type, "packet type")
+	assertEqual(t, 1, len(pkt.Data), "packet data length")
+	t.Logf("Exception Return packet: %s", pkt.Description())
+}
+
+func TestMixedPackets_WithNewTypes(t *testing.T) {
+	// Test a sequence with new packet types mixed with existing ones
+	raw := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
+		0x6E, 0xAA, 0xBB, 0xCC, 0xDD, // ContextID
+		0x3C, 0x42, // VMID
+		0x76,       // Exception Return
+		0x42, 0x12, // Timestamp
+	}
+
+	decoder := NewDecoder(0)
+	packets, _ := testParseSuccess(t, decoder, raw)
+
+	if len(packets) != 5 {
+		t.Fatalf("expected 5 packets, got %d", len(packets))
+	}
+
+	// Check packet types in sequence
+	assertEqual(t, PacketTypeASYNC, packets[0].Type, "packet 0 type")
+	assertEqual(t, PacketTypeContextID, packets[1].Type, "packet 1 type")
+	assertEqual(t, PacketTypeVMID, packets[2].Type, "packet 2 type")
+	assertEqual(t, PacketTypeExceptionReturn, packets[3].Type, "packet 3 type")
+	assertEqual(t, PacketTypeTimestamp, packets[4].Type, "packet 4 type")
+
+	// Check specific values
+	assertEqual(t, uint32(0xDDCCBBAA), packets[1].ContextID, "context ID")
+	assertEqual(t, uint8(0x42), packets[2].VMID, "VMID")
+
+	// Log descriptions
+	for i, pkt := range packets {
+		t.Logf("Packet %d: %s", i, pkt.Description())
+	}
+}
