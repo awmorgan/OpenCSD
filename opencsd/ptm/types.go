@@ -140,29 +140,6 @@ func atomPattern(bits uint8, count uint8) string {
 	return pattern
 }
 
-// Decoder handles PTM trace decoding
-type Decoder struct {
-	TraceID        uint8                       // Trace source ID
-	Log            common.Logger               // Logger for errors and debug info
-	CurrentElement *common.GenericTraceElement // Current element being built
-}
-
-// NewDecoder creates a new PTM decoder for the given trace ID
-func NewDecoder(traceID uint8) *Decoder {
-	return &Decoder{
-		TraceID: traceID,
-		Log:     common.NewNoOpLogger(), // Default to no-op logger
-	}
-}
-
-// NewDecoderWithLogger creates a new PTM decoder with a custom logger
-func NewDecoderWithLogger(traceID uint8, logger common.Logger) *Decoder {
-	return &Decoder{
-		TraceID: traceID,
-		Log:     logger,
-	}
-}
-
 // Parse processes raw PTM trace data and returns packets
 func (d *Decoder) Parse(raw []byte) ([]Packet, error) {
 	if len(raw) == 0 {

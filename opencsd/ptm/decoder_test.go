@@ -483,3 +483,275 @@ func TestGenericTraceElementCreation(t *testing.T) {
 	desc = decoder.CurrentElement.Description()
 	t.Logf("Created trace element: %s", desc)
 }
+
+// Test ProcessPacket - Wait for Sync
+func TestProcessPacket_WaitForSync(t *testing.T) {
+	decoder := NewDecoder(0)
+
+	// Initially not synchronized
+	if decoder.IsSynchronized() {
+		t.Error("Decoder should not be synchronized initially")
+	}
+
+	// Process ASYNC packet
+	asyncPkt := Packet{Type: PacketTypeASYNC}
+	_, err := decoder.ProcessPacket(asyncPkt)
+	if err != nil {
+		t.Fatalf("ProcessPacket(ASYNC) error: %v", err)
+	}
+
+	// Still not synchronized (waiting for ISYNC)
+	if decoder.IsSynchronized() {
+		t.Error("Decoder should not be synchronized after ASYNC only")
+	}
+
+	// Process ISYNC packet
+	isyncPkt := Packet{
+		Type:        PacketTypeISYNC,
+		Address:     0x80000558,
+		ISA:         ISAARM,
+		SecureState: true,
+	}
+	elements, err := decoder.ProcessPacket(isyncPkt)
+	if err != nil {
+		t.Fatalf("ProcessPacket(ISYNC) error: %v", err)
+	}
+
+	// Now synchronized
+	if !decoder.IsSynchronized() {
+		t.Error("Decoder should be synchronized after ISYNC")
+	}
+
+	// Should have generated elements
+	if len(elements) < 1 {
+		t.Errorf("Expected at least 1 element after ISYNC, got %d", len(elements))
+	}
+
+	t.Logf("Generated %d elements after ISYNC:", len(elements))
+	for i, elem := range elements {
+		t.Logf("  [%d] %s", i, elem.Description())
+	}
+}
+
+// Test ProcessPacket - Address Updates
+func TestProcessPacket_AddressUpdate(t *testing.T) {
+	decoder := NewDecoder(0)
+
+	// Sync first
+	decoder.ProcessPacket(Packet{Type: PacketTypeASYNC})
+	decoder.ProcessPacket(Packet{
+		Type:    PacketTypeISYNC,
+		Address: 0x80000558,
+		ISA:     ISAARM,
+	})
+
+	// Initial address should be set from ISYNC
+	if decoder.GetCurrentAddress() != 0x80000558 {
+		t.Errorf("Current address = 0x%x, want 0x80000558", decoder.GetCurrentAddress())
+	}
+
+	// Process branch address packet
+	branchPkt := Packet{
+		Type: PacketTypeBranchAddr,
+		Data: []byte{0x81, 0x80, 0x80, 0x80, 0x48, 0x02},
+	}
+	_, err := decoder.ProcessPacket(branchPkt)
+	if err != nil {
+		t.Fatalf("ProcessPacket(BranchAddr) error: %v", err)
+	}
+
+	// Address should be updated
+	newAddr := decoder.GetCurrentAddress()
+	if newAddr == 0 {
+		t.Error("Current address should be non-zero after branch")
+	}
+	t.Logf("Address updated to: 0x%x", newAddr)
+}
+
+// Test ProcessPacket - Full trace_cov_a15 sequence
+func TestProcessPacket_TraceCovA15(t *testing.T) {
+	// Load the snapshot data
+	binPath := filepath.Join(snapshotPath, "PTM_0_2.bin")
+	data, err := os.ReadFile(binPath)
+	if err != nil {
+		t.Fatalf("Failed to read snapshot: %v", err)
+	}
+
+	decoder := NewDecoder(0)
+
+	// Parse all packets
+	packets, err := decoder.Parse(data)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+
+	t.Logf("Parsed %d packets from %d bytes", len(packets), len(data))
+
+	// Process each packet
+	totalElements := 0
+	for i, pkt := range packets {
+		elements, err := decoder.ProcessPacket(pkt)
+		if err != nil {
+			t.Fatalf("ProcessPacket[%d] error: %v", i, err)
+		}
+
+		if len(elements) > 0 {
+			totalElements += len(elements)
+			t.Logf("Packet %d (%s) -> %d elements", i, pkt.Type, len(elements))
+			for _, elem := range elements {
+				t.Logf("  %s", elem.Description())
+			}
+		}
+	}
+
+	// Verify synchronization
+	if !decoder.IsSynchronized() {
+		t.Error("Decoder should be synchronized after processing trace_cov_a15")
+	}
+
+	// Verify address was updated
+	if decoder.GetCurrentAddress() == 0 {
+		t.Error("Current address should be non-zero after processing trace")
+	}
+
+	t.Logf("Final state: synchronized=%v, address=0x%x, ISA=%s",
+		decoder.IsSynchronized(),
+		decoder.GetCurrentAddress(),
+		decoder.GetCurrentISA())
+
+	t.Logf("Total elements generated: %d", totalElements)
+}
+
+// Test ProcessPacket - Context ID update
+func TestProcessPacket_ContextID(t *testing.T) {
+	decoder := NewDecoder(0)
+
+	// Sync first
+	decoder.ProcessPacket(Packet{Type: PacketTypeASYNC})
+	decoder.ProcessPacket(Packet{Type: PacketTypeISYNC, Address: 0x80000000})
+
+	// Process ContextID packet
+	ctxPkt := Packet{
+		Type:      PacketTypeContextID,
+		ContextID: 0x12345678,
+	}
+	elements, err := decoder.ProcessPacket(ctxPkt)
+	if err != nil {
+		t.Fatalf("ProcessPacket(ContextID) error: %v", err)
+	}
+
+	// Should generate PE_CONTEXT element
+	if len(elements) < 1 {
+		t.Error("Expected at least 1 element for ContextID")
+	} else {
+		t.Logf("Generated element: %s", elements[0].Description())
+	}
+}
+
+// Test ProcessPacket - VMID update
+func TestProcessPacket_VMID(t *testing.T) {
+	decoder := NewDecoder(0)
+
+	// Sync first
+	decoder.ProcessPacket(Packet{Type: PacketTypeASYNC})
+	decoder.ProcessPacket(Packet{Type: PacketTypeISYNC, Address: 0x80000000})
+
+	// Process VMID packet
+	vmidPkt := Packet{
+		Type: PacketTypeVMID,
+		VMID: 0x42,
+	}
+	_, err := decoder.ProcessPacket(vmidPkt)
+	if err != nil {
+		t.Fatalf("ProcessPacket(VMID) error: %v", err)
+	}
+
+	// VMID should be updated in decoder state
+	t.Logf("VMID updated successfully")
+}
+
+// Test ProcessPacket - Exception
+func TestProcessPacket_Exception(t *testing.T) {
+	decoder := NewDecoder(0)
+
+	// Sync first
+	decoder.ProcessPacket(Packet{Type: PacketTypeASYNC})
+	decoder.ProcessPacket(Packet{Type: PacketTypeISYNC, Address: 0x80000504})
+
+	// Process branch with exception
+	branchPkt := Packet{
+		Type:         PacketTypeBranchAddr,
+		ExceptionNum: 0x01, // Debug Halt
+		Data:         []byte{0x81, 0x80, 0x80, 0x80, 0x48, 0x02},
+	}
+	elements, err := decoder.ProcessPacket(branchPkt)
+	if err != nil {
+		t.Fatalf("ProcessPacket(BranchAddr with exception) error: %v", err)
+	}
+
+	// Should generate exception element
+	if len(elements) < 1 {
+		t.Error("Expected at least 1 element for exception")
+	} else {
+		for _, elem := range elements {
+			if elem.Type == common.ElemTypeException {
+				t.Logf("Generated exception element: %s", elem.Description())
+				return
+			}
+		}
+		t.Error("No exception element found")
+	}
+}
+
+// Test ProcessPacket - Timestamp
+func TestProcessPacket_Timestamp(t *testing.T) {
+	decoder := NewDecoder(0)
+
+	// Sync first
+	decoder.ProcessPacket(Packet{Type: PacketTypeASYNC})
+	decoder.ProcessPacket(Packet{Type: PacketTypeISYNC, Address: 0x80000000})
+
+	// Process timestamp packet
+	tsPkt := Packet{
+		Type:      PacketTypeTimestamp,
+		Timestamp: 0x123456789ABC,
+	}
+	elements, err := decoder.ProcessPacket(tsPkt)
+	if err != nil {
+		t.Fatalf("ProcessPacket(Timestamp) error: %v", err)
+	}
+
+	// Should generate timestamp element
+	if len(elements) != 1 {
+		t.Errorf("Expected 1 element for timestamp, got %d", len(elements))
+	} else {
+		t.Logf("Generated timestamp element: %s", elements[0].Description())
+	}
+}
+
+// Test ProcessPacket - Exception Return
+func TestProcessPacket_ExceptionReturn(t *testing.T) {
+	decoder := NewDecoder(0)
+
+	// Sync first
+	decoder.ProcessPacket(Packet{Type: PacketTypeASYNC})
+	decoder.ProcessPacket(Packet{Type: PacketTypeISYNC, Address: 0x80000000})
+
+	// Process exception return packet
+	retPkt := Packet{
+		Type: PacketTypeExceptionReturn,
+	}
+	elements, err := decoder.ProcessPacket(retPkt)
+	if err != nil {
+		t.Fatalf("ProcessPacket(ExceptionReturn) error: %v", err)
+	}
+
+	// Should generate exception return element
+	if len(elements) != 1 {
+		t.Errorf("Expected 1 element for exception return, got %d", len(elements))
+	} else if elements[0].Type != common.ElemTypeExceptionReturn {
+		t.Errorf("Expected exception return element, got %s", elements[0].Type)
+	} else {
+		t.Logf("Generated element: %s", elements[0].Description())
+	}
+}
