@@ -73,18 +73,21 @@ type Packet struct {
 	Offset uint64 // Byte offset in trace stream
 
 	// I-Sync specific fields
-	Address      uint64
-	ISA          ISA
-	ISyncReason  ISyncReason
-	SecureState  bool // S bit
-	AltISA       bool
-	Hypervisor   bool
-	ContextID    uint32
-	CycleCount   uint32
+	Address     uint64
+	ISA         ISA
+	ISyncReason ISyncReason
+	SecureState bool // S bit
+	AltISA      bool
+	Hypervisor  bool
+	ContextID   uint32
+	CycleCount  uint32
 
 	// Atom specific fields
-	AtomBits     uint8  // E/N pattern
-	AtomCount    uint8  // Number of atoms
+	AtomBits  uint8 // E/N pattern
+	AtomCount uint8 // Number of atoms
+
+	// Timestamp specific fields
+	Timestamp uint64 // Timestamp value
 
 	// Branch Address specific fields
 	ExceptionNum uint16
@@ -100,6 +103,8 @@ func (p *Packet) Description() string {
 			p.Address, secureStr(p.SecureState), p.ISA)
 	case PacketTypeATOM:
 		return fmt.Sprintf("Atom packet; %s", atomPattern(p.AtomBits, p.AtomCount))
+	case PacketTypeTimestamp:
+		return fmt.Sprintf("Timestamp packet; TS=0x%x", p.Timestamp)
 	default:
 		return "Unknown packet type"
 	}
@@ -186,6 +191,11 @@ func (d *Decoder) parseNextPacket(buf []byte) (Packet, int, error) {
 		return d.parseISync(buf)
 	}
 
+	// Timestamp: header = 0x42 or 0x46
+	if header == 0x42 || header == 0x46 {
+		return d.parseTimestamp(buf)
+	}
+
 	// Atom packets: bit 7 = 1, bit 0 = 0, excluding special cases
 	// Must check before branch address to avoid misidentification
 	if (header&0x80) != 0 && (header&0x01) == 0 {
@@ -254,6 +264,44 @@ func (d *Decoder) parseISync(buf []byte) (Packet, int, error) {
 	return pkt, size, nil
 }
 
+// parseTimestamp parses a Timestamp packet (header 0x42 or 0x46)
+// Timestamp packets have variable length:
+// - Header byte (0x42 or 0x46)
+// - 1-8 timestamp bytes: bit 7 = continuation flag, bits[6:0] = data bits
+// Each byte contributes 7 bits of the timestamp, shifted into position
+func (d *Decoder) parseTimestamp(buf []byte) (Packet, int, error) {
+	if len(buf) < 2 {
+		return Packet{Type: PacketTypeUnknown, Data: buf[0:1]}, 1, nil
+	}
+
+	pkt := Packet{Type: PacketTypeTimestamp}
+	size := 1
+	tsVal := uint64(0)
+	shift := 0
+
+	// Read timestamp bytes until we find one without continuation bit
+	maxBytes := 9 // Maximum 9 bytes for full 56-bit timestamp (7 bits per byte), index 1-9
+	for size < len(buf) && size-1 < maxBytes {
+		currByte := buf[size]
+		
+		// Extract 7 bits (bits 6:0)
+		tsVal |= uint64(currByte&0x7F) << shift
+		shift += 7
+		size++
+		
+		// Check continuation bit (bit 7)
+		if (currByte & 0x80) == 0 {
+			// No continuation - we have the complete timestamp
+			break
+		}
+	}
+
+	pkt.Timestamp = tsVal
+	pkt.Data = buf[0:size]
+
+	return pkt, size, nil
+}
+
 // isAtomPacket checks if header byte indicates an atom packet
 func (d *Decoder) isAtomPacket(header byte) bool {
 	// Atom packets have specific bit patterns
@@ -276,7 +324,7 @@ func (d *Decoder) parseAtom(buf []byte) (Packet, int, error) {
 	if (header&0x80) != 0 && (header&0x01) == 0 {
 		// Extract atom from bits [6:1]
 		atomBits := (header >> 1) & 0x1F
-		
+
 		// Count number of atoms (find first 0 in atom pattern)
 		count := uint8(0)
 		for i := uint8(0); i < 5; i++ {
@@ -286,11 +334,11 @@ func (d *Decoder) parseAtom(buf []byte) (Packet, int, error) {
 				break
 			}
 		}
-		
+
 		if count == 0 {
 			count = 1 // At least one atom
 		}
-		
+
 		pkt.AtomBits = atomBits & ((1 << count) - 1)
 		pkt.AtomCount = count
 		return pkt, 1, nil
@@ -305,7 +353,7 @@ func (d *Decoder) parseBranchAddress(buf []byte) (Packet, int, error) {
 	// - 1-4 address bytes: bit 7 = 1 for continuation
 	// - Optional 5th address byte (determines ISA)
 	// - Optional exception/waypoint byte
-	
+
 	if len(buf) < 2 {
 		return Packet{Type: PacketTypeUnknown, Data: buf[0:1]}, 1, nil
 	}
