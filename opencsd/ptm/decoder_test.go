@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"opencsd/common"
 )
 
 const snapshotPath = "../../decoder/tests/snapshots/trace_cov_a15"
@@ -417,4 +419,67 @@ func TestMixedPackets_WithNewTypes(t *testing.T) {
 	for i, pkt := range packets {
 		t.Logf("Packet %d: %s", i, pkt.Description())
 	}
+}
+
+func TestDecoderWithLogger(t *testing.T) {
+	// Test that decoder can be created with a custom logger
+	var stdout, stderr bytes.Buffer
+	logger := common.NewStdLoggerWithWriter(&stdout, &stderr, common.SeverityDebug)
+
+	decoder := NewDecoderWithLogger(0x13, logger)
+	if decoder.Log == nil {
+		t.Fatal("Decoder logger is nil")
+	}
+
+	// Log a test message
+	decoder.Log.Info("Decoder initialized for trace ID 0x13")
+
+	output := stdout.String()
+	if len(output) == 0 {
+		t.Error("Expected log output, got none")
+	}
+	t.Logf("Logger output: %s", output)
+}
+
+func TestDecoderDefaultLogger(t *testing.T) {
+	// Test that decoder has a default no-op logger
+	decoder := NewDecoder(0)
+	if decoder.Log == nil {
+		t.Fatal("Decoder should have a default logger")
+	}
+
+	// This should not panic or produce output
+	decoder.Log.Info("This is logged to no-op logger")
+	decoder.Log.Error(nil)
+}
+
+func TestGenericTraceElementCreation(t *testing.T) {
+	// Test that we can create trace elements
+	decoder := NewDecoder(0)
+
+	// Create a PE context element
+	decoder.CurrentElement = common.NewGenericTraceElement(common.ElemTypePeContext)
+	decoder.CurrentElement.Context = common.PEContext{
+		ContextID:      0x12345678,
+		VMID:           0x42,
+		ISA:            common.ISAARM,
+		SecurityState:  common.SecurityStateNonSecure,
+		ExceptionLevel: common.EL1,
+	}
+
+	desc := decoder.CurrentElement.Description()
+	t.Logf("Created trace element: %s", desc)
+
+	// Create an address range element
+	decoder.CurrentElement = common.NewGenericTraceElement(common.ElemTypeAddrRange)
+	decoder.CurrentElement.AddrRange = common.AddrRange{
+		StartAddr:   0x80000000,
+		EndAddr:     0x80000010,
+		ISA:         common.ISAThumb2,
+		NumInstr:    4,
+		LastInstrSz: 2,
+	}
+
+	desc = decoder.CurrentElement.Description()
+	t.Logf("Created trace element: %s", desc)
 }

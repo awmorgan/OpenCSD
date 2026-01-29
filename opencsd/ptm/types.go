@@ -1,6 +1,10 @@
 package ptm
 
-import "fmt"
+import (
+	"fmt"
+
+	"opencsd/common"
+)
 
 // PacketType represents the type of PTM packet
 type PacketType int
@@ -43,27 +47,15 @@ func (t PacketType) String() string {
 	}
 }
 
-// ISA represents instruction set architecture
-type ISA int
+// ISA type alias for common.ISA
+type ISA = common.ISA
 
+// ISA constants
 const (
-	ISAARM ISA = iota
-	ISAThumb2
-	ISATEE
+	ISAARM    = common.ISAARM
+	ISAThumb2 = common.ISAThumb2
+	ISATEE    = common.ISATEE
 )
-
-func (i ISA) String() string {
-	switch i {
-	case ISAARM:
-		return "ARM(32)"
-	case ISAThumb2:
-		return "Thumb2"
-	case ISATEE:
-		return "TEE"
-	default:
-		return "Unknown"
-	}
-}
 
 // ISyncReason represents why an I-Sync packet was generated
 type ISyncReason int
@@ -150,12 +142,25 @@ func atomPattern(bits uint8, count uint8) string {
 
 // Decoder handles PTM trace decoding
 type Decoder struct {
-	TraceID uint8
+	TraceID        uint8                       // Trace source ID
+	Log            common.Logger               // Logger for errors and debug info
+	CurrentElement *common.GenericTraceElement // Current element being built
 }
 
 // NewDecoder creates a new PTM decoder for the given trace ID
 func NewDecoder(traceID uint8) *Decoder {
-	return &Decoder{TraceID: traceID}
+	return &Decoder{
+		TraceID: traceID,
+		Log:     common.NewNoOpLogger(), // Default to no-op logger
+	}
+}
+
+// NewDecoderWithLogger creates a new PTM decoder with a custom logger
+func NewDecoderWithLogger(traceID uint8, logger common.Logger) *Decoder {
+	return &Decoder{
+		TraceID: traceID,
+		Log:     logger,
+	}
 }
 
 // Parse processes raw PTM trace data and returns packets
