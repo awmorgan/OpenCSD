@@ -118,6 +118,10 @@ type AddrRange struct {
 	ISA         ISA    // ISA for this range
 	NumInstr    uint32 // Number of instructions executed
 	LastInstrSz uint8  // Size of last instruction in bytes
+	// Last instruction metadata (for output formatting)
+	LastInstrExec bool      // Last instruction executed (E/N)
+	LastInstrType InstrType // Last instruction type (branch/indirect/normal)
+	LastInstrCond bool      // Last instruction is conditional
 }
 
 // ExceptionInfo represents exception information

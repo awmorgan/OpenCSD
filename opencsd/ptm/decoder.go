@@ -230,6 +230,8 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 
 	rangeStart := d.currentAddr
 	instrCount := uint32(0)
+	var lastInstrInfo *common.InstrInfo
+	var lastInstrAtom common.Atom
 
 	for i := uint8(0); i < pkt.AtomCount; i++ {
 		// Get the atom bit (E = 1 = executed, N = 0 = not executed)
@@ -245,6 +247,8 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 			d.Log.Logf(common.SeverityWarning, "Failed to process atom at 0x%X: %v", prevAddr, err)
 			return d.elements, err
 		}
+		lastInstrInfo = instrInfo
+		lastInstrAtom = atom
 
 		d.Log.Logf(common.SeverityDebug, "  Atom[%d] %s: addr=0x%X type=%s size=%d",
 			i, atom, prevAddr, instrInfo.Type, instrInfo.Size)
@@ -256,10 +260,14 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 			elem := common.GenericTraceElement{
 				Type: common.ElemTypeAddrRange,
 				AddrRange: common.AddrRange{
-					StartAddr: rangeStart,
-					EndAddr:   prevAddr + uint64(instrInfo.Size),
-					ISA:       d.currentISA,
-					NumInstr:  instrCount,
+					StartAddr:     rangeStart,
+					EndAddr:       prevAddr + uint64(instrInfo.Size),
+					ISA:           d.currentISA,
+					NumInstr:      instrCount,
+					LastInstrSz:   uint8(instrInfo.Size),
+					LastInstrExec: atom == common.AtomExecuted,
+					LastInstrType: instrInfo.Type,
+					LastInstrCond: instrInfo.IsConditional,
 				},
 			}
 			d.elements = append(d.elements, elem)
@@ -268,18 +276,33 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 
 			rangeStart = d.currentAddr
 			instrCount = 0
+			lastInstrInfo = nil
 		}
 	}
 
 	// If we have remaining instructions in a range, emit it
 	if instrCount > 0 {
+		lastSz := uint8(0)
+		lastType := common.InstrTypeUnknown
+		lastCond := false
+		lastExec := true
+		if lastInstrInfo != nil {
+			lastSz = uint8(lastInstrInfo.Size)
+			lastType = lastInstrInfo.Type
+			lastCond = lastInstrInfo.IsConditional
+			lastExec = lastInstrAtom == common.AtomExecuted
+		}
 		elem := common.GenericTraceElement{
 			Type: common.ElemTypeAddrRange,
 			AddrRange: common.AddrRange{
-				StartAddr: rangeStart,
-				EndAddr:   d.currentAddr,
-				ISA:       d.currentISA,
-				NumInstr:  instrCount,
+				StartAddr:     rangeStart,
+				EndAddr:       d.currentAddr,
+				ISA:           d.currentISA,
+				NumInstr:      instrCount,
+				LastInstrSz:   lastSz,
+				LastInstrExec: lastExec,
+				LastInstrType: lastType,
+				LastInstrCond: lastCond,
 			},
 		}
 		d.elements = append(d.elements, elem)
