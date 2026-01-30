@@ -9,8 +9,9 @@ import (
 // Decoder handles PTM trace decoding and maintains decoder state
 type Decoder struct {
 	// Configuration
-	TraceID uint8         // Trace source ID
-	Log     common.Logger // Logger for errors and debug info
+	TraceID uint8                   // Trace source ID
+	Log     common.Logger           // Logger for errors and debug info
+	MemAcc  common.MemoryAccessor   // Memory accessor for reading instruction opcodes
 
 	// Current element being built
 	CurrentElement *common.GenericTraceElement
@@ -51,6 +52,13 @@ func NewDecoderWithLogger(traceID uint8, logger common.Logger) *Decoder {
 		TraceID: traceID,
 		Log:     logger,
 	}
+}
+
+// SetMemoryAccessor sets the memory accessor for reading instruction opcodes.
+// This is required for decoding Atom packets, which need to read opcodes
+// to determine branch targets.
+func (d *Decoder) SetMemoryAccessor(memAcc common.MemoryAccessor) {
+	d.MemAcc = memAcc
 }
 
 // Reset resets the decoder state
@@ -218,6 +226,16 @@ func (d *Decoder) processAtom(pkt Packet) ([]common.GenericTraceElement, error) 
 	d.atomIndex = 0
 
 	d.Log.Logf(common.SeverityDebug, "Atom: %d atoms, pattern=0x%x", d.atomCount, d.atomBits)
+
+	// TODO: To fully decode atoms, we need to:
+	// 1. Read instruction opcodes from memory using d.MemAcc.ReadMemory(d.currentAddr, buf)
+	// 2. Disassemble each instruction to determine if it's a branch
+	// 3. For each atom bit:
+	//    - E (executed): instruction executed, advance PC
+	//    - N (not executed): branch not taken, skip instruction
+	// 4. Calculate address ranges and generate ADDR_RANGE elements
+	//
+	// This is the "Hard Wall" - atoms require memory access and instruction disassembly.
 
 	return nil, nil
 }

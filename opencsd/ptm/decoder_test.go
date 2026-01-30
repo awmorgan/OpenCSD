@@ -12,6 +12,42 @@ import (
 const snapshotPath = "../../decoder/tests/snapshots/trace_cov_a15"
 const resultsPath = "../../decoder/tests/results"
 
+// loadMemorySnapshot loads all memory regions from the trace_cov_a15 snapshot
+func loadMemorySnapshot(t *testing.T) common.MemoryAccessor {
+	t.Helper()
+
+	memMap := common.NewMultiRegionMemory()
+
+	// Memory regions from device1.ini
+	regions := []struct {
+		addr uint64
+		file string
+	}{
+		{0x80000000, "mem_Cortex-A15_0_0_VECTORS.bin"},
+		{0x80000278, "mem_Cortex-A15_0_1_RO_CODE.bin"},
+		{0x80001C28, "mem_Cortex-A15_0_2_RO_DATA.bin"},
+		{0x80001D58, "mem_Cortex-A15_0_3_RW_DATA.bin"},
+		{0x80001D68, "mem_Cortex-A15_0_4_ZI_DATA.bin"},
+		{0x80040000, "mem_Cortex-A15_0_5_ARM_LIB_HEAP.bin"},
+		{0x80080000, "mem_Cortex-A15_0_6_ARM_LIB_STACK.bin"},
+		{0x80090000, "mem_Cortex-A15_0_7_IRQ_STACK.bin"},
+		{0x80100000, "mem_Cortex-A15_0_8_TTB.bin"},
+	}
+
+	for _, region := range regions {
+		path := filepath.Join(snapshotPath, region.file)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("Failed to load memory region %s: %v", region.file, err)
+		}
+		memMap.AddRegion(common.NewMemoryBuffer(region.addr, data))
+		t.Logf("Loaded memory region: 0x%08X - 0x%08X (%s, %d bytes)",
+			region.addr, region.addr+uint64(len(data)), region.file, len(data))
+	}
+
+	return memMap
+}
+
 func TestSnapshotAvailable(t *testing.T) {
 	binPath := filepath.Join(snapshotPath, "PTM_0_2.bin")
 	info, err := os.Stat(binPath)
@@ -22,6 +58,84 @@ func TestSnapshotAvailable(t *testing.T) {
 		t.Fatal("PTM snapshot is empty")
 	}
 	t.Logf("Found PTM snapshot: %s (%d bytes)", binPath, info.Size())
+}
+
+func TestMemoryAccessor_LoadSnapshot(t *testing.T) {
+	memAcc := loadMemorySnapshot(t)
+
+	// Test reading from VECTORS region
+	buf := make([]byte, 4)
+	n, err := memAcc.ReadMemory(0x80000000, buf)
+	if err != nil {
+		t.Fatalf("Failed to read from VECTORS: %v", err)
+	}
+	if n != 4 {
+		t.Errorf("Expected to read 4 bytes, got %d", n)
+	}
+	t.Logf("Read from 0x80000000: %02X %02X %02X %02X", buf[0], buf[1], buf[2], buf[3])
+
+	// Test reading from RO_CODE region
+	n, err = memAcc.ReadMemory(0x80000278, buf)
+	if err != nil {
+		t.Fatalf("Failed to read from RO_CODE: %v", err)
+	}
+	if n != 4 {
+		t.Errorf("Expected to read 4 bytes, got %d", n)
+	}
+	t.Logf("Read from 0x80000278: %02X %02X %02X %02X", buf[0], buf[1], buf[2], buf[3])
+
+	// Test reading from invalid address (should fail)
+	_, err = memAcc.ReadMemory(0x00000000, buf)
+	if err == nil {
+		t.Error("Expected error reading from invalid address, got nil")
+	} else {
+		t.Logf("Correctly rejected invalid address: %v", err)
+	}
+}
+
+func TestDecoder_WithMemoryAccessor(t *testing.T) {
+	// Load memory snapshot
+	memAcc := loadMemorySnapshot(t)
+
+	// Create decoder and attach memory accessor
+	decoder := NewDecoder(0)
+	decoder.SetMemoryAccessor(memAcc)
+
+	// Load trace data
+	binPath := filepath.Join(snapshotPath, "PTM_0_2.bin")
+	raw, err := os.ReadFile(binPath)
+	if err != nil {
+		t.Skipf("Snapshot not available: %v", err)
+	}
+
+	// Parse packets
+	packets, err := decoder.Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+
+	t.Logf("Parsed %d packets from trace", len(packets))
+
+	// Process packets with memory access capability
+	totalElements := 0
+	for i, pkt := range packets {
+		elements, err := decoder.ProcessPacket(pkt)
+		if err != nil {
+			t.Logf("Warning: ProcessPacket error at packet %d (%s): %v", i, pkt.Type, err)
+			continue
+		}
+
+		totalElements += len(elements)
+		if len(elements) > 0 {
+			t.Logf("Packet %d (%s) -> %d elements", i, pkt.Type, len(elements))
+			for _, elem := range elements {
+				t.Logf("  %s", elem.Description())
+			}
+		}
+	}
+
+	t.Logf("Total elements generated: %d", totalElements)
+	t.Logf("Decoder has memory access: %v", decoder.MemAcc != nil)
 }
 
 func TestASyncPacket_Detection(t *testing.T) {
