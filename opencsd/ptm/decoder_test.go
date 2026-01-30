@@ -138,6 +138,68 @@ func TestDecoder_WithMemoryAccessor(t *testing.T) {
 	t.Logf("Decoder has memory access: %v", decoder.MemAcc != nil)
 }
 
+func TestAtomProcessing_DetailedTracking(t *testing.T) {
+	// Load memory snapshot
+	memAcc := loadMemorySnapshot(t)
+
+	// Create decoder with logger for detailed output
+	logger := common.NewStdLogger(common.SeverityDebug)
+	decoder := NewDecoderWithLogger(0, logger)
+	decoder.SetMemoryAccessor(memAcc)
+
+	// Load trace data
+	binPath := filepath.Join(snapshotPath, "PTM_0_2.bin")
+	raw, err := os.ReadFile(binPath)
+	if err != nil {
+		t.Skipf("Snapshot not available: %v", err)
+	}
+
+	// Parse packets
+	packets, err := decoder.Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+
+	t.Logf("Processing %d packets with detailed atom tracking", len(packets))
+
+	addrRangeCount := 0
+	totalInstructions := uint32(0)
+
+	for i, pkt := range packets {
+		elements, err := decoder.ProcessPacket(pkt)
+		if err != nil {
+			continue
+		}
+
+		for _, elem := range elements {
+			if elem.Type == common.ElemTypeAddrRange {
+				addrRangeCount++
+				totalInstructions += elem.AddrRange.NumInstr
+				t.Logf("ADDR_RANGE #%d: [0x%X - 0x%X] %s, %d instructions",
+					addrRangeCount,
+					elem.AddrRange.StartAddr,
+					elem.AddrRange.EndAddr,
+					elem.AddrRange.ISA,
+					elem.AddrRange.NumInstr)
+			}
+		}
+
+		// Log atom packets specifically
+		if pkt.Type == PacketTypeATOM {
+			t.Logf("Packet %d: ATOM with %d atoms, pattern=0x%x -> %d elements",
+				i, pkt.AtomCount, pkt.AtomBits, len(elements))
+		}
+	}
+
+	t.Logf("Summary: %d ADDR_RANGE elements, %d total instructions traced",
+		addrRangeCount, totalInstructions)
+
+	// Verify we generated at least some ranges
+	if addrRangeCount == 0 {
+		t.Error("Expected at least one ADDR_RANGE element from atom processing")
+	}
+}
+
 func TestASyncPacket_Detection(t *testing.T) {
 	// First packet from trace_cov_a15.ppl:
 	// Idx:0; ID:0; [0x00 0x00 0x00 0x00 0x00 0x80 ];	ASYNC : Alignment Synchronisation Packet;
