@@ -26,4 +26,9 @@ type MemoryAccessor interface {
 	// - Return an error for completely invalid addresses
 	// - Support unaligned accesses (common in ARM instruction sets)
 	ReadMemory(addr uint64, data []byte) (int, error)
+
+	// ReadTargetMemory reads bytes from memory at the specified address.
+	// This mirrors the C++ naming convention used by the OpenCSD library.
+	// Implementations may delegate this to ReadMemory.
+	ReadTargetMemory(addr uint64, data []byte) (int, error)
 }

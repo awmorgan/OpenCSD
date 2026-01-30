@@ -1,6 +1,7 @@
 package ptm
 
 import (
+	"encoding/binary"
 	"fmt"
 
 	"opencsd/common"
@@ -95,7 +96,7 @@ func (d *Decoder) ProcessPacket(pkt Packet) ([]common.GenericTraceElement, error
 		return d.processBranchAddress(pkt)
 
 	case PacketTypeATOM:
-		return d.processAtom(pkt)
+		return d.processAtomPacket(pkt)
 
 	case PacketTypeTimestamp:
 		return d.processTimestamp(pkt)
@@ -213,8 +214,8 @@ func (d *Decoder) processBranchAddress(pkt Packet) ([]common.GenericTraceElement
 	return d.elements, nil
 }
 
-// processAtom handles atom packets - tracks executed instructions
-func (d *Decoder) processAtom(pkt Packet) ([]common.GenericTraceElement, error) {
+// processAtomPacket handles atom packets - tracks executed instructions
+func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, error) {
 	if !d.syncFound {
 		return nil, nil
 	}
@@ -225,76 +226,48 @@ func (d *Decoder) processAtom(pkt Packet) ([]common.GenericTraceElement, error) 
 		return nil, nil
 	}
 
-	d.Log.Logf(common.SeverityDebug, "Atom: %d atoms, pattern=0x%x", d.atomCount, d.atomBits)
+	d.Log.Logf(common.SeverityDebug, "Atom: %d atoms, pattern=0x%x", pkt.AtomCount, pkt.AtomBits)
 
-	// Process each atom in the packet
-	decoder := NewInstrDecoder(d.currentISA)
 	rangeStart := d.currentAddr
 	instrCount := uint32(0)
 
 	for i := uint8(0); i < pkt.AtomCount; i++ {
 		// Get the atom bit (E = 1 = executed, N = 0 = not executed)
 		atomBit := (pkt.AtomBits >> i) & 1
-		executed := atomBit == 1
+		atom := common.AtomNotExecuted
+		if atomBit == 1 {
+			atom = common.AtomExecuted
+		}
 
-		// Decode the instruction at current address
-		instrInfo, err := decoder.DecodeInstruction(d.currentAddr, d.MemAcc)
+		prevAddr := d.currentAddr
+		instrInfo, branchTaken, err := d.processAtom(atom)
 		if err != nil {
-			d.Log.Logf(common.SeverityWarning, "Failed to decode instruction at 0x%X: %v", d.currentAddr, err)
-			// Skip this atom but continue processing
-			continue
+			d.Log.Logf(common.SeverityWarning, "Failed to process atom at 0x%X: %v", prevAddr, err)
+			return d.elements, err
 		}
 
 		d.Log.Logf(common.SeverityDebug, "  Atom[%d] %s: addr=0x%X type=%s size=%d",
-			i, map[bool]string{true: "E", false: "N"}[executed],
-			d.currentAddr, instrInfo.Type, instrInfo.Size)
+			i, atom, prevAddr, instrInfo.Type, instrInfo.Size)
 
-		if instrInfo.IsBranch {
-			// This is a branch instruction
-			if executed {
-				// Branch taken - emit range and jump to target
-				instrCount++
+		instrCount++
 
-				// Generate ADDR_RANGE element for instructions executed so far
-				if instrCount > 0 {
-					elem := common.GenericTraceElement{
-						Type: common.ElemTypeAddrRange,
-						AddrRange: common.AddrRange{
-							StartAddr: rangeStart,
-							EndAddr:   d.currentAddr + uint64(instrInfo.Size),
-							ISA:       d.currentISA,
-							NumInstr:  instrCount,
-						},
-					}
-					d.elements = append(d.elements, elem)
-					d.Log.Logf(common.SeverityDebug, "  -> ADDR_RANGE: 0x%X-0x%X (%d instrs)",
-						rangeStart, d.currentAddr+uint64(instrInfo.Size), instrCount)
-				}
-
-				// Update PC to branch target
-				if instrInfo.HasBranchTarget {
-					d.currentAddr = instrInfo.BranchTarget
-					d.Log.Logf(common.SeverityDebug, "  -> Branch taken to 0x%X", d.currentAddr)
-				} else {
-					// Indirect branch - can't determine target statically
-					// The next packet should tell us where we went
-					d.Log.Logf(common.SeverityDebug, "  -> Indirect branch (target unknown)")
-					d.currentAddr += uint64(instrInfo.Size)
-				}
-
-				// Start new range
-				rangeStart = d.currentAddr
-				instrCount = 0
-			} else {
-				// Branch not taken - continue to next instruction
-				d.currentAddr += uint64(instrInfo.Size)
-				instrCount++
-				d.Log.Logf(common.SeverityDebug, "  -> Branch not taken, continue to 0x%X", d.currentAddr)
+		if branchTaken {
+			// Branch taken - emit range and start new range at target
+			elem := common.GenericTraceElement{
+				Type: common.ElemTypeAddrRange,
+				AddrRange: common.AddrRange{
+					StartAddr: rangeStart,
+					EndAddr:   prevAddr + uint64(instrInfo.Size),
+					ISA:       d.currentISA,
+					NumInstr:  instrCount,
+				},
 			}
-		} else {
-			// Normal instruction - always executed
-			d.currentAddr += uint64(instrInfo.Size)
-			instrCount++
+			d.elements = append(d.elements, elem)
+			d.Log.Logf(common.SeverityDebug, "  -> ADDR_RANGE: 0x%X-0x%X (%d instrs)",
+				rangeStart, prevAddr+uint64(instrInfo.Size), instrCount)
+
+			rangeStart = d.currentAddr
+			instrCount = 0
 		}
 	}
 
@@ -315,6 +288,55 @@ func (d *Decoder) processAtom(pkt Packet) ([]common.GenericTraceElement, error) 
 	}
 
 	return d.elements, nil
+}
+
+// processAtom advances currentAddr based on a single atom bit.
+func (d *Decoder) processAtom(atomBit common.Atom) (*common.InstrInfo, bool, error) {
+	if d.MemAcc == nil {
+		return nil, false, fmt.Errorf("memory accessor not set")
+	}
+
+	buf := make([]byte, 4)
+	n, err := d.MemAcc.ReadTargetMemory(d.currentAddr, buf)
+	if err != nil {
+		return nil, false, err
+	}
+	if n < 4 {
+		return nil, false, fmt.Errorf("incomplete instruction read at 0x%X: got %d bytes", d.currentAddr, n)
+	}
+
+	opcode := binary.LittleEndian.Uint32(buf)
+	decoder := NewInstrDecoder(d.currentISA)
+
+	var instrInfo *common.InstrInfo
+	if d.currentISA == common.ISAARM {
+		instrInfo, err = decoder.DecodeARMOpcode(d.currentAddr, opcode)
+	} else {
+		instrInfo, err = decoder.DecodeInstruction(d.currentAddr, d.MemAcc)
+	}
+	if err != nil {
+		return nil, false, err
+	}
+
+	nextAddr := d.currentAddr + uint64(instrInfo.Size)
+	branchTaken := false
+
+	if atomBit == common.AtomExecuted {
+		if instrInfo.IsBranch && instrInfo.HasBranchTarget {
+			d.currentAddr = instrInfo.BranchTarget
+			branchTaken = true
+		} else {
+			d.currentAddr = nextAddr
+			if instrInfo.IsBranch {
+				branchTaken = true
+			}
+		}
+	} else {
+		// Not executed/not taken - fall through
+		d.currentAddr = nextAddr
+	}
+
+	return instrInfo, branchTaken, nil
 }
 
 // processTimestamp handles timestamp packets

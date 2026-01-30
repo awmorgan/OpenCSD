@@ -51,6 +51,12 @@ func (mb *MemoryBuffer) ReadMemory(addr uint64, data []byte) (int, error) {
 	return int(toRead), nil
 }
 
+// ReadTargetMemory implements MemoryAccessor.ReadTargetMemory.
+// This mirrors the C++ naming and delegates to ReadMemory.
+func (mb *MemoryBuffer) ReadTargetMemory(addr uint64, data []byte) (int, error) {
+	return mb.ReadMemory(addr, data)
+}
+
 // Contains checks if the given address falls within this buffer's range.
 func (mb *MemoryBuffer) Contains(addr uint64) bool {
 	return addr >= mb.BaseAddr && addr < mb.BaseAddr+uint64(len(mb.Data))
@@ -91,4 +97,10 @@ func (mrm *MultiRegionMemory) ReadMemory(addr uint64, data []byte) (int, error) 
 	}
 
 	return 0, fmt.Errorf("address 0x%X not found in any memory region", addr)
+}
+
+// ReadTargetMemory implements MemoryAccessor.ReadTargetMemory.
+// This mirrors the C++ naming and delegates to ReadMemory.
+func (mrm *MultiRegionMemory) ReadTargetMemory(addr uint64, data []byte) (int, error) {
+	return mrm.ReadMemory(addr, data)
 }

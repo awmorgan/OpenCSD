@@ -32,6 +32,15 @@ func (d *InstrDecoder) DecodeInstruction(addr uint64, memAcc common.MemoryAccess
 	}
 }
 
+// DecodeARMOpcode decodes a 32-bit ARM instruction opcode without reading memory.
+func (d *InstrDecoder) DecodeARMOpcode(addr uint64, opcode uint32) (*common.InstrInfo, error) {
+	info := common.NewInstrInfo()
+	info.Opcode = opcode
+	info.Size = 4
+
+	return d.decodeARMOpcode(addr, opcode, info), nil
+}
+
 // decodeARM decodes a 32-bit ARM instruction
 func (d *InstrDecoder) decodeARM(addr uint64, memAcc common.MemoryAccessor, info *common.InstrInfo) (*common.InstrInfo, error) {
 	buf := make([]byte, 4)
@@ -48,6 +57,11 @@ func (d *InstrDecoder) decodeARM(addr uint64, memAcc common.MemoryAccessor, info
 	info.Opcode = opcode
 	info.Size = 4
 
+	return d.decodeARMOpcode(addr, opcode, info), nil
+}
+
+// decodeARMOpcode decodes a 32-bit ARM instruction opcode.
+func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.InstrInfo) *common.InstrInfo {
 	// Extract condition field (bits 31-28)
 	cond := (opcode >> 28) & 0xF
 
@@ -71,7 +85,7 @@ func (d *InstrDecoder) decodeARM(addr uint64, memAcc common.MemoryAccessor, info
 			info.BranchTarget = uint64(int64(addr) + int64(offset) + 8)
 			info.HasBranchTarget = true
 		}
-		return info, nil
+		return info
 	}
 
 	// Conditional instructions
@@ -96,7 +110,7 @@ func (d *InstrDecoder) decodeARM(addr uint64, memAcc common.MemoryAccessor, info
 		// Branch target = PC + offset + 8 (PC is 8 bytes ahead in ARM)
 		info.BranchTarget = uint64(int64(addr) + int64(offset) + 8)
 		info.HasBranchTarget = true
-		return info, nil
+		return info
 	}
 
 	// BX/BLX (register): bits 27-4 = 0x012FFF, bits 7-4 determine BX(1) or BLX(3)
@@ -104,13 +118,13 @@ func (d *InstrDecoder) decodeARM(addr uint64, memAcc common.MemoryAccessor, info
 		info.IsBranch = true
 		info.Type = common.InstrTypeBranchIndirect
 		info.HasBranchTarget = false // Register-based, can't determine statically
-		return info, nil
+		return info
 	}
 
 	// Not a branch - normal instruction
 	info.Type = common.InstrTypeNormal
 	info.IsBranch = false
-	return info, nil
+	return info
 }
 
 // decodeThumb decodes a 16-bit or 32-bit Thumb instruction
