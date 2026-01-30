@@ -73,6 +73,7 @@ func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.
 		if (opcode & 0xFE000000) == 0xFA000000 {
 			info.IsBranch = true
 			info.Type = common.InstrTypeBranch
+			info.IsLink = true
 			// Calculate branch target
 			offset := int32(opcode&0x00FFFFFF) << 2
 			if (opcode & 0x01000000) != 0 {
@@ -98,6 +99,9 @@ func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.
 	if (opcode & 0x0E000000) == 0x0A000000 {
 		info.IsBranch = true
 		info.Type = common.InstrTypeBranch
+		if opcode&0x01000000 != 0 {
+			info.IsLink = true
+		}
 
 		// Calculate branch offset (24-bit signed, shifted left by 2)
 		offset := int32(opcode & 0x00FFFFFF)
@@ -114,10 +118,13 @@ func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.
 	}
 
 	// BX/BLX (register): bits 27-4 = 0x012FFF, bits 7-4 determine BX(1) or BLX(3)
-	if (opcode & 0x0FFFFFF0) == 0x012FFF10 {
+	if (opcode&0x0FFFFFF0) == 0x012FFF10 || (opcode&0x0FFFFFF0) == 0x012FFF30 {
 		info.IsBranch = true
 		info.Type = common.InstrTypeBranchIndirect
 		info.HasBranchTarget = false // Register-based, can't determine statically
+		if (opcode & 0x00000020) != 0 {
+			info.IsLink = true
+		}
 		return info
 	}
 
@@ -201,10 +208,13 @@ func (d *InstrDecoder) decodeThumb(addr uint64, memAcc common.MemoryAccessor, in
 	}
 
 	// BX/BLX (register): 010001 11 x xxxx xxx (bits 15-7)
-	if (opcode16 & 0xFF80) == 0x4780 {
+	if (opcode16 & 0xFF00) == 0x4700 {
 		info.IsBranch = true
 		info.Type = common.InstrTypeBranchIndirect
 		info.HasBranchTarget = false
+		if (opcode16 & 0x0080) != 0 {
+			info.IsLink = true
+		}
 		return info, nil
 	}
 
@@ -245,6 +255,7 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 		info.HasBranchTarget = true
 		return info
 	}
+	info.IsLink = true
 
 	// B/BL (unconditional): 1111 0xxx xxxx xxxx : 11x1 xxxx xxxx xxxx
 	if (hw1&0xF800) == 0xF000 && (hw2&0xD000) == 0xD000 {

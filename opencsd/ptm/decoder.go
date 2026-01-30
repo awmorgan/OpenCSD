@@ -268,6 +268,7 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 					LastInstrExec: atom == common.AtomExecuted,
 					LastInstrType: instrInfo.Type,
 					LastInstrCond: instrInfo.IsConditional,
+					LastInstrLink: instrInfo.IsLink,
 				},
 			}
 			d.elements = append(d.elements, elem)
@@ -286,12 +287,15 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 		lastType := common.InstrTypeUnknown
 		lastCond := false
 		lastExec := true
+		lastLink := false
 		if lastInstrInfo != nil {
 			lastSz = uint8(lastInstrInfo.Size)
 			lastType = lastInstrInfo.Type
 			lastCond = lastInstrInfo.IsConditional
+			lastLink = lastInstrInfo.IsLink
 			lastExec = lastInstrAtom == common.AtomExecuted
 		}
+
 		elem := common.GenericTraceElement{
 			Type: common.ElemTypeAddrRange,
 			AddrRange: common.AddrRange{
@@ -303,6 +307,7 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 				LastInstrExec: lastExec,
 				LastInstrType: lastType,
 				LastInstrCond: lastCond,
+				LastInstrLink: lastLink,
 			},
 		}
 		d.elements = append(d.elements, elem)

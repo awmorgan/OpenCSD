@@ -46,6 +46,9 @@ type InstrInfo struct {
 	// IsConditional indicates if the branch is conditional
 	IsConditional bool
 
+	// IsLink indicates if this is a branch with link (BL/BLX)
+	IsLink bool
+
 	// BranchTarget is the calculated branch target address (for direct branches)
 	BranchTarget uint64
 

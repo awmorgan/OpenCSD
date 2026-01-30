@@ -336,23 +336,39 @@ func (d *Decoder) parseAtom(buf []byte) (Packet, int, error) {
 	// bit 7 = 1, bit 0 = 0
 	if (header&0x80) != 0 && (header&0x01) == 0 {
 		// Extract atom from bits [6:1]
-		atomBits := (header >> 1) & 0x1F
+		payload := (header >> 1) & 0x3F
 
-		// Count number of atoms (find first 0 in atom pattern)
-		count := uint8(0)
-		for i := uint8(0); i < 5; i++ {
-			if (atomBits & (1 << i)) != 0 {
-				count++
-			} else {
+		// Find highest set bit (Stop Bit)
+		stopBit := -1
+		for i := 5; i >= 0; i-- {
+			if (payload & (1 << i)) != 0 {
+				stopBit = i
 				break
 			}
 		}
 
-		if count == 0 {
-			count = 1 // At least one atom
+		if stopBit == -1 {
+			// No stop bit found, invalid
+			return Packet{Type: PacketTypeUnknown, Data: buf[0:1]}, 1, nil
 		}
 
-		pkt.AtomBits = atomBits & ((1 << count) - 1)
+		// Atoms are bits below stopBit
+		count := uint8(stopBit)
+		var atomPattern uint8
+
+		// PTM: 0=E, 1=N. (OpenCSD seems to imply this matching PPL 0xd0 -> ENEEE)
+		// We map 0->1 (E) and 1->0 (N) for common.AtomExecuted
+		// LSB of atomPattern is Atom 0.
+		// Atom 0 corresponds to bit below stopBit.
+		for i := 0; i < int(count); i++ {
+			bitPos := count - 1 - uint8(i)
+			if (payload & (1 << bitPos)) == 0 {
+				// 0 is Executed
+				atomPattern |= (1 << i)
+			}
+		}
+
+		pkt.AtomBits = atomPattern
 		pkt.AtomCount = count
 		return pkt, 1, nil
 	}

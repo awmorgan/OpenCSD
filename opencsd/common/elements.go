@@ -122,6 +122,7 @@ type AddrRange struct {
 	LastInstrExec bool      // Last instruction executed (E/N)
 	LastInstrType InstrType // Last instruction type (branch/indirect/normal)
 	LastInstrCond bool      // Last instruction is conditional
+	LastInstrLink bool      // Last instruction is a link (BL/BLX)
 }
 
 // ExceptionInfo represents exception information
