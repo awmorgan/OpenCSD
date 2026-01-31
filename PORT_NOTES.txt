@@ -1,23 +1,13 @@
 PTM Go vs C++ port notes (2026-01-31)
 
-Working in Go:
-- PTM packet parsing for ASYNC/ISYNC/ATOM/BRANCH_ADDRESS/TIMESTAMP/CONTEXT_ID/VMID/EXCEPTION_RETURN.
-- Decode path: sync, trace-on, PE context, addr ranges, exceptions, timestamps, exception return, return stack, cycle counts.
-- Snapshot config loader reads ETMCR + TraceID.
-- TC2 golden PPL comparison scaffolding; ADDR_NACC filtered currently.
+COMPLETED:
+1. ✓ Full PTM config parsing (IDR/CTRL/CCER). Applied to decoder flags.
+2. ✓ Processor with unsync scanning (finds ASYNC, emits raw data).
+3. ✓ Packet types: TRIGGER, WPOINT_UPDATE, IGNORE, unsync markers (NOTSYNC, INCOMPLETE_EOT, BAD_SEQUENCE, RESERVED).
+4. ✓ Parser extensions for TRIGGER/WPOINT_UPDATE + config-based ContextID sizing.
 
-Gaps vs C++:
-- Missing packet types: TRIGGER, WPOINT_UPDATE, IGNORE, BAD_SEQUENCE/RESERVED, BRANCH_OR_BYPASS_EOT, TPIU_PAD_EOB, NOTSYNC/INCOMPLETE markers.
-- No PTM packetizer/unsync scanner (loss-of-sync handling, raw unsynced emission, EOT handling).
-- Protocol config incomplete: IDR/CTRL/CCER/TRACEID; timestamps enable/size, context ID bytes, VMID enable, DSB/DMB waypoint, etc.
-- Waypoint update + trace-to-addr modes missing.
-- Instruction follower config (DSB/DMB waypoint, WFI/WFE branch, IT tracking) missing.
-
-Plan:
-1) Full PTM config parsing and use in decoder.
-2) Packet processor/unsync scanner equivalent to C++ trc_pkt_proc_ptm.
-3) Parser extensions for missing packet types and config-sized context ID.
-4) Decode FSM parity (NO_SYNC/WAIT_SYNC/WAIT_ISYNC/CONT states).
-5) Waypoint update + trace-to-addr behaviors.
-6) Instruction follower alignment.
-7) Tighten golden tests (remove ADDR_NACC filtering, add missing types coverage).
+REMAINING:
+5. Decode FSM parity (NO_SYNC/WAIT_SYNC/WAIT_ISYNC/DECODE/CONT* states).
+6. Waypoint update + TRACE_TO_ADDR_INCL/EXCL behaviors.
+7. Instruction follower config (DSB/DMB waypoint, WFI/WFE, IT-block).
+8. Tighten golden tests (timestamp accumulation, ADDR_NACC matching).

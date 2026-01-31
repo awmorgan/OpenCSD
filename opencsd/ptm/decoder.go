@@ -7,6 +7,43 @@ import (
 	"opencsd/common"
 )
 
+// DecoderState represents the state machine states for PTM packet processing
+type DecoderState int
+
+const (
+	StateNoSync DecoderState = iota
+	StateWaitSync
+	StateWaitISYNC
+	StateDecodePkts
+	StateContISYNC
+	StateContAtom
+	StateContWaypoint
+	StateContBranch
+)
+
+func (s DecoderState) String() string {
+	switch s {
+	case StateNoSync:
+		return "NO_SYNC"
+	case StateWaitSync:
+		return "WAIT_SYNC"
+	case StateWaitISYNC:
+		return "WAIT_ISYNC"
+	case StateDecodePkts:
+		return "DECODE_PKTS"
+	case StateContISYNC:
+		return "CONT_ISYNC"
+	case StateContAtom:
+		return "CONT_ATOM"
+	case StateContWaypoint:
+		return "CONT_WAYPOINT"
+	case StateContBranch:
+		return "CONT_BRANCH"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 // Decoder handles PTM trace decoding and maintains decoder state
 type Decoder struct {
 	// Configuration
@@ -27,9 +64,10 @@ type Decoder struct {
 	CurrentElement *common.GenericTraceElement
 
 	// Synchronization state
-	syncFound     bool // true once we've seen ASYNC + ISYNC
-	waitingISync  bool // true after ASYNC, waiting for ISYNC
-	noSyncEmitted bool // true once NO_SYNC has been emitted for this decode run
+	state         DecoderState // Current decode state machine state
+	needISYNC     bool         // Need ISYNC to establish synchronization
+	syncFound     bool         // true once we've seen ASYNC + ISYNC
+	noSyncEmitted bool         // true once NO_SYNC has been emitted for this decode run
 
 	// Current processor context - valid indicates we have a good address from ISYNC/BranchAddr
 	currentAddr    uint64                // Current program counter
@@ -91,8 +129,9 @@ func (d *Decoder) SetMemoryAccessor(memAcc common.MemoryAccessor) {
 
 // Reset resets the decoder state
 func (d *Decoder) Reset() {
+	d.state = StateNoSync
+	d.needISYNC = true
 	d.syncFound = false
-	d.waitingISync = false
 	d.noSyncEmitted = false
 	d.currentAddr = 0
 	d.addrValid = false
@@ -116,7 +155,7 @@ func (d *Decoder) Reset() {
 	d.currentTimestamp = 0 // Reset accumulated timestamp
 }
 
-// ProcessPacket processes a single packet and updates decoder state
+// ProcessPacket processes a single packet using the decode FSM
 // Returns any generated trace elements
 func (d *Decoder) ProcessPacket(pkt Packet) ([]common.GenericTraceElement, error) {
 	d.elements = nil // Clear previous elements
@@ -125,75 +164,145 @@ func (d *Decoder) ProcessPacket(pkt Packet) ([]common.GenericTraceElement, error
 	d.currPktCycleCount = pkt.CycleCount
 	d.currPktHasCC = pkt.CCValid
 
+	// FSM loop - may process multiple transitions per packet for multi-output sequences
+	for {
+		switch d.state {
+		case StateNoSync:
+			// No sync found yet - process packet to move state forward
+			if pkt.Type == PacketTypeASYNC {
+				d.state = StateWaitISYNC
+			} else {
+				d.state = StateWaitSync
+			}
+			// Don't emit NO_SYNC here - let ISYNC processing handle it
+			return d.elements, nil
+
+		case StateWaitSync:
+			// Waiting for ASYNC packet - ignore all others
+			if pkt.Type == PacketTypeASYNC {
+				d.state = StateWaitISYNC
+			}
+			return d.elements, nil
+
+		case StateWaitISYNC:
+			// Waiting for ISYNC packet - ignore others (except ASYNC)
+			if pkt.Type == PacketTypeISYNC {
+				// Process ISYNC and transition to decode
+				elems, err := d.processISync(pkt)
+				if err != nil {
+					return nil, err
+				}
+				d.elements = append(d.elements, elems...)
+				d.syncFound = true
+				d.needISYNC = false
+				d.state = StateDecodePkts
+				return d.elements, nil
+			} else if pkt.Type == PacketTypeASYNC {
+				// Stay in WAIT_ISYNC
+			}
+			return d.elements, nil
+
+		case StateDecodePkts:
+			// Normal packet processing
+			return d.decodePacket(pkt)
+
+		case StateContISYNC:
+			// Continuation of ISYNC processing (for multi-element ISYNC sequences)
+			return d.decodePacket(pkt)
+
+		case StateContAtom:
+			// Continuation of ATOM processing
+			return d.decodePacket(pkt)
+
+		case StateContWaypoint:
+			// Continuation of waypoint processing
+			return d.decodePacket(pkt)
+
+		case StateContBranch:
+			// Continuation of branch processing
+			return d.decodePacket(pkt)
+
+		default:
+			return nil, fmt.Errorf("invalid state: %v", d.state)
+		}
+	}
+}
+
+// decodePacket processes a packet in DECODE_PKTS or continuation states
+func (d *Decoder) decodePacket(pkt Packet) ([]common.GenericTraceElement, error) {
 	switch pkt.Type {
 	case PacketTypeASYNC:
-		return d.processASYNC(pkt)
+		// ASYNC in decode state - just ignore (resync already happened)
+		return d.elements, nil
 
 	case PacketTypeISYNC:
+		// ISYNC in decode - establish new context
 		return d.processISync(pkt)
 
 	case PacketTypeBranchAddr:
+		// Branch address packet
 		return d.processBranchAddress(pkt)
 
 	case PacketTypeATOM:
-		return d.processAtomPacket(pkt)
+		// Atom packet (execute instructions)
+		if d.addrValid {
+			return d.processAtomPacket(pkt)
+		}
+		return d.elements, nil
 
 	case PacketTypeTimestamp:
+		// Timestamp packet
 		return d.processTimestamp(pkt)
 
 	case PacketTypeContextID:
+		// Context ID change
 		return d.processContextID(pkt)
 
 	case PacketTypeVMID:
+		// VMID change
 		return d.processVMID(pkt)
 
 	case PacketTypeExceptionReturn:
+		// Exception return
 		return d.processExceptionReturn(pkt)
 
 	case PacketTypeTrigger:
-		// Trigger packets are logged (could generate an event in future)
+		// Trigger packets are logged
 		d.Log.Logf(common.SeverityDebug, "Trigger packet at offset %d", pkt.Offset)
 		return d.elements, nil
 
 	case PacketTypeWaypoint:
-		// Waypoint update packets are currently just logged
+		// Waypoint update packets
 		d.Log.Logf(common.SeverityDebug, "Waypoint update packet at offset %d", pkt.Offset)
 		return d.elements, nil
 
 	case PacketTypeIgnore:
-		// Ignore packets are skipped
-		d.Log.Logf(common.SeverityDebug, "Ignore packet at offset %d", pkt.Offset)
+		// Ignore packets
 		return d.elements, nil
 
-	case PacketTypeNoSync, PacketTypeIncompleteEOT, PacketTypeBadSequence, PacketTypeReserved:
-		// Marker packets indicate protocol errors or unsync - handled by processor
-		d.Log.Logf(common.SeverityWarning, "Marker packet %s at offset %d", pkt.Type, pkt.Offset)
+	case PacketTypeBadSequence, PacketTypeReserved:
+		// Bad sequence or reserved - need to resync
+		d.state = StateWaitSync
+		d.needISYNC = true
+		elem := common.GenericTraceElement{
+			Type: common.ElemTypeNoSync,
+		}
+		d.elements = append(d.elements, elem)
+		return d.elements, nil
+
+	case PacketTypeNoSync, PacketTypeIncompleteEOT:
+		// Marker packets - just log
+		d.Log.Logf(common.SeverityDebug, "Marker packet %s at offset %d", pkt.Type, pkt.Offset)
 		return d.elements, nil
 
 	case PacketTypeUnknown:
 		// Ignore unknown packets
 		d.Log.Logf(common.SeverityDebug, "Ignoring unknown packet at offset %d", pkt.Offset)
-		return nil, nil
+		return d.elements, nil
 
 	default:
 		return nil, fmt.Errorf("unhandled packet type: %s", pkt.Type)
 	}
-}
-
-// processASYNC handles ASYNC packets - signals start of sync sequence
-func (d *Decoder) processASYNC(pkt Packet) ([]common.GenericTraceElement, error) {
-	if !d.syncFound {
-		d.Log.Debug("ASYNC packet received, waiting for ISYNC")
-		d.waitingISync = true
-		if !d.noSyncEmitted {
-			elem := common.GenericTraceElement{
-				Type: common.ElemTypeNoSync,
-			}
-			d.elements = append(d.elements, elem)
-			d.noSyncEmitted = true
-		}
-	}
-	return d.elements, nil
 }
 
 // processISync handles ISYNC packets - establishes synchronization
@@ -202,7 +311,7 @@ func (d *Decoder) processISync(pkt Packet) ([]common.GenericTraceElement, error)
 	if !d.syncFound {
 		// First sync
 		d.syncFound = true
-		d.waitingISync = false
+		d.needISYNC = false
 		d.Log.Logf(common.SeverityInfo, "Synchronization established at address 0x%x", pkt.Address)
 
 		// Generate NO_SYNC element first (if we weren't synced before)
