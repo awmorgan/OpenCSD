@@ -246,15 +246,16 @@ func (d *Decoder) processBranchAddress(pkt Packet) ([]common.GenericTraceElement
 			elem := common.GenericTraceElement{
 				Type: common.ElemTypeAddrRange,
 				AddrRange: common.AddrRange{
-					StartAddr:     prevAddr,
-					EndAddr:       prevAddr + uint64(instrInfo.Size),
-					ISA:           d.currentISA,
-					NumInstr:      1,
-					LastInstrSz:   uint8(instrInfo.Size),
-					LastInstrExec: true,
-					LastInstrType: instrInfo.Type,
-					LastInstrCond: instrInfo.IsConditional,
-					LastInstrLink: instrInfo.IsLink,
+					StartAddr:       prevAddr,
+					EndAddr:         prevAddr + uint64(instrInfo.Size),
+					ISA:             d.currentISA,
+					NumInstr:        1,
+					LastInstrSz:     uint8(instrInfo.Size),
+					LastInstrExec:   true,
+					LastInstrType:   instrInfo.Type,
+					LastInstrCond:   instrInfo.IsConditional,
+					LastInstrLink:   instrInfo.IsLink,
+					LastInstrReturn: instrInfo.IsReturn,
 				},
 			}
 			d.elements = append(d.elements, elem)
@@ -337,15 +338,16 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 				elem := common.GenericTraceElement{
 					Type: common.ElemTypeAddrRange,
 					AddrRange: common.AddrRange{
-						StartAddr:     rangeStart,
-						EndAddr:       nextAddr,
-						ISA:           d.currentISA,
-						NumInstr:      instrCount,
-						LastInstrSz:   uint8(instrInfo.Size),
-						LastInstrExec: lastExec,
-						LastInstrType: instrInfo.Type,
-						LastInstrCond: instrInfo.IsConditional,
-						LastInstrLink: instrInfo.IsLink,
+						StartAddr:       rangeStart,
+						EndAddr:         nextAddr,
+						ISA:             d.currentISA,
+						NumInstr:        instrCount,
+						LastInstrSz:     uint8(instrInfo.Size),
+						LastInstrExec:   lastExec,
+						LastInstrType:   instrInfo.Type,
+						LastInstrCond:   instrInfo.IsConditional,
+						LastInstrLink:   instrInfo.IsLink,
+						LastInstrReturn: instrInfo.IsReturn,
 					},
 				}
 				d.elements = append(d.elements, elem)

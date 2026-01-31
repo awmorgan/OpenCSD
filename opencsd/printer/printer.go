@@ -21,6 +21,11 @@ func FormatGenericElementLine(offset uint64, traceID uint8, elem common.GenericT
 	return fmt.Sprintf("Idx:%d; ID:%x; %s", offset, traceID, formatGenericElement(elem))
 }
 
+// FormatGenericElement formats a generic trace element to match the C++ .ppl output.
+func FormatGenericElement(elem common.GenericTraceElement) string {
+	return formatGenericElement(elem)
+}
+
 func formatHexBytes(data []byte) string {
 	if len(data) == 0 {
 		return ""
@@ -66,7 +71,7 @@ func ptmPacketDescription(pkt ptm.Packet) string {
 	case ptm.PacketTypeBranchAddr:
 		return formatBranchAddrDesc(pkt)
 	case ptm.PacketTypeTimestamp:
-		return fmt.Sprintf("Timestamp packet; TS=0x%x; ", pkt.Timestamp)
+		return formatTimestampDesc(pkt)
 	case ptm.PacketTypeContextID:
 		return fmt.Sprintf("Context ID packet; CtxtID=0x%08x; ", pkt.ContextID)
 	case ptm.PacketTypeVMID:
@@ -101,7 +106,7 @@ func formatISyncDesc(pkt ptm.Packet) string {
 
 	ctxt := ""
 	if pkt.ContextID != 0 {
-		ctxt = fmt.Sprintf("CtxtID=0x%08x; ", pkt.ContextID)
+		ctxt = fmt.Sprintf("CtxtID=%08x; ", pkt.ContextID)
 	}
 
 	isa := fmt.Sprintf("ISA=%s; ", isaPacketString(pkt.ISA))
@@ -110,15 +115,35 @@ func formatISyncDesc(pkt ptm.Packet) string {
 }
 
 func formatBranchAddrDesc(pkt ptm.Packet) string {
-	// NOTE: Address and exception details require full PTM address decode.
 	desc := "Branch address packet; "
-	if pkt.Address != 0 {
-		desc += fmt.Sprintf("Addr=0x%08x; ", uint32(pkt.Address))
+	addrStr := formatValStr(32, 32, pkt.Address, int(pkt.AddrBits))
+	desc += fmt.Sprintf("Addr=%s; ", addrStr)
+
+	if pkt.ISAValid {
+		desc += fmt.Sprintf("ISA=%s; ", isaPacketString(pkt.ISA))
 	}
+
+	if pkt.SecureValid {
+		if pkt.SecureState {
+			desc += "S; "
+		} else {
+			desc += "NS; "
+		}
+		if pkt.Hypervisor {
+			desc += "Hyp; "
+		}
+	}
+
 	if pkt.ExceptionNum != 0 {
-		desc += fmt.Sprintf("Excep=0x%02x; ", pkt.ExceptionNum)
+		desc += fmt.Sprintf("Excep=%s [%02x]; ", ptmExceptionName(pkt.ExceptionNum), pkt.ExceptionNum)
 	}
+
 	return desc
+}
+
+func formatTimestampDesc(pkt ptm.Packet) string {
+	tsStr := formatValStr(64, 64, pkt.Timestamp, 0)
+	return fmt.Sprintf("Timestamp packet; TS=%s(%d); ", tsStr, pkt.Timestamp)
 }
 
 func atomPattern(bits uint8, count uint8) string {
@@ -191,15 +216,14 @@ func genericElemDetails(elem common.GenericTraceElement) string {
 }
 
 func traceOnReason(reason string) string {
-	switch reason {
-	case "trace enable":
+	lower := strings.ToLower(reason)
+	switch lower {
+	case "trace enable", "begin or filter":
 		return "begin or filter"
-	case "debug restart":
-		return "debug restart"
 	case "overflow":
 		return "overflow"
-	case "begin or filter":
-		return "begin or filter"
+	case "debug restart":
+		return "debug restart"
 	default:
 		if reason != "" {
 			return reason
@@ -232,20 +256,19 @@ func formatPEContext(ctx common.PEContext) string {
 
 func formatAddrRange(ar common.AddrRange) string {
 	isa := isaElemString(ar.ISA)
-	lastSz := ar.LastInstrSz
-	if lastSz == 0 {
-		lastSz = 4
-	}
 	lastExec := "E "
-	if ar.LastInstrSz != 0 && !ar.LastInstrExec && ar.NumInstr > 0 {
+	if ar.NumInstr > 0 && !ar.LastInstrExec {
 		lastExec = "N "
 	}
+
 	instrType := instrTypeString(ar.LastInstrType)
+	subType := instrSubTypeString(ar)
 	cond := ""
 	if ar.LastInstrCond {
 		cond = " <cond>"
 	}
-	return fmt.Sprintf("exec range=0x%x:[0x%x] num_i(%d) last_sz(%d) (ISA=%s) %s%s%s", ar.StartAddr, ar.EndAddr, ar.NumInstr, lastSz, isa, lastExec, instrType, cond)
+
+	return fmt.Sprintf("exec range=0x%x:[0x%x] num_i(%d) last_sz(%d) (ISA=%s) %s%s%s%s", ar.StartAddr, ar.EndAddr, ar.NumInstr, ar.LastInstrSz, isa, lastExec, instrType, subType, cond)
 }
 
 func formatException(ex common.ExceptionInfo) string {
@@ -290,10 +313,99 @@ func isaElemString(isa common.ISA) string {
 func instrTypeString(t common.InstrType) string {
 	switch t {
 	case common.InstrTypeBranch:
-		return "BR "
+		return "BR  "
 	case common.InstrTypeBranchIndirect:
 		return "iBR "
 	default:
 		return "--- "
 	}
+}
+
+func instrSubTypeString(ar common.AddrRange) string {
+	if ar.LastInstrType == common.InstrTypeBranch && ar.LastInstrLink {
+		return "b+link "
+	}
+	if ar.LastInstrType == common.InstrTypeBranchIndirect && ar.LastInstrReturn {
+		return "V7:impl ret"
+	}
+	return ""
+}
+
+func formatValStr(totalBits int, validBits int, value uint64, updateBits int) string {
+	if totalBits < 4 {
+		totalBits = 4
+	}
+	if totalBits > 64 {
+		totalBits = 64
+	}
+
+	if validBits < 0 {
+		validBits = 0
+	}
+	if validBits > totalBits {
+		validBits = totalBits
+	}
+
+	numHexChars := totalBits / 4
+	if totalBits%4 != 0 {
+		numHexChars++
+	}
+
+	validChars := validBits / 4
+	if validBits%4 != 0 {
+		validChars++
+	}
+
+	var sb strings.Builder
+	sb.WriteString("0x")
+	if validChars < numHexChars {
+		for i := 0; i < numHexChars-validChars; i++ {
+			sb.WriteString("?")
+		}
+	}
+
+	if validChars > 0 {
+		fmtStr := fmt.Sprintf("%%0%dX", validChars)
+		sb.WriteString(fmt.Sprintf(fmtStr, value))
+	}
+
+	if validBits < totalBits {
+		sb.WriteString(fmt.Sprintf(" (%d:0)", validBits-1))
+	}
+
+	if updateBits > 0 {
+		updateMask := uint64(0)
+		if updateBits >= 64 {
+			updateMask = ^uint64(0)
+		} else {
+			updateMask = (uint64(1) << updateBits) - 1
+		}
+		sb.WriteString(fmt.Sprintf(" ~[0x%X]", value&updateMask))
+	}
+
+	return sb.String()
+}
+
+func ptmExceptionName(exNum uint16) string {
+	if exNum < 16 {
+		return []string{
+			"No Exception",
+			"Debug Halt",
+			"SMC",
+			"Hyp",
+			"Async Data Abort",
+			"Jazelle",
+			"Reserved",
+			"Reserved",
+			"PE Reset",
+			"Undefined Instr",
+			"SVC",
+			"Prefetch Abort",
+			"Data Fault",
+			"Generic",
+			"IRQ",
+			"FIQ",
+		}[exNum]
+	}
+	return "Unknown"
 }

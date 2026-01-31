@@ -119,10 +119,11 @@ type AddrRange struct {
 	NumInstr    uint32 // Number of instructions executed
 	LastInstrSz uint8  // Size of last instruction in bytes
 	// Last instruction metadata (for output formatting)
-	LastInstrExec bool      // Last instruction executed (E/N)
-	LastInstrType InstrType // Last instruction type (branch/indirect/normal)
-	LastInstrCond bool      // Last instruction is conditional
-	LastInstrLink bool      // Last instruction is a link (BL/BLX)
+	LastInstrExec   bool      // Last instruction executed (E/N)
+	LastInstrType   InstrType // Last instruction type (branch/indirect/normal)
+	LastInstrCond   bool      // Last instruction is conditional
+	LastInstrLink   bool      // Last instruction is a link (BL/BLX)
+	LastInstrReturn bool      // Last instruction is an indirect return (e.g., BX LR)
 }
 
 // ExceptionInfo represents exception information
