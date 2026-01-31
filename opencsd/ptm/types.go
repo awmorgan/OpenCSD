@@ -187,6 +187,12 @@ func extractCycleCount(buf []byte, offset int) (uint32, int) {
 	return cycleCount, byIdx
 }
 
+// extractCycleCountFromTS extracts cycle count bytes that follow timestamp bytes.
+// Uses the same format as extractCycleCount.
+func extractCycleCountFromTS(buf []byte, offset int) (uint32, int) {
+	return extractCycleCount(buf, offset)
+}
+
 // Parse processes raw PTM trace data and returns packets
 func (d *Decoder) Parse(raw []byte) ([]Packet, error) {
 	if len(raw) == 0 {
@@ -334,6 +340,7 @@ func (d *Decoder) parseISync(buf []byte) (Packet, int, error) {
 // - Header byte (0x42 or 0x46)
 // - 1-8 timestamp bytes: bit 7 = continuation flag, bits[6:0] = data bits
 // Each byte contributes 7 bits of the timestamp, shifted into position
+// - Optional cycle count bytes if cycle-accurate mode is enabled
 func (d *Decoder) parseTimestamp(buf []byte) (Packet, int, error) {
 	if len(buf) < 2 {
 		return Packet{Type: PacketTypeUnknown, Data: buf[0:1]}, 1, nil
@@ -362,6 +369,17 @@ func (d *Decoder) parseTimestamp(buf []byte) (Packet, int, error) {
 	}
 
 	pkt.Timestamp = tsVal
+
+	// In cycle-accurate mode, read cycle count bytes after timestamp
+	if d.CycleAccEnable && size < len(buf) {
+		cc, ccBytes := extractCycleCountFromTS(buf, size)
+		if ccBytes > 0 {
+			pkt.CycleCount = cc
+			pkt.CCValid = true
+			size += ccBytes
+		}
+	}
+
 	pkt.Data = buf[0:size]
 
 	return pkt, size, nil
@@ -386,13 +404,45 @@ func (d *Decoder) parseAtom(buf []byte) (Packet, int, error) {
 
 	// Atom packet encoding follows PTM P-header formats.
 	if (header&0x80) != 0 && (header&0x01) == 0 {
-		atomCount, atomBits := parseAtomFromHeader(header)
-		if atomCount == 0 {
-			return Packet{Type: PacketTypeUnknown, Data: buf[0:1]}, 1, nil
+		if d.CycleAccEnable {
+			// Cycle-accurate atom: single atom with cycle count
+			// Bit 1 (0x02): 0 = E (executed), 1 = N (not executed)
+			pkt.AtomCount = 1
+			if (header & 0x02) == 0 {
+				pkt.AtomBits = 1 // E
+			} else {
+				pkt.AtomBits = 0 // N
+			}
+
+			size := 1
+
+			// If bit 6 (0x40) is set, there are cycle count bytes
+			if (header & 0x40) != 0 {
+				cc, ccBytes := extractCycleCount(buf, 0)
+				if ccBytes > 0 {
+					pkt.CycleCount = cc
+					pkt.CCValid = true
+					size = ccBytes
+				}
+			} else {
+				// No continuation - cycle count comes from header only
+				// Extract from bits 5:2 of header
+				pkt.CycleCount = uint32((header >> 2) & 0x0F)
+				pkt.CCValid = true
+			}
+
+			pkt.Data = buf[0:size]
+			return pkt, size, nil
+		} else {
+			// Non-cycle-accurate: parse multiple atoms from header
+			atomCount, atomBits := parseAtomFromHeader(header)
+			if atomCount == 0 {
+				return Packet{Type: PacketTypeUnknown, Data: buf[0:1]}, 1, nil
+			}
+			pkt.AtomBits = atomBits
+			pkt.AtomCount = atomCount
+			return pkt, 1, nil
 		}
-		pkt.AtomBits = atomBits
-		pkt.AtomCount = atomCount
-		return pkt, 1, nil
 	}
 
 	return Packet{Type: PacketTypeUnknown, Data: buf[0:1]}, 1, nil

@@ -312,8 +312,47 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 	hw1 := (opcode >> 16) & 0xFFFF
 	hw2 := opcode & 0xFFFF
 
+	// Check for barrier instructions first - these are NOT branches
+	// DMB/DSB/ISB: 1111 0011 1011 1111 : 1000 xxxx xxxx xxxx
+	if (hw1 == 0xF3BF) && ((hw2 & 0xF000) == 0x8000) {
+		// This is a barrier instruction (DMB/DSB/ISB), not a branch
+		info.Type = common.InstrTypeNormal
+		info.IsBranch = false
+		return info
+	}
+
+	// MSR/MRS system instructions: 1111 0011 1xxx xxxx : 1000 xxxx xxxx xxxx
+	if ((hw1&0xFFF0) == 0xF380 || (hw1&0xFFF0) == 0xF3E0) && ((hw2 & 0xF000) == 0x8000) {
+		info.Type = common.InstrTypeNormal
+		info.IsBranch = false
+		return info
+	}
+
+	// NOP hints: 1111 0011 1010 1111 : 1000 0000 xxxx xxxx
+	if (hw1 == 0xF3AF) && ((hw2 & 0xFF00) == 0x8000) {
+		info.Type = common.InstrTypeNormal
+		info.IsBranch = false
+		return info
+	}
+
+	// CPS: 1111 0011 1010 1111 : 1000 0xxx xxxx xxxx
+	if (hw1 == 0xF3AF) && ((hw2 & 0xF800) == 0x8000) {
+		info.Type = common.InstrTypeNormal
+		info.IsBranch = false
+		return info
+	}
+
 	// B (conditional): 1111 0xxx xxxx xxxx : 10x0 xxxx xxxx xxxx
 	if (hw1&0xF800) == 0xF000 && (hw2&0xD000) == 0x8000 {
+		// Additional check: condition field must not be 111x (0xE or 0xF)
+		cond := (hw1 >> 6) & 0xF
+		if cond >= 0xE {
+			// Invalid condition for conditional branch - this might be another instruction
+			info.Type = common.InstrTypeNormal
+			info.IsBranch = false
+			return info
+		}
+
 		info.IsBranch = true
 		info.IsConditional = true
 		info.Type = common.InstrTypeBranch

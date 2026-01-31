@@ -415,6 +415,14 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 		return nil, nil
 	}
 
+	// Set cycle count from packet
+	if pkt.CCValid {
+		d.currPktCycleCount = pkt.CycleCount
+		d.currPktHasCC = true
+	} else {
+		d.currPktHasCC = false
+	}
+
 	d.Log.Logf(common.SeverityDebug, "Atom: %d atoms, pattern=0x%x", pkt.AtomCount, pkt.AtomBits)
 
 	for i := uint8(0); i < pkt.AtomCount; i++ {
