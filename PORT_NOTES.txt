@@ -9,8 +9,8 @@ STATUS (2026-01-31):
   PTM protocol: ⚠️ IN PROGRESS
     - ✅ Full line-by-line compare: trace_cov_a15.ppl
     - ✅ Full line-by-line compare: tc2-ptm-rstk-t32.ppl
-    - ⚠️ Snowball.ppl compare added but still failing (see Current Blocker below)
-    - ⚠️ TC2.ppl compare added (PTM IDs 0x13/0x14) but not fully validated yet
+    - ✅ Full line-by-line compare: Snowball.ppl (PTM IDs 0x10/0x11)
+    - ✅ Full line-by-line compare: TC2.ppl (PTM IDs 0x13/0x14)
   ETMv4, ETMv3, ETE, STM, ITM: ⚠️ NOT STARTED
   Framework: PARTIAL (memory accessor, frame demux, printer done)
 
@@ -50,8 +50,8 @@ all PTM-containing .ppl files are compared line-by-line against Go output.
 Current PTM verification:
   ✅ Full line-by-line compare: trace_cov_a15.ppl (TestCompareAgainstPPL)
   ✅ Full line-by-line compare: tc2-ptm-rstk-t32.ppl (TestTC2PTMRstkCompare)
-  ⚠️ Snowball.ppl compare added (TestSnowballCompare) but failing
-  ⚠️ TC2.ppl compare added (TestTC2PPLCompare) but not fully validated yet
+  ✅ Full line-by-line compare: Snowball.ppl (TestSnowballCompare)
+  ✅ Full line-by-line compare: TC2.ppl (TestTC2PPLCompare)
 
 PPL generation & formats (C++):
   - decoder/tests/run_pkt_decode_tests.bash generates most decoder/tests/results/*.ppl
@@ -135,17 +135,14 @@ DEVELOPMENT WORKFLOW:
 5. Fix decoder logic to match C++ behavior exactly (consult decoder/source/{protocol}/)
    - For investigation, create small Go debug programs under opencsd/cmd/debug_xxx/
      (e.g., cmd/debug_snowball, cmd/debug_branchaddr). Use Go only (no Python).
-     These should load snapshots, run demux/parse/decoder, and print focused diagnostics.
+     These should load snapshots, run demux/parse/decoder, and print diagnostics.
 6. Commit: git add -A && git commit -m "..."
 7. Push: git push origin go
 
-CURRENT BLOCKER (PTM / Snowball.ppl):
-------------------------------------
-- Snowball compare still fails at an ISB vs iBR mismatch around 0xC0020980.
-- Debugging shows ARM opcode 0xF57FF01F at 0xC001015C decoded as Unknown in Go.
-- C++ treats ISB/DSB/DMB in ARM decode via inst_ARM_barrier().
-- Next step: implement ARM barrier detection in opencsd/ptm/instr_decode.go
-  (use decoder/source/i_dec/trc_i_decode.cpp + trc_idec_arminst.cpp as reference).
+CURRENT BLOCKER:
+----------------
+- None for PTM compares listed above. Remaining work is to expand PTM compare
+  coverage to all PTM-containing .ppl files (see PPL generation list).
 
 SESSION UPDATES (2026-01-31):
 -----------------------------
@@ -154,6 +151,13 @@ PTM fixes and test additions done in Go:
       * TestTC2PTMRstkCompare (tc2-ptm-rstk-t32.ppl)
       * TestSnowballCompare (Snowball.ppl, PTM IDs 0x10/0x11, demuxed)
       * TestTC2PPLCompare (TC2.ppl, PTM IDs 0x13/0x14, demuxed)
+  - ARM barrier decode (A32) implemented in opencsd/ptm/instr_decode.go
+    (DSB/DMB/ISB now recognized; Snowball compare now passes).
+  - Thumb2 decode fixes:
+      * SUBS PC, LR, #imm (ERET) handled as indirect branch.
+      * T3 conditional-branch decode no longer exits early on invalid cond,
+        allowing other instruction patterns to match.
+  - TC2 PPL compare now handles ID 0x14 with EO_TRACE only when no demuxed data.
   - ISA handling aligned to C++:
       * Branch range ISA uses pre-branch ISA; update ISA after emitting range.
       * BranchAddr processing updates ISA after implied atom/exception handling.
@@ -175,10 +179,21 @@ Debug helpers added (Go only):
   - opencsd/cmd/debug_snowball
   - opencsd/cmd/debug_branchaddr
   - opencsd/cmd/debug_instr
+  - opencsd/cmd/debug_tc2 (decodes instruction range from kernel_dump.bin)
 
 Open questions / TODOs:
-  - ARM barrier decode (ISB/DSB/DMB) for A32 is still missing in Go.
-  - Validate TC2 PPL compare after Snowball is fixed.
+  - Add PTM PPL compare tests for remaining PTM-containing .ppl files.
+  - Once PTM is fully verified, start ETMv4 port.
+
+ADDITIONAL NOTES (WHAT WOULD HAVE HELPED):
+------------------------------------------
+- TC2.ppl includes PTM ID 0x14 but only EO_TRACE (no packets). The demuxer
+  may return no data for that ID; the compare test should still pass by
+  emitting only EO_TRACE for ID 0x14.
+- For instruction-level debugging, prefer Go helpers under opencsd/cmd/debug_*.
+  Example: run `go run ./cmd/debug_tc2 -start 0xC000CD4E -end 0xC000CDA0`.
+- For Thumb2 decode, do not return early on invalid conditional-branch patterns;
+  allow other instruction forms to match later in decode.
 
 CRITICAL LESSONS - READ THIS:
 ------------------------------

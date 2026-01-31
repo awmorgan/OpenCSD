@@ -66,6 +66,34 @@ func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.
 	info.NextISA = d.isa
 	info.NextISAValid = true
 
+	// Check for ARM barrier instructions (DSB/DMB/ISB) - not branches, but waypoints
+	// Mirrors C++ inst_ARM_barrier() in decoder/source/i_dec/trc_idec_arminst.cpp
+	if (opcode & 0xFFF00000) == 0xF5700000 {
+		switch opcode & 0xF0 {
+		case 0x40:
+			info.Type = common.InstrTypeDSBDMB // DSB
+			return info
+		case 0x50:
+			info.Type = common.InstrTypeDSBDMB // DMB
+			return info
+		case 0x60:
+			info.Type = common.InstrTypeISB
+			return info
+		}
+	} else if (opcode & 0x0FFF0F00) == 0x0E070F00 {
+		switch opcode & 0xFF {
+		case 0x9A:
+			info.Type = common.InstrTypeDSBDMB // mcr p15,0,Rt,c7,c10,4
+			return info
+		case 0xBA:
+			info.Type = common.InstrTypeDSBDMB // mcr p15,0,Rt,c7,c10,5
+			return info
+		case 0x95:
+			info.Type = common.InstrTypeISB // mcr p15,0,Rt,c7,c5,4
+			return info
+		}
+	}
+
 	// Extract condition field (bits 31-28)
 	cond := (opcode >> 28) & 0xF
 
@@ -422,36 +450,35 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 			// Invalid condition for conditional branch - this might be another instruction
 			info.Type = common.InstrTypeNormal
 			info.IsBranch = false
+		} else {
+			info.IsBranch = true
+			info.IsConditional = true
+			info.Type = common.InstrTypeBranch
+
+			// Extract offset bits
+			s := (hw1 >> 10) & 1
+			j1 := (hw2 >> 13) & 1
+			j2 := (hw2 >> 11) & 1
+			imm6 := hw1 & 0x3F
+			imm11 := hw2 & 0x7FF
+
+			// Combine offset: S:J2:J1:imm6:imm11:0
+			offset := int32((s << 20) | (j2 << 19) | (j1 << 18) | (imm6 << 12) | (imm11 << 1))
+
+			// Sign extend from 21 bits
+			if offset&0x00100000 != 0 {
+				offset |= ^int32(0x001FFFFF)
+			}
+
+			branchTarget := uint64(int64(addr) + int64(offset) + 4)
+			branchTarget |= 0x1 // Thumb state
+			info.BranchTarget = branchTarget &^ 0x1
+			if (branchTarget & 0x1) == 0 {
+				info.NextISA = common.ISAARM
+			}
+			info.HasBranchTarget = true
 			return info
 		}
-
-		info.IsBranch = true
-		info.IsConditional = true
-		info.Type = common.InstrTypeBranch
-
-		// Extract offset bits
-		s := (hw1 >> 10) & 1
-		j1 := (hw2 >> 13) & 1
-		j2 := (hw2 >> 11) & 1
-		imm6 := hw1 & 0x3F
-		imm11 := hw2 & 0x7FF
-
-		// Combine offset: S:J2:J1:imm6:imm11:0
-		offset := int32((s << 20) | (j2 << 19) | (j1 << 18) | (imm6 << 12) | (imm11 << 1))
-
-		// Sign extend from 21 bits
-		if offset&0x00100000 != 0 {
-			offset |= ^int32(0x001FFFFF)
-		}
-
-		branchTarget := uint64(int64(addr) + int64(offset) + 4)
-		branchTarget |= 0x1 // Thumb state
-		info.BranchTarget = branchTarget &^ 0x1
-		if (branchTarget & 0x1) == 0 {
-			info.NextISA = common.ISAARM
-		}
-		info.HasBranchTarget = true
-		return info
 	}
 
 	// B.W (unconditional): 1111 0Sii iiii iiii : 10J1 1J2i iiii iiii  (T4 encoding)
@@ -647,6 +674,15 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 	// LDR PC, [Rn, Rm] (T2): 1111 1000 0101 xxxx : 1111 0000 00xx xxxx
 	// Pattern: (inst & 0xfff0ffc0) == 0xf850f000
 	if (opcode32 & 0xFFF0FFC0) == 0xF850F000 {
+		info.IsBranch = true
+		info.Type = common.InstrTypeBranchIndirect
+		info.HasBranchTarget = false
+		return info
+	}
+
+	// SUBS PC, LR, #imm (includes ERET) - indirect branch
+	// Pattern: (inst & 0xfff0d000) == 0xf3d08000
+	if (opcode32 & 0xFFF0D000) == 0xF3D08000 {
 		info.IsBranch = true
 		info.Type = common.InstrTypeBranchIndirect
 		info.HasBranchTarget = false

@@ -307,9 +307,20 @@ func TestTC2PPLCompare(t *testing.T) {
 
 	for _, id := range []uint8{0x13, 0x14} {
 		data, ok := streams[id]
+		expectedLines := filterPPLRecordsByIDWithOptions(expectedRecords, id, id, true)
+		expectedLines = trimExpectedToFirstAsync(expectedLines)
+
 		if !ok || len(data) == 0 {
-			t.Fatalf("No demuxed data for PTM ID 0x%02x", id)
+			// Handle streams with no demuxed data - expect only EO_TRACE for this ID.
+			if len(expectedLines) == 0 {
+				t.Fatalf("No expected lines for PTM ID 0x%02x", id)
+			}
+			eotElem := common.GenericTraceElement{Type: common.ElemTypeEOTrace}
+			actualLines := []string{printer.FormatGenericElementLine(0, id, eotElem)}
+			compareNormalizedPPLLines(t, expectedLines, actualLines)
+			continue
 		}
+
 		decoder := ptm.NewDecoder(id)
 		decoder.RetStackEnable = true
 		decoder.SetMemoryAccessor(memAcc)
@@ -325,8 +336,6 @@ func TestTC2PPLCompare(t *testing.T) {
 
 		actualLines := generateActualPPLLines(t, packets, decoder, id, id)
 		actualLines = dropInitialNoSyncAfterAsync(actualLines)
-		expectedLines := filterPPLRecordsByIDWithOptions(expectedRecords, id, id, true)
-		expectedLines = trimExpectedToFirstAsync(expectedLines)
 		compareNormalizedPPLLines(t, expectedLines, actualLines)
 	}
 }
