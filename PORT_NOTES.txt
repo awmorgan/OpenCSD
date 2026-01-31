@@ -39,6 +39,23 @@ Supporting Components:
 CURRENT STATUS: Only PTM protocol decoder is partially ported (~60% verified).
 All other protocols (ETMv3, ETMv4, ETE, STM, ITM) still need to be ported.
 
+GIT REPOSITORY & BRANCHES:
+--------------------------
+Repository: https://github.com/awmorgan/OpenCSD
+Active Branch: go
+Main C++ Code: main branch (decoder/ directory)
+Go Port Location: go branch (opencsd/ directory)
+
+Setup:
+  git clone https://github.com/awmorgan/OpenCSD
+  cd OpenCSD
+  git checkout go
+
+Go Module:
+  module opencsd
+  go 1.25.6
+  No external dependencies (pure Go implementation)
+
 CRITICAL VERIFICATION STRATEGY:
 -------------------------------
 **The C++ golden test files (.ppl) are the authoritative reference for verification.**
@@ -64,6 +81,33 @@ opencsd/ptm/decoder_test.go   - Basic decoder functionality tests
 opencsd/tests/helpers/ppl_loader.go - PPL file parser
 
 To run verification: cd opencsd && go test ./ptm -v -run TestCompareAgainstPPL
+
+TEST SNAPSHOT STRUCTURE:
+------------------------
+Snapshots in decoder/tests/snapshots/ contain everything needed to decode a trace:
+
+Example: decoder/tests/snapshots/trace_cov_a15/
+  snapshot.ini           - Main config (lists all devices)
+  trace.ini              - Trace metadata (timestamp frequency, buffer mappings)
+  device*.ini            - Device configs (register values: IDR, CTRL, CCER, etc.)
+  PTM_0_2.bin            - Raw trace data (binary packet stream)
+  mem_*.bin              - Memory images (code/data regions needed for instruction decode)
+
+Loading a snapshot in Go:
+  1. Parse snapshot.ini to find device configs
+  2. Load device*.ini to get PTM configuration registers
+  3. Read trace.ini to map trace buffers to source IDs
+  4. Load PTM_*.bin as raw trace input
+  5. Load mem_*.bin files for memory access during decode
+
+See: opencsd/ptm/tc2_test.go for complete example
+
+Key Concept - Trace Source IDs:
+  - Each CoreSight trace source has a unique ID (0x00-0xFF)
+  - PTM_0_2 means PTM with ID 0x02
+  - ETM_1_5 means ETM with ID 0x05
+  - In muxed traces, ID is used to demux packets to correct decoder
+  - Frame deformatter (opencsd/frame/demux.go) splits muxed trace by ID
 
 PROGRESS TRACKING:
 -----------------
@@ -135,6 +179,22 @@ Add tests for:
 
 DEVELOPMENT WORKFLOW:
 --------------------
+
+ENVIRONMENT SETUP:
+  Go: 1.19 or later (tested with 1.25.6)
+  OS: Linux, macOS, or Windows (with bash for test scripts)
+  No external Go dependencies
+
+BUILDING C++ REFERENCE (Optional - for regenerating .ppl files):
+  On Linux:
+    cd decoder/build/linux
+    make
+  On macOS:
+    cd decoder/build/macos
+    make
+  On Windows (MinGW):
+    cd decoder/build/mingw
+    make
 
 1. **Regenerate C++ golden files** (if needed):
    cd decoder/tests
