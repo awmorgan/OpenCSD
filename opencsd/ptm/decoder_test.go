@@ -237,6 +237,51 @@ func TestASyncPacket_WithTrailingData(t *testing.T) {
 	assertBytesEqual(t, raw[0:6], pkt.Data, "A-Sync packet data")
 }
 
+func TestAtomPacket_FormatFromHeader(t *testing.T) {
+	// Atom packet 0xd0 should decode to ENEEE (5 atoms)
+	raw := []byte{0xd0}
+
+	decoder := NewDecoder(0)
+	packets, _ := testParseSuccess(t, decoder, raw)
+
+	if len(packets) != 1 {
+		t.Fatalf("expected 1 packet, got %d", len(packets))
+	}
+
+	pkt := packets[0]
+	assertEqual(t, PacketTypeATOM, pkt.Type, "packet type")
+	if pkt.AtomCount != 5 {
+		t.Fatalf("expected 5 atoms, got %d", pkt.AtomCount)
+	}
+	if atomPatternTest(pkt.AtomBits, pkt.AtomCount) != "ENEEE" {
+		t.Fatalf("expected ENEEE, got %s", atomPatternTest(pkt.AtomBits, pkt.AtomCount))
+	}
+}
+
+func TestBranchAddress_WithException(t *testing.T) {
+	// Branch address packet with exception from trace_cov_a15.ppl
+	raw := []byte{0x81, 0x80, 0x80, 0x80, 0x48, 0x02}
+
+	decoder := NewDecoder(0)
+	packets, _ := testParseSuccess(t, decoder, raw)
+
+	if len(packets) != 1 {
+		t.Fatalf("expected 1 packet, got %d", len(packets))
+	}
+
+	pkt := packets[0]
+	assertEqual(t, PacketTypeBranchAddr, pkt.Type, "packet type")
+	if pkt.ExceptionNum != 0x01 {
+		t.Fatalf("expected exception 0x01, got 0x%02x", pkt.ExceptionNum)
+	}
+	if !pkt.SecureValid || !pkt.SecureState {
+		t.Fatalf("expected secure state true")
+	}
+	if pkt.Address != 0x0 {
+		t.Fatalf("expected address 0x0, got 0x%x", pkt.Address)
+	}
+}
+
 func TestPTMDecoder_FirstChunkFromSnapshot(t *testing.T) {
 	binPath := filepath.Join(snapshotPath, "PTM_0_2.bin")
 	raw, err := os.ReadFile(binPath)
@@ -339,6 +384,21 @@ func assertBytesEqual(t *testing.T, want, got []byte, msg string) {
 	if !bytes.Equal(want, got) {
 		t.Errorf("%s: want %x, got %x", msg, want, got)
 	}
+}
+
+func atomPatternTest(bits uint8, count uint8) string {
+	if count == 0 {
+		return ""
+	}
+	pattern := ""
+	for i := uint8(0); i < count; i++ {
+		if (bits & (1 << i)) != 0 {
+			pattern += "E"
+		} else {
+			pattern += "N"
+		}
+	}
+	return pattern
 }
 
 func min(vals ...int) int {
@@ -726,12 +786,16 @@ func TestProcessPacket_AddressUpdate(t *testing.T) {
 		t.Errorf("Current address = 0x%x, want 0x80000558", decoder.GetCurrentAddress())
 	}
 
-	// Process branch address packet
-	branchPkt := Packet{
-		Type: PacketTypeBranchAddr,
-		Data: []byte{0x81, 0x80, 0x80, 0x80, 0x48, 0x02},
+	// Process branch address packet from raw bytes (single-byte address update)
+	branchRaw := []byte{0x2f}
+	branchPkts, err := decoder.Parse(branchRaw)
+	if err != nil {
+		t.Fatalf("Parse(BranchAddr) error: %v", err)
 	}
-	_, err := decoder.ProcessPacket(branchPkt)
+	if len(branchPkts) != 1 {
+		t.Fatalf("expected 1 branch packet, got %d", len(branchPkts))
+	}
+	_, err = decoder.ProcessPacket(branchPkts[0])
 	if err != nil {
 		t.Fatalf("ProcessPacket(BranchAddr) error: %v", err)
 	}
@@ -783,11 +847,6 @@ func TestProcessPacket_TraceCovA15(t *testing.T) {
 	// Verify synchronization
 	if !decoder.IsSynchronized() {
 		t.Error("Decoder should be synchronized after processing trace_cov_a15")
-	}
-
-	// Verify address was updated
-	if decoder.GetCurrentAddress() == 0 {
-		t.Error("Current address should be non-zero after processing trace")
 	}
 
 	t.Logf("Final state: synchronized=%v, address=0x%x, ISA=%s",

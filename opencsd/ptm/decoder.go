@@ -23,6 +23,7 @@ type Decoder struct {
 
 	// Current processor context
 	currentAddr    uint64                // Current program counter
+	lastPacketAddr uint64                // Last packet-reported address (for address reconstruction)
 	currentISA     common.ISA            // Current instruction set
 	secureState    bool                  // Current security state (S/N)
 	contextID      uint32                // Current context ID
@@ -34,6 +35,9 @@ type Decoder struct {
 	atomBits    uint8 // E/N pattern
 	atomCount   uint8 // Number of atoms
 	atomIndex   uint8 // Current atom being processed
+
+	// Simple return stack for indirect returns
+	retStack []uint64
 
 	// Output elements
 	elements []common.GenericTraceElement // Decoded trace elements
@@ -67,6 +71,7 @@ func (d *Decoder) Reset() {
 	d.syncFound = false
 	d.waitingISync = false
 	d.currentAddr = 0
+	d.lastPacketAddr = 0
 	d.currentISA = common.ISAARM
 	d.secureState = false
 	d.contextID = 0
@@ -78,6 +83,7 @@ func (d *Decoder) Reset() {
 	d.atomIndex = 0
 	d.elements = nil
 	d.CurrentElement = nil
+	d.retStack = nil
 }
 
 // ProcessPacket processes a single packet and updates decoder state
@@ -131,6 +137,7 @@ func (d *Decoder) processASYNC(pkt Packet) ([]common.GenericTraceElement, error)
 
 // processISync handles ISYNC packets - establishes synchronization
 func (d *Decoder) processISync(pkt Packet) ([]common.GenericTraceElement, error) {
+	wasSynced := d.syncFound
 	if !d.syncFound {
 		// First sync
 		d.syncFound = true
@@ -144,36 +151,52 @@ func (d *Decoder) processISync(pkt Packet) ([]common.GenericTraceElement, error)
 		d.elements = append(d.elements, elem)
 	}
 
+	prevISA := d.currentISA
+	prevCtx := d.contextID
+	prevVMID := d.vmid
+	prevSec := d.secureState
+
 	// Update context from ISYNC
 	d.currentAddr = pkt.Address
+	d.lastPacketAddr = pkt.Address
 	d.currentISA = pkt.ISA
-	d.secureState = pkt.SecureState
+	if pkt.SecureValid {
+		d.secureState = pkt.SecureState
+	}
 	d.contextID = pkt.ContextID
-
-	// Generate TRACE_ON element
-	reason := "trace enable"
-	if pkt.ISyncReason == ISyncDebugExit {
-		reason = "debug restart"
+	if pkt.VMID != 0 {
+		d.vmid = pkt.VMID
 	}
 
-	traceOnElem := common.GenericTraceElement{
-		Type:          common.ElemTypeTraceOn,
-		TraceOnReason: reason,
-	}
-	d.elements = append(d.elements, traceOnElem)
+	// Generate TRACE_ON element if required
+	if !wasSynced || pkt.ISyncReason != ISyncPeriodic {
+		reason := "trace enable"
+		if pkt.ISyncReason == ISyncDebugExit {
+			reason = "debug restart"
+		}
 
-	// Generate PE_CONTEXT element
-	ctxElem := common.GenericTraceElement{
-		Type: common.ElemTypePeContext,
-		Context: common.PEContext{
-			ContextID:      d.contextID,
-			VMID:           uint32(d.vmid),
-			ISA:            d.currentISA,
-			SecurityState:  d.getSecurityState(),
-			ExceptionLevel: d.exceptionLevel,
-		},
+		traceOnElem := common.GenericTraceElement{
+			Type:          common.ElemTypeTraceOn,
+			TraceOnReason: reason,
+		}
+		d.elements = append(d.elements, traceOnElem)
 	}
-	d.elements = append(d.elements, ctxElem)
+
+	// Generate PE_CONTEXT only if context changed or first sync
+	contextChanged := !wasSynced || (pkt.ISAValid && pkt.ISA != prevISA) || (pkt.SecureValid && pkt.SecureState != prevSec) || (d.contextID != prevCtx) || (d.vmid != prevVMID)
+	if contextChanged {
+		ctxElem := common.GenericTraceElement{
+			Type: common.ElemTypePeContext,
+			Context: common.PEContext{
+				ContextID:      d.contextID,
+				VMID:           uint32(d.vmid),
+				ISA:            d.currentISA,
+				SecurityState:  d.getSecurityState(),
+				ExceptionLevel: d.exceptionLevel,
+			},
+		}
+		d.elements = append(d.elements, ctxElem)
+	}
 
 	d.Log.Logf(common.SeverityDebug, "ISYNC: addr=0x%x ISA=%s", d.currentAddr, d.currentISA)
 
@@ -187,10 +210,19 @@ func (d *Decoder) processBranchAddress(pkt Packet) ([]common.GenericTraceElement
 		return nil, nil
 	}
 
-	// Extract address from packet
-	// For now, we do a simple extraction - this needs proper implementation
-	// based on the PTM specification for address compression
-	addr := d.extractBranchAddress(pkt)
+	prevAddr := d.currentAddr
+	addr := pkt.Address
+	if pkt.AddrBits > 0 {
+		mask := (uint64(1) << pkt.AddrBits) - 1
+		addr = (d.lastPacketAddr & ^mask) | (addr & mask)
+	}
+
+	if pkt.ISAValid {
+		d.currentISA = pkt.ISA
+	}
+	if pkt.SecureValid {
+		d.secureState = pkt.SecureState
+	}
 
 	// Check if this is an exception
 	if pkt.ExceptionNum != 0 {
@@ -200,15 +232,38 @@ func (d *Decoder) processBranchAddress(pkt Packet) ([]common.GenericTraceElement
 			Exception: common.ExceptionInfo{
 				Number:      pkt.ExceptionNum,
 				Type:        d.getExceptionType(pkt.ExceptionNum),
-				PrefRetAddr: d.currentAddr, // Previous address
+				PrefRetAddr: prevAddr, // Previous address
 			},
 		}
 		d.elements = append(d.elements, elem)
-		d.Log.Logf(common.SeverityDebug, "Exception: num=0x%x at addr=0x%x", pkt.ExceptionNum, d.currentAddr)
+		d.Log.Logf(common.SeverityDebug, "Exception: num=0x%x at addr=0x%x", pkt.ExceptionNum, prevAddr)
+	}
+
+	// If no exception, a branch address implies an executed instruction range
+	if pkt.ExceptionNum == 0 && d.MemAcc != nil {
+		instrInfo, err := d.decodeInstruction(prevAddr)
+		if err == nil {
+			elem := common.GenericTraceElement{
+				Type: common.ElemTypeAddrRange,
+				AddrRange: common.AddrRange{
+					StartAddr:     prevAddr,
+					EndAddr:       prevAddr + uint64(instrInfo.Size),
+					ISA:           d.currentISA,
+					NumInstr:      1,
+					LastInstrSz:   uint8(instrInfo.Size),
+					LastInstrExec: true,
+					LastInstrType: instrInfo.Type,
+					LastInstrCond: instrInfo.IsConditional,
+					LastInstrLink: instrInfo.IsLink,
+				},
+			}
+			d.elements = append(d.elements, elem)
+		}
 	}
 
 	// Update current address
 	d.currentAddr = addr
+	d.lastPacketAddr = addr
 	d.Log.Logf(common.SeverityDebug, "Branch to address: 0x%x", d.currentAddr)
 
 	return d.elements, nil
@@ -348,10 +403,19 @@ func (d *Decoder) processAtom(atomBit common.Atom) (*common.InstrInfo, bool, err
 
 	nextAddr := d.currentAddr + uint64(instrInfo.Size)
 	branchTaken := false
+	if atomBit == common.AtomExecuted && instrInfo.IsLink {
+		d.retStack = append(d.retStack, nextAddr)
+	}
 
 	if atomBit == common.AtomExecuted {
 		if instrInfo.IsBranch && instrInfo.HasBranchTarget {
 			d.currentAddr = instrInfo.BranchTarget
+			branchTaken = true
+		} else if instrInfo.Type == common.InstrTypeBranchIndirect && instrInfo.IsReturn && len(d.retStack) > 0 {
+			// Use return stack for indirect returns
+			target := d.retStack[len(d.retStack)-1]
+			d.retStack = d.retStack[:len(d.retStack)-1]
+			d.currentAddr = target
 			branchTaken = true
 		} else {
 			d.currentAddr = nextAddr
@@ -365,6 +429,29 @@ func (d *Decoder) processAtom(atomBit common.Atom) (*common.InstrInfo, bool, err
 	}
 
 	return instrInfo, branchTaken, nil
+}
+
+func (d *Decoder) decodeInstruction(addr uint64) (*common.InstrInfo, error) {
+	if d.MemAcc == nil {
+		return nil, fmt.Errorf("memory accessor not set")
+	}
+
+	buf := make([]byte, 4)
+	n, err := d.MemAcc.ReadTargetMemory(addr, buf)
+	if err != nil {
+		return nil, err
+	}
+	if n < 4 {
+		return nil, fmt.Errorf("incomplete instruction read at 0x%X: got %d bytes", addr, n)
+	}
+
+	decoder := NewInstrDecoder(d.currentISA)
+	if d.currentISA == common.ISAARM {
+		opcode := binary.LittleEndian.Uint32(buf)
+		return decoder.DecodeARMOpcode(addr, opcode)
+	}
+
+	return decoder.DecodeInstruction(addr, d.MemAcc)
 }
 
 // processTimestamp handles timestamp packets

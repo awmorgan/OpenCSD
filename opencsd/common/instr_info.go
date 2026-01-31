@@ -55,6 +55,9 @@ type InstrInfo struct {
 	// HasBranchTarget indicates if BranchTarget is valid
 	HasBranchTarget bool
 
+	// IsReturn indicates an indirect branch that returns (e.g., BX LR)
+	IsReturn bool
+
 	// Opcode is the raw instruction bytes
 	Opcode uint32
 }
@@ -67,5 +70,6 @@ func NewInstrInfo() *InstrInfo {
 		IsBranch:        false,
 		IsConditional:   false,
 		HasBranchTarget: false,
+		IsReturn:        false,
 	}
 }

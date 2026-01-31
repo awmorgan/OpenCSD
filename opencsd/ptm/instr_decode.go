@@ -125,6 +125,11 @@ func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.
 		if (opcode & 0x00000020) != 0 {
 			info.IsLink = true
 		}
+		// Detect BX/BLX LR return (Rm == 14)
+		rm := opcode & 0xF
+		if rm == 0xE {
+			info.IsReturn = true
+		}
 		return info
 	}
 

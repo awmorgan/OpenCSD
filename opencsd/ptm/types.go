@@ -76,13 +76,16 @@ type Packet struct {
 	// I-Sync specific fields
 	Address     uint64
 	ISA         ISA
+	ISAValid    bool
 	ISyncReason ISyncReason
-	SecureState bool // S bit
+	SecureState bool // Secure if true
+	SecureValid bool
 	AltISA      bool
 	Hypervisor  bool
 	ContextID   uint32
 	CycleCount  uint32
 	VMID        uint8
+	AddrBits    uint8 // Number of valid address bits in Address
 
 	// Atom specific fields
 	AtomBits  uint8 // E/N pattern
@@ -194,21 +197,14 @@ func (d *Decoder) parseNextPacket(buf []byte) (Packet, int, error) {
 		return d.parseTimestamp(buf)
 	}
 
-	// Atom packets: bit 7 = 1, bit 0 = 0, excluding special cases
+	// Atom packets: bit 7 = 1, bit 0 = 0
 	// Must check before branch address to avoid misidentification
 	if (header&0x80) != 0 && (header&0x01) == 0 {
-		// Check if it's actually a branch address (bit 7=1, bit 0=1)
-		// or if bits[6:1] indicate special encoding
-		atomBits := (header >> 1) & 0x1F
-		// If all bits 0 except bit 0, it's likely a branch address continuation
-		if atomBits != 0 && atomBits != 0x1F {
-			return d.parseAtom(buf)
-		}
+		return d.parseAtom(buf)
 	}
 
-	// Branch Address: bit 7 = 1, bit 0 = 1
-	// OR bit 7 = 1, bit 0 = 0, bits[6:1] = all 0 (continuation byte)
-	if (header&0x80) != 0 && ((header&0x01) != 0 || (header&0x7E) == 0) {
+	// Branch Address: bit 0 = 1 (all such headers)
+	if (header & 0x01) != 0 {
 		return d.parseBranchAddress(buf)
 	}
 
@@ -248,7 +244,9 @@ func (d *Decoder) parseISync(buf []byte) (Packet, int, error) {
 
 	// Info byte (byte 5)
 	info := buf[5]
-	pkt.SecureState = (info & 0x08) != 0
+	// Bit 3 is NS in PTM. Secure when NS bit is 0.
+	pkt.SecureState = (info & 0x08) == 0
+	pkt.SecureValid = true
 	pkt.AltISA = (info & 0x04) != 0
 	pkt.Hypervisor = (info & 0x02) != 0
 	isyncReason := (info >> 5) & 0x3
@@ -264,6 +262,7 @@ func (d *Decoder) parseISync(buf []byte) (Packet, int, error) {
 	} else {
 		pkt.ISA = ISAARM
 	}
+	pkt.ISAValid = true
 
 	// Clear LSB from address for alignment
 	pkt.Address = addr & 0xFFFFFFFE
@@ -332,44 +331,14 @@ func (d *Decoder) parseAtom(buf []byte) (Packet, int, error) {
 	header := buf[0]
 	pkt := Packet{Type: PacketTypeATOM, Data: buf[0:1]}
 
-	// Simple atom encoding: single byte
-	// bit 7 = 1, bit 0 = 0
+	// Atom packet encoding follows PTM P-header formats.
 	if (header&0x80) != 0 && (header&0x01) == 0 {
-		// Extract atom from bits [6:1]
-		payload := (header >> 1) & 0x3F
-
-		// Find highest set bit (Stop Bit)
-		stopBit := -1
-		for i := 5; i >= 0; i-- {
-			if (payload & (1 << i)) != 0 {
-				stopBit = i
-				break
-			}
-		}
-
-		if stopBit == -1 {
-			// No stop bit found, invalid
+		atomCount, atomBits := parseAtomFromHeader(header)
+		if atomCount == 0 {
 			return Packet{Type: PacketTypeUnknown, Data: buf[0:1]}, 1, nil
 		}
-
-		// Atoms are bits below stopBit
-		count := uint8(stopBit)
-		var atomPattern uint8
-
-		// PTM: 0=E, 1=N. (OpenCSD seems to imply this matching PPL 0xd0 -> ENEEE)
-		// We map 0->1 (E) and 1->0 (N) for common.AtomExecuted
-		// LSB of atomPattern is Atom 0.
-		// Atom 0 corresponds to bit below stopBit.
-		for i := 0; i < int(count); i++ {
-			bitPos := count - 1 - uint8(i)
-			if (payload & (1 << bitPos)) == 0 {
-				// 0 is Executed
-				atomPattern |= (1 << i)
-			}
-		}
-
-		pkt.AtomBits = atomPattern
-		pkt.AtomCount = count
+		pkt.AtomBits = atomBits
+		pkt.AtomCount = atomCount
 		return pkt, 1, nil
 	}
 
@@ -381,47 +350,178 @@ func (d *Decoder) parseBranchAddress(buf []byte) (Packet, int, error) {
 	// Branch address packets are variable length:
 	// - 1-4 address bytes: bit 7 = 1 for continuation
 	// - Optional 5th address byte (determines ISA)
-	// - Optional exception/waypoint byte
+	// - Optional exception bytes
 
-	if len(buf) < 2 {
+	if len(buf) < 1 {
 		return Packet{Type: PacketTypeUnknown, Data: buf[0:1]}, 1, nil
 	}
 
 	pkt := Packet{Type: PacketTypeBranchAddr}
 	size := 1
-	gotAllAddrBytes := false
 	numAddrBytes := 1
+	gotAddrBytes := false
+	gotExcepBytes := false
+	addrPktISA, hasISA := ISAARM, false
+	var lastAddrByte byte = buf[0]
 
-	// Read address bytes (header + 1-4 address bytes)
-	for size < len(buf) && !gotAllAddrBytes && numAddrBytes <= 5 {
-		if numAddrBytes <= 4 {
-			// Address bytes 1-4: check continuation bit
-			if (buf[size-1] & 0x80) == 0 {
-				// No continuation - we have all address bytes
-				gotAllAddrBytes = true
-				break
+	if (buf[0] & 0x80) == 0 {
+		gotAddrBytes = true
+		gotExcepBytes = true
+	}
+
+	for size < len(buf) && !gotAddrBytes && numAddrBytes <= 5 {
+		curr := buf[size]
+		lastAddrByte = curr
+		size++
+		numAddrBytes++
+
+		if numAddrBytes < 5 {
+			if (curr & 0x80) == 0 {
+				gotAddrBytes = true
+				if (curr & 0x40) == 0 {
+					gotExcepBytes = true
+				}
 			}
-			size++
-			numAddrBytes++
 		} else {
-			// 5th address byte (if we get here, we had 4 continuation bytes)
-			gotAllAddrBytes = true
-			break
+			// 5th address byte determines ISA
+			gotAddrBytes = true
+			if (curr & 0x40) == 0 {
+				gotExcepBytes = true
+			}
+
+			addrPktISA = ISAARM
+			hasISA = true
+			if (curr & 0x20) == 0x20 {
+				// Jazelle not represented in Go ISA; keep ARM for now.
+				addrPktISA = ISAARM
+			} else if (curr & 0x30) == 0x10 {
+				addrPktISA = ISAThumb2
+			}
 		}
 	}
 
-	// Check if there's an exception/waypoint byte
-	// This exists if byte 5 has bit 6 set
-	if numAddrBytes == 5 && size < len(buf) {
-		if (buf[size-1] & 0x40) != 0 {
+	// Exception bytes
+	if gotAddrBytes && !gotExcepBytes && size < len(buf) {
+		if (lastAddrByte & 0x40) != 0 {
+			// Read exception bytes
+			E1 := buf[size]
 			size++
+			excepAltISA := (E1 & 0x40) != 0
+			pkt.SecureState = (E1 & 0x01) == 0
+			pkt.SecureValid = true
+			exNum := uint16((E1 >> 1) & 0x0F)
+			if (E1&0x80) != 0 && size < len(buf) {
+				E2 := buf[size]
+				size++
+				pkt.Hypervisor = ((E2 >> 5) & 0x1) != 0
+				exNum |= uint16(E2&0x1F) << 4
+			}
+			pkt.ExceptionNum = exNum
+			gotExcepBytes = true
+
+			// Adjust ISA for exception alt ISA if applicable
+			if addrPktISA == ISATEE && !excepAltISA {
+				addrPktISA = ISAThumb2
+			} else if addrPktISA == ISAThumb2 && excepAltISA {
+				addrPktISA = ISATEE
+			}
 		}
+	}
+
+	// Extract address bits
+	addrVal, addrBits := extractBranchAddressBits(buf, numAddrBytes, addrPktISA)
+	pkt.Address = addrVal
+	pkt.AddrBits = addrBits
+	if hasISA {
+		pkt.ISA = addrPktISA
+		pkt.ISAValid = true
 	}
 
 	pkt.Data = buf[0:size]
-	// TODO: Extract actual address value and exception info
-
 	return pkt, size, nil
+}
+
+func parseAtomFromHeader(pHdr byte) (uint8, uint8) {
+	var atomNum uint8
+	atomFmtID := pHdr & 0xF0
+	if atomFmtID == 0x80 {
+		if (pHdr & 0x08) == 0x08 {
+			atomNum = 2
+		} else {
+			atomNum = 1
+		}
+	} else if atomFmtID == 0x90 {
+		atomNum = 3
+	} else {
+		if (pHdr & 0xE0) == 0xA0 {
+			atomNum = 4
+		} else {
+			atomNum = 5
+		}
+	}
+
+	if atomNum == 0 {
+		return 0, 0
+	}
+
+	atomMask := byte(0x2)
+	var atomBits uint8
+	for i := uint8(0); i < atomNum; i++ {
+		atomBits <<= 1
+		if (pHdr & atomMask) == 0 {
+			atomBits |= 0x1
+		}
+		atomMask <<= 1
+	}
+
+	return atomNum, atomBits
+}
+
+func extractBranchAddressBits(buf []byte, numAddrBytes int, isa ISA) (uint64, uint8) {
+	if numAddrBytes == 0 {
+		return 0, 0
+	}
+	addrVal := uint64(0)
+	mask := byte(0x7E)
+	numBits := uint8(7)
+	shift := 0
+	nextShift := 0
+	var totalBits uint8
+
+	for i := 0; i < numAddrBytes; i++ {
+		if i == 4 {
+			mask = 0x0F
+			numBits = 4
+			if isa == ISAARM {
+				mask = 0x07
+				numBits = 3
+			}
+		} else if i > 0 {
+			mask = 0x7F
+			numBits = 7
+			if i == numAddrBytes-1 {
+				mask = 0x3F
+				numBits = 6
+			}
+		}
+
+		shift = nextShift
+		addrVal |= uint64(buf[i]&mask) << shift
+		totalBits += numBits
+
+		if i == 0 {
+			nextShift = 7
+		} else {
+			nextShift += 7
+		}
+	}
+
+	if isa == ISAARM {
+		addrVal <<= 1
+		totalBits++
+	}
+
+	return addrVal, totalBits
 }
 
 // parseContextID parses a Context ID packet (header 0x6E)
