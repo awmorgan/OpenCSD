@@ -84,6 +84,7 @@ type Packet struct {
 	Hypervisor  bool
 	ContextID   uint32
 	CycleCount  uint32
+	CCValid     bool // Cycle count is valid
 	VMID        uint8
 	AddrBits    uint8 // Number of valid address bits in Address
 
@@ -141,6 +142,49 @@ func atomPattern(bits uint8, count uint8) string {
 		}
 	}
 	return pattern
+}
+
+// extractCycleCount extracts a cycle count value from packet data.
+// The first byte has continuation bit at 0x40 and data in bits[5:2].
+// Subsequent bytes have continuation bit at 0x80 and data in bits[6:0].
+// Returns the cycle count value and number of bytes consumed.
+func extractCycleCount(buf []byte, offset int) (uint32, int) {
+	if offset >= len(buf) {
+		return 0, 0
+	}
+
+	cycleCount := uint32(0)
+	byIdx := 0
+	shift := 4 // First byte contributes 4 bits
+
+	for {
+		if offset+byIdx >= len(buf) {
+			break
+		}
+		currByte := buf[offset+byIdx]
+
+		if byIdx == 0 {
+			// First byte: data in bits[5:2], cont bit at 0x40
+			cycleCount = uint32((currByte >> 2) & 0x0F)
+			if (currByte & 0x40) == 0 {
+				// No continuation
+				byIdx++
+				break
+			}
+		} else {
+			// Subsequent bytes: data in bits[6:0], cont bit at 0x80
+			cycleCount |= uint32(currByte&0x7F) << shift
+			shift += 7
+			if (currByte&0x80) == 0 || byIdx >= 4 {
+				// No continuation or max bytes reached
+				byIdx++
+				break
+			}
+		}
+		byIdx++
+	}
+
+	return cycleCount, byIdx
 }
 
 // Parse processes raw PTM trace data and returns packets
@@ -268,10 +312,19 @@ func (d *Decoder) parseISync(buf []byte) (Packet, int, error) {
 	pkt.Address = addr & 0xFFFFFFFE
 
 	size := 6
-	pkt.Data = buf[0:size]
 
-	// TODO: Parse optional cycle count and context ID bytes
-	// For now, just return the basic 6-byte packet
+	// Parse optional cycle count if reason != periodic AND cycle accurate tracing is enabled
+	// Since we don't always have config, try to parse if reason != 0 and there's more data
+	if pkt.ISyncReason != ISyncPeriodic && d.CycleAccEnable && len(buf) > 6 {
+		cc, ccBytes := extractCycleCount(buf, 6)
+		if ccBytes > 0 {
+			pkt.CycleCount = cc
+			pkt.CCValid = true
+			size += ccBytes
+		}
+	}
+
+	pkt.Data = buf[0:size]
 
 	return pkt, size, nil
 }
@@ -435,6 +488,16 @@ func (d *Decoder) parseBranchAddress(buf []byte) (Packet, int, error) {
 	if hasISA {
 		pkt.ISA = addrPktISA
 		pkt.ISAValid = true
+	}
+
+	// Parse optional cycle count if enabled
+	if d.CycleAccEnable && gotExcepBytes && size < len(buf) {
+		cc, ccBytes := extractCycleCount(buf, size)
+		if ccBytes > 0 {
+			pkt.CycleCount = cc
+			pkt.CCValid = true
+			size += ccBytes
+		}
 	}
 
 	pkt.Data = buf[0:size]

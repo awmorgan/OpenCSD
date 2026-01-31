@@ -164,7 +164,11 @@ func atomPattern(bits uint8, count uint8) string {
 func formatGenericElement(elem common.GenericTraceElement) string {
 	name := genericElemName(elem.Type)
 	details := genericElemDetails(elem)
-	return fmt.Sprintf("%s(%s)", name, details)
+	ccStr := ""
+	if elem.HasCycleCount {
+		ccStr = fmt.Sprintf(" [CC=%d]; ", elem.CycleCount)
+	}
+	return fmt.Sprintf("%s(%s%s)", name, details, ccStr)
 }
 
 func genericElemName(t common.ElemType) string {

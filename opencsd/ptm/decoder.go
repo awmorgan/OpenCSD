@@ -10,9 +10,10 @@ import (
 // Decoder handles PTM trace decoding and maintains decoder state
 type Decoder struct {
 	// Configuration
-	TraceID uint8                 // Trace source ID
-	Log     common.Logger         // Logger for errors and debug info
-	MemAcc  common.MemoryAccessor // Memory accessor for reading instruction opcodes
+	TraceID        uint8                 // Trace source ID
+	Log            common.Logger         // Logger for errors and debug info
+	MemAcc         common.MemoryAccessor // Memory accessor for reading instruction opcodes
+	CycleAccEnable bool                  // Cycle accurate tracing enabled
 
 	// Current element being built
 	CurrentElement *common.GenericTraceElement
@@ -41,6 +42,10 @@ type Decoder struct {
 	// Return stack for indirect returns - stores (address, ISA) pairs
 	retStack    []uint64     // Return addresses
 	retStackISA []common.ISA // ISA at each return address
+
+	// Current packet cycle count (to be attached to output elements)
+	currPktCycleCount uint32 // Cycle count from current packet
+	currPktHasCC      bool   // True if current packet has cycle count
 
 	// Output elements
 	elements []common.GenericTraceElement // Decoded trace elements
@@ -90,12 +95,18 @@ func (d *Decoder) Reset() {
 	d.CurrentElement = nil
 	d.retStack = nil
 	d.retStackISA = nil
+	d.currPktCycleCount = 0
+	d.currPktHasCC = false
 }
 
 // ProcessPacket processes a single packet and updates decoder state
 // Returns any generated trace elements
 func (d *Decoder) ProcessPacket(pkt Packet) ([]common.GenericTraceElement, error) {
 	d.elements = nil // Clear previous elements
+
+	// Track current packet's cycle count
+	d.currPktCycleCount = pkt.CycleCount
+	d.currPktHasCC = pkt.CCValid
 
 	switch pkt.Type {
 	case PacketTypeASYNC:
@@ -196,6 +207,10 @@ func (d *Decoder) processISync(pkt Packet) ([]common.GenericTraceElement, error)
 			Type:          common.ElemTypeTraceOn,
 			TraceOnReason: reason,
 		}
+		if pkt.CCValid {
+			traceOnElem.CycleCount = pkt.CycleCount
+			traceOnElem.HasCycleCount = true
+		}
 		d.elements = append(d.elements, traceOnElem)
 	}
 
@@ -251,6 +266,10 @@ func (d *Decoder) processBranchAddress(pkt Packet) ([]common.GenericTraceElement
 				Type:        d.getExceptionType(pkt.ExceptionNum),
 				PrefRetAddr: prevAddr, // Previous address
 			},
+		}
+		if d.currPktHasCC {
+			elem.CycleCount = d.currPktCycleCount
+			elem.HasCycleCount = true
 		}
 		d.elements = append(d.elements, elem)
 		d.Log.Logf(common.SeverityDebug, "Exception: num=0x%x at addr=0x%x", pkt.ExceptionNum, prevAddr)
@@ -357,6 +376,10 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 					LastInstrLink:   instrInfo.IsLink,
 					LastInstrReturn: instrInfo.IsReturn,
 				},
+			}
+			if d.currPktHasCC {
+				elem.CycleCount = d.currPktCycleCount
+				elem.HasCycleCount = true
 			}
 			d.elements = append(d.elements, elem)
 			d.Log.Logf(common.SeverityDebug, "  -> ADDR_RANGE: 0x%X-0x%X (%d instrs)", rangeStart, nextAddr, instrCount)
@@ -514,6 +537,10 @@ func (d *Decoder) processTimestamp(pkt Packet) ([]common.GenericTraceElement, er
 	elem := common.GenericTraceElement{
 		Type:      common.ElemTypeTimestamp,
 		Timestamp: pkt.Timestamp,
+	}
+	if d.currPktHasCC {
+		elem.CycleCount = d.currPktCycleCount
+		elem.HasCycleCount = true
 	}
 	d.elements = append(d.elements, elem)
 

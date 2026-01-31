@@ -163,6 +163,10 @@ type GenericTraceElement struct {
 
 	// Trace context
 	TraceOnReason string // Reason for trace restart (for ElemTypeTraceOn)
+
+	// Cycle count information (optional, for elements with associated cycle count)
+	CycleCount    uint32 // Cycle count value
+	HasCycleCount bool   // True if CycleCount is valid
 }
 
 // NewGenericTraceElement creates a new trace element of the specified type

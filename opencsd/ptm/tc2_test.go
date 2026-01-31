@@ -300,6 +300,7 @@ func TestTC2LineByLine(t *testing.T) {
 	// Create decoder
 	decoder := ptm.NewDecoder(0x13)
 	decoder.SetMemoryAccessor(memMap)
+	decoder.CycleAccEnable = true // TC2 has cycle accurate tracing enabled
 
 	// Manually create packets matching what we see in TC2.ppl
 	// We'll compare first few lines
@@ -313,10 +314,10 @@ func TestTC2LineByLine(t *testing.T) {
 			SecureState: true, SecureValid: true,
 			ISyncReason: ptm.ISyncPeriodic,
 		},
-		// TIMESTAMP
-		{Type: ptm.PacketTypeTimestamp, Offset: 26579, Timestamp: 0x82f9d18bcc},
-		// ATOM E (522 cycles - we ignore cycles)
-		{Type: ptm.PacketTypeATOM, Offset: 26590, AtomCount: 1, AtomBits: 1},
+		// TIMESTAMP (CC=0)
+		{Type: ptm.PacketTypeTimestamp, Offset: 26579, Timestamp: 0x82f9d18bcc, CycleCount: 0, CCValid: true},
+		// ATOM E (522 cycles)
+		{Type: ptm.PacketTypeATOM, Offset: 26590, AtomCount: 1, AtomBits: 1, CycleCount: 522, CCValid: true},
 	}
 
 	var actualLines []string
