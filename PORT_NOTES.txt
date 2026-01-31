@@ -6,8 +6,23 @@ COMPLETED:
 3. ✓ Packet types: TRIGGER, WPOINT_UPDATE, IGNORE, unsync markers (NOTSYNC, INCOMPLETE_EOT, BAD_SEQUENCE, RESERVED).
 4. ✓ Parser extensions for TRIGGER/WPOINT_UPDATE + config-based ContextID sizing.
 5. ✓ Decode FSM parity (8 states: NO_SYNC/WAIT_SYNC/WAIT_ISYNC/DECODE_PKTS/CONT*).
+6. ✓ Waypoint update + TRACE_TO_ADDR_INCL/EXCL behaviors (2026-01-31).
+7. ✓ Instruction follower config: DSB/DMB waypoint, WFI/WFE handling (2026-01-31).
 
 REMAINING:
-6. Waypoint update + TRACE_TO_ADDR_INCL/EXCL behaviors.
-7. Instruction follower config (DSB/DMB waypoint, WFI/WFE, IT-block).
 8. Tighten golden tests (timestamp accumulation, ADDR_NACC matching).
+9. Comparison with C++ output format (instruction attribute strings like "E BR b+link").
+
+STATUS (2026-01-31):
+- Waypoint update packet parsing and processing now fully implemented
+- Traces to waypoint address with inclusive semantics  
+- DSB/DMB barriers handled as waypoints when configured
+- Go decoder producing output on tc2-ptm-rstk-t32 snapshot
+- Created ptm_verify.go tool for easy output comparison
+- Output is semantically correct but formatting differs from C++
+
+NEXT STEPS:
+- Add instruction attribute formatting (branch type, link, return, condition flags)
+- Run full test suite against tc2 snapshot
+- Validate timestamp accumulation and ADDR_NACC behavior
+
