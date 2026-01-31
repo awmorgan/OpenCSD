@@ -60,6 +60,13 @@ type InstrInfo struct {
 
 	// Opcode is the raw instruction bytes
 	Opcode uint32
+
+	// NextISA indicates the ISA after this instruction executes.
+	// For ISA-changing branches (BLX, BX), this will be different from current ISA.
+	NextISA ISA
+
+	// NextISAValid indicates if NextISA has been set
+	NextISAValid bool
 }
 
 // NewInstrInfo creates a new InstrInfo with default values

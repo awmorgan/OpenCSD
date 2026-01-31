@@ -62,6 +62,10 @@ func (d *InstrDecoder) decodeARM(addr uint64, memAcc common.MemoryAccessor, info
 
 // decodeARMOpcode decodes a 32-bit ARM instruction opcode.
 func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.InstrInfo) *common.InstrInfo {
+	// Default: next ISA is same as current
+	info.NextISA = d.isa
+	info.NextISAValid = true
+
 	// Extract condition field (bits 31-28)
 	cond := (opcode >> 28) & 0xF
 
@@ -74,6 +78,8 @@ func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.
 			info.IsBranch = true
 			info.Type = common.InstrTypeBranch
 			info.IsLink = true
+			// BLX immediate always switches to Thumb
+			info.NextISA = common.ISAThumb2
 			// Calculate branch target
 			offset := int32(opcode&0x00FFFFFF) << 2
 			if (opcode & 0x01000000) != 0 {
