@@ -563,7 +563,7 @@ func TestTC2_TimestampPackets(t *testing.T) {
 		}
 
 		if !bytes.Equal(got.Data, cpp.Bytes) {
-			t.Logf("Timestamp packet %d: bytes mismatch, got %x want %x", i, got.Data, cpp.Bytes)
+			t.Errorf("Timestamp packet %d: bytes mismatch, got %x want %x", i, got.Data, cpp.Bytes)
 		}
 
 		t.Logf("Timestamp packet %d: OK (offset=%d)", i, cpp.ByteOffset)
