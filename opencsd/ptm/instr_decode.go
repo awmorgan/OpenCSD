@@ -133,6 +133,41 @@ func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.
 		return info
 	}
 
+	// LDM with PC in register list is an indirect branch (often a return)
+	// LDM: bits 27-25 = 100, L bit (20) = 1
+	if (opcode&0x0E000000) == 0x08000000 && (opcode&0x00100000) != 0 {
+		regList := opcode & 0x0000FFFF
+		if (regList & 0x8000) != 0 {
+			info.IsBranch = true
+			info.Type = common.InstrTypeBranchIndirect
+			info.HasBranchTarget = false
+			// Treat LDM SP!, {...,PC} as return
+			rn := (opcode >> 16) & 0xF
+			wback := (opcode & 0x00200000) != 0
+			if rn == 0xD && wback {
+				info.IsReturn = true
+			}
+			return info
+		}
+	}
+
+	// LDR to PC is an indirect branch (often a return)
+	// LDR: bits 27-26 = 01, L bit (20) = 1
+	if (opcode&0x0C000000) == 0x04000000 && (opcode&0x00100000) != 0 {
+		rd := (opcode >> 12) & 0xF
+		if rd == 0xF {
+			info.IsBranch = true
+			info.Type = common.InstrTypeBranchIndirect
+			info.HasBranchTarget = false
+			rn := (opcode >> 16) & 0xF
+			wback := (opcode & 0x00200000) != 0
+			if rn == 0xD && wback {
+				info.IsReturn = true
+			}
+			return info
+		}
+	}
+
 	// Not a branch - normal instruction
 	info.Type = common.InstrTypeNormal
 	info.IsBranch = false

@@ -121,7 +121,8 @@ func (p *PPLPrinter) Print(elem common.GenericTraceElement) string {
 }
 
 func TestCompareAgainstPPL(t *testing.T) {
-	t.Skip("PTM instruction follower not yet implemented; PPL parity test pending")
+	// TODO: Remove skip once PTM instruction follower matches C++ parity.
+	// t.Skip("PTM instruction follower not yet implemented; PPL parity test pending")
 	// Setup paths
 	pplPath := "../../decoder/tests/results/trace_cov_a15.ppl"
 	binPath := filepath.Join(snapshotPath, "PTM_0_2.bin")

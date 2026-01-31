@@ -283,11 +283,6 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 
 	d.Log.Logf(common.SeverityDebug, "Atom: %d atoms, pattern=0x%x", pkt.AtomCount, pkt.AtomBits)
 
-	rangeStart := d.currentAddr
-	instrCount := uint32(0)
-	var lastInstrInfo *common.InstrInfo
-	var lastInstrAtom common.Atom
-
 	for i := uint8(0); i < pkt.AtomCount; i++ {
 		// Get the atom bit (E = 1 = executed, N = 0 = not executed)
 		atomBit := (pkt.AtomBits >> i) & 1
@@ -296,78 +291,75 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 			atom = common.AtomExecuted
 		}
 
-		prevAddr := d.currentAddr
-		instrInfo, branchTaken, err := d.processAtom(atom)
-		if err != nil {
-			d.Log.Logf(common.SeverityWarning, "Failed to process atom at 0x%X: %v", prevAddr, err)
-			return d.elements, err
-		}
-		lastInstrInfo = instrInfo
-		lastInstrAtom = atom
+		rangeStart := d.currentAddr
+		instrCount := uint32(0)
+		var lastInstrInfo *common.InstrInfo
+		lastExec := atom == common.AtomExecuted
 
-		d.Log.Logf(common.SeverityDebug, "  Atom[%d] %s: addr=0x%X type=%s size=%d",
-			i, atom, prevAddr, instrInfo.Type, instrInfo.Size)
-
-		instrCount++
-
-		if branchTaken {
-			// Branch taken - emit range and start new range at target
-			elem := common.GenericTraceElement{
-				Type: common.ElemTypeAddrRange,
-				AddrRange: common.AddrRange{
-					StartAddr:     rangeStart,
-					EndAddr:       prevAddr + uint64(instrInfo.Size),
-					ISA:           d.currentISA,
-					NumInstr:      instrCount,
-					LastInstrSz:   uint8(instrInfo.Size),
-					LastInstrExec: atom == common.AtomExecuted,
-					LastInstrType: instrInfo.Type,
-					LastInstrCond: instrInfo.IsConditional,
-					LastInstrLink: instrInfo.IsLink,
-				},
+		// Walk instructions until we hit a branch (consume one atom per branch)
+		for step := 0; step < 4096; step++ {
+			prevAddr := d.currentAddr
+			instrInfo, err := d.decodeInstruction(prevAddr)
+			if err != nil {
+				d.Log.Logf(common.SeverityWarning, "Failed to decode instruction at 0x%X: %v", prevAddr, err)
+				return d.elements, err
 			}
-			d.elements = append(d.elements, elem)
-			d.Log.Logf(common.SeverityDebug, "  -> ADDR_RANGE: 0x%X-0x%X (%d instrs)",
-				rangeStart, prevAddr+uint64(instrInfo.Size), instrCount)
+			lastInstrInfo = instrInfo
+			instrCount++
+			nextAddr := prevAddr + uint64(instrInfo.Size)
 
-			rangeStart = d.currentAddr
-			instrCount = 0
-			lastInstrInfo = nil
-		}
-	}
+			if instrInfo.IsBranch {
+				executed := atom == common.AtomExecuted
+				if !instrInfo.IsConditional {
+					executed = true
+				}
+				lastExec = executed
 
-	// If we have remaining instructions in a range, emit it
-	if instrCount > 0 {
-		lastSz := uint8(0)
-		lastType := common.InstrTypeUnknown
-		lastCond := false
-		lastExec := true
-		lastLink := false
-		if lastInstrInfo != nil {
-			lastSz = uint8(lastInstrInfo.Size)
-			lastType = lastInstrInfo.Type
-			lastCond = lastInstrInfo.IsConditional
-			lastLink = lastInstrInfo.IsLink
-			lastExec = lastInstrAtom == common.AtomExecuted
+				if executed && instrInfo.IsLink {
+					d.retStack = append(d.retStack, nextAddr)
+				}
+
+				if executed {
+					if instrInfo.HasBranchTarget {
+						d.currentAddr = instrInfo.BranchTarget
+					} else if instrInfo.Type == common.InstrTypeBranchIndirect && instrInfo.IsReturn && len(d.retStack) > 0 {
+						target := d.retStack[len(d.retStack)-1]
+						d.retStack = d.retStack[:len(d.retStack)-1]
+						d.currentAddr = target
+					} else {
+						d.currentAddr = nextAddr
+					}
+				} else {
+					d.currentAddr = nextAddr
+				}
+
+				// Emit range on branch
+				elem := common.GenericTraceElement{
+					Type: common.ElemTypeAddrRange,
+					AddrRange: common.AddrRange{
+						StartAddr:     rangeStart,
+						EndAddr:       nextAddr,
+						ISA:           d.currentISA,
+						NumInstr:      instrCount,
+						LastInstrSz:   uint8(instrInfo.Size),
+						LastInstrExec: lastExec,
+						LastInstrType: instrInfo.Type,
+						LastInstrCond: instrInfo.IsConditional,
+						LastInstrLink: instrInfo.IsLink,
+					},
+				}
+				d.elements = append(d.elements, elem)
+				d.Log.Logf(common.SeverityDebug, "  -> ADDR_RANGE: 0x%X-0x%X (%d instrs)", rangeStart, nextAddr, instrCount)
+				break
+			}
+
+			// Non-branch: advance and continue
+			d.currentAddr = nextAddr
 		}
 
-		elem := common.GenericTraceElement{
-			Type: common.ElemTypeAddrRange,
-			AddrRange: common.AddrRange{
-				StartAddr:     rangeStart,
-				EndAddr:       d.currentAddr,
-				ISA:           d.currentISA,
-				NumInstr:      instrCount,
-				LastInstrSz:   lastSz,
-				LastInstrExec: lastExec,
-				LastInstrType: lastType,
-				LastInstrCond: lastCond,
-				LastInstrLink: lastLink,
-			},
+		if lastInstrInfo == nil {
+			return d.elements, fmt.Errorf("no instruction decoded for atom at 0x%X", rangeStart)
 		}
-		d.elements = append(d.elements, elem)
-		d.Log.Logf(common.SeverityDebug, "  -> Final ADDR_RANGE: 0x%X-0x%X (%d instrs)",
-			rangeStart, d.currentAddr, instrCount)
 	}
 
 	return d.elements, nil
@@ -426,6 +418,9 @@ func (d *Decoder) processAtom(atomBit common.Atom) (*common.InstrInfo, bool, err
 	} else {
 		// Not executed/not taken - fall through
 		d.currentAddr = nextAddr
+		if instrInfo.IsBranch {
+			branchTaken = true
+		}
 	}
 
 	return instrInfo, branchTaken, nil
