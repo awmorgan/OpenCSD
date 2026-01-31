@@ -168,13 +168,21 @@ func (d *Decoder) ProcessPacket(pkt Packet) ([]common.GenericTraceElement, error
 	for {
 		switch d.state {
 		case StateNoSync:
-			// No sync found yet - process packet to move state forward
+			// No sync found yet - emit NO_SYNC element and transition
+			// Matches C++ behavior: output NO_SYNC on first packet, then transition state
+			if !d.noSyncEmitted {
+				elem := common.GenericTraceElement{
+					Type: common.ElemTypeNoSync,
+				}
+				d.elements = append(d.elements, elem)
+				d.noSyncEmitted = true
+			}
+			// Transition state based on packet type
 			if pkt.Type == PacketTypeASYNC {
 				d.state = StateWaitISYNC
 			} else {
 				d.state = StateWaitSync
 			}
-			// Don't emit NO_SYNC here - let ISYNC processing handle it
 			return d.elements, nil
 
 		case StateWaitSync:
@@ -188,11 +196,11 @@ func (d *Decoder) ProcessPacket(pkt Packet) ([]common.GenericTraceElement, error
 			// Waiting for ISYNC packet - ignore others (except ASYNC)
 			if pkt.Type == PacketTypeISYNC {
 				// Process ISYNC and transition to decode
-				elems, err := d.processISync(pkt)
+				// processISync appends to d.elements directly, so no need to append the return value
+				_, err := d.processISync(pkt)
 				if err != nil {
 					return nil, err
 				}
-				d.elements = append(d.elements, elems...)
 				d.syncFound = true
 				d.needISYNC = false
 				d.state = StateDecodePkts
@@ -312,15 +320,6 @@ func (d *Decoder) processISync(pkt Packet) ([]common.GenericTraceElement, error)
 		d.syncFound = true
 		d.needISYNC = false
 		d.Log.Logf(common.SeverityInfo, "Synchronization established at address 0x%x", pkt.Address)
-
-		// Generate NO_SYNC element first (if we weren't synced before)
-		if !d.noSyncEmitted {
-			elem := common.GenericTraceElement{
-				Type: common.ElemTypeNoSync,
-			}
-			d.elements = append(d.elements, elem)
-			d.noSyncEmitted = true
-		}
 	}
 
 	prevISA := d.currentISA
