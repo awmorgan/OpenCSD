@@ -105,6 +105,7 @@ func (d *Decoder) Reset() {
 	d.retStackISA = nil
 	d.currPktCycleCount = 0
 	d.currPktHasCC = false
+	d.currentTimestamp = 0 // Reset accumulated timestamp
 }
 
 // ProcessPacket processes a single packet and updates decoder state
@@ -223,8 +224,9 @@ func (d *Decoder) processISync(pkt Packet) ([]common.GenericTraceElement, error)
 	}
 
 	// Generate PE_CONTEXT only if context changed or first sync
+	// But NOT for periodic ISYNCs (matches C++ line 360: m_i_sync_pe_ctxt = false)
 	contextChanged := !wasSynced || (pkt.ISAValid && pkt.ISA != prevISA) || (pkt.SecureValid && pkt.SecureState != prevSec) || (d.contextID != prevCtx) || (d.vmid != prevVMID)
-	if contextChanged {
+	if contextChanged && (pkt.ISyncReason != ISyncPeriodic || !wasSynced) {
 		ctxElem := common.GenericTraceElement{
 			Type: common.ElemTypePeContext,
 			Context: common.PEContext{
@@ -281,13 +283,16 @@ func (d *Decoder) processBranchAddress(pkt Packet) ([]common.GenericTraceElement
 		}
 		d.elements = append(d.elements, elem)
 		d.Log.Logf(common.SeverityDebug, "Exception: num=0x%x at addr=0x%x", pkt.ExceptionNum, prevAddr)
-	} else if d.MemAcc != nil && d.addrValid {
+	} else if d.addrValid {
 		// Branch address only (no exception) implies an E atom
 		// Need to trace from current address to the branch waypoint
-		_, err := d.traceToWaypoint(common.AtomExecuted)
-		if err != nil {
-			d.Log.Logf(common.SeverityWarning, "Failed to trace to waypoint: %v", err)
-			return d.elements, err
+		// C++ line 407: only process if m_curr_pe_state.valid is true
+		if d.MemAcc != nil {
+			_, err := d.traceToWaypoint(common.AtomExecuted)
+			if err != nil {
+				d.Log.Logf(common.SeverityWarning, "Failed to trace to waypoint: %v", err)
+				return d.elements, err
+			}
 		}
 	}
 
@@ -641,10 +646,10 @@ func (d *Decoder) processTimestamp(pkt Packet) ([]common.GenericTraceElement, er
 
 	// Update accumulated timestamp - only update the bits specified by TSUpdateBits
 	if pkt.TSUpdateBits > 0 && pkt.TSUpdateBits <= 64 {
-		// Create mask for the bits being updated
-		var validMask uint64 = ^uint64(0) >> (64 - pkt.TSUpdateBits)
-		// Clear those bits in current timestamp and set new value
-		d.currentTimestamp = (d.currentTimestamp &^ validMask) | (pkt.Timestamp & validMask)
+		// Create mask for the bits being updated (low bits)
+		var updateMask uint64 = (uint64(1) << pkt.TSUpdateBits) - 1
+		// Clear the low bits in current timestamp and set new value
+		d.currentTimestamp = (d.currentTimestamp &^ updateMask) | (pkt.Timestamp & updateMask)
 	}
 
 	elem := common.GenericTraceElement{
@@ -668,21 +673,24 @@ func (d *Decoder) processContextID(pkt Packet) ([]common.GenericTraceElement, er
 		return nil, nil
 	}
 
-	d.contextID = pkt.ContextID
-	d.Log.Logf(common.SeverityDebug, "Context ID updated: 0x%x", d.contextID)
+	// Check if context ID changed
+	if pkt.ContextID != d.contextID {
+		d.contextID = pkt.ContextID
+		d.Log.Logf(common.SeverityDebug, "Context ID updated: 0x%x", d.contextID)
 
-	// Generate PE_CONTEXT element with updated context
-	elem := common.GenericTraceElement{
-		Type: common.ElemTypePeContext,
-		Context: common.PEContext{
-			ContextID:      d.contextID,
-			VMID:           uint32(d.vmid),
-			ISA:            d.currentISA,
-			SecurityState:  d.getSecurityState(),
-			ExceptionLevel: d.exceptionLevel,
-		},
+		// Generate PE_CONTEXT element with updated context
+		elem := common.GenericTraceElement{
+			Type: common.ElemTypePeContext,
+			Context: common.PEContext{
+				ContextID:      d.contextID,
+				VMID:           uint32(d.vmid),
+				ISA:            d.currentISA,
+				SecurityState:  d.getSecurityState(),
+				ExceptionLevel: d.exceptionLevel,
+			},
+		}
+		d.elements = append(d.elements, elem)
 	}
-	d.elements = append(d.elements, elem)
 
 	return d.elements, nil
 }
@@ -693,10 +701,26 @@ func (d *Decoder) processVMID(pkt Packet) ([]common.GenericTraceElement, error) 
 		return nil, nil
 	}
 
-	d.vmid = pkt.VMID
-	d.Log.Logf(common.SeverityDebug, "VMID updated: 0x%x", d.vmid)
+	// Check if VMID changed
+	if pkt.VMID != d.vmid {
+		d.vmid = pkt.VMID
+		d.Log.Logf(common.SeverityDebug, "VMID updated: 0x%x", d.vmid)
 
-	return nil, nil
+		// Generate PE_CONTEXT element with updated VMID
+		elem := common.GenericTraceElement{
+			Type: common.ElemTypePeContext,
+			Context: common.PEContext{
+				ContextID:      d.contextID,
+				VMID:           uint32(d.vmid),
+				ISA:            d.currentISA,
+				SecurityState:  d.getSecurityState(),
+				ExceptionLevel: d.exceptionLevel,
+			},
+		}
+		d.elements = append(d.elements, elem)
+	}
+
+	return d.elements, nil
 }
 
 // processExceptionReturn handles exception return packets
