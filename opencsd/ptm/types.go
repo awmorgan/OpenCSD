@@ -302,10 +302,7 @@ func (d *Decoder) parseNextPacket(buf []byte) (Packet, int, error) {
 
 	// Waypoint Update: header = 0x72
 	if header == 0x72 {
-		return Packet{
-			Type: PacketTypeWaypoint,
-			Data: buf[0:1],
-		}, 1, nil
+		return d.parseWaypointUpdate(buf)
 	}
 
 	// Unknown packet - consume one byte and continue
@@ -786,4 +783,97 @@ func (d *Decoder) parseExceptionReturn(buf []byte) (Packet, int, error) {
 	}
 
 	return pkt, 1, nil
+}
+
+// parseWaypointUpdate parses a Waypoint Update packet (header 0x72)
+// Waypoint update packets are variable length:
+// - 1-4 address bytes: bit 7 = 1 for continuation
+// - Optional 5th address byte (determines ISA)
+// - Optional waypoint flag byte
+// Similar structure to Branch Address but uses waypoint semantics
+func (d *Decoder) parseWaypointUpdate(buf []byte) (Packet, int, error) {
+	if len(buf) < 1 {
+		return Packet{Type: PacketTypeUnknown, Data: buf[0:1]}, 1, nil
+	}
+
+	pkt := Packet{Type: PacketTypeWaypoint}
+	size := 1
+	numAddrBytes := 1
+	gotAddrBytes := false
+	gotWPBytes := false
+	addrPktISA, hasISA := ISAARM, false
+	var lastAddrByte byte = buf[0]
+
+	if (buf[0] & 0x80) == 0 {
+		gotAddrBytes = true
+		gotWPBytes = true
+	}
+
+	for size < len(buf) && !gotAddrBytes && numAddrBytes <= 5 {
+		curr := buf[size]
+		lastAddrByte = curr
+		size++
+		numAddrBytes++
+
+		if numAddrBytes < 5 {
+			if (curr & 0x80) == 0 {
+				gotAddrBytes = true
+				if (curr & 0x40) == 0 {
+					gotWPBytes = true
+				}
+			}
+		} else {
+			// 5th address byte determines ISA
+			gotAddrBytes = true
+			if (curr & 0x40) == 0 {
+				gotWPBytes = true
+			}
+
+			addrPktISA = ISAARM
+			hasISA = true
+			if (curr & 0x20) == 0x20 {
+				addrPktISA = ISAARM
+			} else if (curr & 0x30) == 0x10 {
+				addrPktISA = ISAThumb2
+			}
+		}
+	}
+
+	// Waypoint flag byte (replaces exception bytes in branch address)
+	// bit 6: alt ISA flag
+	if gotAddrBytes && !gotWPBytes && size < len(buf) {
+		if (lastAddrByte & 0x40) != 0 {
+			WPByte := buf[size]
+			size++
+			wpAltISA := (WPByte & 0x40) != 0
+			gotWPBytes = true
+
+			// Adjust ISA for waypoint alt ISA if applicable
+			if addrPktISA == ISATEE && !wpAltISA {
+				addrPktISA = ISAThumb2
+			} else if addrPktISA == ISAThumb2 && wpAltISA {
+				addrPktISA = ISATEE
+			}
+		}
+	}
+
+	// If ISA wasn't specified by the packet, use the current parsing ISA
+	if !hasISA {
+		addrPktISA = d.parseISA
+	}
+
+	// Extract address bits
+	addrVal, addrBits := extractBranchAddressBits(buf, numAddrBytes, addrPktISA)
+	pkt.Address = addrVal
+	pkt.AddrBits = addrBits
+
+	// Always set ISA
+	pkt.ISA = addrPktISA
+	pkt.ISAValid = true
+	if hasISA {
+		d.parseISA = addrPktISA
+	}
+
+	pkt.Data = buf[0:size]
+	return pkt, size, nil
 }

@@ -272,9 +272,8 @@ func (d *Decoder) decodePacket(pkt Packet) ([]common.GenericTraceElement, error)
 		return d.elements, nil
 
 	case PacketTypeWaypoint:
-		// Waypoint update packets
-		d.Log.Logf(common.SeverityDebug, "Waypoint update packet at offset %d", pkt.Offset)
-		return d.elements, nil
+		// Waypoint update packets - trace from current address to waypoint address
+		return d.processWaypointUpdate(pkt)
 
 	case PacketTypeIgnore:
 		// Ignore packets
@@ -515,6 +514,33 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 				return false, nil // ISB does not consume an atom
 			}
 
+			// Handle DSB/DMB (barrier) - when configured as waypoint
+			if instrInfo.Type == common.InstrTypeDSBDMB && d.DsbDmbWaypoint {
+				d.currentAddr = nextAddr
+				elem := common.GenericTraceElement{
+					Type: common.ElemTypeAddrRange,
+					AddrRange: common.AddrRange{
+						StartAddr:       rangeStart,
+						EndAddr:         nextAddr,
+						ISA:             d.currentISA,
+						NumInstr:        instrCount,
+						LastInstrSz:     uint8(instrInfo.Size),
+						LastInstrExec:   true, // DSB/DMB is always executed
+						LastInstrType:   instrInfo.Type,
+						LastInstrCond:   instrInfo.IsConditional,
+						LastInstrLink:   instrInfo.IsLink,
+						LastInstrReturn: instrInfo.IsReturn,
+					},
+				}
+				if d.currPktHasCC {
+					elem.CycleCount = d.currPktCycleCount
+					elem.HasCycleCount = true
+				}
+				d.elements = append(d.elements, elem)
+				d.Log.Logf(common.SeverityDebug, "  -> ADDR_RANGE (DSB/DMB): 0x%X-0x%X (%d instrs)", rangeStart, nextAddr, instrCount)
+				return false, nil // DSB/DMB does not consume an atom
+			}
+
 			// Handle branches (C++ trc_pkt_decode_ptm.cpp line 549-589)
 			// In PTM, ALL branches (conditional or unconditional) consume an atom.
 			// The atom value determines whether the branch is taken (E) or not taken (N).
@@ -656,6 +682,37 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 			d.Log.Logf(common.SeverityWarning, "Failed to trace to waypoint for atom %d: %v", i, err)
 			return d.elements, err
 		}
+	}
+
+	return d.elements, nil
+}
+
+// processWaypointUpdate handles waypoint update packets
+// Waypoint updates trace from current address to the waypoint address using TRACE_TO_ADDR_INCL semantics
+// From C++ trc_pkt_decode_ptm.cpp line 453-456
+func (d *Decoder) processWaypointUpdate(pkt Packet) ([]common.GenericTraceElement, error) {
+	if !d.syncFound {
+		return nil, nil
+	}
+
+	// Check if we have memory access
+	if d.MemAcc == nil {
+		d.Log.Warning("Cannot process waypoint update without memory accessor")
+		return d.elements, nil
+	}
+
+	// Waypoint updates only process if we have a valid address
+	if !d.addrValid {
+		d.Log.Logf(common.SeverityDebug, "Waypoint update at offset %d: no valid address, skipping", pkt.Offset)
+		return d.elements, nil
+	}
+
+	// Trace to the waypoint address (with inclusive semantics: last instruction is at the waypoint address)
+	// C++ trc_pkt_decode_ptm.cpp line 456: TRACE_TO_ADDR_INCL = trace until we execute the instruction AT the address
+	err := d.traceToWaypointAddr(pkt.Address, true)
+	if err != nil {
+		d.Log.Logf(common.SeverityWarning, "Failed to trace to waypoint address 0x%X: %v", pkt.Address, err)
+		return d.elements, nil
 	}
 
 	return d.elements, nil
@@ -917,4 +974,90 @@ func (d *Decoder) GetCurrentAddress() uint64 {
 // GetCurrentISA returns the current instruction set
 func (d *Decoder) GetCurrentISA() common.ISA {
 	return d.currentISA
+}
+
+// traceToWaypointAddr traces instructions from current address to a specific waypoint address
+// with the given semantics (inclusive or exclusive).
+// C++ implementation: trc_pkt_decode_ptm.cpp::traceInstrToWP() and processAtomRange()
+// inclusive=true: trace UNTIL we execute the instruction AT the address (TRACE_TO_ADDR_INCL)
+// inclusive=false: trace UNTIL we reach the address (TRACE_TO_ADDR_EXCL)
+func (d *Decoder) traceToWaypointAddr(waypointAddr uint64, inclusive bool) error {
+	if d.MemAcc == nil {
+		return fmt.Errorf("memory accessor not set")
+	}
+
+	rangeStart := d.currentAddr
+	instrCount := uint32(0)
+	var lastInstrInfo *common.InstrInfo
+
+	// Walk instructions until we reach the waypoint address
+	for step := 0; step < 4096; step++ {
+		prevAddr := d.currentAddr
+
+		instrInfo, err := d.decodeInstruction(prevAddr)
+		if err != nil {
+			// Memory access error - emit ADDR_NACC
+			d.Log.Logf(common.SeverityWarning, "Memory access error at 0x%X: %v", prevAddr, err)
+			elem := common.GenericTraceElement{
+				Type:         common.ElemTypeAddrNacc,
+				NaccAddr:     prevAddr,
+				NaccMemSpace: d.getSecurityState(),
+			}
+			d.elements = append(d.elements, elem)
+			d.addrValid = false // Need resync
+			return nil          // Not fatal
+		}
+
+		lastInstrInfo = instrInfo
+		instrCount++
+		nextAddr := prevAddr + uint64(instrInfo.Size)
+
+		// Check if we've reached the waypoint
+		var wpFound bool
+		if inclusive {
+			// TRACE_TO_ADDR_INCL: stop when we've executed the instruction AT the address
+			wpFound = (prevAddr == waypointAddr)
+		} else {
+			// TRACE_TO_ADDR_EXCL: stop when next instruction is at the address
+			wpFound = (nextAddr == waypointAddr)
+		}
+
+		if wpFound {
+			// Emit the range and return
+			elem := common.GenericTraceElement{
+				Type: common.ElemTypeAddrRange,
+				AddrRange: common.AddrRange{
+					StartAddr:       rangeStart,
+					EndAddr:         nextAddr,
+					ISA:             d.currentISA,
+					NumInstr:        instrCount,
+					LastInstrSz:     uint8(instrInfo.Size),
+					LastInstrExec:   true, // Waypoint update always executes the matched instruction
+					LastInstrType:   instrInfo.Type,
+					LastInstrCond:   instrInfo.IsConditional,
+					LastInstrLink:   instrInfo.IsLink,
+					LastInstrReturn: instrInfo.IsReturn,
+				},
+			}
+			if d.currPktHasCC {
+				elem.CycleCount = d.currPktCycleCount
+				elem.HasCycleCount = true
+			}
+			d.elements = append(d.elements, elem)
+			d.Log.Logf(common.SeverityDebug, "  -> ADDR_RANGE (WP): 0x%X-0x%X (%d instrs)", rangeStart, nextAddr, instrCount)
+
+			d.currentAddr = nextAddr
+			return nil
+		}
+
+		// Not a waypoint - advance and continue
+		d.currentAddr = nextAddr
+	}
+
+	// Waypoint address not reached within reasonable distance
+	if lastInstrInfo == nil {
+		return fmt.Errorf("no instruction decoded starting at 0x%X", rangeStart)
+	}
+
+	return fmt.Errorf("waypoint address 0x%X not reached within 4096 instructions starting at 0x%X", waypointAddr, rangeStart)
 }
