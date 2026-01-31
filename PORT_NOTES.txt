@@ -126,16 +126,19 @@ COMPLETED (Core Functionality):
 REMAINING WORK (Verification & Polish):
 ---------------------------------------
 
-**PRIORITY 1: Fix TestCompareAgainstPPL (Currently Failing)**
-Current issue: Line ordering mismatch - Go emits ISYNC packet before NO_SYNC element
+**PRIORITY 1: Fix TestCompareAgainstPPL (Currently Failing)** ✓ FIXED (2026-01-31)
+Previous issue: Line ordering mismatch - Go emitted ISYNC packet before NO_SYNC element
 File: opencsd/ptm/ppl_test.go
-Action needed: Synchronize packet/element emission order with C++ reference
+Fixes applied:
+  1. NO_SYNC element now emitted during StateNoSync case (when processing ASYNC)
+     instead of deferring to ISYNC processing (matches C++ behavior)
+  2. Fixed double-appending bug: StateWaitISYNC was calling processISync() which
+     appends to d.elements, then re-appending the result to d.elements again
+  3. Key insight: All process*() functions append to d.elements directly
+     and return d.elements - callers should NOT re-append the return value
 
-Expected flow per C++:
-  1. NO_SYNC element first
-  2. Then ISYNC packet
-  3. Then TRACE_ON element
-  4. Then PE_CONTEXT element
+Result: ✓ TestCompareAgainstPPL now PASSES 100% line-by-line verification
+        against C++ golden file (trace_cov_a15.ppl)
 
 **PRIORITY 2: Add Instruction Attribute Formatting**
 C++ output includes: "E BR b+link", "N BR <cond>", "E iBR V7:impl ret"
@@ -324,26 +327,96 @@ processISync()  - ISYNC handling (line 281+)
 processAtom()   - ATOM processing (line 469+)
 traceInstrToWP()- Instruction following to waypoint (line 618+)
 
+DEBUGGING LESSONS & TIPS FOR FUTURE DEVELOPERS:
+-----------------------------------------------
+
+**Issue 1: Tracing Element Duplication**
+Problem: Elements were being generated twice for the same packet
+Root Cause: Double-appending pattern - a function was appending to a shared
+           slice (d.elements) AND its return value was being re-appended by caller
+Pattern to Avoid: 
+  WRONG:  elems := d.processISync(pkt)
+          d.elements = append(d.elements, elems...)  // <- Double append!
+  RIGHT:  d.processISync(pkt)
+          // Function already appended to d.elements
+Lesson: When all process* functions append to a shared collector (d.elements),
+        the caller should NOT re-append the return value. Either:
+        - Return NEW elements and let caller append, OR
+        - Append IN the function and return the full list (current design)
+
+**Issue 2: State Machine Emission Order**
+Problem: Expected sequence was NO_SYNC → ISYNC, but got ISYNC → NO_SYNC
+Root Cause: Deferred emission - trying to emit NO_SYNC during ISYNC processing
+           instead of during the first state transition
+Pattern to Follow: Emit output at the EARLIEST state where you know what to emit
+  C++ behavior: NO_SYNC is emitted when entering from NO_SYNC state
+  Go fix: Emit NO_SYNC in StateNoSync case on first packet (ASYNC)
+Lesson: Match C++ line-by-line output order exactly. Use .ppl golden files
+        to verify - they show exact emission order and timing
+
+**Issue 3: Debugging PPL Mismatches**
+Helpful Debugging Technique:
+  1. Add test.Logf() output to print Actual and Expected arrays side-by-side
+  2. Compare first 10 lines to find where divergence starts
+  3. Use `go test -v -run TestName 2>&1 | grep "Actual\|Expected" | head -30`
+  4. Look for:
+     - Line count differences (missing or extra elements)
+     - Idx values (packet offset should match)
+     - Element type mismatches
+     - Value differences (addresses, counts, reasons)
+
+Tip: When test fails, DON'T guess - add logging to understand the actual
+     output being generated, then compare line-by-line with expected.
+
+**Architecture Insight: Unified d.elements Pattern**
+The decoder maintains a single slice (d.elements) that accumulates output
+across the lifetime of ProcessPacket(). This is different from per-function
+result aggregation:
+  - d.elements is cleared at START of ProcessPacket
+  - All process* functions append to d.elements directly
+  - ProcessPacket returns d.elements at the end
+  - FSM loop in ProcessPacket may call multiple process* functions for
+    continuation states
+
+This design allows:
+  - Combining multiple elements from different packet types
+  - Handling continuation states where one packet produces multiple element sets
+  - Clean return of all accumulated elements
+
+**Comparison with C++ Model**
+C++ uses m_output_elem (single element output) with a while loop that:
+  1. Sets m_output_elem 
+  2. Calls outputTraceElement() to emit it
+  3. Loops for continuation processing
+
+Go equivalent maintains the same logic but returns all elements at once.
+The key is matching the OUTPUT ORDER, not the internal mechanism.
+
 FINAL STEPS TO COMPLETE PTM PORT:
 ---------------------------------
-1. Fix TestCompareAgainstPPL to pass 100%
-2. Add instruction attribute strings to output
+1. ✓ Fix TestCompareAgainstPPL to pass 100% (COMPLETED 2026-01-31)
+2. Add instruction attribute strings to output (NEXT PRIORITY)
 3. Verify timestamp accumulation logic
 4. Test all snapshots in decoder/tests/snapshots/
 5. Ensure all .ppl files in decoder/tests/results/ verify
 6. Performance testing (if needed)
 7. Documentation updates
 
-PTM CURRENT STATUS (2026-01-31):
+PTM CURRENT STATUS (2026-01-31 - UPDATED):
 --------------------------------
 - Core decoder functionality: COMPLETE
 - Packet parsing: COMPLETE
 - Instruction following: COMPLETE
 - Waypoint handling: COMPLETE
 - Test infrastructure: IN PLACE
-- Verification: PARTIAL (~60% complete, needs line-by-line fixes)
+- Basic verification: ✓ WORKING (TestCompareAgainstPPL passes 100%)
+- Full verification: IN PROGRESS (~65% complete after PRIORITY 1 fix)
+  * trace_cov_a15.ppl - ✓ FULLY PASSING (trace_cov_a15 snapshot)
+  * TC2.ppl - ⚠ PARTIAL (timestamp accumulation needs work)
+  * tc2-ptm-rstk-t32.ppl - ⚠ NOT YET AUTOMATED
 
-Estimated remaining work for PTM: 2-3 days for full verification parity
+Estimated remaining work for PTM: 1-2 days to fix timestamp accumulation
+                                  and instruction attribute formatting
 
 REMAINING PROTOCOLS TO PORT:
 ---------------------------
