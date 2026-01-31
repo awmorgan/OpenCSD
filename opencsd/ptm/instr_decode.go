@@ -374,7 +374,7 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 
 	// POP.W {reglist} with PC: 1110 1000 1011 1101 : PM0x xxxx xxxx xxxx
 	// Encoding T2: LDMIA.W SP!, {registers}
-	if (hw1&0xFFFF) == 0xE8BD {
+	if (hw1 & 0xFFFF) == 0xE8BD {
 		// Check if PC is in register list (bit 15)
 		if (hw2 & 0x8000) != 0 {
 			info.IsBranch = true
@@ -387,7 +387,7 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 
 	// LDM/LDMIA with PC: 1110 100x x0x1 xxxx : (P)(M)0x xxxx xxxx xxxx
 	// Check if PC in register list
-	if (hw1&0xFE50) == 0xE810 {
+	if (hw1 & 0xFE50) == 0xE810 {
 		if (hw2 & 0x8000) != 0 {
 			info.IsBranch = true
 			info.Type = common.InstrTypeBranchIndirect
@@ -404,7 +404,7 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 
 	// LDR.W PC, [...]: Various Thumb2 LDR encodings that load PC
 	// LDR (literal) with Rt=PC: 1111 1000 x101 1111 : xxxx xxxx xxxx xxxx
-	if (hw1&0xFF7F) == 0xF85F {
+	if (hw1 & 0xFF7F) == 0xF85F {
 		rt := (hw2 >> 12) & 0xF
 		if rt == 15 {
 			info.IsBranch = true

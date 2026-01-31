@@ -38,8 +38,9 @@ type Decoder struct {
 	atomCount   uint8 // Number of atoms
 	atomIndex   uint8 // Current atom being processed
 
-	// Simple return stack for indirect returns
-	retStack []uint64
+	// Return stack for indirect returns - stores (address, ISA) pairs
+	retStack    []uint64     // Return addresses
+	retStackISA []common.ISA // ISA at each return address
 
 	// Output elements
 	elements []common.GenericTraceElement // Decoded trace elements
@@ -88,6 +89,7 @@ func (d *Decoder) Reset() {
 	d.elements = nil
 	d.CurrentElement = nil
 	d.retStack = nil
+	d.retStackISA = nil
 }
 
 // ProcessPacket processes a single packet and updates decoder state
@@ -320,6 +322,7 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 			if executed && instrInfo.IsLink {
 				// Push return address with current ISA for return stack
 				d.retStack = append(d.retStack, nextAddr)
+				d.retStackISA = append(d.retStackISA, d.currentISA)
 			}
 
 			if executed {
@@ -327,8 +330,11 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 					d.currentAddr = instrInfo.BranchTarget
 				} else if instrInfo.Type == common.InstrTypeBranchIndirect && instrInfo.IsReturn && len(d.retStack) > 0 {
 					target := d.retStack[len(d.retStack)-1]
+					targetISA := d.retStackISA[len(d.retStackISA)-1]
 					d.retStack = d.retStack[:len(d.retStack)-1]
+					d.retStackISA = d.retStackISA[:len(d.retStackISA)-1]
 					d.currentAddr = target
+					d.currentISA = targetISA
 				} else {
 					d.currentAddr = nextAddr
 				}
@@ -443,6 +449,7 @@ func (d *Decoder) processAtom(atomBit common.Atom) (*common.InstrInfo, bool, err
 	branchTaken := false
 	if atomBit == common.AtomExecuted && instrInfo.IsLink {
 		d.retStack = append(d.retStack, nextAddr)
+		d.retStackISA = append(d.retStackISA, d.currentISA)
 	}
 
 	if atomBit == common.AtomExecuted {
@@ -452,8 +459,11 @@ func (d *Decoder) processAtom(atomBit common.Atom) (*common.InstrInfo, bool, err
 		} else if instrInfo.Type == common.InstrTypeBranchIndirect && instrInfo.IsReturn && len(d.retStack) > 0 {
 			// Use return stack for indirect returns
 			target := d.retStack[len(d.retStack)-1]
+			targetISA := d.retStackISA[len(d.retStackISA)-1]
 			d.retStack = d.retStack[:len(d.retStack)-1]
+			d.retStackISA = d.retStackISA[:len(d.retStackISA)-1]
 			d.currentAddr = target
+			d.currentISA = targetISA
 			branchTaken = true
 		} else {
 			d.currentAddr = nextAddr
