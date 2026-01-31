@@ -419,6 +419,7 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 							d.currentAddr = target
 							d.currentISA = targetISA
 							d.addrValid = true // C++ line 581
+						} else {
 							// No return stack - invalid state but continue from next instruction
 							// This allows further atoms to be processed (speculative decoding?)
 							d.addrValid = false
