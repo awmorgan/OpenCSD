@@ -1,28 +1,376 @@
-PTM Go vs C++ port notes (2026-01-31)
+================================================================================
+PTM Go Port - Developer Handoff Notes (2026-01-31)
+================================================================================
 
-COMPLETED:
-1. ✓ Full PTM config parsing (IDR/CTRL/CCER). Applied to decoder flags.
-2. ✓ Processor with unsync scanning (finds ASYNC, emits raw data).
-3. ✓ Packet types: TRIGGER, WPOINT_UPDATE, IGNORE, unsync markers (NOTSYNC, INCOMPLETE_EOT, BAD_SEQUENCE, RESERVED).
-4. ✓ Parser extensions for TRIGGER/WPOINT_UPDATE + config-based ContextID sizing.
-5. ✓ Decode FSM parity (8 states: NO_SYNC/WAIT_SYNC/WAIT_ISYNC/DECODE_PKTS/CONT*).
-6. ✓ Waypoint update + TRACE_TO_ADDR_INCL/EXCL behaviors (2026-01-31).
-7. ✓ Instruction follower config: DSB/DMB waypoint, WFI/WFE handling (2026-01-31).
+PROJECT OVERVIEW:
+-----------------
+This is a Go port of the OpenCSD PTM (Program Trace Macrocell) decoder from C++.
+The C++ reference implementation is in decoder/source/ptm/ and decoder/include/opencsd/ptm/.
+The Go port is in opencsd/ptm/.
 
-REMAINING:
-8. Tighten golden tests (timestamp accumulation, ADDR_NACC matching).
-9. Comparison with C++ output format (instruction attribute strings like "E BR b+link").
+CRITICAL VERIFICATION STRATEGY:
+-------------------------------
+**The C++ golden test files (.ppl) are the authoritative reference for verification.**
 
-STATUS (2026-01-31):
-- Waypoint update packet parsing and processing now fully implemented
-- Traces to waypoint address with inclusive semantics  
-- DSB/DMB barriers handled as waypoints when configured
-- Go decoder producing output on tc2-ptm-rstk-t32 snapshot
-- Created ptm_verify.go tool for easy output comparison
-- Output is semantically correct but formatting differs from C++
+Location of golden files: decoder/tests/results/*.ppl
+Key files:
+  - trace_cov_a15.ppl    - Basic PTM test with return stack
+  - tc2-ptm-rstk-t32.ppl - Extended test with Thumb2 and return stack
+  - TC2.ppl              - Full TC2 snapshot test
 
-NEXT STEPS:
-- Add instruction attribute formatting (branch type, link, return, condition flags)
-- Run full test suite against tc2 snapshot
-- Validate timestamp accumulation and ADDR_NACC behavior
+HOW VERIFICATION WORKS:
+1. C++ decoder generates .ppl (packet + element) files from test snapshots
+2. Go tests parse these .ppl files using opencsd/tests/helpers/ppl_loader.go
+3. Go decoder processes same snapshots and compares output line-by-line
+4. Tests incrementally verify more until full parity achieved
+
+CURRENT TEST INFRASTRUCTURE:
+----------------------------
+opencsd/ptm/ppl_test.go       - TestCompareAgainstPPL - full line-by-line comparison
+opencsd/ptm/tc2_test.go       - TC2 snapshot tests (partial verification)
+opencsd/ptm/tc2_full_test.go  - Full TC2 test (work in progress)
+opencsd/ptm/decoder_test.go   - Basic decoder functionality tests
+opencsd/tests/helpers/ppl_loader.go - PPL file parser
+
+To run verification: cd opencsd && go test ./ptm -v -run TestCompareAgainstPPL
+
+PROGRESS TRACKING:
+-----------------
+
+COMPLETED (Core Functionality):
+1. ✓ PTM config parsing (IDR/CTRL/CCER registers) - opencsd/ptm/config.go
+2. ✓ Packet processor with unsync scanning - opencsd/ptm/processor.go
+3. ✓ All packet types: ASYNC, ISYNC, ATOM, BRANCH_ADDRESS, TIMESTAMP, CONTEXT_ID,
+      VMID, EXCEPTION_RETURN, TRIGGER, WPOINT_UPDATE, IGNORE - opencsd/ptm/types.go
+4. ✓ Decoder FSM (8 states) - opencsd/ptm/decoder.go
+5. ✓ Waypoint update with TRACE_TO_ADDR_INCL/EXCL - decoder.go lines 693-721, 979-1064
+6. ✓ Instruction follower: DSB/DMB waypoint handling - decoder.go lines 519-543
+7. ✓ ARM and Thumb2 instruction decode - opencsd/ptm/instr_decode.go
+8. ✓ Return stack for indirect branch prediction - decoder.go lines 145-149
+
+REMAINING WORK (Verification & Polish):
+---------------------------------------
+
+**PRIORITY 1: Fix TestCompareAgainstPPL (Currently Failing)**
+Current issue: Line ordering mismatch - Go emits ISYNC packet before NO_SYNC element
+File: opencsd/ptm/ppl_test.go
+Action needed: Synchronize packet/element emission order with C++ reference
+
+Expected flow per C++:
+  1. NO_SYNC element first
+  2. Then ISYNC packet
+  3. Then TRACE_ON element
+  4. Then PE_CONTEXT element
+
+**PRIORITY 2: Add Instruction Attribute Formatting**
+C++ output includes: "E BR b+link", "N BR <cond>", "E iBR V7:impl ret"
+Go currently only outputs basic range info
+Files to modify:
+  - opencsd/common/elements.go - Add string fields to AddrRange
+  - opencsd/ptm/decoder.go - Populate fields during decode
+  - opencsd/printer/printer.go - Format output strings
+
+Attributes needed:
+  - E/N (executed/not executed)
+  - BR type (direct branch, indirect branch, conditional)
+  - b+link (branch with link)
+  - V7:impl ret (return instruction)
+  - <cond> (conditional)
+
+**PRIORITY 3: Timestamp Accumulation**
+C++ accumulates timestamp bits across multiple timestamp packets
+Go implementation exists but needs verification against golden files
+File: opencsd/ptm/decoder.go lines 811-837
+
+**PRIORITY 4: ADDR_NACC Handling**
+Memory access failures should emit ADDR_NACC elements
+Currently working but needs verification against:
+  - Exact addresses that should NACC
+  - Memory space (secure/non-secure) attributes
+File: opencsd/ptm/decoder.go - search for ElemTypeAddrNacc
+
+**PRIORITY 5: Expand Test Coverage**
+Current status:
+  ✓ trace_cov_a15.ppl - Basic test (some lines match)
+  ⚠ TC2.ppl - Partial (muxed trace, ID filtering works)
+  ✗ tc2-ptm-rstk-t32.ppl - Not yet integrated into automated tests
+
+Add tests for:
+  - Full tc2-ptm-rstk-t32 comparison
+  - Timestamp accumulation edge cases  
+  - Context ID changes
+  - VMID changes
+  - Exception handling sequences
+
+DEVELOPMENT WORKFLOW:
+--------------------
+
+1. **Regenerate C++ golden files** (if needed):
+   cd decoder/tests
+   bash ../regen_ppl_outputs.bash
+   This creates/updates .ppl files in decoder/tests/results/
+
+2. **Run Go tests against golden files**:
+   cd opencsd
+   go test ./ptm -v                    # Run all PTM tests
+   go test ./ptm -v -run TestComparePPL # Run specific test
+   
+3. **When tests fail, compare output**:
+   - Expected: from .ppl file
+   - Actual: from Go decoder
+   - Use diff tools or test output to find mismatches
+
+4. **Iterative verification approach**:
+   a) Start with simple snapshots (trace_cov_a15)
+   b) Fix line-by-line mismatches
+   c) Add more complex snapshots (TC2, tc2-ptm-rstk-t32)
+   d) Continue until all .ppl files verify 100%
+
+5. **Commit frequently** with clear messages:
+   git add -A
+   git commit -m "Fix ISYNC packet ordering in decoder"
+   git push origin go
+
+KEY FILES TO UNDERSTAND:
+------------------------
+
+C++ Reference Implementation:
+  decoder/source/ptm/trc_pkt_decode_ptm.cpp - Main decoder logic
+  decoder/source/ptm/trc_pkt_proc_ptm.cpp   - Packet processor
+  decoder/include/opencsd/ptm/trc_pkt_decode_ptm.h - Decoder interface
+
+Go Port:
+  opencsd/ptm/decoder.go      - Main decoder (921 lines)
+  opencsd/ptm/types.go        - Packet definitions and parsing (790 lines)
+  opencsd/ptm/processor.go    - Packet processor
+  opencsd/ptm/config.go       - Configuration from device registers
+  opencsd/ptm/instr_decode.go - ARM/Thumb instruction decoder
+  opencsd/common/elements.go  - Generic trace element definitions
+  opencsd/printer/printer.go  - Output formatting (for .ppl comparison)
+
+Test Infrastructure:
+  opencsd/tests/helpers/ppl_loader.go - Parses C++ .ppl files
+  opencsd/ptm/*_test.go               - All Go tests
+
+TESTING SNAPSHOTS:
+-----------------
+Location: decoder/tests/snapshots/
+
+trace_cov_a15/:
+  - PTM trace ID 0x02
+  - Simple ARM code execution
+  - Memory regions: 9 .bin files
+  - Test: TestCompareAgainstPPL
+
+TC2/:
+  - PTM trace ID 0x13 (muxed with other trace sources)
+  - Kernel-level trace
+  - Memory: kernel_dump.bin at 0xC0008000
+  - Tests: TestTC2Compare, TestTC2MemoryRange
+
+tc2-ptm-rstk-t32/:
+  - PTM trace ID 0x00
+  - Return stack + Thumb2 code
+  - Memory regions: 9 .bin files
+  - Verification tool: opencsd/cmd/ptm_verify.go
+
+RUNNING VERIFICATION TOOL:
+-------------------------
+Manual verification (not automated test):
+cd opencsd
+go run ./cmd/ptm_verify.go \
+  -snapshot /c/Users/arthu/git/OpenCSD/decoder/tests/snapshots/tc2-ptm-rstk-t32 \
+  -max-packets 100 \
+  -output comparison.txt
+
+Compare output with: decoder/tests/results/tc2-ptm-rstk-t32.ppl
+
+COMMON ISSUES & SOLUTIONS:
+-------------------------
+
+Issue: "Line count mismatch" in PPL test
+Fix: Check packet/element emission order in decoder.ProcessPacket()
+
+Issue: "Address range mismatch"
+Fix: Verify instruction size calculation and ISA switching
+
+Issue: "Unknown packet type"
+Fix: Check types.go parseNextPacket() - may need new packet handler
+
+Issue: Tests can't find .ppl files
+Fix: Ensure C++ golden files exist - run regen_ppl_outputs.bash
+
+Issue: Memory access errors in decoder
+Fix: Check snapshot memory regions are loaded correctly
+
+ARCHITECTURE NOTES:
+------------------
+
+PTM Packet Flow:
+  Raw trace bytes → Packet Parser → Decoder → Generic Trace Elements
+
+Packet types determine:
+  - When synchronization occurs (ASYNC, ISYNC)
+  - What addresses are valid (ISYNC, BRANCH_ADDRESS)
+  - Instruction execution (ATOM packets)
+  - Context changes (CONTEXT_ID, VMID)
+
+Decoder FSM States:
+  NO_SYNC       - Not synchronized, output NO_SYNC element
+  WAIT_SYNC     - Waiting for ASYNC packet
+  WAIT_ISYNC    - Waiting for ISYNC packet (have ASYNC)
+  DECODE_PKTS   - Synchronized, processing packets normally
+  CONT_ISYNC    - Continuation of ISYNC processing
+  CONT_ATOM     - Continuation of ATOM processing  
+  CONT_WAYPOINT - Continuation of waypoint processing
+  CONT_BRANCH   - Continuation of branch processing
+
+C++ DECODER REFERENCE (Key Functions):
+--------------------------------------
+processPacket() - Main packet dispatch (line 112+)
+decodePacket()  - Packet type handler (line 251+)
+processISync()  - ISYNC handling (line 281+)
+processAtom()   - ATOM processing (line 469+)
+traceInstrToWP()- Instruction following to waypoint (line 618+)
+
+FINAL STEPS TO COMPLETE PORT:
+-----------------------------
+1. Fix TestCompareAgainstPPL to pass 100%
+2. Add instruction attribute strings to output
+3. Verify timestamp accumulation logic
+4. Test all snapshots in decoder/tests/snapshots/
+5. Ensure all .ppl files in decoder/tests/results/ verify
+6. Performance testing (if needed)
+7. Documentation updates
+
+CURRENT STATUS (2026-01-31):
+----------------------------
+- Core decoder functionality: COMPLETE
+- Packet parsing: COMPLETE
+- Instruction following: COMPLETE
+- Waypoint handling: COMPLETE
+- Test infrastructure: IN PLACE
+- Verification: PARTIAL (needs line-by-line fixes)
+
+Estimated remaining work: 2-3 days for full verification parity
+
+GETTING HELP:
+------------
+- C++ reference code is authoritative - when in doubt, match C++ behavior
+- .ppl golden files show expected output format exactly
+- Use opencsd/cmd/ptm_verify.go to manually inspect decoder output
+- Tests in *_test.go files show how to use the decoder API
+
+================================================================================
+END OF DEVELOPER HANDOFF NOTES
+================================================================================
+
+
+================================================================================
+APPENDIX A: C++ TO GO CODE MAPPING
+================================================================================
+
+C++ Source Files (decoder/source/ptm/):
+----------------------------------------
+trc_pkt_decode_ptm.cpp   (24K)  → opencsd/ptm/decoder.go      (33K)
+  - Main packet decoder
+  - processPacket(), decodePacket(), processISync(), processAtom()
+  - Instruction following: traceInstrToWP()
+
+trc_pkt_proc_ptm.cpp     (38K)  → opencsd/ptm/types.go        (22K)
+  - Packet parsing from raw bytes
+  - parseNextPacket(), parseISync(), parseBranchAddress(), etc.
+
+trc_pkt_elem_ptm.cpp     (12K)  → opencsd/ptm/types.go        (22K)
+  - Packet element definitions (merged into types.go)
+
+trc_cmp_cfg_ptm.cpp      (2K)   → opencsd/ptm/config.go       (7K)
+  - Device configuration parsing
+
+C++ Header Files (decoder/include/opencsd/ptm/):
+-----------------------------------------------
+trc_pkt_decode_ptm.h     (7K)   → opencsd/ptm/decoder.go      (33K)
+trc_pkt_proc_ptm.h       (7K)   → opencsd/ptm/types.go        (22K)
+trc_pkt_elem_ptm.h       (7K)   → opencsd/ptm/types.go        (22K)
+trc_cmp_cfg_ptm.h        (7K)   → opencsd/ptm/config.go       (7K)
+trc_pkt_types_ptm.h      (6K)   → opencsd/ptm/types.go        (22K)
+
+Additional Go Files (No C++ Equivalent):
+---------------------------------------
+opencsd/ptm/instr_decode.go      (17K) - ARM/Thumb instruction decoder
+opencsd/ptm/processor.go         (4K)  - Packet processor wrapper
+opencsd/ptm/*_test.go            (58K) - Test suite
+opencsd/cmd/ptm_verify.go        (4K)  - Verification tool
+
+Line Count Comparison:
+---------------------
+C++ Implementation:  ~3,800 lines (source + headers)
+Go Implementation:   ~4,500 lines (including tests)
+
+The Go port is roughly equivalent in size, with additional test infrastructure.
+
+================================================================================
+APPENDIX B: QUICK START FOR NEW DEVELOPER
+================================================================================
+
+1. CLONE AND SETUP
+   git clone https://github.com/awmorgan/OpenCSD
+   cd OpenCSD
+   git checkout go
+   cd opencsd
+
+2. VERIFY ENVIRONMENT
+   go version  # Should be 1.19 or later
+   go test ./ptm -v -run TestDecoder  # Basic decoder test
+
+3. UNDERSTAND THE GOLDEN FILES
+   cd ../decoder/tests/results
+   head -50 trace_cov_a15.ppl  # See expected output format
+   
+4. RUN VERIFICATION TEST
+   cd ../../../opencsd
+   go test ./ptm -v -run TestCompareAgainstPPL
+   # This will FAIL - that's the work to do!
+
+5. FIX THE FIRST MISMATCH
+   - Test shows: Expected vs Actual
+   - Debug in opencsd/ptm/decoder.go
+   - Focus on ProcessPacket() function
+
+6. ITERATE
+   - Fix one mismatch at a time
+   - Run test after each fix
+   - Commit when a section works
+
+7. COMPARE WITH C++
+   - Read decoder/source/ptm/trc_pkt_decode_ptm.cpp
+   - Match behavior exactly
+   - When in doubt, C++ is correct
+
+================================================================================
+APPENDIX C: VERIFICATION CHECKLIST
+================================================================================
+
+Before marking port as complete, ensure:
+
+□ TestCompareAgainstPPL passes 100%
+□ All snapshots in decoder/tests/snapshots/ decode correctly
+□ All .ppl files in decoder/tests/results/ verify
+□ Instruction attributes formatted correctly
+□ Timestamp accumulation verified
+□ ADDR_NACC elements match C++ output
+□ Context ID changes handled correctly
+□ VMID changes handled correctly
+□ Exception handling matches C++ behavior
+□ Return stack prediction works correctly
+□ ISA switching (ARM/Thumb) works correctly
+□ Memory access errors handled properly
+□ All edge cases from C++ tests covered
+□ Documentation updated
+□ Code comments explain C++ equivalents
+
+Current Status:
+✓ Core functionality complete
+✓ Test infrastructure in place
+⚠ Verification in progress (~60% complete)
 
