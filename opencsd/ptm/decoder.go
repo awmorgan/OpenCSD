@@ -414,10 +414,7 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 						d.currentISA = instrInfo.NextISA
 					}
 
-					// Reset for next range and CONTINUE the loop (do not return)
-					rangeStart = d.currentAddr
-					instrCount = 0
-					continue
+					return false, nil // Unconditional direct branch does not consume an atom
 				}
 
 				// Conditional branch or indirect branch - DOES consume an atom
