@@ -178,15 +178,13 @@ func parseTraceIDs(traceIniPath string) (uint8, uint8, error) {
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if matches := nameRe.FindStringSubmatch(line); len(matches) == 4 {
-			packetID, err := parseUint8(matches[2])
+			// packetID and elemID should both be the trace ID (matches[3])
+			// matches[2] is the stream index/buffer index, not the trace ID
+			id, err := parseUint8(matches[3])
 			if err != nil {
 				return 0, 0, err
 			}
-			elemID, err := parseUint8(matches[3])
-			if err != nil {
-				return 0, 0, err
-			}
-			return packetID, elemID, nil
+			return id, id, nil
 		}
 	}
 

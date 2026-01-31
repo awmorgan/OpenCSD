@@ -61,8 +61,9 @@ type Decoder struct {
 // NewDecoder creates a new PTM decoder for the given trace ID
 func NewDecoder(traceID uint8) *Decoder {
 	return &Decoder{
-		TraceID: traceID,
-		Log:     common.NewNoOpLogger(), // Default to no-op logger
+		TraceID:        traceID,
+		Log:            common.NewNoOpLogger(), // Default to no-op logger
+		RetStackEnable: true,                   // Enable return stack by default
 	}
 }
 
@@ -407,7 +408,7 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 					if executed {
 						// Indirect branch taken - need new address
 						d.addrValid = false // C++ line 568
-						fmt.Printf("DEBUG: Indirect branch at 0x%X. IsReturn=%v, RetStackSize=%d, RetStackEnable=%v. Stack=%v\n", d.currentAddr, instrInfo.IsReturn, len(d.retStack), d.RetStackEnable, d.retStack)
+						// fmt.Printf("DEBUG: Indirect branch at 0x%X. IsReturn=%v, RetStackSize=%d, RetStackEnable=%v. Stack=%v\n", d.currentAddr, instrInfo.IsReturn, len(d.retStack), d.RetStackEnable, d.retStack)
 						d.Log.Logf(common.SeverityDebug, "Indirect branch at 0x%X. IsReturn=%v, RetStackSize=%d, RetStackEnable=%v", d.currentAddr, instrInfo.IsReturn, len(d.retStack), d.RetStackEnable)
 						// Try return stack if enabled and this is a return (C++ line 570-583)
 						if d.RetStackEnable && instrInfo.IsReturn && len(d.retStack) > 0 {
@@ -421,7 +422,7 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 							// No return stack - invalid state but continue from next instruction
 							// This allows further atoms to be processed (speculative decoding?)
 							d.addrValid = false
-							d.currentAddr = nextAddr
+							// d.currentAddr = nextAddr // Incorrect: taken branch means NOT nextAddr
 						}
 
 						// Push to return stack if link branch (C++ line 586-587)
