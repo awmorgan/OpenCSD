@@ -90,12 +90,12 @@ func TestTC2FullDecode(t *testing.T) {
 	memMap.AddRegion(common.NewMemoryBuffer(0xC0008000, kernelData))
 	t.Logf("Loaded kernel dump: %d bytes at 0xC0008000", len(kernelData))
 
-	// Create decoder with cycle accuracy enabled (TC2 has it enabled via ETMCR bit 12)
-	// Return stack is NOT enabled in TC2 (ETMCR bit 29 is 0)
+	// Create decoder and auto-configure from snapshot (ETMCR controls CycleAcc/RetStack)
 	decoder := ptm.NewDecoder(0x13)
 	decoder.SetMemoryAccessor(memMap)
-	decoder.CycleAccEnable = true
-	decoder.RetStackEnable = false // TC2 ETMCR=0x10001000 does not have bit 29 set
+	if _, err := decoder.ConfigureFromSnapshot(snapshotPath); err != nil {
+		t.Fatalf("Failed to load TC2 snapshot config: %v", err)
+	}
 
 	// Parse packets from PTM data
 	packets, err := decoder.Parse(ptmData)

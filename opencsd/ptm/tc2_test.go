@@ -311,10 +311,12 @@ func TestTC2LineByLine(t *testing.T) {
 	}
 	memMap.AddRegion(common.NewMemoryBuffer(0xC0008000, kernelData))
 
-	// Create decoder
+	// Create decoder and auto-configure from snapshot
 	decoder := ptm.NewDecoder(0x13)
 	decoder.SetMemoryAccessor(memMap)
-	decoder.CycleAccEnable = true // TC2 has cycle accurate tracing enabled
+	if _, err := decoder.ConfigureFromSnapshot(snapshotPath); err != nil {
+		t.Fatalf("Failed to load TC2 snapshot config: %v", err)
+	}
 
 	// Manually create packets matching what we see in TC2.ppl
 	// We'll compare first few lines

@@ -10,6 +10,7 @@ import (
 )
 
 const snapshotPath = "../../decoder/tests/snapshots/trace_cov_a15"
+const tc2SnapshotPath = "../../decoder/tests/snapshots/TC2"
 const resultsPath = "../../decoder/tests/results"
 
 // loadMemorySnapshot loads all memory regions from the trace_cov_a15 snapshot
@@ -541,6 +542,9 @@ func TestTC2_TimestampPackets(t *testing.T) {
 
 		// Parse the C++ reference bytes with our decoder
 		decoder := NewDecoder(0x13)
+		if _, cfgErr := decoder.ConfigureFromSnapshot(tc2SnapshotPath); cfgErr != nil {
+			t.Fatalf("Failed to load TC2 snapshot config: %v", cfgErr)
+		}
 		packets, err := decoder.Parse(cpp.Bytes)
 		if err != nil {
 			t.Errorf("Timestamp packet %d: parse error: %v", i, err)

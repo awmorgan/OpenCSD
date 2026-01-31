@@ -80,11 +80,12 @@ func TestTC2FullDecodeExtended(t *testing.T) {
 	}
 	memMap.AddRegion(common.NewMemoryBuffer(0xC0008000, kernelData))
 
-	// Create decoder
+	// Create decoder and auto-configure from snapshot
 	decoder := ptm.NewDecoder(0x13)
+	if _, err := decoder.ConfigureFromSnapshot(snapshotPath); err != nil {
+		t.Fatalf("Failed to load TC2 snapshot config: %v", err)
+	}
 	decoder.SetMemoryAccessor(memMap)
-	decoder.CycleAccEnable = true
-	decoder.RetStackEnable = false
 
 	// Parse packets
 	packets, err := decoder.Parse(ptmData)
