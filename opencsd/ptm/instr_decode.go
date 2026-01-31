@@ -279,7 +279,25 @@ func (d *InstrDecoder) decodeThumb(addr uint64, memAcc common.MemoryAccessor, in
 		if (opcode16 & 0x0080) != 0 {
 			info.IsLink = true
 		}
+		// Detect BX LR (return)
+		rm := (opcode16 >> 3) & 0xF
+		if rm == 14 {
+			info.IsReturn = true
+		}
 		return info, nil
+	}
+
+	// POP {reglist} with PC: 1011 110x xxxx xxxx
+	// This is an indirect branch (often a return)
+	if (opcode16 & 0xFE00) == 0xBC00 {
+		// Check if PC is in register list (bit 8)
+		if (opcode16 & 0x0100) != 0 {
+			info.IsBranch = true
+			info.Type = common.InstrTypeBranchIndirect
+			info.HasBranchTarget = false
+			info.IsReturn = true
+			return info, nil
+		}
 	}
 
 	// Not a branch
@@ -319,13 +337,16 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 		info.HasBranchTarget = true
 		return info
 	}
-	info.IsLink = true
-
 	// B/BL (unconditional): 1111 0xxx xxxx xxxx : 11x1 xxxx xxxx xxxx
 	if (hw1&0xF800) == 0xF000 && (hw2&0xD000) == 0xD000 {
 		info.IsBranch = true
 		info.IsConditional = false
 		info.Type = common.InstrTypeBranch
+
+		// Check if this is BL (bit 14 of hw2)
+		if (hw2 & 0x4000) != 0 {
+			info.IsLink = true
+		}
 
 		// Extract offset bits
 		s := (hw1 >> 10) & 1
@@ -349,6 +370,48 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 		info.BranchTarget = uint64(int64(addr) + int64(offset) + 4)
 		info.HasBranchTarget = true
 		return info
+	}
+
+	// POP.W {reglist} with PC: 1110 1000 1011 1101 : PM0x xxxx xxxx xxxx
+	// Encoding T2: LDMIA.W SP!, {registers}
+	if (hw1&0xFFFF) == 0xE8BD {
+		// Check if PC is in register list (bit 15)
+		if (hw2 & 0x8000) != 0 {
+			info.IsBranch = true
+			info.Type = common.InstrTypeBranchIndirect
+			info.HasBranchTarget = false
+			info.IsReturn = true
+			return info
+		}
+	}
+
+	// LDM/LDMIA with PC: 1110 100x x0x1 xxxx : (P)(M)0x xxxx xxxx xxxx
+	// Check if PC in register list
+	if (hw1&0xFE50) == 0xE810 {
+		if (hw2 & 0x8000) != 0 {
+			info.IsBranch = true
+			info.Type = common.InstrTypeBranchIndirect
+			info.HasBranchTarget = false
+			// Treat as return if base is SP and writeback
+			rn := hw1 & 0xF
+			wback := (hw1 & 0x0020) != 0
+			if rn == 13 && wback {
+				info.IsReturn = true
+			}
+			return info
+		}
+	}
+
+	// LDR.W PC, [...]: Various Thumb2 LDR encodings that load PC
+	// LDR (literal) with Rt=PC: 1111 1000 x101 1111 : xxxx xxxx xxxx xxxx
+	if (hw1&0xFF7F) == 0xF85F {
+		rt := (hw2 >> 12) & 0xF
+		if rt == 15 {
+			info.IsBranch = true
+			info.Type = common.InstrTypeBranchIndirect
+			info.HasBranchTarget = false
+			return info
+		}
 	}
 
 	// Not a recognized branch
