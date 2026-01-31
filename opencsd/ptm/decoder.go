@@ -314,10 +314,9 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 		return false, fmt.Errorf("memory accessor not set")
 	}
 
-	if !d.addrValid {
-		// No valid address to trace from, skip this atom
-		return false, nil
-	}
+	// Note: C++ processAtomRange does NOT check m_curr_pe_state.valid before tracing.
+	// It uses the stored address even when valid=false. The valid flag only affects
+	// whether we wait for a new address packet after this atom is processed.
 
 	rangeStart := d.currentAddr
 	instrCount := uint32(0)
@@ -380,64 +379,37 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 				return false, nil // ISB does not consume an atom
 			}
 
-			// Handle branches
+			// Handle branches (C++ trc_pkt_decode_ptm.cpp line 549-589)
+			// In PTM, ALL branches (conditional or unconditional) consume an atom.
+			// The atom value determines whether the branch is taken (E) or not taken (N).
 			if instrInfo.IsBranch {
-				// Unconditional Direct Branch (B, BL immediate) - does NOT consume an atom
-				if !instrInfo.IsConditional && instrInfo.HasBranchTarget {
-					// Push return address if this is a link branch (BL)
-					if instrInfo.IsLink {
-						d.retStack = append(d.retStack, nextAddr)
-						d.retStackISA = append(d.retStackISA, d.currentISA)
-					}
-
-					// Emit the range up to this instruction
-					elem := common.GenericTraceElement{
-						Type: common.ElemTypeAddrRange,
-						AddrRange: common.AddrRange{
-							StartAddr:       rangeStart,
-							EndAddr:         nextAddr,
-							ISA:             d.currentISA,
-							NumInstr:        instrCount,
-							LastInstrSz:     uint8(instrInfo.Size),
-							LastInstrExec:   true, // Unconditional branch always executed
-							LastInstrType:   instrInfo.Type,
-							LastInstrCond:   instrInfo.IsConditional,
-							LastInstrLink:   instrInfo.IsLink,
-							LastInstrReturn: instrInfo.IsReturn,
-						},
-					}
-					if d.currPktHasCC {
-						elem.CycleCount = d.currPktCycleCount
-						elem.HasCycleCount = true
-					}
-					d.elements = append(d.elements, elem)
-					d.Log.Logf(common.SeverityDebug, "  -> ADDR_RANGE (uncond): 0x%X-0x%X (%d instrs)", rangeStart, nextAddr, instrCount)
-
-					// Update state: jump to branch target
-					d.currentAddr = instrInfo.BranchTarget
-					if instrInfo.NextISAValid {
-						d.currentISA = instrInfo.NextISA
-					}
-
-					return false, nil // Unconditional direct branch does not consume an atom
-				}
-
-				// Conditional branch or indirect branch - DOES consume an atom
 				executed := atom == common.AtomExecuted
 				lastExec = executed
 
-				if executed && instrInfo.IsLink {
-					// Push return address with current ISA for return stack
-					d.retStack = append(d.retStack, nextAddr)
-					d.retStackISA = append(d.retStackISA, d.currentISA)
-				}
-
-				if executed {
-					if instrInfo.HasBranchTarget {
+				// Determine next address based on branch type and atom value
+				// C++ line 551-557: OCSD_INSTR_BR case
+				if instrInfo.HasBranchTarget {
+					// Direct branch (B, BL, BEQ, etc.)
+					if executed {
+						// Branch taken - jump to target
 						d.currentAddr = instrInfo.BranchTarget
-					} else if instrInfo.Type == common.InstrTypeBranchIndirect {
-						// Indirect branch - need address from return stack or branch packet
-						// Only use return stack if enabled
+						// Push return address if link branch (C++ line 555-556)
+						if instrInfo.IsLink {
+							d.retStack = append(d.retStack, nextAddr)
+							d.retStackISA = append(d.retStackISA, d.currentISA)
+						}
+					} else {
+						// Branch not taken - continue to next instruction
+						d.currentAddr = nextAddr
+					}
+				} else if instrInfo.Type == common.InstrTypeBranchIndirect {
+					// Indirect branch (BX, BLX register) - C++ line 560-588
+					if executed {
+						// Indirect branch taken - need new address
+						d.addrValid = false // C++ line 568
+						fmt.Printf("DEBUG: Indirect branch at 0x%X. IsReturn=%v, RetStackSize=%d, RetStackEnable=%v. Stack=%v\n", d.currentAddr, instrInfo.IsReturn, len(d.retStack), d.RetStackEnable, d.retStack)
+						d.Log.Logf(common.SeverityDebug, "Indirect branch at 0x%X. IsReturn=%v, RetStackSize=%d, RetStackEnable=%v", d.currentAddr, instrInfo.IsReturn, len(d.retStack), d.RetStackEnable)
+						// Try return stack if enabled and this is a return (C++ line 570-583)
 						if d.RetStackEnable && instrInfo.IsReturn && len(d.retStack) > 0 {
 							target := d.retStack[len(d.retStack)-1]
 							targetISA := d.retStackISA[len(d.retStackISA)-1]
@@ -445,25 +417,33 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 							d.retStackISA = d.retStackISA[:len(d.retStackISA)-1]
 							d.currentAddr = target
 							d.currentISA = targetISA
-						} else {
-							// No return stack or not enabled - invalidate address
-							// Will be resynchronized by next Branch Address or ISYNC packet
+							d.addrValid = true // C++ line 581
+							// No return stack - invalid state but continue from next instruction
+							// This allows further atoms to be processed (speculative decoding?)
 							d.addrValid = false
-							d.currentAddr = nextAddr // Temporary placeholder
+							d.currentAddr = nextAddr
+						}
+
+						// Push to return stack if link branch (C++ line 586-587)
+						if instrInfo.IsLink {
+							d.retStack = append(d.retStack, nextAddr)
+							d.retStackISA = append(d.retStackISA, d.currentISA)
 						}
 					} else {
+						// Indirect branch not taken - continue to next instruction
 						d.currentAddr = nextAddr
 					}
 				} else {
+					// Other branch types - continue to next instruction
 					d.currentAddr = nextAddr
 				}
 
-				// Update ISA for next instruction if branch was taken
+				// Update ISA if branch was taken and has ISA change
 				if executed && instrInfo.NextISAValid {
 					d.currentISA = instrInfo.NextISA
 				}
 
-				// Emit range on waypoint
+				// Emit range (C++ line 591-595)
 				elem := common.GenericTraceElement{
 					Type: common.ElemTypeAddrRange,
 					AddrRange: common.AddrRange{
@@ -486,7 +466,7 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 				d.elements = append(d.elements, elem)
 				d.Log.Logf(common.SeverityDebug, "  -> ADDR_RANGE: 0x%X-0x%X (%d instrs)", rangeStart, nextAddr, instrCount)
 
-				return true, nil // Conditional/indirect branch consumes an atom
+				return true, nil // Branch consumes an atom
 			}
 
 			// Other waypoints (should not reach here normally)
@@ -527,11 +507,6 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 	d.Log.Logf(common.SeverityDebug, "Atom: %d atoms, pattern=0x%x", pkt.AtomCount, pkt.AtomBits)
 
 	for i := uint8(0); i < pkt.AtomCount; i++ {
-		// If address is not valid (after ADDR_NACC), skip remaining atoms
-		if !d.addrValid {
-			break
-		}
-
 		// Get the atom bit (E = 1 = executed, N = 0 = not executed)
 		atomBit := (pkt.AtomBits >> i) & 1
 		atom := common.AtomNotExecuted

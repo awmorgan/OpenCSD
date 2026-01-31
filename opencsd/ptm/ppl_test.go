@@ -40,6 +40,7 @@ func TestCompareAgainstPPL(t *testing.T) {
 	// Setup decoder
 	memAcc := loadMemorySnapshot(t)
 	decoder := ptm.NewDecoder(packetID)
+	decoder.RetStackEnable = true
 	decoder.SetMemoryAccessor(memAcc)
 
 	// Load trace data
