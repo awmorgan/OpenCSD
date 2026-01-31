@@ -1,12 +1,43 @@
 ================================================================================
-PTM Go Port - Developer Handoff Notes (2026-01-31)
+OpenCSD Go Port - Developer Handoff Notes (2026-01-31)
 ================================================================================
 
 PROJECT OVERVIEW:
 -----------------
-This is a Go port of the OpenCSD PTM (Program Trace Macrocell) decoder from C++.
-The C++ reference implementation is in decoder/source/ptm/ and decoder/include/opencsd/ptm/.
-The Go port is in opencsd/ptm/.
+This is a Go port of the ENTIRE OpenCSD library from C++.
+OpenCSD is ARM's CoreSight trace decoder library supporting multiple trace protocols.
+
+C++ Source: decoder/source/ and decoder/include/opencsd/
+Go Port: opencsd/
+
+FULL PORTING SCOPE (C++ → Go):
+------------------------------
+Total C++ codebase: ~22,400 lines across 54 files
+
+Protocol Decoders (must all be ported):
+  - ETMv4  (~5,100 lines) - decoder/source/etmv4/ → NOT YET PORTED
+  - ETMv3  (~2,900 lines) - decoder/source/etmv3/ → NOT YET PORTED
+  - PTM    (~2,400 lines) - decoder/source/ptm/   → ✓ IN PROGRESS (~60% complete)
+  - ETE    (~1,700 lines) - decoder/source/ete/   → NOT YET PORTED
+  - STM    (~1,700 lines) - decoder/source/stm/   → NOT YET PORTED
+  - ITM    (~1,300 lines) - decoder/source/itm/   → NOT YET PORTED
+
+Core Framework (~4,500 lines) - PARTIALLY PORTED:
+  - Frame deformatter (trc_frame_deformatter.cpp) → ✓ opencsd/frame/demux.go
+  - Generic elements (trc_gen_elem.cpp) → ✓ opencsd/common/elements.go
+  - Code follower (ocsd_code_follower.cpp) → NOT YET PORTED
+  - Decode tree (ocsd_dcd_tree.cpp) → NOT YET PORTED
+  - Error handling (ocsd_error*.cpp) → PARTIAL in opencsd/common/logger.go
+  - Return stack (trc_ret_stack.cpp) → ✓ in PTM decoder
+
+Supporting Components:
+  - Memory accessor (~1,500 lines) → ✓ opencsd/common/mem_acc.go + mem_buffer.go
+  - Instruction decoder (~1,100 lines) → ✓ opencsd/ptm/instr_decode.go (ARM/Thumb only)
+  - C API wrapper (~1,500 lines) → NOT NEEDED (native Go API)
+  - Packet printers (~400 lines) → ✓ opencsd/printer/printer.go
+
+CURRENT STATUS: Only PTM protocol decoder is partially ported (~60% verified).
+All other protocols (ETMv3, ETMv4, ETE, STM, ITM) still need to be ported.
 
 CRITICAL VERIFICATION STRATEGY:
 -------------------------------
@@ -233,8 +264,8 @@ processISync()  - ISYNC handling (line 281+)
 processAtom()   - ATOM processing (line 469+)
 traceInstrToWP()- Instruction following to waypoint (line 618+)
 
-FINAL STEPS TO COMPLETE PORT:
------------------------------
+FINAL STEPS TO COMPLETE PTM PORT:
+---------------------------------
 1. Fix TestCompareAgainstPPL to pass 100%
 2. Add instruction attribute strings to output
 3. Verify timestamp accumulation logic
@@ -243,16 +274,44 @@ FINAL STEPS TO COMPLETE PORT:
 6. Performance testing (if needed)
 7. Documentation updates
 
-CURRENT STATUS (2026-01-31):
-----------------------------
+PTM CURRENT STATUS (2026-01-31):
+--------------------------------
 - Core decoder functionality: COMPLETE
 - Packet parsing: COMPLETE
 - Instruction following: COMPLETE
 - Waypoint handling: COMPLETE
 - Test infrastructure: IN PLACE
-- Verification: PARTIAL (needs line-by-line fixes)
+- Verification: PARTIAL (~60% complete, needs line-by-line fixes)
 
-Estimated remaining work: 2-3 days for full verification parity
+Estimated remaining work for PTM: 2-3 days for full verification parity
+
+REMAINING PROTOCOLS TO PORT:
+---------------------------
+After PTM is 100% verified, the following protocols must be ported:
+
+PRIORITY ORDER (by usage frequency):
+1. ETMv4 (~5,100 lines) - Most common modern trace protocol
+   - decoder/source/etmv4/ → opencsd/etmv4/
+   - Similar structure to PTM but more complex packets
+   - Has timestamp, cycle count, Q elements
+
+2. ETMv3 (~2,900 lines) - Legacy ARM trace
+   - decoder/source/etmv3/ → opencsd/etmv3/
+   - Simpler than ETMv4 but still widely used
+
+3. ETE (~1,700 lines) - Embedded Trace Extension (ARMv9)
+   - decoder/source/ete/ → opencsd/ete/
+   - Based on ETMv4 with extensions
+
+4. STM (~1,700 lines) - System Trace Macrocell
+   - decoder/source/stm/ → opencsd/stm/
+   - Software instrumentation trace
+
+5. ITM (~1,300 lines) - Instrumentation Trace Macrocell
+   - decoder/source/itm/ → opencsd/itm/
+   - Cortex-M debug trace
+
+Estimated total effort for all protocols: 4-6 weeks (assuming PTM patterns reused)
 
 GETTING HELP:
 ------------
@@ -267,51 +326,111 @@ END OF DEVELOPER HANDOFF NOTES
 
 
 ================================================================================
-APPENDIX A: C++ TO GO CODE MAPPING
+APPENDIX A: C++ TO GO CODE MAPPING - PTM PROTOCOL
 ================================================================================
 
+PTM Protocol Files (COMPLETED - In Verification):
+-------------------------------------------------
 C++ Source Files (decoder/source/ptm/):
-----------------------------------------
-trc_pkt_decode_ptm.cpp   (24K)  → opencsd/ptm/decoder.go      (33K)
-  - Main packet decoder
-  - processPacket(), decodePacket(), processISync(), processAtom()
-  - Instruction following: traceInstrToWP()
-
-trc_pkt_proc_ptm.cpp     (38K)  → opencsd/ptm/types.go        (22K)
-  - Packet parsing from raw bytes
-  - parseNextPacket(), parseISync(), parseBranchAddress(), etc.
-
-trc_pkt_elem_ptm.cpp     (12K)  → opencsd/ptm/types.go        (22K)
-  - Packet element definitions (merged into types.go)
-
-trc_cmp_cfg_ptm.cpp      (2K)   → opencsd/ptm/config.go       (7K)
-  - Device configuration parsing
+  trc_pkt_decode_ptm.cpp   (24K)  → opencsd/ptm/decoder.go      (33K)
+  trc_pkt_proc_ptm.cpp     (38K)  → opencsd/ptm/types.go        (22K)
+  trc_pkt_elem_ptm.cpp     (12K)  → opencsd/ptm/types.go        (22K)
+  trc_cmp_cfg_ptm.cpp      (2K)   → opencsd/ptm/config.go       (7K)
 
 C++ Header Files (decoder/include/opencsd/ptm/):
------------------------------------------------
-trc_pkt_decode_ptm.h     (7K)   → opencsd/ptm/decoder.go      (33K)
-trc_pkt_proc_ptm.h       (7K)   → opencsd/ptm/types.go        (22K)
-trc_pkt_elem_ptm.h       (7K)   → opencsd/ptm/types.go        (22K)
-trc_cmp_cfg_ptm.h        (7K)   → opencsd/ptm/config.go       (7K)
-trc_pkt_types_ptm.h      (6K)   → opencsd/ptm/types.go        (22K)
+  trc_pkt_decode_ptm.h     (7K)   → opencsd/ptm/decoder.go      (33K)
+  trc_pkt_proc_ptm.h       (7K)   → opencsd/ptm/types.go        (22K)
+  trc_pkt_elem_ptm.h       (7K)   → opencsd/ptm/types.go        (22K)
+  trc_cmp_cfg_ptm.h        (7K)   → opencsd/ptm/config.go       (7K)
+  trc_pkt_types_ptm.h      (6K)   → opencsd/ptm/types.go        (22K)
 
-Additional Go Files (No C++ Equivalent):
----------------------------------------
-opencsd/ptm/instr_decode.go      (17K) - ARM/Thumb instruction decoder
-opencsd/ptm/processor.go         (4K)  - Packet processor wrapper
-opencsd/ptm/*_test.go            (58K) - Test suite
-opencsd/cmd/ptm_verify.go        (4K)  - Verification tool
+Additional Go Files:
+  opencsd/ptm/instr_decode.go      (17K) - ARM/Thumb instruction decoder
+  opencsd/ptm/processor.go         (4K)  - Packet processor wrapper
+  opencsd/ptm/*_test.go            (58K) - Test suite
+  opencsd/cmd/ptm_verify.go        (4K)  - Verification tool
 
-Line Count Comparison:
----------------------
-C++ Implementation:  ~3,800 lines (source + headers)
-Go Implementation:   ~4,500 lines (including tests)
+PTM Line Count: C++ ~3,800 lines → Go ~4,500 lines (including tests)
 
-The Go port is roughly equivalent in size, with additional test infrastructure.
+REMAINING PROTOCOLS TO PORT (NOT STARTED):
+------------------------------------------
+
+ETMv4 Protocol (~5,100 lines):
+  decoder/source/etmv4/trc_pkt_decode_etmv4i.cpp → opencsd/etmv4/decoder.go
+  decoder/source/etmv4/trc_pkt_proc_etmv4i.cpp   → opencsd/etmv4/types.go
+  decoder/source/etmv4/trc_pkt_elem_etmv4i.cpp   → opencsd/etmv4/types.go
+  decoder/source/etmv4/trc_cmp_cfg_etmv4.cpp     → opencsd/etmv4/config.go
+  + Header files in decoder/include/opencsd/etmv4/
+
+ETMv3 Protocol (~2,900 lines):
+  decoder/source/etmv3/trc_pkt_decode_etmv3.cpp  → opencsd/etmv3/decoder.go
+  decoder/source/etmv3/trc_pkt_proc_etmv3.cpp    → opencsd/etmv3/types.go
+  decoder/source/etmv3/trc_pkt_elem_etmv3.cpp    → opencsd/etmv3/types.go
+  decoder/source/etmv3/trc_cmp_cfg_etmv3.cpp     → opencsd/etmv3/config.go
+  + Header files in decoder/include/opencsd/etmv3/
+
+ETE Protocol (~1,700 lines):
+  decoder/source/ete/trc_cmp_cfg_ete.cpp         → opencsd/ete/config.go
+  (ETE extends ETMv4, so will reuse much of etmv4/ implementation)
+
+STM Protocol (~1,700 lines):
+  decoder/source/stm/trc_pkt_decode_stm.cpp      → opencsd/stm/decoder.go
+  decoder/source/stm/trc_pkt_proc_stm.cpp        → opencsd/stm/types.go
+  decoder/source/stm/trc_pkt_elem_stm.cpp        → opencsd/stm/types.go
+  decoder/source/stm/trc_cmp_cfg_stm.cpp         → opencsd/stm/config.go
+  + Header files in decoder/include/opencsd/stm/
+
+ITM Protocol (~1,300 lines):
+  decoder/source/itm/trc_pkt_decode_itm.cpp      → opencsd/itm/decoder.go
+  decoder/source/itm/trc_pkt_proc_itm.cpp        → opencsd/itm/types.go
+  decoder/source/itm/trc_pkt_elem_itm.cpp        → opencsd/itm/types.go
+  decoder/source/itm/trc_cmp_cfg_itm.cpp         → opencsd/itm/config.go
+  + Header files in decoder/include/opencsd/itm/
+
+Core Framework Components (PARTIALLY PORTED):
+---------------------------------------------
+Frame deformatter:
+  decoder/source/trc_frame_deformatter.cpp       → ✓ opencsd/frame/demux.go
+
+Generic elements:
+  decoder/source/trc_gen_elem.cpp                → ✓ opencsd/common/elements.go
+
+Memory accessor:
+  decoder/source/mem_acc/*.cpp                   → ✓ opencsd/common/mem_*.go
+
+Decode tree (NOT PORTED):
+  decoder/source/ocsd_dcd_tree.cpp               → opencsd/tree/ (TBD)
+
+Code follower (NOT PORTED):
+  decoder/source/ocsd_code_follower.cpp          → opencsd/common/ (TBD)
+
+Return stack:
+  decoder/source/trc_ret_stack.cpp               → ✓ in opencsd/ptm/decoder.go
+
+Error handling:
+  decoder/source/ocsd_error*.cpp                 → PARTIAL in opencsd/common/logger.go
+
+Instruction decoder:
+  decoder/source/i_dec/*.cpp                     → ✓ opencsd/ptm/instr_decode.go (ARM/Thumb only)
+  (Will need extension for A64, RISC-V when porting ETMv4/ETE)
+
+Packet printers:
+  decoder/source/pkt_printers/*.cpp              → ✓ opencsd/printer/printer.go
+
+PORTING STRATEGY FOR REMAINING PROTOCOLS:
+-----------------------------------------
+1. Use PTM as template - same packet/decoder/config structure
+2. Each protocol gets its own directory: opencsd/{etmv4,etmv3,ete,stm,itm}/
+3. Reuse common infrastructure: frame demux, memory accessor, elements
+4. Create protocol-specific tests using decoder/tests/snapshots-ete/ etc.
+5. Generate .ppl golden files from C++ for each protocol
+6. Verify with TestCompareAgainstPPL pattern established for PTM
 
 ================================================================================
-APPENDIX B: QUICK START FOR NEW DEVELOPER
+APPENDIX B: QUICK START FOR NEW DEVELOPER - PTM VERIFICATION
 ================================================================================
+
+GOAL: Complete PTM verification to 100%, then start next protocol port
 
 1. CLONE AND SETUP
    git clone https://github.com/awmorgan/OpenCSD
@@ -327,23 +446,115 @@ APPENDIX B: QUICK START FOR NEW DEVELOPER
    cd ../decoder/tests/results
    head -50 trace_cov_a15.ppl  # See expected output format
    
+   Format of .ppl files:
+   - Idx: Packet/element sequence number
+   - ID: Trace source ID (0x00 for PTM in most tests)
+   - Packet lines: [0x08 0x01...] ISYNC (etc.)
+   - Element lines: OCSD_GEN_TRC_ELEM_TRACE_ON; (etc.)
+
 4. RUN VERIFICATION TEST
    cd ../../../opencsd
    go test ./ptm -v -run TestCompareAgainstPPL
    # This will FAIL - that's the work to do!
+   
+   Test shows mismatches like:
+   Expected: Idx:0; ID:2; OCSD_GEN_TRC_ELEM_NO_SYNC
+   Actual:   Idx:6; ID:0; [0x08...] ISYNC
 
 5. FIX THE FIRST MISMATCH
    - Test shows: Expected vs Actual
    - Debug in opencsd/ptm/decoder.go
    - Focus on ProcessPacket() function
+   - Key issue: Packet/element emission ORDER
+   
+   Current issue: Go emits packets before elements, C++ does opposite
 
 6. ITERATE
    - Fix one mismatch at a time
-   - Run test after each fix
+   - Run test after each fix: go test ./ptm -v -run TestCompareAgainstPPL
    - Commit when a section works
+   - Move to next .ppl file
 
 7. COMPARE WITH C++
    - Read decoder/source/ptm/trc_pkt_decode_ptm.cpp
+   - Key function: processPacket() (line 112+)
+   - Match the OUTPUT ORDER exactly
+
+8. WHEN PTM IS 100% VERIFIED:
+   - All .ppl files in decoder/tests/results/trace_cov_a15.ppl pass
+   - All TC2 tests pass
+   - Commit with message: "PTM port complete - 100% verification"
+   - CREATE BRANCH: git checkout -b etmv4-port
+   - Start ETMv4 protocol using PTM as template
+
+================================================================================
+APPENDIX C: NEXT PROTOCOL PORT - ETMv4 GUIDE
+================================================================================
+
+Once PTM is 100% verified, follow this process for ETMv4:
+
+1. CREATE DIRECTORY STRUCTURE
+   mkdir -p opencsd/etmv4
+   cd opencsd/etmv4
+
+2. CREATE INITIAL FILES (copy PTM structure)
+   - config.go      (device configuration)
+   - types.go       (packet definitions and parsing)
+   - decoder.go     (main packet decoder)
+   - processor.go   (packet processor wrapper)
+   - instr_decode.go (reuse PTM's or extend for A64)
+   - decoder_test.go (basic tests)
+   - ppl_test.go    (PPL verification)
+
+3. STUDY C++ REFERENCE
+   - decoder/source/etmv4/trc_pkt_decode_etmv4i.cpp
+   - decoder/include/opencsd/etmv4/*.h
+   - Key differences from PTM:
+     * Q elements (cycle count estimates)
+     * Timestamp packets (different format)
+     * Conditional instruction tracing
+     * A64 instruction set support
+
+4. GENERATE GOLDEN FILES
+   cd decoder/tests
+   # Ensure C++ library builds
+   cd ../build/linux && make
+   # Run test script to generate .ppl files
+   cd ../../tests
+   ./run_pkt_decode_tests.bash
+   # Check results:
+   ls -l results/*etm*.ppl
+
+5. PORT PACKET PARSING (types.go)
+   - Start with packet type definitions
+   - Implement parseNextPacket() 
+   - Add parsers for each ETMv4 packet type
+   - Reference: decoder/source/etmv4/trc_pkt_proc_etmv4i.cpp
+
+6. PORT DECODER (decoder.go)
+   - Implement ProcessPacket() 
+   - Add FSM states
+   - Instruction following logic
+   - Reference: decoder/source/etmv4/trc_pkt_decode_etmv4i.cpp
+
+7. CREATE TESTS
+   - Copy test infrastructure from opencsd/ptm/ppl_test.go
+   - Point to ETMv4 .ppl files
+   - Run: go test ./etmv4 -v -run TestCompareAgainstPPL
+
+8. VERIFY INCREMENTALLY
+   - Fix mismatches one by one
+   - Commit progress regularly
+   - Target: 100% PPL verification
+
+ESTIMATED EFFORT:
+- ETMv4: 2-3 weeks (more complex than PTM)
+- ETMv3: 1-2 weeks (simpler, similar to PTM)
+- ETE: 3-5 days (extends ETMv4)
+- STM: 1 week (different paradigm - software trace)
+- ITM: 1 week (similar to STM)
+
+TOTAL FOR ALL PROTOCOLS: 6-8 weeks
    - Match behavior exactly
    - When in doubt, C++ is correct
 
