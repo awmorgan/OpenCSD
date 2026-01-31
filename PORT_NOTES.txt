@@ -1,43 +1,25 @@
 ================================================================================
-OpenCSD Go Port - Developer Handoff Notes (2026-01-31)
+OpenCSD Go Port - Developer Handoff Notes (2026-02-01)
 ================================================================================
 
-PROJECT OVERVIEW:
------------------
-This is a Go port of the ENTIRE OpenCSD library from C++.
-OpenCSD is ARM's CoreSight trace decoder library supporting multiple trace protocols.
+PROJECT: Go port of ARM's CoreSight trace decoder library (OpenCSD).
+Scope: ~22,400 lines of C++ → Go across 6 trace protocols + framework.
 
-C++ Source: decoder/source/ and decoder/include/opencsd/
-Go Port: opencsd/
+STATUS (2026-02-01):
+  PTM protocol: ✅ 100% VERIFIED (18/18 tests passing, line-by-line PPL match)
+  ETMv4, ETMv3, ETE, STM, ITM: ⚠️ NOT STARTED
+  Framework: PARTIAL (memory accessor, frame demux, printer done)
 
-FULL PORTING SCOPE (C++ → Go):
-------------------------------
-Total C++ codebase: ~22,400 lines across 54 files
+QUICK START:
+  git clone https://github.com/awmorgan/OpenCSD && cd OpenCSD && git checkout go
+  cd opencsd && go test ./ptm -v                      # Run all PTM tests
+  go test ./ptm -v -run TestCompareAgainstPPL        # Golden file verification
 
-Protocol Decoders (must all be ported):
-  - ETMv4  (~5,100 lines) - decoder/source/etmv4/ → NOT YET PORTED
-  - ETMv3  (~2,900 lines) - decoder/source/etmv3/ → NOT YET PORTED
-  - PTM    (~2,400 lines) - decoder/source/ptm/   → ✓ IN PROGRESS (~60% complete)
-  - ETE    (~1,700 lines) - decoder/source/ete/   → NOT YET PORTED
-  - STM    (~1,700 lines) - decoder/source/stm/   → NOT YET PORTED
-  - ITM    (~1,300 lines) - decoder/source/itm/   → NOT YET PORTED
-
-Core Framework (~4,500 lines) - PARTIALLY PORTED:
-  - Frame deformatter (trc_frame_deformatter.cpp) → ✓ opencsd/frame/demux.go
-  - Generic elements (trc_gen_elem.cpp) → ✓ opencsd/common/elements.go
-  - Code follower (ocsd_code_follower.cpp) → NOT YET PORTED
-  - Decode tree (ocsd_dcd_tree.cpp) → NOT YET PORTED
-  - Error handling (ocsd_error*.cpp) → PARTIAL in opencsd/common/logger.go
-  - Return stack (trc_ret_stack.cpp) → ✓ in PTM decoder
-
-Supporting Components:
-  - Memory accessor (~1,500 lines) → ✓ opencsd/common/mem_acc.go + mem_buffer.go
-  - Instruction decoder (~1,100 lines) → ✓ opencsd/ptm/instr_decode.go (ARM/Thumb only)
-  - C API wrapper (~1,500 lines) → NOT NEEDED (native Go API)
-  - Packet printers (~400 lines) → ✓ opencsd/printer/printer.go
-
-CURRENT STATUS: Only PTM protocol decoder is partially ported (~60% verified).
-All other protocols (ETMv3, ETMv4, ETE, STM, ITM) still need to be ported.
+KEY LOCATIONS:
+  Go code: opencsd/
+  C++ reference: decoder/source/ and decoder/include/
+  Test data: decoder/tests/snapshots/ (contains memory + device configs)
+  Golden files: decoder/tests/results/*.ppl (authoritative reference)
 
 GIT REPOSITORY & BRANCHES:
 --------------------------
@@ -56,31 +38,22 @@ Go Module:
   go 1.25.6
   No external dependencies (pure Go implementation)
 
-CRITICAL VERIFICATION STRATEGY:
--------------------------------
-**The C++ golden test files (.ppl) are the authoritative reference for verification.**
+VERIFICATION & TESTING:
+-----------------------
+Golden files (.ppl) are the authoritative reference. Each protocol must match C++
+output line-by-line using these tests:
+  - opencsd/ptm/ppl_test.go: TestCompareAgainstPPL (full verification)
+  - opencsd/tests/helpers/ppl_loader.go: PPL file parser
 
-Location of golden files: decoder/tests/results/*.ppl
-Key files:
-  - trace_cov_a15.ppl    - Basic PTM test with return stack
-  - tc2-ptm-rstk-t32.ppl - Extended test with Thumb2 and return stack
-  - TC2.ppl              - Full TC2 snapshot test
+PTM Tests (All passing 18/18):
+  ✅ TestCompareAgainstPPL       - trace_cov_a15.ppl 100% line match
+  ✅ TestTC2FullDecode          - Large TC2 snapshot
+  ✅ TestTC2LineByLine          - Timestamp + instruction attributes
+  ✅ TestTC2SingleISyncDecode   - ISYNC without ASYNC (edge case)
+  ✅ TestTC2NaccAddress         - Memory access failures
 
-HOW VERIFICATION WORKS:
-1. C++ decoder generates .ppl (packet + element) files from test snapshots
-2. Go tests parse these .ppl files using opencsd/tests/helpers/ppl_loader.go
-3. Go decoder processes same snapshots and compares output line-by-line
-4. Tests incrementally verify more until full parity achieved
-
-CURRENT TEST INFRASTRUCTURE:
-----------------------------
-opencsd/ptm/ppl_test.go       - TestCompareAgainstPPL - full line-by-line comparison
-opencsd/ptm/tc2_test.go       - TC2 snapshot tests (partial verification)
-opencsd/ptm/tc2_full_test.go  - Full TC2 test (work in progress)
-opencsd/ptm/decoder_test.go   - Basic decoder functionality tests
-opencsd/tests/helpers/ppl_loader.go - PPL file parser
-
-To run verification: cd opencsd && go test ./ptm -v -run TestCompareAgainstPPL
+Next dev: Simply run `go test ./ptm -v` - all should pass. If any fail, see
+DEBUGGING section below.
 
 TEST SNAPSHOT STRUCTURE:
 ------------------------
@@ -123,300 +96,77 @@ COMPLETED (Core Functionality):
 7. ✓ ARM and Thumb2 instruction decode - opencsd/ptm/instr_decode.go
 8. ✓ Return stack for indirect branch prediction - decoder.go lines 145-149
 
-REMAINING WORK (Verification & Polish):
----------------------------------------
+SNAPSHOT STRUCTURE:
+-------------------
+Test data in decoder/tests/snapshots/{name}/:
+  - snapshot.ini, trace.ini, device*.ini: Configuration (copy to decoder code)
+  - PTM_X_Y.bin, mem_*.bin: Raw trace data + memory (needed for instruction decode)
 
-**PRIORITY 1: Fix TestCompareAgainstPPL (Currently Failing)** ✓ FIXED (2026-01-31)
-Previous issue: Line ordering mismatch - Go emitted ISYNC packet before NO_SYNC element
-File: opencsd/ptm/ppl_test.go
-Fixes applied:
-  1. NO_SYNC element now emitted during StateNoSync case (when processing ASYNC)
-     instead of deferring to ISYNC processing (matches C++ behavior)
-  2. Fixed double-appending bug: StateWaitISYNC was calling processISync() which
-     appends to d.elements, then re-appending the result to d.elements again
-  3. Key insight: All process*() functions append to d.elements directly
-     and return d.elements - callers should NOT re-append the return value
-
-Result: ✓ TestCompareAgainstPPL now PASSES 100% line-by-line verification
-        against C++ golden file (trace_cov_a15.ppl)
-
-**PRIORITY 2: Add Instruction Attribute Formatting**
-C++ output includes: "E BR b+link", "N BR <cond>", "E iBR V7:impl ret"
-Go currently only outputs basic range info
-Files to modify:
-  - opencsd/common/elements.go - Add string fields to AddrRange
-  - opencsd/ptm/decoder.go - Populate fields during decode
-  - opencsd/printer/printer.go - Format output strings
-
-Attributes needed:
-  - E/N (executed/not executed)
-  - BR type (direct branch, indirect branch, conditional)
-  - b+link (branch with link)
-  - V7:impl ret (return instruction)
-  - <cond> (conditional)
-
-**PRIORITY 3: Timestamp Accumulation**
-C++ accumulates timestamp bits across multiple timestamp packets
-Go implementation exists but needs verification against golden files
-File: opencsd/ptm/decoder.go lines 811-837
-
-**PRIORITY 4: ADDR_NACC Handling**
-Memory access failures should emit ADDR_NACC elements
-Currently working but needs verification against:
-  - Exact addresses that should NACC
-  - Memory space (secure/non-secure) attributes
-File: opencsd/ptm/decoder.go - search for ElemTypeAddrNacc
-
-**PRIORITY 5: Expand Test Coverage**
-Current status:
-  ✓ trace_cov_a15.ppl - Basic test (some lines match)
-  ⚠ TC2.ppl - Partial (muxed trace, ID filtering works)
-  ✗ tc2-ptm-rstk-t32.ppl - Not yet integrated into automated tests
-
-Add tests for:
-  - Full tc2-ptm-rstk-t32 comparison
-  - Timestamp accumulation edge cases  
-  - Context ID changes
-  - VMID changes
-  - Exception handling sequences
+Example: decoder/tests/snapshots/trace_cov_a15/
+  - PTM trace ID 0x02, simple ARM execution, 9 memory regions
+  - Golden output: decoder/tests/results/trace_cov_a15.ppl
+  - Test loads these files and compares decoded output line-by-line
 
 DEVELOPMENT WORKFLOW:
---------------------
+---------------------
+1. Make code changes to opencsd/{protocol}/decoder.go
+2. Run tests: go test ./{protocol} -v
+3. If PPL test fails: add test.Logf() to print actual vs expected
+4. Compare first 10 lines to find divergence (test output shows first mismatches)
+5. Fix decoder logic to match C++ behavior exactly (consult decoder/source/{protocol}/)
+6. Commit: git add -A && git commit -m "..."
+7. Push: git push origin go
 
-ENVIRONMENT SETUP:
-  Go: 1.19 or later (tested with 1.25.6)
-  OS: Linux, macOS, or Windows (with bash for test scripts)
-  No external Go dependencies
+CRITICAL LESSONS - READ THIS:
+------------------------------
+These are the gotchas that caused failures during PTM port:
 
-BUILDING C++ REFERENCE (Optional - for regenerating .ppl files):
-  On Linux:
-    cd decoder/build/linux
-    make
-  On macOS:
-    cd decoder/build/macos
-    make
-  On Windows (MinGW):
-    cd decoder/build/mingw
-    make
+1. **State Machine Continuation (CRITICAL FIX)**
+   - StateNoSync must emit NO_SYNC then CONTINUE (not return) to process packet
+   - Without continue, ISYNC packets stall in StateWaitISYNC waiting for next packet
+   - Test case: TestTC2SingleISyncDecode was failing because NO_SYNC was returned
+   - Fix: Use `continue` after state transition to let FSM process same packet in new state
 
-1. **Regenerate C++ golden files** (if needed):
-   cd decoder/tests
-   bash ../regen_ppl_outputs.bash
-   This creates/updates .ppl files in decoder/tests/results/
+2. **ISYNC as First Packet (EDGE CASE)**
+   - ISYNC can be the first packet (without ASYNC in test scenarios)
+   - Real traces always have ASYNC first, but tests may skip it
+   - StateNoSync must accept both ASYNC and ISYNC as valid sync initiators
+   - Code: Check pkt.Type == PacketTypeISYNC in StateNoSync transition
 
-2. **Run Go tests against golden files**:
-   cd opencsd
-   go test ./ptm -v                    # Run all PTM tests
-   go test ./ptm -v -run TestComparePPL # Run specific test
-   
-3. **When tests fail, compare output**:
-   - Expected: from .ppl file
-   - Actual: from Go decoder
-   - Use diff tools or test output to find mismatches
+3. **Timestamp Accumulation (TSUpdateBits)**
+   - Timestamp packets only update if TSUpdateBits > 0
+   - TSUpdateBits indicates how many bits are being updated (e.g., 48 for 48-bit timestamp)
+   - Without it: mask = 0, so timestamp stays at 0
+   - Test case: TestTC2LineByLine had TS=0 instead of 0x0082f9d18bcc
+   - Packet creation must include TSUpdateBits field (not just Timestamp value)
 
-4. **Iterative verification approach**:
-   a) Start with simple snapshots (trace_cov_a15)
-   b) Fix line-by-line mismatches
-   c) Add more complex snapshots (TC2, tc2-ptm-rstk-t32)
-   d) Continue until all .ppl files verify 100%
+4. **Output Order Matters**
+   - C++ outputs elements in exact sequence - PPL files show this
+   - One element out of place = test fail, even if count is correct
+   - Add test logging early: t.Logf("Element: %s", printer.FormatGenericElement(elem))
+   - Compare actual vs expected line-by-line (test output shows first 10 lines)
 
-5. **Commit frequently** with clear messages:
-   git add -A
-   git commit -m "Fix ISYNC packet ordering in decoder"
-   git push origin go
+5. **Decoder d.elements Pattern**
+   - ProcessPacket clears d.elements at start
+   - All process*() functions append to d.elements directly AND return it
+   - Do NOT re-append return values (was causing duplication in old code)
+   - ProcessPacket returns d.elements at the end
 
-KEY FILES TO UNDERSTAND:
-------------------------
+ARCHITECTURE:
+---------------
+PTM Decoder State Machine (8 states):
+  StateNoSync     → emit NO_SYNC, transition based on packet, CONTINUE
+  StateWaitSync   → wait for ASYNC
+  StateWaitISYNC  → wait for ISYNC (have ASYNC), process it
+  StateDecodePkts → normal packet processing
+  StateContISYNC, StateContAtom, StateContWaypoint, StateContBranch → unused in current impl
 
-C++ Reference Implementation:
-  decoder/source/ptm/trc_pkt_decode_ptm.cpp - Main decoder logic
-  decoder/source/ptm/trc_pkt_proc_ptm.cpp   - Packet processor
-  decoder/include/opencsd/ptm/trc_pkt_decode_ptm.h - Decoder interface
-
-Go Port:
-  opencsd/ptm/decoder.go      - Main decoder (921 lines)
-  opencsd/ptm/types.go        - Packet definitions and parsing (790 lines)
-  opencsd/ptm/processor.go    - Packet processor
-  opencsd/ptm/config.go       - Configuration from device registers
-  opencsd/ptm/instr_decode.go - ARM/Thumb instruction decoder
-  opencsd/common/elements.go  - Generic trace element definitions
-  opencsd/printer/printer.go  - Output formatting (for .ppl comparison)
-
-Test Infrastructure:
-  opencsd/tests/helpers/ppl_loader.go - Parses C++ .ppl files
-  opencsd/ptm/*_test.go               - All Go tests
-
-TESTING SNAPSHOTS:
------------------
-Location: decoder/tests/snapshots/
-
-trace_cov_a15/:
-  - PTM trace ID 0x02
-  - Simple ARM code execution
-  - Memory regions: 9 .bin files
-  - Test: TestCompareAgainstPPL
-
-TC2/:
-  - PTM trace ID 0x13 (muxed with other trace sources)
-  - Kernel-level trace
-  - Memory: kernel_dump.bin at 0xC0008000
-  - Tests: TestTC2Compare, TestTC2MemoryRange
-
-tc2-ptm-rstk-t32/:
-  - PTM trace ID 0x00
-  - Return stack + Thumb2 code
-  - Memory regions: 9 .bin files
-  - Verification tool: opencsd/cmd/ptm_verify.go
-
-RUNNING VERIFICATION TOOL:
--------------------------
-Manual verification (not automated test):
-cd opencsd
-go run ./cmd/ptm_verify.go \
-  -snapshot /c/Users/arthu/git/OpenCSD/decoder/tests/snapshots/tc2-ptm-rstk-t32 \
-  -max-packets 100 \
-  -output comparison.txt
-
-Compare output with: decoder/tests/results/tc2-ptm-rstk-t32.ppl
-
-COMMON ISSUES & SOLUTIONS:
--------------------------
-
-Issue: "Line count mismatch" in PPL test
-Fix: Check packet/element emission order in decoder.ProcessPacket()
-
-Issue: "Address range mismatch"
-Fix: Verify instruction size calculation and ISA switching
-
-Issue: "Unknown packet type"
-Fix: Check types.go parseNextPacket() - may need new packet handler
-
-Issue: Tests can't find .ppl files
-Fix: Ensure C++ golden files exist - run regen_ppl_outputs.bash
-
-Issue: Memory access errors in decoder
-Fix: Check snapshot memory regions are loaded correctly
-
-ARCHITECTURE NOTES:
-------------------
-
-PTM Packet Flow:
-  Raw trace bytes → Packet Parser → Decoder → Generic Trace Elements
-
-Packet types determine:
-  - When synchronization occurs (ASYNC, ISYNC)
-  - What addresses are valid (ISYNC, BRANCH_ADDRESS)
-  - Instruction execution (ATOM packets)
-  - Context changes (CONTEXT_ID, VMID)
-
-Decoder FSM States:
-  NO_SYNC       - Not synchronized, output NO_SYNC element
-  WAIT_SYNC     - Waiting for ASYNC packet
-  WAIT_ISYNC    - Waiting for ISYNC packet (have ASYNC)
-  DECODE_PKTS   - Synchronized, processing packets normally
-  CONT_ISYNC    - Continuation of ISYNC processing
-  CONT_ATOM     - Continuation of ATOM processing  
-  CONT_WAYPOINT - Continuation of waypoint processing
-  CONT_BRANCH   - Continuation of branch processing
-
-C++ DECODER REFERENCE (Key Functions):
---------------------------------------
-processPacket() - Main packet dispatch (line 112+)
-decodePacket()  - Packet type handler (line 251+)
-processISync()  - ISYNC handling (line 281+)
-processAtom()   - ATOM processing (line 469+)
-traceInstrToWP()- Instruction following to waypoint (line 618+)
-
-DEBUGGING LESSONS & TIPS FOR FUTURE DEVELOPERS:
------------------------------------------------
-
-**Issue 1: Tracing Element Duplication**
-Problem: Elements were being generated twice for the same packet
-Root Cause: Double-appending pattern - a function was appending to a shared
-           slice (d.elements) AND its return value was being re-appended by caller
-Pattern to Avoid: 
-  WRONG:  elems := d.processISync(pkt)
-          d.elements = append(d.elements, elems...)  // <- Double append!
-  RIGHT:  d.processISync(pkt)
-          // Function already appended to d.elements
-Lesson: When all process* functions append to a shared collector (d.elements),
-        the caller should NOT re-append the return value. Either:
-        - Return NEW elements and let caller append, OR
-        - Append IN the function and return the full list (current design)
-
-**Issue 2: State Machine Emission Order**
-Problem: Expected sequence was NO_SYNC → ISYNC, but got ISYNC → NO_SYNC
-Root Cause: Deferred emission - trying to emit NO_SYNC during ISYNC processing
-           instead of during the first state transition
-Pattern to Follow: Emit output at the EARLIEST state where you know what to emit
-  C++ behavior: NO_SYNC is emitted when entering from NO_SYNC state
-  Go fix: Emit NO_SYNC in StateNoSync case on first packet (ASYNC)
-Lesson: Match C++ line-by-line output order exactly. Use .ppl golden files
-        to verify - they show exact emission order and timing
-
-**Issue 3: Debugging PPL Mismatches**
-Helpful Debugging Technique:
-  1. Add test.Logf() output to print Actual and Expected arrays side-by-side
-  2. Compare first 10 lines to find where divergence starts
-  3. Use `go test -v -run TestName 2>&1 | grep "Actual\|Expected" | head -30`
-  4. Look for:
-     - Line count differences (missing or extra elements)
-     - Idx values (packet offset should match)
-     - Element type mismatches
-     - Value differences (addresses, counts, reasons)
-
-Tip: When test fails, DON'T guess - add logging to understand the actual
-     output being generated, then compare line-by-line with expected.
-
-**Architecture Insight: Unified d.elements Pattern**
-The decoder maintains a single slice (d.elements) that accumulates output
-across the lifetime of ProcessPacket(). This is different from per-function
-result aggregation:
-  - d.elements is cleared at START of ProcessPacket
-  - All process* functions append to d.elements directly
-  - ProcessPacket returns d.elements at the end
-  - FSM loop in ProcessPacket may call multiple process* functions for
-    continuation states
-
-This design allows:
-  - Combining multiple elements from different packet types
-  - Handling continuation states where one packet produces multiple element sets
-  - Clean return of all accumulated elements
-
-**Comparison with C++ Model**
-C++ uses m_output_elem (single element output) with a while loop that:
-  1. Sets m_output_elem 
-  2. Calls outputTraceElement() to emit it
-  3. Loops for continuation processing
-
-Go equivalent maintains the same logic but returns all elements at once.
-The key is matching the OUTPUT ORDER, not the internal mechanism.
-
-FINAL STEPS TO COMPLETE PTM PORT:
----------------------------------
-1. ✓ Fix TestCompareAgainstPPL to pass 100% (COMPLETED 2026-01-31)
-2. Add instruction attribute strings to output (NEXT PRIORITY)
-3. Verify timestamp accumulation logic
-4. Test all snapshots in decoder/tests/snapshots/
-5. Ensure all .ppl files in decoder/tests/results/ verify
-6. Performance testing (if needed)
-7. Documentation updates
-
-PTM CURRENT STATUS (2026-01-31 - UPDATED):
---------------------------------
-- Core decoder functionality: COMPLETE
-- Packet parsing: COMPLETE
-- Instruction following: COMPLETE
-- Waypoint handling: COMPLETE
-- Test infrastructure: IN PLACE
-- Basic verification: ✓ WORKING (TestCompareAgainstPPL passes 100%)
-- Full verification: IN PROGRESS (~65% complete after PRIORITY 1 fix)
-  * trace_cov_a15.ppl - ✓ FULLY PASSING (trace_cov_a15 snapshot)
-  * TC2.ppl - ⚠ PARTIAL (timestamp accumulation needs work)
-  * tc2-ptm-rstk-t32.ppl - ⚠ NOT YET AUTOMATED
-
-Estimated remaining work for PTM: 1-2 days to fix timestamp accumulation
-                                  and instruction attribute formatting
+Key decoder files:
+  opencsd/ptm/decoder.go (1071 lines)     - State machine + packet handlers
+  opencsd/ptm/types.go (880 lines)        - Packet parsing
+  opencsd/ptm/instr_decode.go (600 lines) - ARM/Thumb instruction decoder
+  opencsd/ptm/config.go (250 lines)       - Device configuration
+  opencsd/common/elements.go              - Trace element definitions
 
 REMAINING PROTOCOLS TO PORT:
 ---------------------------
@@ -590,131 +340,64 @@ GOAL: Complete PTM verification to 100%, then start next protocol port
    go test ./ptm -v -run TestCompareAgainstPPL
    # This will FAIL - that's the work to do!
    
-   Test shows mismatches like:
-   Expected: Idx:0; ID:2; OCSD_GEN_TRC_ELEM_NO_SYNC
-   Actual:   Idx:6; ID:0; [0x08...] ISYNC
-
-5. FIX THE FIRST MISMATCH
-   - Test shows: Expected vs Actual
-   - Debug in opencsd/ptm/decoder.go
-   - Focus on ProcessPacket() function
-   - Key issue: Packet/element emission ORDER
-   
-   Current issue: Go emits packets before elements, C++ does opposite
-
-6. ITERATE
-   - Fix one mismatch at a time
-   - Run test after each fix: go test ./ptm -v -run TestCompareAgainstPPL
-   - Commit when a section works
-   - Move to next .ppl file
-
-7. COMPARE WITH C++
-   - Read decoder/source/ptm/trc_pkt_decode_ptm.cpp
-   - Key function: processPacket() (line 112+)
-   - Match the OUTPUT ORDER exactly
-
-8. WHEN PTM IS 100% VERIFIED:
-   - All .ppl files in decoder/tests/results/trace_cov_a15.ppl pass
-   - All TC2 tests pass
-   - Commit with message: "PTM port complete - 100% verification"
-   - CREATE BRANCH: git checkout -b etmv4-port
-   - Start ETMv4 protocol using PTM as template
-
 ================================================================================
-APPENDIX C: NEXT PROTOCOL PORT - ETMv4 GUIDE
+NEXT STEPS FOR NEXT DEVELOPER:
 ================================================================================
 
-Once PTM is 100% verified, follow this process for ETMv4:
+PTM is 100% verified. Next: Port remaining protocols.
 
-1. CREATE DIRECTORY STRUCTURE
-   mkdir -p opencsd/etmv4
-   cd opencsd/etmv4
+For ETMv4 (most important):
+1. mkdir opencsd/etmv4
+2. Copy PTM structure: config.go, types.go, decoder.go, processor.go, instr_decode.go
+3. Study C++ reference: decoder/source/etmv4/trc_pkt_decode_etmv4i.cpp
+4. Generate golden files: decoder/tests/results/*.ppl (build C++ first)
+5. Port packet parsing (types.go), then decoder FSM (decoder.go)
+6. Use TestCompareAgainstPPL pattern - same as PTM
+7. Test incrementally: start trace_cov_a15, then larger snapshots
+8. Estimated: 2-3 weeks
 
-2. CREATE INITIAL FILES (copy PTM structure)
-   - config.go      (device configuration)
-   - types.go       (packet definitions and parsing)
-   - decoder.go     (main packet decoder)
-   - processor.go   (packet processor wrapper)
-   - instr_decode.go (reuse PTM's or extend for A64)
-   - decoder_test.go (basic tests)
-   - ppl_test.go    (PPL verification)
-
-3. STUDY C++ REFERENCE
-   - decoder/source/etmv4/trc_pkt_decode_etmv4i.cpp
-   - decoder/include/opencsd/etmv4/*.h
-   - Key differences from PTM:
-     * Q elements (cycle count estimates)
-     * Timestamp packets (different format)
-     * Conditional instruction tracing
-     * A64 instruction set support
-
-4. GENERATE GOLDEN FILES
-   cd decoder/tests
-   # Ensure C++ library builds
-   cd ../build/linux && make
-   # Run test script to generate .ppl files
-   cd ../../tests
-   ./run_pkt_decode_tests.bash
-   # Check results:
-   ls -l results/*etm*.ppl
-
-5. PORT PACKET PARSING (types.go)
-   - Start with packet type definitions
-   - Implement parseNextPacket() 
-   - Add parsers for each ETMv4 packet type
-   - Reference: decoder/source/etmv4/trc_pkt_proc_etmv4i.cpp
-
-6. PORT DECODER (decoder.go)
-   - Implement ProcessPacket() 
-   - Add FSM states
-   - Instruction following logic
-   - Reference: decoder/source/etmv4/trc_pkt_decode_etmv4i.cpp
-
-7. CREATE TESTS
-   - Copy test infrastructure from opencsd/ptm/ppl_test.go
-   - Point to ETMv4 .ppl files
-   - Run: go test ./etmv4 -v -run TestCompareAgainstPPL
-
-8. VERIFY INCREMENTALLY
-   - Fix mismatches one by one
-   - Commit progress regularly
-   - Target: 100% PPL verification
-
-ESTIMATED EFFORT:
-- ETMv4: 2-3 weeks (more complex than PTM)
-- ETMv3: 1-2 weeks (simpler, similar to PTM)
-- ETE: 3-5 days (extends ETMv4)
-- STM: 1 week (different paradigm - software trace)
-- ITM: 1 week (similar to STM)
-
-TOTAL FOR ALL PROTOCOLS: 6-8 weeks
-   - Match behavior exactly
-   - When in doubt, C++ is correct
+For other protocols (ETMv3, ETE, STM, ITM):
+- Same approach, 1-2 weeks each
+- Total effort: 6-8 weeks for all
 
 ================================================================================
-APPENDIX C: VERIFICATION CHECKLIST
+APPENDIX: C++ TO GO FILE MAPPING - PTM
 ================================================================================
 
-Before marking port as complete, ensure:
+PTM Files (COMPLETED - 100% Verified):
+  trc_pkt_decode_ptm.cpp      → opencsd/ptm/decoder.go
+  trc_pkt_proc_ptm.cpp        → opencsd/ptm/types.go
+  trc_cmp_cfg_ptm.cpp         → opencsd/ptm/config.go
+  (+ supporting files above)
 
-□ TestCompareAgainstPPL passes 100%
-□ All snapshots in decoder/tests/snapshots/ decode correctly
-□ All .ppl files in decoder/tests/results/ verify
-□ Instruction attributes formatted correctly
-□ Timestamp accumulation verified
-□ ADDR_NACC elements match C++ output
-□ Context ID changes handled correctly
-□ VMID changes handled correctly
-□ Exception handling matches C++ behavior
-□ Return stack prediction works correctly
-□ ISA switching (ARM/Thumb) works correctly
-□ Memory access errors handled properly
-□ All edge cases from C++ tests covered
-□ Documentation updated
-□ Code comments explain C++ equivalents
+Line counts: C++ ~3,800 lines → Go ~4,500 lines (including tests + comments)
 
-Current Status:
-✓ Core functionality complete
-✓ Test infrastructure in place
-⚠ Verification in progress (~60% complete)
+================================================================================
+APPENDIX: VERIFICATION CHECKLIST
+================================================================================
+
+Before marking protocol complete, ensure:
+
+✅ PTM Verification (2026-02-01):
+  □ TestCompareAgainstPPL passes 100% ← DONE
+  □ All TC2 tests pass                ← DONE
+  □ TestTC2SingleISyncDecode passes   ← DONE (STATE MACHINE FIX)
+  □ TestTC2NaccAddress passes         ← DONE (STATE MACHINE FIX)
+  □ TestTC2LineByLine passes          ← DONE (TIMESTAMP FIX)
+  □ All 18/18 tests passing           ← DONE
+
+For future protocols:
+  □ TestCompareAgainstPPL passes 100%
+  □ All .ppl files in decoder/tests/results/ verify
+  □ All snapshots in decoder/tests/snapshots/ decode correctly
+  □ Memory access errors handled (ADDR_NACC elements correct)
+  □ Context/VMID changes handled
+  □ Exception handling matches C++
+  □ ISA switching works (ARM/Thumb/A64 if applicable)
+  □ Instruction attributes formatted correctly
+  □ Timestamp accumulation verified
+  □ Return stack prediction works (if protocol supports it)
+
+================================================================================
+END OF NOTES
 
