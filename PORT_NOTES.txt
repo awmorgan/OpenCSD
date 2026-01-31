@@ -6,14 +6,14 @@ PROJECT: Go port of ARM's CoreSight trace decoder library (OpenCSD).
 Scope: ~22,400 lines of C++ → Go across 6 trace protocols + framework.
 
 STATUS (2026-02-01):
-  PTM protocol: ✅ 100% VERIFIED (18/18 tests passing, line-by-line PPL match)
+  PTM protocol: ⚠️ PARTIAL (core decode works; only trace_cov_a15 has strict golden compare)
   ETMv4, ETMv3, ETE, STM, ITM: ⚠️ NOT STARTED
   Framework: PARTIAL (memory accessor, frame demux, printer done)
 
 QUICK START:
   git clone https://github.com/awmorgan/OpenCSD && cd OpenCSD && git checkout go
-  cd opencsd && go test ./ptm -v                      # Run all PTM tests
-  go test ./ptm -v -run TestCompareAgainstPPL        # Golden file verification
+  cd opencsd && go test ./ptm -v                      # Run PTM tests (coverage incomplete)
+  go test ./ptm -v -run TestCompareAgainstPPL        # Full golden compare for trace_cov_a15 only
 
 KEY LOCATIONS:
   Go code: opencsd/
@@ -40,20 +40,30 @@ Go Module:
 
 VERIFICATION & TESTING:
 -----------------------
-Golden files (.ppl) are the authoritative reference. Each protocol must match C++
-output line-by-line using these tests:
-  - opencsd/ptm/ppl_test.go: TestCompareAgainstPPL (full verification)
-  - opencsd/tests/helpers/ppl_loader.go: PPL file parser
+Golden files (.ppl) are the authoritative reference. PTM is NOT complete until
+all PTM-containing .ppl files are compared line-by-line against Go output.
 
-PTM Tests (All passing 18/18):
-  ✅ TestCompareAgainstPPL       - trace_cov_a15.ppl 100% line match
-  ✅ TestTC2FullDecode          - Large TC2 snapshot
-  ✅ TestTC2LineByLine          - Timestamp + instruction attributes
-  ✅ TestTC2SingleISyncDecode   - ISYNC without ASYNC (edge case)
-  ✅ TestTC2NaccAddress         - Memory access failures
+Current PTM verification:
+  ✅ Full line-by-line compare: trace_cov_a15.ppl (TestCompareAgainstPPL)
+  ⚠️ Partial/diagnostic only: TC2.ppl (elements only, filtered/limited; PTM IDs 0x13/0x14)
+  ⚠️ Not compared yet: Snowball.ppl (PTM IDs 0x10/0x11), tc2-ptm-rstk-t32.ppl
 
-Next dev: Simply run `go test ./ptm -v` - all should pass. If any fail, see
-DEBUGGING section below.
+PPL generation & formats (C++):
+  - decoder/tests/run_pkt_decode_tests.bash generates most decoder/tests/results/*.ppl
+    * Full decode: juno-ret-stck, a57_single_step, bugfix-exact-match, juno-uname-001,
+      juno-uname-002, juno_r1_1, tc2-ptm-rstk-t32, trace_cov_a15, stm_only, stm_only-2,
+      stm_only-juno, stm-issue-27, TC2, Snowball, test-file-mem-offsets,
+      itm_only_raw, itm_only_csformat
+    * Packet monitor: init-short-addr (-pkt_mon)
+    * TPIU/deformatter: a55-test-tpiu (-dstream_format, -o_raw_packed/-o_raw_unpacked)
+    * Error-mode variants (same snapshot): juno_r1_1_rangelimit (OPENCSD_INSTR_RANGE_LIMIT),
+      juno_r1_1_badopcode (OPENCSD_ERR_ON_AA64_BAD_OPCODE), juno_r1_1_badopcode_flag (-aa64_opcode_chk)
+  - Extra outputs from test programs: c_api_test.ppl, frame_demux_test.ppl,
+    mem_buff_demo.ppl/mem_buff_demo_cb.ppl, itm-decode-test.ppl
+  - The first lines of each .ppl include the exact command-line and protocol/trace IDs.
+
+Next dev: Do NOT mark PTM complete until all PTM .ppl files above are compared
+line-by-line in Go tests.
 
 TEST SNAPSHOT STRUCTURE:
 ------------------------
@@ -81,6 +91,10 @@ Key Concept - Trace Source IDs:
   - ETM_1_5 means ETM with ID 0x05
   - In muxed traces, ID is used to demux packets to correct decoder
   - Frame deformatter (opencsd/frame/demux.go) splits muxed trace by ID
+
+PPL header tip (useful for verification):
+  - Each .ppl starts with the command line and "Protocol printer ..." lines listing protocol + IDs.
+  - TC2.ppl is multi-protocol (ETMv3/PTM/ITM) with PTM IDs 0x13/0x14; Snowball.ppl has PTM IDs 0x10/0x11.
 
 PROGRESS TRACKING:
 -----------------
@@ -170,7 +184,7 @@ Key decoder files:
 
 REMAINING PROTOCOLS TO PORT:
 ---------------------------
-After PTM is 100% verified, the following protocols must be ported:
+After PTM verification is complete, the following protocols must be ported:
 
 PRIORITY ORDER (by usage frequency):
 1. ETMv4 (~5,100 lines) - Most common modern trace protocol
@@ -212,8 +226,8 @@ END OF DEVELOPER HANDOFF NOTES
 APPENDIX A: C++ TO GO CODE MAPPING - PTM PROTOCOL
 ================================================================================
 
-PTM Protocol Files (COMPLETED - In Verification):
--------------------------------------------------
+PTM Protocol Files (PORTED - verification pending):
+----------------------------------------------------
 C++ Source Files (decoder/source/ptm/):
   trc_pkt_decode_ptm.cpp   (24K)  → opencsd/ptm/decoder.go      (33K)
   trc_pkt_proc_ptm.cpp     (38K)  → opencsd/ptm/types.go        (22K)
@@ -338,13 +352,13 @@ GOAL: Complete PTM verification to 100%, then start next protocol port
 4. RUN VERIFICATION TEST
    cd ../../../opencsd
    go test ./ptm -v -run TestCompareAgainstPPL
-   # This will FAIL - that's the work to do!
+   # This verifies trace_cov_a15 only. Expand coverage to remaining PTM .ppl files.
    
 ================================================================================
 NEXT STEPS FOR NEXT DEVELOPER:
 ================================================================================
 
-PTM is 100% verified. Next: Port remaining protocols.
+PTM verification is incomplete. Next: finish PTM .ppl comparisons before porting other protocols.
 
 For ETMv4 (most important):
 1. mkdir opencsd/etmv4
@@ -364,7 +378,7 @@ For other protocols (ETMv3, ETE, STM, ITM):
 APPENDIX: C++ TO GO FILE MAPPING - PTM
 ================================================================================
 
-PTM Files (COMPLETED - 100% Verified):
+PTM Files (PORTED - verification pending):
   trc_pkt_decode_ptm.cpp      → opencsd/ptm/decoder.go
   trc_pkt_proc_ptm.cpp        → opencsd/ptm/types.go
   trc_cmp_cfg_ptm.cpp         → opencsd/ptm/config.go
@@ -378,13 +392,12 @@ APPENDIX: VERIFICATION CHECKLIST
 
 Before marking protocol complete, ensure:
 
-✅ PTM Verification (2026-02-01):
-  □ TestCompareAgainstPPL passes 100% ← DONE
-  □ All TC2 tests pass                ← DONE
-  □ TestTC2SingleISyncDecode passes   ← DONE (STATE MACHINE FIX)
-  □ TestTC2NaccAddress passes         ← DONE (STATE MACHINE FIX)
-  □ TestTC2LineByLine passes          ← DONE (TIMESTAMP FIX)
-  □ All 18/18 tests passing           ← DONE
+PTM Verification (2026-02-01):
+  □ Full line-by-line compare for trace_cov_a15.ppl
+  □ Full line-by-line compare for Snowball.ppl (PTM IDs 0x10/0x11)
+  □ Full line-by-line compare for tc2-ptm-rstk-t32.ppl
+  □ Full line-by-line compare for TC2.ppl (PTM IDs 0x13/0x14)
+  □ TC2 tests validated without filtering (ADDR_NACC, line counts, etc.)
 
 For future protocols:
   □ TestCompareAgainstPPL passes 100%
