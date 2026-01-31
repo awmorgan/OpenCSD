@@ -330,8 +330,8 @@ func TestTC2LineByLine(t *testing.T) {
 			SecureState: true, SecureValid: true,
 			ISyncReason: ptm.ISyncPeriodic,
 		},
-		// TIMESTAMP (CC=0)
-		{Type: ptm.PacketTypeTimestamp, Offset: 26579, Timestamp: 0x82f9d18bcc, CycleCount: 0, CCValid: true},
+		// TIMESTAMP (CC=0) - 48-bit timestamp update
+		{Type: ptm.PacketTypeTimestamp, Offset: 26579, Timestamp: 0x82f9d18bcc, TSUpdateBits: 48, CycleCount: 0, CCValid: true},
 		// ATOM E (522 cycles)
 		{Type: ptm.PacketTypeATOM, Offset: 26590, AtomCount: 1, AtomBits: 1, CycleCount: 522, CCValid: true},
 	}

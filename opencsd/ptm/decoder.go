@@ -176,14 +176,22 @@ func (d *Decoder) ProcessPacket(pkt Packet) ([]common.GenericTraceElement, error
 				}
 				d.elements = append(d.elements, elem)
 				d.noSyncEmitted = true
-			}
-			// Transition state based on packet type
-			if pkt.Type == PacketTypeASYNC {
-				d.state = StateWaitISYNC
+				// After emitting NO_SYNC, transition based on packet type and continue
+				if pkt.Type == PacketTypeASYNC {
+					d.state = StateWaitISYNC
+				} else if pkt.Type == PacketTypeISYNC {
+					// Allow ISYNC to act as initial sync packet (without ASYNC)
+					d.state = StateWaitISYNC
+				} else {
+					d.state = StateWaitSync
+				}
+				// Continue processing in the new state
+				continue
 			} else {
+				// NO_SYNC already emitted, shouldn't reach here
 				d.state = StateWaitSync
+				return d.elements, nil
 			}
-			return d.elements, nil
 
 		case StateWaitSync:
 			// Waiting for ASYNC packet - ignore all others
