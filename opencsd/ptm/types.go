@@ -20,6 +20,12 @@ const (
 	PacketTypeContextID                  // Context ID packet (0x6E)
 	PacketTypeVMID                       // VMID packet (0x3C)
 	PacketTypeExceptionReturn            // Exception return packet (0x76)
+	PacketTypeTrigger                    // Trigger packet (0x0C)
+	PacketTypeIgnore                     // Ignore packet
+	PacketTypeNoSync                     // Not synchronized / unsynced data
+	PacketTypeIncompleteEOT              // Incomplete packet at end-of-trace
+	PacketTypeBadSequence                // Bad/invalid sequence
+	PacketTypeReserved                   // Reserved packet
 )
 
 func (t PacketType) String() string {
@@ -42,6 +48,18 @@ func (t PacketType) String() string {
 		return "VMID"
 	case PacketTypeExceptionReturn:
 		return "EXCEPTION_RETURN"
+	case PacketTypeTrigger:
+		return "TRIGGER"
+	case PacketTypeIgnore:
+		return "IGNORE"
+	case PacketTypeNoSync:
+		return "NOTSYNC"
+	case PacketTypeIncompleteEOT:
+		return "INCOMPLETE_EOT"
+	case PacketTypeBadSequence:
+		return "BAD_SEQUENCE"
+	case PacketTypeReserved:
+		return "RESERVED"
 	default:
 		return "UNKNOWN"
 	}
@@ -272,6 +290,22 @@ func (d *Decoder) parseNextPacket(buf []byte) (Packet, int, error) {
 	// Exception Return: header = 0x76
 	if header == 0x76 {
 		return d.parseExceptionReturn(buf)
+	}
+
+	// Trigger: header = 0x0C
+	if header == 0x0C {
+		return Packet{
+			Type: PacketTypeTrigger,
+			Data: buf[0:1],
+		}, 1, nil
+	}
+
+	// Waypoint Update: header = 0x72
+	if header == 0x72 {
+		return Packet{
+			Type: PacketTypeWaypoint,
+			Data: buf[0:1],
+		}, 1, nil
 	}
 
 	// Unknown packet - consume one byte and continue

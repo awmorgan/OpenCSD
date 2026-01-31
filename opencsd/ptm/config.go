@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	etmcrCycleAccBit = 12
+	etmcrCycleAccBit  = 12
 	etmcrTimestampBit = 28
-	etmcrRetStackBit = 29
+	etmcrRetStackBit  = 29
 	etmcrVmidBit      = 30
 
 	etmccerRetStackImplBit = 23

@@ -10,18 +10,18 @@ import (
 // Decoder handles PTM trace decoding and maintains decoder state
 type Decoder struct {
 	// Configuration
-	TraceID        uint8                 // Trace source ID
-	Log            common.Logger         // Logger for errors and debug info
-	MemAcc         common.MemoryAccessor // Memory accessor for reading instruction opcodes
-	CycleAccEnable bool                  // Cycle accurate tracing enabled
-	RetStackEnable bool                  // Return stack enabled (from ETMCR bit 29)
-	VMIDEnable     bool                  // VMID tracing enabled
-	TimestampEnable bool                 // Timestamp tracing enabled
-	Timestamp64Bit bool                  // Timestamp is 64-bit
-	TimestampBinary bool                 // Timestamp encoding is natural binary
-	DsbDmbWaypoint bool                  // DSB/DMB treated as waypoints
-	ContextIDBytes int                   // Context ID packet size in bytes
-	ContextIDConfigured bool             // Context ID size configured from device
+	TraceID             uint8                 // Trace source ID
+	Log                 common.Logger         // Logger for errors and debug info
+	MemAcc              common.MemoryAccessor // Memory accessor for reading instruction opcodes
+	CycleAccEnable      bool                  // Cycle accurate tracing enabled
+	RetStackEnable      bool                  // Return stack enabled (from ETMCR bit 29)
+	VMIDEnable          bool                  // VMID tracing enabled
+	TimestampEnable     bool                  // Timestamp tracing enabled
+	Timestamp64Bit      bool                  // Timestamp is 64-bit
+	TimestampBinary     bool                  // Timestamp encoding is natural binary
+	DsbDmbWaypoint      bool                  // DSB/DMB treated as waypoints
+	ContextIDBytes      int                   // Context ID packet size in bytes
+	ContextIDConfigured bool                  // Context ID size configured from device
 
 	// Current element being built
 	CurrentElement *common.GenericTraceElement
@@ -149,6 +149,26 @@ func (d *Decoder) ProcessPacket(pkt Packet) ([]common.GenericTraceElement, error
 
 	case PacketTypeExceptionReturn:
 		return d.processExceptionReturn(pkt)
+
+	case PacketTypeTrigger:
+		// Trigger packets are logged (could generate an event in future)
+		d.Log.Logf(common.SeverityDebug, "Trigger packet at offset %d", pkt.Offset)
+		return d.elements, nil
+
+	case PacketTypeWaypoint:
+		// Waypoint update packets are currently just logged
+		d.Log.Logf(common.SeverityDebug, "Waypoint update packet at offset %d", pkt.Offset)
+		return d.elements, nil
+
+	case PacketTypeIgnore:
+		// Ignore packets are skipped
+		d.Log.Logf(common.SeverityDebug, "Ignore packet at offset %d", pkt.Offset)
+		return d.elements, nil
+
+	case PacketTypeNoSync, PacketTypeIncompleteEOT, PacketTypeBadSequence, PacketTypeReserved:
+		// Marker packets indicate protocol errors or unsync - handled by processor
+		d.Log.Logf(common.SeverityWarning, "Marker packet %s at offset %d", pkt.Type, pkt.Offset)
+		return d.elements, nil
 
 	case PacketTypeUnknown:
 		// Ignore unknown packets
