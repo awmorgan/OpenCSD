@@ -22,8 +22,9 @@ type Decoder struct {
 	waitingISync  bool // true after ASYNC, waiting for ISYNC
 	noSyncEmitted bool // true once NO_SYNC has been emitted for this decode run
 
-	// Current processor context
+	// Current processor context - valid indicates we have a good address from ISYNC/BranchAddr
 	currentAddr    uint64                // Current program counter
+	addrValid      bool                  // True if currentAddr is valid (set by ISYNC/BranchAddr)
 	lastPacketAddr uint64                // Last packet-reported address (for address reconstruction)
 	currentISA     common.ISA            // Current instruction set
 	secureState    bool                  // Current security state (S/N)
@@ -73,6 +74,7 @@ func (d *Decoder) Reset() {
 	d.waitingISync = false
 	d.noSyncEmitted = false
 	d.currentAddr = 0
+	d.addrValid = false
 	d.lastPacketAddr = 0
 	d.currentISA = common.ISAARM
 	d.secureState = false
@@ -170,6 +172,7 @@ func (d *Decoder) processISync(pkt Packet) ([]common.GenericTraceElement, error)
 
 	// Update context from ISYNC
 	d.currentAddr = pkt.Address
+	d.addrValid = true // ISYNC provides a valid address
 	d.lastPacketAddr = pkt.Address
 	d.currentISA = pkt.ISA
 	if pkt.SecureValid {
@@ -249,10 +252,10 @@ func (d *Decoder) processBranchAddress(pkt Packet) ([]common.GenericTraceElement
 		}
 		d.elements = append(d.elements, elem)
 		d.Log.Logf(common.SeverityDebug, "Exception: num=0x%x at addr=0x%x", pkt.ExceptionNum, prevAddr)
-	} else if d.MemAcc != nil {
+	} else if d.MemAcc != nil && d.addrValid {
 		// Branch address only (no exception) implies an E atom
 		// Need to trace from current address to the branch waypoint
-		err := d.traceToWaypoint(common.AtomExecuted)
+		_, err := d.traceToWaypoint(common.AtomExecuted)
 		if err != nil {
 			d.Log.Logf(common.SeverityWarning, "Failed to trace to waypoint: %v", err)
 			return d.elements, err
@@ -261,6 +264,7 @@ func (d *Decoder) processBranchAddress(pkt Packet) ([]common.GenericTraceElement
 
 	// Update current address to the branch target from packet
 	d.currentAddr = addr
+	d.addrValid = true // Branch address provides a valid address
 	d.lastPacketAddr = addr
 	d.Log.Logf(common.SeverityDebug, "Branch to address: 0x%x", d.currentAddr)
 
@@ -270,9 +274,15 @@ func (d *Decoder) processBranchAddress(pkt Packet) ([]common.GenericTraceElement
 // traceToWaypoint traces instructions from currentAddr until a branch is found.
 // This emits an INSTR_RANGE element and updates currentAddr.
 // The atom parameter indicates if the branch was executed (E) or not (N).
-func (d *Decoder) traceToWaypoint(atom common.Atom) error {
+// Returns true if successful, false if a memory access error occurred (ADDR_NACC emitted).
+func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 	if d.MemAcc == nil {
-		return fmt.Errorf("memory accessor not set")
+		return false, fmt.Errorf("memory accessor not set")
+	}
+
+	if !d.addrValid {
+		// No valid address to trace from, skip this atom
+		return false, nil
 	}
 
 	rangeStart := d.currentAddr
@@ -285,8 +295,16 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) error {
 		prevAddr := d.currentAddr
 		instrInfo, err := d.decodeInstruction(prevAddr)
 		if err != nil {
-			d.Log.Logf(common.SeverityWarning, "Failed to decode instruction at 0x%X: %v", prevAddr, err)
-			return err
+			// Memory access error - emit ADDR_NACC and invalidate address
+			d.Log.Logf(common.SeverityWarning, "Memory access error at 0x%X: %v", prevAddr, err)
+			elem := common.GenericTraceElement{
+				Type:         common.ElemTypeAddrNacc,
+				NaccAddr:     prevAddr,
+				NaccMemSpace: d.getSecurityState(),
+			}
+			d.elements = append(d.elements, elem)
+			d.addrValid = false // Need ISYNC or BranchAddr to resync
+			return false, nil   // Not a fatal error, just need to wait for resync
 		}
 		lastInstrInfo = instrInfo
 		instrCount++
@@ -342,7 +360,7 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) error {
 				d.currentISA = instrInfo.NextISA
 			}
 
-			return nil
+			return true, nil
 		}
 
 		// Non-branch: advance and continue
@@ -350,10 +368,10 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) error {
 	}
 
 	if lastInstrInfo == nil {
-		return fmt.Errorf("no instruction decoded starting at 0x%X", rangeStart)
+		return false, fmt.Errorf("no instruction decoded starting at 0x%X", rangeStart)
 	}
 
-	return fmt.Errorf("no branch found within 4096 instructions starting at 0x%X", rangeStart)
+	return false, fmt.Errorf("no branch found within 4096 instructions starting at 0x%X", rangeStart)
 }
 
 // processAtomPacket handles atom packets - tracks executed instructions
@@ -371,6 +389,11 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 	d.Log.Logf(common.SeverityDebug, "Atom: %d atoms, pattern=0x%x", pkt.AtomCount, pkt.AtomBits)
 
 	for i := uint8(0); i < pkt.AtomCount; i++ {
+		// If address is not valid (after ADDR_NACC), skip remaining atoms
+		if !d.addrValid {
+			break
+		}
+
 		// Get the atom bit (E = 1 = executed, N = 0 = not executed)
 		atomBit := (pkt.AtomBits >> i) & 1
 		atom := common.AtomNotExecuted
@@ -378,7 +401,7 @@ func (d *Decoder) processAtomPacket(pkt Packet) ([]common.GenericTraceElement, e
 			atom = common.AtomExecuted
 		}
 
-		err := d.traceToWaypoint(atom)
+		_, err := d.traceToWaypoint(atom)
 		if err != nil {
 			d.Log.Logf(common.SeverityWarning, "Failed to trace to waypoint for atom %d: %v", i, err)
 			return d.elements, err

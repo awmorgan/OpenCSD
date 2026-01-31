@@ -9,6 +9,7 @@ const (
 	ElemTypeUnknown         ElemType = iota
 	ElemTypePeContext                // Processing Element context (ISA, security state, etc.)
 	ElemTypeAddrRange                // Instruction address range
+	ElemTypeAddrNacc                 // Address not accessible (memory read failed)
 	ElemTypeException                // Exception event
 	ElemTypeExceptionReturn          // Exception return event
 	ElemTypeTimestamp                // Timestamp value
@@ -23,6 +24,8 @@ func (t ElemType) String() string {
 		return "PE_CONTEXT"
 	case ElemTypeAddrRange:
 		return "ADDR_RANGE"
+	case ElemTypeAddrNacc:
+		return "ADDR_NACC"
 	case ElemTypeException:
 		return "EXCEPTION"
 	case ElemTypeExceptionReturn:
@@ -148,6 +151,10 @@ type GenericTraceElement struct {
 	// Address range information (for ElemTypeAddrRange)
 	AddrRange AddrRange
 
+	// Address not accessible info (for ElemTypeAddrNacc)
+	NaccAddr     uint64        // Address that could not be read
+	NaccMemSpace SecurityState // Memory space (secure/non-secure)
+
 	// Exception information (for ElemTypeException)
 	Exception ExceptionInfo
 
@@ -182,6 +189,9 @@ func (e *GenericTraceElement) Description() string {
 			e.AddrRange.EndAddr,
 			e.AddrRange.ISA,
 			e.AddrRange.NumInstr)
+
+	case ElemTypeAddrNacc:
+		return fmt.Sprintf("ADDR_NACC: 0x%x %s", e.NaccAddr, e.NaccMemSpace)
 
 	case ElemTypeException:
 		return fmt.Sprintf("EXCEPTION: num=0x%x type=%s retAddr=0x%x",

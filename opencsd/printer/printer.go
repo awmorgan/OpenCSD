@@ -179,6 +179,8 @@ func genericElemName(t common.ElemType) string {
 		return "OCSD_GEN_TRC_ELEM_PE_CONTEXT"
 	case common.ElemTypeAddrRange:
 		return "OCSD_GEN_TRC_ELEM_INSTR_RANGE"
+	case common.ElemTypeAddrNacc:
+		return "OCSD_GEN_TRC_ELEM_ADDR_NACC"
 	case common.ElemTypeException:
 		return "OCSD_GEN_TRC_ELEM_EXCEPTION"
 	case common.ElemTypeExceptionReturn:
@@ -204,6 +206,8 @@ func genericElemDetails(elem common.GenericTraceElement) string {
 		return formatPEContext(elem.Context)
 	case common.ElemTypeAddrRange:
 		return formatAddrRange(elem.AddrRange)
+	case common.ElemTypeAddrNacc:
+		return formatAddrNacc(elem)
 	case common.ElemTypeException:
 		return formatException(elem.Exception)
 	case common.ElemTypeExceptionReturn:
@@ -269,6 +273,19 @@ func formatAddrRange(ar common.AddrRange) string {
 	}
 
 	return fmt.Sprintf("exec range=0x%x:[0x%x] num_i(%d) last_sz(%d) (ISA=%s) %s%s%s%s", ar.StartAddr, ar.EndAddr, ar.NumInstr, ar.LastInstrSz, isa, lastExec, instrType, subType, cond)
+}
+
+func formatAddrNacc(elem common.GenericTraceElement) string {
+	// Format: " 0xc02f5b3a; Memspace [0x19:Any S] "
+	// Memory space encoding: 0x19 = Any + Secure
+	// C++ uses exception_number to store memspace: secure=0x1, any=0x18, combined=0x19
+	memSpaceCode := 0x18 // Any
+	memSpaceStr := "Any N"
+	if elem.NaccMemSpace == common.SecurityStateSecure {
+		memSpaceCode = 0x19
+		memSpaceStr = "Any S"
+	}
+	return fmt.Sprintf(" 0x%x; Memspace [0x%x:%s] ", elem.NaccAddr, memSpaceCode, memSpaceStr)
 }
 
 func formatException(ex common.ExceptionInfo) string {

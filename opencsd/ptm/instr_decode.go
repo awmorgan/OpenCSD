@@ -219,6 +219,23 @@ func (d *InstrDecoder) decodeThumb(addr uint64, memAcc common.MemoryAccessor, in
 	}
 
 	// 16-bit Thumb instruction
+	// CBZ/CBNZ: 1011 x0x1 xxxx xxxx - Compare and Branch on (Non-)Zero
+	if (opcode16 & 0xF500) == 0xB100 {
+		info.IsBranch = true
+		info.IsConditional = true
+		info.Type = common.InstrTypeBranch
+
+		// Calculate offset: i:imm5:0 where i is bit 9, imm5 is bits 7-3
+		imm5 := (opcode16 >> 3) & 0x1F
+		i := (opcode16 >> 9) & 1
+		offset := uint64((i << 6) | (imm5 << 1))
+
+		// Branch target = PC + 4 + offset (always forward branch)
+		info.BranchTarget = addr + 4 + offset
+		info.HasBranchTarget = true
+		return info, nil
+	}
+
 	// B (conditional): 1101 xxxx xxxx xxxx (bits 15-12 = 0xD, bits 11-8 != 0xE or 0xF)
 	if (opcode16&0xF000) == 0xD000 && (opcode16&0x0F00) < 0x0E00 {
 		info.IsBranch = true
