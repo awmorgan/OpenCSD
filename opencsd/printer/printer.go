@@ -55,6 +55,10 @@ func ptmPacketTypeName(pktType ptm.PacketType) string {
 		return "VMID"
 	case ptm.PacketTypeExceptionReturn:
 		return "ERET"
+	case ptm.PacketTypeWaypoint:
+		return "WP_UPDATE"
+	case ptm.PacketTypeNoSync:
+		return "NOTSYNC"
 	default:
 		return "UNKNOWN"
 	}
@@ -67,7 +71,11 @@ func ptmPacketDescription(pkt ptm.Packet) string {
 	case ptm.PacketTypeISYNC:
 		return formatISyncDesc(pkt)
 	case ptm.PacketTypeATOM:
-		return fmt.Sprintf("Atom packet; %s; ", atomPattern(pkt.AtomBits, pkt.AtomCount))
+		desc := fmt.Sprintf("Atom packet; %s; ", atomPattern(pkt.AtomBits, pkt.AtomCount))
+		if pkt.CCValid {
+			desc += fmt.Sprintf("Cycles=%d; ", pkt.CycleCount)
+		}
+		return desc
 	case ptm.PacketTypeBranchAddr:
 		return formatBranchAddrDesc(pkt)
 	case ptm.PacketTypeTimestamp:
@@ -78,9 +86,26 @@ func ptmPacketDescription(pkt ptm.Packet) string {
 		return fmt.Sprintf("VMID packet; VMID=0x%02x; ", pkt.VMID)
 	case ptm.PacketTypeExceptionReturn:
 		return "Exception return packet; "
+	case ptm.PacketTypeWaypoint:
+		return formatWaypointUpdateDesc(pkt)
+	case ptm.PacketTypeNoSync:
+		return "PTM Not Synchronised; "
 	default:
 		return "Unknown packet type; "
 	}
+}
+
+func formatWaypointUpdateDesc(pkt ptm.Packet) string {
+	desc := "Waypoint update packet; "
+	addrStr := formatValStr(32, int(pkt.AddrValidBits), pkt.Address, int(pkt.AddrBits))
+	desc += fmt.Sprintf("Addr=%s; ", addrStr)
+	if pkt.ISAValid && pkt.ISAChanged {
+		desc += fmt.Sprintf("ISA=%s; ", isaPacketString(pkt.ISA))
+	}
+	if pkt.CCValid {
+		desc += fmt.Sprintf("Cycles=%d; ", pkt.CycleCount)
+	}
+	return desc
 }
 
 func formatISyncDesc(pkt ptm.Packet) string {
@@ -111,15 +136,23 @@ func formatISyncDesc(pkt ptm.Packet) string {
 
 	isa := fmt.Sprintf("ISA=%s; ", isaPacketString(pkt.ISA))
 
-	return fmt.Sprintf("Instruction Synchronisation packet; (%s); Addr=0x%08x; %s%s%s", reason, uint32(pkt.Address), security, hyp, ctxt) + isa
+	desc := fmt.Sprintf("Instruction Synchronisation packet; (%s); Addr=0x%08x; %s%s%s", reason, uint32(pkt.Address), security, hyp, ctxt) + isa
+	if pkt.CCValid {
+		desc += fmt.Sprintf("Cycles=%d; ", pkt.CycleCount)
+	}
+	return desc
 }
 
 func formatBranchAddrDesc(pkt ptm.Packet) string {
 	desc := "Branch address packet; "
-	addrStr := formatValStr(32, 32, pkt.Address, int(pkt.AddrBits))
+	validBits := int(pkt.AddrBits)
+	if pkt.AddrValidBits > 0 {
+		validBits = int(pkt.AddrValidBits)
+	}
+	addrStr := formatValStr(32, validBits, pkt.Address, int(pkt.AddrBits))
 	desc += fmt.Sprintf("Addr=%s; ", addrStr)
 
-	if pkt.ISAValid {
+	if pkt.ISAValid && pkt.ISAChanged {
 		desc += fmt.Sprintf("ISA=%s; ", isaPacketString(pkt.ISA))
 	}
 
@@ -137,13 +170,20 @@ func formatBranchAddrDesc(pkt ptm.Packet) string {
 	if pkt.ExceptionNum != 0 {
 		desc += fmt.Sprintf("Excep=%s [%02x]; ", ptmExceptionName(pkt.ExceptionNum), pkt.ExceptionNum)
 	}
+	if pkt.CCValid {
+		desc += fmt.Sprintf("Cycles=%d; ", pkt.CycleCount)
+	}
 
 	return desc
 }
 
 func formatTimestampDesc(pkt ptm.Packet) string {
-	tsStr := formatValStr(64, 64, pkt.Timestamp, 0)
-	return fmt.Sprintf("Timestamp packet; TS=%s(%d); ", tsStr, pkt.Timestamp)
+	tsStr := formatValStr(64, 64, pkt.Timestamp, int(pkt.TSUpdateBits))
+	desc := fmt.Sprintf("Timestamp packet; TS=%s(%d); ", tsStr, pkt.Timestamp)
+	if pkt.CCValid {
+		desc += fmt.Sprintf("Cycles=%d; ", pkt.CycleCount)
+	}
+	return desc
 }
 
 func atomPattern(bits uint8, count uint8) string {
@@ -281,10 +321,11 @@ func formatAddrRange(ar common.AddrRange) string {
 
 func formatAddrNacc(elem common.GenericTraceElement) string {
 	// Format: " 0xc02f5b3a; Memspace [0x19:Any S] "
-	// Memory space encoding: 0x19 = Any + Secure
-	// C++ uses exception_number to store memspace: secure=0x1, any=0x18, combined=0x19
-	memSpaceCode := 0x18 // Any
-	memSpaceStr := "Any N"
+	// Memory space encoding (ocsd_mem_space_acc_t):
+	//   OCSD_MEM_SPACE_S = 0x19 (Any Secure)
+	//   OCSD_MEM_SPACE_N = 0x6  (Any Non Secure)
+	memSpaceCode := 0x6 // Any Non Secure
+	memSpaceStr := "Any NS"
 	if elem.NaccMemSpace == common.SecurityStateSecure {
 		memSpaceCode = 0x19
 		memSpaceStr = "Any S"

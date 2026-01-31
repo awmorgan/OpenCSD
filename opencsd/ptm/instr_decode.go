@@ -118,7 +118,12 @@ func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.
 		offset <<= 2
 
 		// Branch target = PC + offset + 8 (PC is 8 bytes ahead in ARM)
-		info.BranchTarget = uint64(int64(addr) + int64(offset) + 8)
+		branchTarget := uint64(int64(addr) + int64(offset) + 8)
+		if (branchTarget & 0x1) != 0 {
+			info.NextISA = common.ISAThumb2
+			branchTarget &^= 0x1
+		}
+		info.BranchTarget = branchTarget
 		info.HasBranchTarget = true
 		return info
 	}
@@ -181,6 +186,24 @@ func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.
 		}
 	}
 
+	// MOV/MOVS PC, Rm is an indirect branch (often a return)
+	// Pattern: (opcode & 0x0FE0F000) == 0x01A0F000 (MOV/MOVS register)
+	if (opcode & 0x0FE0F000) == 0x01A0F000 {
+		rd := (opcode >> 12) & 0xF
+		if rd == 0xF {
+			info.IsBranch = true
+			info.Type = common.InstrTypeBranchIndirect
+			info.HasBranchTarget = false
+			info.NextISAValid = false
+			rm := opcode & 0xF
+			// C++ only marks implied return for MOV PC,LR with S=0 (plain MOV)
+			if rm == 0xE && (opcode&0x00100000) == 0 {
+				info.IsReturn = true
+			}
+			return info
+		}
+	}
+
 	// Not a branch - normal instruction
 	info.Type = common.InstrTypeNormal
 	info.IsBranch = false
@@ -189,6 +212,10 @@ func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.
 
 // decodeThumb decodes a 16-bit or 32-bit Thumb instruction
 func (d *InstrDecoder) decodeThumb(addr uint64, memAcc common.MemoryAccessor, info *common.InstrInfo) (*common.InstrInfo, error) {
+	// Default: next ISA is same as current
+	info.NextISA = d.isa
+	info.NextISAValid = true
+
 	buf := make([]byte, 2)
 	n, err := memAcc.ReadMemory(addr, buf)
 	if err != nil {
@@ -237,7 +264,12 @@ func (d *InstrDecoder) decodeThumb(addr uint64, memAcc common.MemoryAccessor, in
 		offset := uint64((i << 6) | (imm5 << 1))
 
 		// Branch target = PC + 4 + offset (always forward branch)
-		info.BranchTarget = addr + 4 + offset
+		branchTarget := addr + 4 + offset
+		branchTarget |= 0x1 // Thumb state
+		info.BranchTarget = branchTarget &^ 0x1
+		if (branchTarget & 0x1) == 0 {
+			info.NextISA = common.ISAARM
+		}
 		info.HasBranchTarget = true
 		return info, nil
 	}
@@ -253,7 +285,12 @@ func (d *InstrDecoder) decodeThumb(addr uint64, memAcc common.MemoryAccessor, in
 		offset <<= 1
 
 		// Branch target = PC + offset + 4 (PC is 4 bytes ahead in Thumb)
-		info.BranchTarget = uint64(int64(addr) + int64(offset) + 4)
+		branchTarget := uint64(int64(addr) + int64(offset) + 4)
+		branchTarget |= 0x1 // Thumb state
+		info.BranchTarget = branchTarget &^ 0x1
+		if (branchTarget & 0x1) == 0 {
+			info.NextISA = common.ISAARM
+		}
 		info.HasBranchTarget = true
 		return info, nil
 	}
@@ -272,7 +309,12 @@ func (d *InstrDecoder) decodeThumb(addr uint64, memAcc common.MemoryAccessor, in
 		offset <<= 1
 
 		// Branch target = PC + offset + 4
-		info.BranchTarget = uint64(int64(addr) + int64(offset) + 4)
+		branchTarget := uint64(int64(addr) + int64(offset) + 4)
+		branchTarget |= 0x1 // Thumb state
+		info.BranchTarget = branchTarget &^ 0x1
+		if (branchTarget & 0x1) == 0 {
+			info.NextISA = common.ISAARM
+		}
 		info.HasBranchTarget = true
 		return info, nil
 	}
@@ -402,7 +444,12 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 			offset |= ^int32(0x001FFFFF)
 		}
 
-		info.BranchTarget = uint64(int64(addr) + int64(offset) + 4)
+		branchTarget := uint64(int64(addr) + int64(offset) + 4)
+		branchTarget |= 0x1 // Thumb state
+		info.BranchTarget = branchTarget &^ 0x1
+		if (branchTarget & 0x1) == 0 {
+			info.NextISA = common.ISAARM
+		}
 		info.HasBranchTarget = true
 		return info
 	}
@@ -433,7 +480,48 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 			offset |= ^int32(0x01FFFFFF)
 		}
 
-		info.BranchTarget = uint64(int64(addr) + int64(offset) + 4)
+		branchTarget := uint64(int64(addr) + int64(offset) + 4)
+		branchTarget |= 0x1 // Thumb state
+		info.BranchTarget = branchTarget &^ 0x1
+		if (branchTarget & 0x1) == 0 {
+			info.NextISA = common.ISAARM
+		}
+		info.HasBranchTarget = true
+		return info
+	}
+
+	// BLX (imm) (encoding T2)
+	// Pattern: (inst & 0xf800d001) == 0xf000c000
+	if (opcode & 0xF800D001) == 0xF000C000 {
+		info.IsBranch = true
+		info.IsConditional = false
+		info.Type = common.InstrTypeBranch
+		info.IsLink = true
+
+		// Extract offset bits (same base as BL)
+		s := (hw1 >> 10) & 1
+		j1 := (hw2 >> 13) & 1
+		j2 := (hw2 >> 11) & 1
+		imm10 := hw1 & 0x3FF
+		imm11 := hw2 & 0x7FF
+
+		// I1 = NOT(J1 XOR S), I2 = NOT(J2 XOR S)
+		i1 := ((j1 ^ s) ^ 1) & 1
+		i2 := ((j2 ^ s) ^ 1) & 1
+
+		// Combine offset: S:I1:I2:imm10:imm11:0 (imm11 bit0 is 0 for BLX)
+		offset := int32((s << 24) | (i1 << 23) | (i2 << 22) | (imm10 << 12) | (imm11 << 1))
+
+		// Sign extend from 25 bits
+		if offset&0x01000000 != 0 {
+			offset |= ^int32(0x01FFFFFF)
+		}
+
+		alignedPC := addr &^ 0x3
+		branchTarget := uint64(int64(alignedPC) + int64(offset) + 4)
+		// BLX switches to ARM, do not set Thumb bit
+		info.BranchTarget = branchTarget
+		info.NextISA = common.ISAARM
 		info.HasBranchTarget = true
 		return info
 	}
@@ -469,7 +557,12 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 			offset |= ^int32(0x01FFFFFF)
 		}
 
-		info.BranchTarget = uint64(int64(addr) + int64(offset) + 4)
+		branchTarget := uint64(int64(addr) + int64(offset) + 4)
+		branchTarget |= 0x1 // Thumb state
+		info.BranchTarget = branchTarget &^ 0x1
+		if (branchTarget & 0x1) == 0 {
+			info.NextISA = common.ISAARM
+		}
 		info.HasBranchTarget = true
 		return info
 	}

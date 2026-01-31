@@ -80,7 +80,10 @@ type Decoder struct {
 	exceptionLevel common.ExceptionLevel // Current exception level
 
 	// Parsing state - tracks ISA during packet parsing (before ProcessPacket)
-	parseISA common.ISA // ISA state during parsing (updated by ISYNC, used by branch addr)
+	parseISA      common.ISA // ISA state during parsing (updated by ISYNC, used by branch addr)
+	parseISAValid bool       // true once ISA is known during parsing
+	parseAddr     uint64     // accumulated address during parsing
+	parseAddrBits uint8      // number of valid bits in parseAddr
 
 	// Timestamp state - accumulated timestamp value
 	currentTimestamp uint64 // Accumulated timestamp (updated by timestamp packets)
@@ -138,6 +141,9 @@ func (d *Decoder) Reset() {
 	d.lastPacketAddr = 0
 	d.currentISA = common.ISAARM
 	d.parseISA = common.ISAARM
+	d.parseISAValid = false
+	d.parseAddr = 0
+	d.parseAddrBits = 0
 	d.secureState = false
 	d.contextID = 0
 	d.vmid = 0
@@ -306,7 +312,12 @@ func (d *Decoder) decodePacket(pkt Packet) ([]common.GenericTraceElement, error)
 		return d.elements, nil
 
 	case PacketTypeNoSync, PacketTypeIncompleteEOT:
-		// Marker packets - just log
+		// Marker packets - emit NO_SYNC once then ignore
+		if !d.noSyncEmitted {
+			elem := common.GenericTraceElement{Type: common.ElemTypeNoSync}
+			d.elements = append(d.elements, elem)
+			d.noSyncEmitted = true
+		}
 		d.Log.Logf(common.SeverityDebug, "Marker packet %s at offset %d", pkt.Type, pkt.Offset)
 		return d.elements, nil
 
@@ -402,13 +413,6 @@ func (d *Decoder) processBranchAddress(pkt Packet) ([]common.GenericTraceElement
 		addr = (d.lastPacketAddr & ^mask) | (addr & mask)
 	}
 
-	if pkt.ISAValid {
-		d.currentISA = pkt.ISA
-	}
-	if pkt.SecureValid {
-		d.secureState = pkt.SecureState
-	}
-
 	// Check if this is an exception
 	if pkt.ExceptionNum != 0 {
 		// Generate exception element
@@ -437,6 +441,14 @@ func (d *Decoder) processBranchAddress(pkt Packet) ([]common.GenericTraceElement
 				return d.elements, err
 			}
 		}
+	}
+
+	// Update ISA/security state after processing implied atom/exception (matches C++ ordering)
+	if pkt.ISAValid {
+		d.currentISA = pkt.ISA
+	}
+	if pkt.SecureValid {
+		d.secureState = pkt.SecureState
 	}
 
 	// Update current address to the branch target from packet
@@ -552,6 +564,7 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 			// In PTM, ALL branches (conditional or unconditional) consume an atom.
 			// The atom value determines whether the branch is taken (E) or not taken (N).
 			if instrInfo.IsBranch {
+				rangeISA := d.currentISA
 				executed := atom == common.AtomExecuted
 				lastExec = executed
 
@@ -608,18 +621,13 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 					d.currentAddr = nextAddr
 				}
 
-				// Update ISA if branch was taken and has ISA change
-				if executed && instrInfo.NextISAValid {
-					d.currentISA = instrInfo.NextISA
-				}
-
 				// Emit range (C++ line 591-595)
 				elem := common.GenericTraceElement{
 					Type: common.ElemTypeAddrRange,
 					AddrRange: common.AddrRange{
 						StartAddr:       rangeStart,
 						EndAddr:         nextAddr,
-						ISA:             d.currentISA,
+						ISA:             rangeISA,
 						NumInstr:        instrCount,
 						LastInstrSz:     uint8(instrInfo.Size),
 						LastInstrExec:   lastExec,
@@ -635,6 +643,11 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 				}
 				d.elements = append(d.elements, elem)
 				d.Log.Logf(common.SeverityDebug, "  -> ADDR_RANGE: 0x%X-0x%X (%d instrs)", rangeStart, nextAddr, instrCount)
+
+				// Update ISA if branch was taken and has ISA change (after emitting range)
+				if executed && instrInfo.NextISAValid {
+					d.currentISA = instrInfo.NextISA
+				}
 
 				return true, nil // Branch consumes an atom
 			}
@@ -820,13 +833,8 @@ func (d *Decoder) processTimestamp(pkt Packet) ([]common.GenericTraceElement, er
 		return nil, nil
 	}
 
-	// Update accumulated timestamp - only update the bits specified by TSUpdateBits
-	if pkt.TSUpdateBits > 0 && pkt.TSUpdateBits <= 64 {
-		// Create mask for the bits being updated (low bits)
-		var updateMask uint64 = (uint64(1) << pkt.TSUpdateBits) - 1
-		// Clear the low bits in current timestamp and set new value
-		d.currentTimestamp = (d.currentTimestamp &^ updateMask) | (pkt.Timestamp & updateMask)
-	}
+	// Timestamp already accumulated during parsing; keep decoder state in sync
+	d.currentTimestamp = pkt.Timestamp
 
 	elem := common.GenericTraceElement{
 		Type:      common.ElemTypeTimestamp,

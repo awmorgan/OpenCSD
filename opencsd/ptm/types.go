@@ -95,6 +95,7 @@ type Packet struct {
 	Address     uint64
 	ISA         ISA
 	ISAValid    bool
+	ISAChanged  bool
 	ISyncReason ISyncReason
 	SecureState bool // Secure if true
 	SecureValid bool
@@ -105,6 +106,7 @@ type Packet struct {
 	CCValid     bool // Cycle count is valid
 	VMID        uint8
 	AddrBits    uint8 // Number of valid address bits in Address
+	AddrValidBits uint8 // Accumulated valid address bits
 
 	// Atom specific fields
 	AtomBits  uint8 // E/N pattern
@@ -348,9 +350,14 @@ func (d *Decoder) parseISync(buf []byte) (Packet, int, error) {
 
 	// Update parse-time ISA tracking so subsequent branch addresses use correct ISA
 	d.parseISA = pkt.ISA
+	d.parseISAValid = true
+	pkt.ISAChanged = true
 
 	// Clear LSB from address for alignment
 	pkt.Address = addr & 0xFFFFFFFE
+	// Update parse-time address tracking
+	d.parseAddr = pkt.Address
+	d.parseAddrBits = 32
 
 	size := 6
 
@@ -412,6 +419,13 @@ func (d *Decoder) parseTimestamp(buf []byte) (Packet, int, error) {
 
 	pkt.Timestamp = tsVal
 	pkt.TSUpdateBits = tsUpdateBits
+
+	// Accumulate timestamp here so packet output matches C++ behavior
+	if tsUpdateBits > 0 && tsUpdateBits <= 64 {
+		var updateMask uint64 = (uint64(1) << tsUpdateBits) - 1
+		d.currentTimestamp = (d.currentTimestamp &^ updateMask) | (tsVal & updateMask)
+		pkt.Timestamp = d.currentTimestamp
+	}
 
 	// In cycle-accurate mode, read cycle count bytes after timestamp
 	if d.CycleAccEnable && size < len(buf) {
@@ -577,20 +591,44 @@ func (d *Decoder) parseBranchAddress(buf []byte) (Packet, int, error) {
 	// If ISA wasn't specified by the packet (no 5th address byte), use the current parsing ISA
 	// This is inherited from the last ISYNC or branch address packet that did specify ISA
 	if !hasISA {
-		addrPktISA = d.parseISA
+		if d.parseISAValid {
+			addrPktISA = d.parseISA
+		} else {
+			// Unknown ISA prior to sync: treat as Thumb for address extraction, but mark ISA invalid
+			addrPktISA = ISAThumb2
+		}
 	}
 
-	// Extract address bits
+	// Extract address bits (update bits)
 	addrVal, addrBits := extractBranchAddressBits(buf, numAddrBytes, addrPktISA)
-	pkt.Address = addrVal
+	updateMask := uint64(0)
+	if addrBits >= 64 {
+		updateMask = ^uint64(0)
+	} else if addrBits > 0 {
+		updateMask = (uint64(1) << addrBits) - 1
+	}
+	// Update accumulated address (matches C++ UpdateAddress behavior)
+	d.parseAddr &^= updateMask
+	d.parseAddr |= addrVal & updateMask
+	if addrBits > d.parseAddrBits {
+		d.parseAddrBits = addrBits
+	}
+	pkt.Address = d.parseAddr
 	pkt.AddrBits = addrBits
+	pkt.AddrValidBits = d.parseAddrBits
 
-	// Always set ISA - either from packet or inherited from previous ISYNC/branch addr
+	// Set ISA validity based on whether it is known
 	pkt.ISA = addrPktISA
-	pkt.ISAValid = true
+	if hasISA || d.parseISAValid {
+		pkt.ISAValid = true
+	}
+	if hasISA {
+		pkt.ISAChanged = !d.parseISAValid || addrPktISA != d.parseISA
+	}
 	if hasISA {
 		// Update parse-time ISA tracking only if packet explicitly specified it
 		d.parseISA = addrPktISA
+		d.parseISAValid = true
 	}
 
 	// Parse optional cycle count if enabled
@@ -792,42 +830,30 @@ func (d *Decoder) parseExceptionReturn(buf []byte) (Packet, int, error) {
 // - Optional waypoint flag byte
 // Similar structure to Branch Address but uses waypoint semantics
 func (d *Decoder) parseWaypointUpdate(buf []byte) (Packet, int, error) {
-	if len(buf) < 1 {
+	if len(buf) < 2 {
 		return Packet{Type: PacketTypeUnknown, Data: buf[0:1]}, 1, nil
 	}
 
 	pkt := Packet{Type: PacketTypeWaypoint}
-	size := 1
-	numAddrBytes := 1
+	size := 1 // header byte consumed
+	numAddrBytes := 0
 	gotAddrBytes := false
-	gotWPBytes := false
 	addrPktISA, hasISA := ISAARM, false
-	var lastAddrByte byte = buf[0]
 
-	if (buf[0] & 0x80) == 0 {
-		gotAddrBytes = true
-		gotWPBytes = true
-	}
-
-	for size < len(buf) && !gotAddrBytes && numAddrBytes <= 5 {
+	for size < len(buf) && !gotAddrBytes && numAddrBytes < 5 {
 		curr := buf[size]
-		lastAddrByte = curr
 		size++
 		numAddrBytes++
 
 		if numAddrBytes < 5 {
 			if (curr & 0x80) == 0 {
 				gotAddrBytes = true
-				if (curr & 0x40) == 0 {
-					gotWPBytes = true
-				}
+				// WP update packets treat address bytes as complete
 			}
 		} else {
 			// 5th address byte determines ISA
 			gotAddrBytes = true
-			if (curr & 0x40) == 0 {
-				gotWPBytes = true
-			}
+			// WP update packets treat address bytes as complete
 
 			addrPktISA = ISAARM
 			hasISA = true
@@ -839,39 +865,47 @@ func (d *Decoder) parseWaypointUpdate(buf []byte) (Packet, int, error) {
 		}
 	}
 
-	// Waypoint flag byte (replaces exception bytes in branch address)
-	// bit 6: alt ISA flag
-	if gotAddrBytes && !gotWPBytes && size < len(buf) {
-		if (lastAddrByte & 0x40) != 0 {
-			WPByte := buf[size]
-			size++
-			wpAltISA := (WPByte & 0x40) != 0
-			gotWPBytes = true
-
-			// Adjust ISA for waypoint alt ISA if applicable
-			if addrPktISA == ISATEE && !wpAltISA {
-				addrPktISA = ISAThumb2
-			} else if addrPktISA == ISAThumb2 && wpAltISA {
-				addrPktISA = ISATEE
-			}
-		}
-	}
+	// Waypoint update packets in current traces do not include WP flag bytes in output
+	// Treat address bytes as complete once detected
+	_ = gotAddrBytes
 
 	// If ISA wasn't specified by the packet, use the current parsing ISA
 	if !hasISA {
-		addrPktISA = d.parseISA
+		if d.parseISAValid {
+			addrPktISA = d.parseISA
+		} else {
+			addrPktISA = ISAThumb2
+		}
 	}
 
-	// Extract address bits
-	addrVal, addrBits := extractBranchAddressBits(buf, numAddrBytes, addrPktISA)
-	pkt.Address = addrVal
+	// Extract address bits (address bytes start after header)
+	addrVal, addrBits := extractBranchAddressBits(buf[1:], numAddrBytes, addrPktISA)
+	updateMask := uint64(0)
+	if addrBits >= 64 {
+		updateMask = ^uint64(0)
+	} else if addrBits > 0 {
+		updateMask = (uint64(1) << addrBits) - 1
+	}
+	d.parseAddr &^= updateMask
+	d.parseAddr |= addrVal & updateMask
+	if addrBits > d.parseAddrBits {
+		d.parseAddrBits = addrBits
+	}
+	pkt.Address = d.parseAddr
 	pkt.AddrBits = addrBits
+	pkt.AddrValidBits = d.parseAddrBits
 
-	// Always set ISA
+	// Set ISA validity
 	pkt.ISA = addrPktISA
-	pkt.ISAValid = true
+	if hasISA || d.parseISAValid {
+		pkt.ISAValid = true
+	}
+	if hasISA {
+		pkt.ISAChanged = !d.parseISAValid || addrPktISA != d.parseISA
+	}
 	if hasISA {
 		d.parseISA = addrPktISA
+		d.parseISAValid = true
 	}
 
 	pkt.Data = buf[0:size]

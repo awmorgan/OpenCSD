@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"opencsd/common"
+	"opencsd/frame"
 	"opencsd/printer"
 	"opencsd/ptm"
 	"opencsd/tests/helpers"
@@ -64,83 +65,14 @@ func TestCompareAgainstPPL(t *testing.T) {
 		t.Fatalf("Parse error: %v", err)
 	}
 
-	// Generate actual output lines (packets + elements), interleaved
-	var actualLines []string
-	prevISA := common.ISAARM
-	prevISAValid := false
-	lastPacketAddr := uint64(0)
-	for _, pkt := range packets {
-		pktForPrint := pkt
-		if pkt.Type == ptm.PacketTypeBranchAddr && pkt.ISAValid && prevISAValid && pkt.ISA == prevISA {
-			pktForPrint.ISAValid = false
-		}
-		if pkt.Type == ptm.PacketTypeBranchAddr && pkt.AddrBits > 0 {
-			mask := (uint64(1) << pkt.AddrBits) - 1
-			pktForPrint.Address = (lastPacketAddr & ^mask) | (pktForPrint.Address & mask)
-		}
-		actualLines = append(actualLines, printer.FormatRawPacketLine(pkt.Offset, packetID, pktForPrint))
-		elems, err := decoder.ProcessPacket(pkt)
-		if err != nil {
-			t.Logf("ProcessPacket error: %v", err)
-		}
-		for _, elem := range elems {
-			actualLines = append(actualLines, printer.FormatGenericElementLine(pkt.Offset, elemID, elem))
-		}
+	// Generate actual output lines (packets + elements interleaved)
+	actualLines := generateActualPPLLines(t, packets, decoder, packetID, elemID)
 
-		if pkt.Type == ptm.PacketTypeISYNC {
-			prevISA = pkt.ISA
-			prevISAValid = true
-			lastPacketAddr = pkt.Address
-		} else if pkt.Type == ptm.PacketTypeBranchAddr && pkt.ISAValid {
-			prevISA = pkt.ISA
-			prevISAValid = true
-			lastPacketAddr = pktForPrint.Address
-		} else if pkt.Type == ptm.PacketTypeBranchAddr {
-			lastPacketAddr = pktForPrint.Address
-		}
-	}
+	// Filter expected lines by our trace IDs
+	expectedLines := filterPPLRecordsByID(expectedRecords, packetID, elemID)
 
-	if len(packets) > 0 {
-		eotElem := common.GenericTraceElement{Type: common.ElemTypeEOTrace}
-		lastOffset := packets[len(packets)-1].Offset
-		actualLines = append(actualLines, printer.FormatGenericElementLine(lastOffset, elemID, eotElem))
-	}
-
-	// Filter expected records by trace IDs we use for packet/element streams
-	packetIDStr := fmt.Sprintf("%x", packetID)
-	elemIDStr := fmt.Sprintf("%x", elemID)
-	var expectedLines []string
-	for _, rec := range expectedRecords {
-		idLower := strings.ToLower(rec.ID)
-		switch rec.Kind {
-		case helpers.PPLRecordPacket:
-			if idLower == packetIDStr {
-				expectedLines = append(expectedLines, rec.Line)
-			}
-		case helpers.PPLRecordElement:
-			if idLower == elemIDStr {
-				expectedLines = append(expectedLines, rec.Line)
-			}
-		}
-	}
-
-	minLen := len(expectedLines)
-	if len(actualLines) < minLen {
-		minLen = len(actualLines)
-	}
-
-	for i := 0; i < minLen; i++ {
-		if actualLines[i] != expectedLines[i] {
-			t.Fatalf("Mismatch at line %d:\nExpected: %s\nActual:   %s", i, expectedLines[i], actualLines[i])
-		}
-	}
-
-	if len(actualLines) != len(expectedLines) {
-		if len(actualLines) < len(expectedLines) {
-			t.Fatalf("Line count mismatch: expected %d, got %d. First missing expected line: %s", len(expectedLines), len(actualLines), expectedLines[minLen])
-		}
-		t.Fatalf("Line count mismatch: expected %d, got %d. First extra actual line: %s", len(expectedLines), len(actualLines), actualLines[minLen])
-	}
+	// Compare line by line
+	comparePPLLines(t, expectedLines, actualLines)
 }
 
 func loadMemorySnapshot(t *testing.T) common.MemoryAccessor {
@@ -239,4 +171,383 @@ func parseUint8(val string) (uint8, error) {
 		return 0, fmt.Errorf("invalid uint8: %s", val)
 	}
 	return uint8(parsed), nil
+}
+
+// TestTC2PTMRstkCompare verifies tc2-ptm-rstk-t32.ppl (PTM ID 0x0)
+func TestTC2PTMRstkCompare(t *testing.T) {
+	const snapshotPath = "../../decoder/tests/snapshots/tc2-ptm-rstk-t32"
+	const pplPath = "../../decoder/tests/results/tc2-ptm-rstk-t32.ppl"
+
+	// Skip if PPL file doesn't exist
+	if _, err := os.Stat(pplPath); os.IsNotExist(err) {
+		t.Skip("PPL reference file not found. Run regen_ppl_outputs.bash to generate it.")
+	}
+
+	// Load expected records
+	expectedRecords, err := helpers.LoadPPLRecords(pplPath)
+	if err != nil {
+		t.Fatalf("Failed to load PPL file: %v", err)
+	}
+
+	packetID, elemID, err := deriveIDsFromPPL(expectedRecords)
+	if err != nil {
+		t.Fatalf("Failed to derive IDs from PPL: %v", err)
+	}
+
+	// Load memory
+	memMap := loadTC2PTMRstkMemory(t, snapshotPath)
+
+	// Setup decoder
+	decoder := ptm.NewDecoder(elemID)
+	decoder.RetStackEnable = true
+	decoder.SetMemoryAccessor(memMap)
+
+	// Read PTM trace binary
+	binPath := filepath.Join(snapshotPath, "PTM_0_2.bin")
+	raw, err := os.ReadFile(binPath)
+	if err != nil {
+		t.Fatalf("Failed to read binary trace: %v", err)
+	}
+
+	// Parse packets
+	packets, err := decoder.Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+
+	// Generate actual output (packets + elements interleaved)
+	actualLines := generateActualPPLLines(t, packets, decoder, packetID, elemID)
+
+	// Filter expected lines by our trace IDs
+	expectedLines := filterPPLRecordsByID(expectedRecords, packetID, elemID)
+
+	// Compare line by line
+	comparePPLLines(t, expectedLines, actualLines)
+}
+
+// TestSnowballCompare verifies Snowball.ppl for PTM IDs 0x10 and 0x11 (muxed trace)
+func TestSnowballCompare(t *testing.T) {
+	const snapshotPath = "../../decoder/tests/snapshots/Snowball"
+	const pplPath = "../../decoder/tests/results/Snowball.ppl"
+
+	if _, err := os.Stat(pplPath); os.IsNotExist(err) {
+		t.Skip("PPL reference file not found. Run regen_ppl_outputs.bash to generate it.")
+	}
+
+	expectedRecords, err := helpers.LoadPPLRecords(pplPath)
+	if err != nil {
+		t.Fatalf("Failed to load PPL file: %v", err)
+	}
+
+	memAcc := loadKernelDumpMemory(t, snapshotPath)
+
+	tracePath := filepath.Join(snapshotPath, "cstrace.bin")
+	traceData, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatalf("Failed to read trace data: %v", err)
+	}
+
+	demux := frame.NewDemuxer()
+	demux.MemAligned = true
+	demux.ResetOn4Sync = true
+	streams := demux.Process(traceData)
+
+	for _, id := range []uint8{0x10, 0x11} {
+		data, ok := streams[id]
+		if !ok || len(data) == 0 {
+			t.Fatalf("No demuxed data for PTM ID 0x%02x", id)
+		}
+		decoder := ptm.NewDecoder(id)
+		decoder.RetStackEnable = true
+		decoder.SetMemoryAccessor(memAcc)
+		if _, err := decoder.ConfigureFromSnapshot(snapshotPath); err != nil {
+			t.Fatalf("Failed to configure decoder for ID 0x%02x: %v", id, err)
+		}
+		data = trimToFirstAsync(data)
+
+		packets, err := decoder.Parse(data)
+		if err != nil {
+			t.Fatalf("Parse error for ID 0x%02x: %v", id, err)
+		}
+
+		actualLines := generateActualPPLLines(t, packets, decoder, id, id)
+		actualLines = dropInitialNoSyncAfterAsync(actualLines)
+		expectedLines := filterPPLRecordsByIDWithOptions(expectedRecords, id, id, true)
+		expectedLines = trimExpectedToFirstAsync(expectedLines)
+		compareNormalizedPPLLines(t, expectedLines, actualLines)
+	}
+}
+
+// TestTC2PPLCompare verifies TC2.ppl for PTM IDs 0x13 and 0x14 (muxed trace)
+func TestTC2PPLCompare(t *testing.T) {
+	const snapshotPath = "../../decoder/tests/snapshots/TC2"
+	const pplPath = "../../decoder/tests/results/TC2.ppl"
+
+	if _, err := os.Stat(pplPath); os.IsNotExist(err) {
+		t.Skip("PPL reference file not found. Run regen_ppl_outputs.bash to generate it.")
+	}
+
+	expectedRecords, err := helpers.LoadPPLRecords(pplPath)
+	if err != nil {
+		t.Fatalf("Failed to load PPL file: %v", err)
+	}
+
+	memAcc := loadKernelDumpMemory(t, snapshotPath)
+
+	tracePath := filepath.Join(snapshotPath, "cstrace.bin")
+	traceData, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatalf("Failed to read trace data: %v", err)
+	}
+
+	demux := frame.NewDemuxer()
+	demux.MemAligned = true
+	demux.ResetOn4Sync = true
+	streams := demux.Process(traceData)
+
+	for _, id := range []uint8{0x13, 0x14} {
+		data, ok := streams[id]
+		if !ok || len(data) == 0 {
+			t.Fatalf("No demuxed data for PTM ID 0x%02x", id)
+		}
+		decoder := ptm.NewDecoder(id)
+		decoder.RetStackEnable = true
+		decoder.SetMemoryAccessor(memAcc)
+		if _, err := decoder.ConfigureFromSnapshot(snapshotPath); err != nil {
+			t.Fatalf("Failed to configure decoder for ID 0x%02x: %v", id, err)
+		}
+		data = trimToFirstAsync(data)
+
+		packets, err := decoder.Parse(data)
+		if err != nil {
+			t.Fatalf("Parse error for ID 0x%02x: %v", id, err)
+		}
+
+		actualLines := generateActualPPLLines(t, packets, decoder, id, id)
+		actualLines = dropInitialNoSyncAfterAsync(actualLines)
+		expectedLines := filterPPLRecordsByIDWithOptions(expectedRecords, id, id, true)
+		expectedLines = trimExpectedToFirstAsync(expectedLines)
+		compareNormalizedPPLLines(t, expectedLines, actualLines)
+	}
+}
+
+func loadTC2PTMRstkMemory(t *testing.T, snapshotPath string) common.MemoryAccessor {
+	t.Helper()
+
+	memMap := common.NewMultiRegionMemory()
+	regions := []struct {
+		addr uint64
+		file string
+	}{
+		{0x80000000, "mem_Cortex-A15_0_0_VECTORS.bin"},
+		{0x80000278, "mem_Cortex-A15_0_1_RO_CODE.bin"},
+		{0x80001C28, "mem_Cortex-A15_0_2_RO_DATA.bin"},
+		{0x80001D58, "mem_Cortex-A15_0_3_RW_DATA.bin"},
+		{0x80001D68, "mem_Cortex-A15_0_4_ZI_DATA.bin"},
+		{0x80040000, "mem_Cortex-A15_0_5_ARM_LIB_HEAP.bin"},
+		{0x80080000, "mem_Cortex-A15_0_6_ARM_LIB_STACK.bin"},
+		{0x80090000, "mem_Cortex-A15_0_7_IRQ_STACK.bin"},
+		{0x80100000, "mem_Cortex-A15_0_8_TTB.bin"},
+	}
+
+	for _, region := range regions {
+		path := filepath.Join(snapshotPath, region.file)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("Failed to load memory region %s: %v", region.file, err)
+		}
+		memMap.AddRegion(common.NewMemoryBuffer(region.addr, data))
+	}
+
+	return memMap
+}
+
+func loadKernelDumpMemory(t *testing.T, snapshotPath string) common.MemoryAccessor {
+	t.Helper()
+
+	memMap := common.NewMultiRegionMemory()
+	kernelPath := filepath.Join(snapshotPath, "kernel_dump.bin")
+	kernelData, err := os.ReadFile(kernelPath)
+	if err != nil {
+		t.Fatalf("Failed to read kernel dump: %v", err)
+	}
+	memMap.AddRegion(common.NewMemoryBuffer(0xC0008000, kernelData))
+	return memMap
+}
+
+// Helper functions to reduce duplication
+
+func generateActualPPLLines(t *testing.T, packets []ptm.Packet, decoder *ptm.Decoder, packetID, elemID uint8) []string {
+	t.Helper()
+
+	var actualLines []string
+	prevISA := common.ISAARM
+	prevISAValid := false
+	lastPacketAddr := uint64(0)
+
+	for _, pkt := range packets {
+		pktForPrint := pkt
+		// Suppress ISA if unchanged
+		if pkt.Type == ptm.PacketTypeBranchAddr && pkt.ISAValid && prevISAValid && pkt.ISA == prevISA {
+			pktForPrint.ISAValid = false
+		}
+		// Reconstruct full address from partial address
+		if pkt.Type == ptm.PacketTypeBranchAddr && pkt.AddrBits > 0 {
+			mask := (uint64(1) << pkt.AddrBits) - 1
+			pktForPrint.Address = (lastPacketAddr & ^mask) | (pktForPrint.Address & mask)
+		}
+
+		actualLines = append(actualLines, printer.FormatRawPacketLine(pkt.Offset, packetID, pktForPrint))
+
+		elems, err := decoder.ProcessPacket(pkt)
+		if err != nil {
+			t.Logf("ProcessPacket error: %v", err)
+		}
+		for _, elem := range elems {
+			actualLines = append(actualLines, printer.FormatGenericElementLine(pkt.Offset, elemID, elem))
+		}
+
+		// Track ISA and address for next packet
+		if pkt.Type == ptm.PacketTypeISYNC {
+			prevISA = pkt.ISA
+			prevISAValid = true
+			lastPacketAddr = pkt.Address
+		} else if pkt.Type == ptm.PacketTypeBranchAddr && pkt.ISAValid {
+			prevISA = pkt.ISA
+			prevISAValid = true
+			lastPacketAddr = pktForPrint.Address
+		} else if pkt.Type == ptm.PacketTypeBranchAddr {
+			lastPacketAddr = pktForPrint.Address
+		}
+	}
+
+	// Add end-of-trace element
+	if len(packets) > 0 {
+		eotElem := common.GenericTraceElement{Type: common.ElemTypeEOTrace}
+		lastOffset := packets[len(packets)-1].Offset
+		actualLines = append(actualLines, printer.FormatGenericElementLine(lastOffset, elemID, eotElem))
+	}
+
+	return actualLines
+}
+
+func filterPPLRecordsByID(records []helpers.PPLRecord, packetID, elemID uint8) []string {
+	return filterPPLRecordsByIDWithOptions(records, packetID, elemID, false)
+}
+
+func filterPPLRecordsByIDWithOptions(records []helpers.PPLRecord, packetID, elemID uint8, skipNotSync bool) []string {
+	packetIDStr := fmt.Sprintf("%x", packetID)
+	elemIDStr := fmt.Sprintf("%x", elemID)
+	var lines []string
+
+	for _, rec := range records {
+		idLower := strings.ToLower(rec.ID)
+		switch rec.Kind {
+		case helpers.PPLRecordPacket:
+			if idLower == packetIDStr {
+				if skipNotSync && strings.EqualFold(rec.PacketType, "NOTSYNC") {
+					continue
+				}
+				lines = append(lines, rec.Line)
+			}
+		case helpers.PPLRecordElement:
+			if idLower == elemIDStr {
+				lines = append(lines, rec.Line)
+			}
+		}
+	}
+
+	return lines
+}
+
+func comparePPLLines(t *testing.T, expectedLines, actualLines []string) {
+	t.Helper()
+
+	minLen := len(expectedLines)
+	if len(actualLines) < minLen {
+		minLen = len(actualLines)
+	}
+
+	for i := 0; i < minLen; i++ {
+		if actualLines[i] != expectedLines[i] {
+			t.Fatalf("Mismatch at line %d:\nExpected: %s\nActual:   %s", i, expectedLines[i], actualLines[i])
+		}
+	}
+
+	if len(actualLines) != len(expectedLines) {
+		if len(actualLines) < len(expectedLines) {
+			t.Fatalf("Line count mismatch: expected %d, got %d. First missing expected line: %s", len(expectedLines), len(actualLines), expectedLines[minLen])
+		}
+		t.Fatalf("Line count mismatch: expected %d, got %d. First extra actual line: %s", len(expectedLines), len(actualLines), actualLines[minLen])
+	}
+}
+
+func normalizePPLLine(line string) string {
+	if idx := strings.Index(line, "; ID:"); idx > 0 {
+		return strings.TrimSpace(line[idx+2:])
+	}
+	return strings.TrimSpace(line)
+}
+
+func compareNormalizedPPLLines(t *testing.T, expectedLines, actualLines []string) {
+	t.Helper()
+
+	minLen := len(expectedLines)
+	if len(actualLines) < minLen {
+		minLen = len(actualLines)
+	}
+
+	for i := 0; i < minLen; i++ {
+		expected := normalizePPLLine(expectedLines[i])
+		actual := normalizePPLLine(actualLines[i])
+		if actual != expected {
+			t.Fatalf("Mismatch at line %d:\nExpected: %s\nActual:   %s", i, expectedLines[i], actualLines[i])
+		}
+	}
+
+	if len(actualLines) != len(expectedLines) {
+		if len(actualLines) < len(expectedLines) {
+			t.Fatalf("Line count mismatch: expected %d, got %d. First missing expected line: %s", len(expectedLines), len(actualLines), expectedLines[minLen])
+		}
+		t.Fatalf("Line count mismatch: expected %d, got %d. First extra actual line: %s", len(expectedLines), len(actualLines), actualLines[minLen])
+	}
+}
+
+func trimExpectedToFirstAsync(lines []string) []string {
+	for i, line := range lines {
+		if strings.Contains(line, "ASYNC") {
+			return lines[i:]
+		}
+	}
+	return lines
+}
+
+func trimToFirstAsync(data []byte) []byte {
+	if len(data) < 6 {
+		return data
+	}
+	asyncPattern := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80}
+	for i := 0; i+6 <= len(data); i++ {
+		match := true
+		for j := 0; j < 6; j++ {
+			if data[i+j] != asyncPattern[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return data[i:]
+		}
+	}
+	return data
+}
+
+func dropInitialNoSyncAfterAsync(lines []string) []string {
+	if len(lines) < 2 {
+		return lines
+	}
+	if strings.Contains(lines[0], "ASYNC") && strings.Contains(lines[1], "OCSD_GEN_TRC_ELEM_NO_SYNC") {
+		return append(lines[:1], lines[2:]...)
+	}
+	return lines
 }

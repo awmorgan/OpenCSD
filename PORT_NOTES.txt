@@ -1,12 +1,16 @@
 ================================================================================
-OpenCSD Go Port - Developer Handoff Notes (2026-02-01)
+OpenCSD Go Port - Developer Handoff Notes (2026-01-31)
 ================================================================================
 
 PROJECT: Go port of ARM's CoreSight trace decoder library (OpenCSD).
 Scope: ~22,400 lines of C++ → Go across 6 trace protocols + framework.
 
-STATUS (2026-02-01):
-  PTM protocol: ⚠️ PARTIAL (core decode works; only trace_cov_a15 has strict golden compare)
+STATUS (2026-01-31):
+  PTM protocol: ⚠️ IN PROGRESS
+    - ✅ Full line-by-line compare: trace_cov_a15.ppl
+    - ✅ Full line-by-line compare: tc2-ptm-rstk-t32.ppl
+    - ⚠️ Snowball.ppl compare added but still failing (see Current Blocker below)
+    - ⚠️ TC2.ppl compare added (PTM IDs 0x13/0x14) but not fully validated yet
   ETMv4, ETMv3, ETE, STM, ITM: ⚠️ NOT STARTED
   Framework: PARTIAL (memory accessor, frame demux, printer done)
 
@@ -45,8 +49,9 @@ all PTM-containing .ppl files are compared line-by-line against Go output.
 
 Current PTM verification:
   ✅ Full line-by-line compare: trace_cov_a15.ppl (TestCompareAgainstPPL)
-  ⚠️ Partial/diagnostic only: TC2.ppl (elements only, filtered/limited; PTM IDs 0x13/0x14)
-  ⚠️ Not compared yet: Snowball.ppl (PTM IDs 0x10/0x11), tc2-ptm-rstk-t32.ppl
+  ✅ Full line-by-line compare: tc2-ptm-rstk-t32.ppl (TestTC2PTMRstkCompare)
+  ⚠️ Snowball.ppl compare added (TestSnowballCompare) but failing
+  ⚠️ TC2.ppl compare added (TestTC2PPLCompare) but not fully validated yet
 
 PPL generation & formats (C++):
   - decoder/tests/run_pkt_decode_tests.bash generates most decoder/tests/results/*.ppl
@@ -128,8 +133,52 @@ DEVELOPMENT WORKFLOW:
 3. If PPL test fails: add test.Logf() to print actual vs expected
 4. Compare first 10 lines to find divergence (test output shows first mismatches)
 5. Fix decoder logic to match C++ behavior exactly (consult decoder/source/{protocol}/)
+   - For investigation, create small Go debug programs under opencsd/cmd/debug_xxx/
+     (e.g., cmd/debug_snowball, cmd/debug_branchaddr). Use Go only (no Python).
+     These should load snapshots, run demux/parse/decoder, and print focused diagnostics.
 6. Commit: git add -A && git commit -m "..."
 7. Push: git push origin go
+
+CURRENT BLOCKER (PTM / Snowball.ppl):
+------------------------------------
+- Snowball compare still fails at an ISB vs iBR mismatch around 0xC0020980.
+- Debugging shows ARM opcode 0xF57FF01F at 0xC001015C decoded as Unknown in Go.
+- C++ treats ISB/DSB/DMB in ARM decode via inst_ARM_barrier().
+- Next step: implement ARM barrier detection in opencsd/ptm/instr_decode.go
+  (use decoder/source/i_dec/trc_i_decode.cpp + trc_idec_arminst.cpp as reference).
+
+SESSION UPDATES (2026-01-31):
+-----------------------------
+PTM fixes and test additions done in Go:
+  - Added PPL tests:
+      * TestTC2PTMRstkCompare (tc2-ptm-rstk-t32.ppl)
+      * TestSnowballCompare (Snowball.ppl, PTM IDs 0x10/0x11, demuxed)
+      * TestTC2PPLCompare (TC2.ppl, PTM IDs 0x13/0x14, demuxed)
+  - ISA handling aligned to C++:
+      * Branch range ISA uses pre-branch ISA; update ISA after emitting range.
+      * BranchAddr processing updates ISA after implied atom/exception handling.
+      * ISAChanged tracked; ISA string only printed when it changes (matches C++).
+  - BranchAddr address handling:
+      * Added accumulated address validity across packets (valid bits update).
+      * Unknown ISA before sync now treated as Thumb for extraction, but ISA not printed.
+  - Timestamp handling:
+      * Timestamp accumulation moved to parse stage so packet output matches C++.
+      * Timestamp/ISYNC/ATOM/BRANCH output now prints Cycles= when present.
+      * Timestamp prints update mask using TSUpdateBits.
+  - Waypoint update parsing:
+      * Header handled separately from address bytes (like C++).
+      * WP_UPDATE output uses proper formatting.
+  - ARM MOV PC,Rm indirect branch handling added (return only for MOV PC,LR with S=0).
+  - NO_SYNC emitted for NOTSYNC packets and packet printer supports NOTSYNC.
+
+Debug helpers added (Go only):
+  - opencsd/cmd/debug_snowball
+  - opencsd/cmd/debug_branchaddr
+  - opencsd/cmd/debug_instr
+
+Open questions / TODOs:
+  - ARM barrier decode (ISB/DSB/DMB) for A32 is still missing in Go.
+  - Validate TC2 PPL compare after Snowball is fixed.
 
 CRITICAL LESSONS - READ THIS:
 ------------------------------
