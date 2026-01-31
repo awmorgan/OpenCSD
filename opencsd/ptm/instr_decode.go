@@ -128,6 +128,8 @@ func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.
 		info.IsBranch = true
 		info.Type = common.InstrTypeBranchIndirect
 		info.HasBranchTarget = false // Register-based, can't determine statically
+		// ISA changes based on register value bit 0 - unknown at decode time
+		info.NextISAValid = false
 		if (opcode & 0x00000020) != 0 {
 			info.IsLink = true
 		}
@@ -147,6 +149,8 @@ func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.
 			info.IsBranch = true
 			info.Type = common.InstrTypeBranchIndirect
 			info.HasBranchTarget = false
+			// ISA changes based on loaded PC value bit 0 - unknown at decode time
+			info.NextISAValid = false
 			// Treat LDM SP!, {...,PC} as return
 			rn := (opcode >> 16) & 0xF
 			wback := (opcode & 0x00200000) != 0
@@ -165,6 +169,8 @@ func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.
 			info.IsBranch = true
 			info.Type = common.InstrTypeBranchIndirect
 			info.HasBranchTarget = false
+			// ISA changes based on loaded PC value bit 0 - unknown at decode time
+			info.NextISAValid = false
 			rn := (opcode >> 16) & 0xF
 			wback := (opcode & 0x00200000) != 0
 			postIndex := (opcode & 0x01000000) == 0
@@ -287,6 +293,20 @@ func (d *InstrDecoder) decodeThumb(addr uint64, memAcc common.MemoryAccessor, in
 		return info, nil
 	}
 
+	// MOV PC, Rm or ADD PC, Rm: 010001 xx x xxxx 111 with bit 7 set (D bit for PC)
+	// Pattern: (opcode & 0xFD87) == 0x4487
+	if (opcode16 & 0xFD87) == 0x4487 {
+		info.IsBranch = true
+		info.Type = common.InstrTypeBranchIndirect
+		info.HasBranchTarget = false
+		// Check for MOV PC, LR (implied return)
+		// MOV PC, LR has Rm=14: 0100 0110 1111 0111 = 0x46F7
+		if (opcode16 & 0xFFFF) == 0x46F7 {
+			info.IsReturn = true
+		}
+		return info, nil
+	}
+
 	// POP {reglist} with PC: 1011 110x xxxx xxxx
 	// This is an indirect branch (often a return)
 	if (opcode16 & 0xFE00) == 0xBC00 {
@@ -312,12 +332,21 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 	hw1 := (opcode >> 16) & 0xFFFF
 	hw2 := opcode & 0xFFFF
 
-	// Check for barrier instructions first - these are NOT branches
-	// DMB/DSB/ISB: 1111 0011 1011 1111 : 1000 xxxx xxxx xxxx
-	if (hw1 == 0xF3BF) && ((hw2 & 0xF000) == 0x8000) {
-		// This is a barrier instruction (DMB/DSB/ISB), not a branch
-		info.Type = common.InstrTypeNormal
+	// Check for barrier instructions first - these are NOT branches but are waypoints
+	// DMB/DSB/ISB: 1111 0011 1011 1111 : 1000 1111 xxxx xxxx
+	// Pattern: 0xF3BF8Fxx where xx determines the barrier type
+	if (opcode & 0xFFFFFF00) == 0xF3BF8F00 {
 		info.IsBranch = false
+		switch opcode & 0xF0 {
+		case 0x60:
+			// ISB - always a waypoint
+			info.Type = common.InstrTypeISB
+		case 0x40, 0x50:
+			// DSB or DMB - waypoint only if configured (for now treat as normal)
+			info.Type = common.InstrTypeDSBDMB
+		default:
+			info.Type = common.InstrTypeNormal
+		}
 		return info
 	}
 
@@ -342,7 +371,8 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 		return info
 	}
 
-	// B (conditional): 1111 0xxx xxxx xxxx : 10x0 xxxx xxxx xxxx
+	// B (conditional): 1111 0Scc ccii iiii : 10J1 0J2i iiii iiii  (T3 encoding)
+	// Pattern: hw1[15:11] = 11110, hw2[15:14] = 10, hw2[12] = 0
 	if (hw1&0xF800) == 0xF000 && (hw2&0xD000) == 0x8000 {
 		// Additional check: condition field must not be 111x (0xE or 0xF)
 		cond := (hw1 >> 6) & 0xF
@@ -376,8 +406,41 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 		info.HasBranchTarget = true
 		return info
 	}
-	// B/BL (unconditional): 1111 0xxx xxxx xxxx : 11x1 xxxx xxxx xxxx
-	if (hw1&0xF800) == 0xF000 && (hw2&0xD000) == 0xD000 {
+
+	// B.W (unconditional): 1111 0Sii iiii iiii : 10J1 1J2i iiii iiii  (T4 encoding)
+	// Pattern: hw1[15:11] = 11110, hw2[15:14] = 10, hw2[12] = 1
+	if (hw1&0xF800) == 0xF000 && (hw2&0xD000) == 0x9000 {
+		info.IsBranch = true
+		info.IsConditional = false
+		info.Type = common.InstrTypeBranch
+
+		// Extract offset bits
+		s := (hw1 >> 10) & 1
+		j1 := (hw2 >> 13) & 1
+		j2 := (hw2 >> 11) & 1
+		imm10 := hw1 & 0x3FF
+		imm11 := hw2 & 0x7FF
+
+		// I1 = NOT(J1 XOR S), I2 = NOT(J2 XOR S)
+		i1 := ((j1 ^ s) ^ 1) & 1
+		i2 := ((j2 ^ s) ^ 1) & 1
+
+		// Combine offset: S:I1:I2:imm10:imm11:0
+		offset := int32((s << 24) | (i1 << 23) | (i2 << 22) | (imm10 << 12) | (imm11 << 1))
+
+		// Sign extend from 25 bits
+		if offset&0x01000000 != 0 {
+			offset |= ^int32(0x01FFFFFF)
+		}
+
+		info.BranchTarget = uint64(int64(addr) + int64(offset) + 4)
+		info.HasBranchTarget = true
+		return info
+	}
+
+	// BL/BLX: 1111 0Sii iiii iiii : 11J1 Jiii iiii iiii  (T1/T2 encoding)
+	// Pattern: hw1[15:11] = 11110, hw2[15:14] = 11
+	if (hw1&0xF800) == 0xF000 && (hw2&0xC000) == 0xC000 {
 		info.IsBranch = true
 		info.IsConditional = false
 		info.Type = common.InstrTypeBranch
@@ -431,14 +494,26 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 			info.IsBranch = true
 			info.Type = common.InstrTypeBranchIndirect
 			info.HasBranchTarget = false
-			// Treat as return if base is SP and writeback
-			rn := hw1 & 0xF
-			wback := (hw1 & 0x0020) != 0
-			if rn == 13 && wback {
+			// Only mark as implied return for LDMIA [SP]!, which is hw1 = 0xE8BD
+			// Pattern: (hw1 & 0x0FFF) == 0x08BD
+			if (hw1 & 0x0FFF) == 0x08BD {
 				info.IsReturn = true
 			}
 			return info
 		}
+	}
+
+	// TBB/TBH: Table Branch Byte/Halfword
+	// Encoding: 1110 1000 1101 xxxx : 1111 0000 000x xxxx
+	// Pattern: (hw1 & 0xFFF0) == 0xE8D0 && (hw2 & 0xFFE0) == 0xF000
+	opcode32 := (uint32(hw1) << 16) | uint32(hw2)
+	if (opcode32 & 0xFFF0FFE0) == 0xE8D0F000 {
+		info.IsBranch = true
+		info.Type = common.InstrTypeBranchIndirect
+		info.HasBranchTarget = false // Target computed from table
+		// TBB/TBH are always taken (not conditional)
+		info.IsConditional = false
+		return info
 	}
 
 	// LDR.W PC, [...]: Various Thumb2 LDR encodings that load PC
@@ -451,6 +526,38 @@ func (d *InstrDecoder) decodeThumb2Branch(addr uint64, opcode uint32, info *comm
 			info.HasBranchTarget = false
 			return info
 		}
+	}
+
+	// LDR PC, [Rn, #imm12] (T3): 1111 1000 1101 xxxx : 1111 xxxx xxxx xxxx
+	// Pattern: (inst & 0xfff0f000) == 0xf8d0f000
+	if (opcode32 & 0xFFF0F000) == 0xF8D0F000 {
+		info.IsBranch = true
+		info.Type = common.InstrTypeBranchIndirect
+		info.HasBranchTarget = false
+		return info
+	}
+
+	// LDR PC, [Rn, #-imm8] (T4): 1111 1000 0101 xxxx : 1111 1xxx xxxx xxxx
+	// Pattern: (inst & 0xfff0f800) == 0xf850f800
+	if (opcode32 & 0xFFF0F800) == 0xF850F800 {
+		info.IsBranch = true
+		info.Type = common.InstrTypeBranchIndirect
+		info.HasBranchTarget = false
+		// Check for implied return: LDR PC, [SP], #imm
+		// Pattern: (inst & 0x000f0f00) == 0x000d0b00
+		if (opcode32 & 0x000F0F00) == 0x000D0B00 {
+			info.IsReturn = true
+		}
+		return info
+	}
+
+	// LDR PC, [Rn, Rm] (T2): 1111 1000 0101 xxxx : 1111 0000 00xx xxxx
+	// Pattern: (inst & 0xfff0ffc0) == 0xf850f000
+	if (opcode32 & 0xFFF0FFC0) == 0xF850F000 {
+		info.IsBranch = true
+		info.Type = common.InstrTypeBranchIndirect
+		info.HasBranchTarget = false
+		return info
 	}
 
 	// Not a recognized branch

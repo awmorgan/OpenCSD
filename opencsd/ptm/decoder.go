@@ -14,6 +14,7 @@ type Decoder struct {
 	Log            common.Logger         // Logger for errors and debug info
 	MemAcc         common.MemoryAccessor // Memory accessor for reading instruction opcodes
 	CycleAccEnable bool                  // Cycle accurate tracing enabled
+	RetStackEnable bool                  // Return stack enabled (from ETMCR bit 29)
 
 	// Current element being built
 	CurrentElement *common.GenericTraceElement
@@ -32,6 +33,12 @@ type Decoder struct {
 	contextID      uint32                // Current context ID
 	vmid           uint8                 // Current VMID
 	exceptionLevel common.ExceptionLevel // Current exception level
+
+	// Parsing state - tracks ISA during packet parsing (before ProcessPacket)
+	parseISA common.ISA // ISA state during parsing (updated by ISYNC, used by branch addr)
+
+	// Timestamp state - accumulated timestamp value
+	currentTimestamp uint64 // Accumulated timestamp (updated by timestamp packets)
 
 	// Atom tracking (for instruction execution)
 	atomPending bool  // Have atoms waiting to be processed
@@ -83,6 +90,7 @@ func (d *Decoder) Reset() {
 	d.addrValid = false
 	d.lastPacketAddr = 0
 	d.currentISA = common.ISAARM
+	d.parseISA = common.ISAARM
 	d.secureState = false
 	d.contextID = 0
 	d.vmid = 0
@@ -311,7 +319,7 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 	var lastInstrInfo *common.InstrInfo
 	lastExec := atom == common.AtomExecuted
 
-	// Walk instructions until we hit a branch
+	// Walk instructions until we hit a waypoint (branch, ISB, etc.)
 	for step := 0; step < 4096; step++ {
 		prevAddr := d.currentAddr
 		instrInfo, err := d.decodeInstruction(prevAddr)
@@ -331,65 +339,156 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 		instrCount++
 		nextAddr := prevAddr + uint64(instrInfo.Size)
 
-		if instrInfo.IsBranch {
-			executed := atom == common.AtomExecuted
-			if !instrInfo.IsConditional {
-				executed = true
-			}
-			lastExec = executed
+		// Check if this is a waypoint (not a normal instruction)
+		// ISB is always a waypoint
+		// DSB/DMB are only waypoints if configured (DSBDMBWaypoint flag)
+		// For now, we don't treat DSB/DMB as waypoints (default C++ behavior)
+		isWaypoint := instrInfo.Type != common.InstrTypeNormal &&
+			instrInfo.Type != common.InstrTypeUnknown &&
+			instrInfo.Type != common.InstrTypeDSBDMB // DSB/DMB not a waypoint by default
 
-			if executed && instrInfo.IsLink {
-				// Push return address with current ISA for return stack
-				d.retStack = append(d.retStack, nextAddr)
-				d.retStackISA = append(d.retStackISA, d.currentISA)
+		if isWaypoint {
+			// Handle ISB (barrier) - emit range, return false (no atom consumed)
+			if instrInfo.Type == common.InstrTypeISB {
+				d.currentAddr = nextAddr
+				elem := common.GenericTraceElement{
+					Type: common.ElemTypeAddrRange,
+					AddrRange: common.AddrRange{
+						StartAddr:       rangeStart,
+						EndAddr:         nextAddr,
+						ISA:             d.currentISA,
+						NumInstr:        instrCount,
+						LastInstrSz:     uint8(instrInfo.Size),
+						LastInstrExec:   true, // ISB is always executed
+						LastInstrType:   instrInfo.Type,
+						LastInstrCond:   instrInfo.IsConditional,
+						LastInstrLink:   instrInfo.IsLink,
+						LastInstrReturn: instrInfo.IsReturn,
+					},
+				}
+				if d.currPktHasCC {
+					elem.CycleCount = d.currPktCycleCount
+					elem.HasCycleCount = true
+				}
+				d.elements = append(d.elements, elem)
+				d.Log.Logf(common.SeverityDebug, "  -> ADDR_RANGE (ISB): 0x%X-0x%X (%d instrs)", rangeStart, nextAddr, instrCount)
+				return false, nil // ISB does not consume an atom
 			}
 
-			if executed {
-				if instrInfo.HasBranchTarget {
+			// Handle branches
+			if instrInfo.IsBranch {
+				// Unconditional Direct Branch (B, BL immediate) - does NOT consume an atom
+				if !instrInfo.IsConditional && instrInfo.HasBranchTarget {
+					// Push return address if this is a link branch (BL)
+					if instrInfo.IsLink {
+						d.retStack = append(d.retStack, nextAddr)
+						d.retStackISA = append(d.retStackISA, d.currentISA)
+					}
+
+					// Emit the range up to this instruction
+					elem := common.GenericTraceElement{
+						Type: common.ElemTypeAddrRange,
+						AddrRange: common.AddrRange{
+							StartAddr:       rangeStart,
+							EndAddr:         nextAddr,
+							ISA:             d.currentISA,
+							NumInstr:        instrCount,
+							LastInstrSz:     uint8(instrInfo.Size),
+							LastInstrExec:   true, // Unconditional branch always executed
+							LastInstrType:   instrInfo.Type,
+							LastInstrCond:   instrInfo.IsConditional,
+							LastInstrLink:   instrInfo.IsLink,
+							LastInstrReturn: instrInfo.IsReturn,
+						},
+					}
+					if d.currPktHasCC {
+						elem.CycleCount = d.currPktCycleCount
+						elem.HasCycleCount = true
+					}
+					d.elements = append(d.elements, elem)
+					d.Log.Logf(common.SeverityDebug, "  -> ADDR_RANGE (uncond): 0x%X-0x%X (%d instrs)", rangeStart, nextAddr, instrCount)
+
+					// Update state: jump to branch target
 					d.currentAddr = instrInfo.BranchTarget
-				} else if instrInfo.Type == common.InstrTypeBranchIndirect && instrInfo.IsReturn && len(d.retStack) > 0 {
-					target := d.retStack[len(d.retStack)-1]
-					targetISA := d.retStackISA[len(d.retStackISA)-1]
-					d.retStack = d.retStack[:len(d.retStack)-1]
-					d.retStackISA = d.retStackISA[:len(d.retStackISA)-1]
-					d.currentAddr = target
-					d.currentISA = targetISA
+					if instrInfo.NextISAValid {
+						d.currentISA = instrInfo.NextISA
+					}
+
+					// Reset for next range and CONTINUE the loop (do not return)
+					rangeStart = d.currentAddr
+					instrCount = 0
+					continue
+				}
+
+				// Conditional branch or indirect branch - DOES consume an atom
+				executed := atom == common.AtomExecuted
+				lastExec = executed
+
+				if executed && instrInfo.IsLink {
+					// Push return address with current ISA for return stack
+					d.retStack = append(d.retStack, nextAddr)
+					d.retStackISA = append(d.retStackISA, d.currentISA)
+				}
+
+				if executed {
+					if instrInfo.HasBranchTarget {
+						d.currentAddr = instrInfo.BranchTarget
+					} else if instrInfo.Type == common.InstrTypeBranchIndirect {
+						// Indirect branch - need address from return stack or branch packet
+						// Only use return stack if enabled
+						if d.RetStackEnable && instrInfo.IsReturn && len(d.retStack) > 0 {
+							target := d.retStack[len(d.retStack)-1]
+							targetISA := d.retStackISA[len(d.retStackISA)-1]
+							d.retStack = d.retStack[:len(d.retStack)-1]
+							d.retStackISA = d.retStackISA[:len(d.retStackISA)-1]
+							d.currentAddr = target
+							d.currentISA = targetISA
+						} else {
+							// No return stack or not enabled - invalidate address
+							// Will be resynchronized by next Branch Address or ISYNC packet
+							d.addrValid = false
+							d.currentAddr = nextAddr // Temporary placeholder
+						}
+					} else {
+						d.currentAddr = nextAddr
+					}
 				} else {
 					d.currentAddr = nextAddr
 				}
-			} else {
-				d.currentAddr = nextAddr
+
+				// Update ISA for next instruction if branch was taken
+				if executed && instrInfo.NextISAValid {
+					d.currentISA = instrInfo.NextISA
+				}
+
+				// Emit range on waypoint
+				elem := common.GenericTraceElement{
+					Type: common.ElemTypeAddrRange,
+					AddrRange: common.AddrRange{
+						StartAddr:       rangeStart,
+						EndAddr:         nextAddr,
+						ISA:             d.currentISA,
+						NumInstr:        instrCount,
+						LastInstrSz:     uint8(instrInfo.Size),
+						LastInstrExec:   lastExec,
+						LastInstrType:   instrInfo.Type,
+						LastInstrCond:   instrInfo.IsConditional,
+						LastInstrLink:   instrInfo.IsLink,
+						LastInstrReturn: instrInfo.IsReturn,
+					},
+				}
+				if d.currPktHasCC {
+					elem.CycleCount = d.currPktCycleCount
+					elem.HasCycleCount = true
+				}
+				d.elements = append(d.elements, elem)
+				d.Log.Logf(common.SeverityDebug, "  -> ADDR_RANGE: 0x%X-0x%X (%d instrs)", rangeStart, nextAddr, instrCount)
+
+				return true, nil // Conditional/indirect branch consumes an atom
 			}
 
-			// Emit range on branch
-			elem := common.GenericTraceElement{
-				Type: common.ElemTypeAddrRange,
-				AddrRange: common.AddrRange{
-					StartAddr:       rangeStart,
-					EndAddr:         nextAddr,
-					ISA:             d.currentISA,
-					NumInstr:        instrCount,
-					LastInstrSz:     uint8(instrInfo.Size),
-					LastInstrExec:   lastExec,
-					LastInstrType:   instrInfo.Type,
-					LastInstrCond:   instrInfo.IsConditional,
-					LastInstrLink:   instrInfo.IsLink,
-					LastInstrReturn: instrInfo.IsReturn,
-				},
-			}
-			if d.currPktHasCC {
-				elem.CycleCount = d.currPktCycleCount
-				elem.HasCycleCount = true
-			}
-			d.elements = append(d.elements, elem)
-			d.Log.Logf(common.SeverityDebug, "  -> ADDR_RANGE: 0x%X-0x%X (%d instrs)", rangeStart, nextAddr, instrCount)
-
-			// Update ISA for next instruction if branch was taken
-			if executed && instrInfo.NextISAValid {
-				d.currentISA = instrInfo.NextISA
-			}
-
-			return true, nil
+			// Other waypoints (should not reach here normally)
+			d.currentAddr = nextAddr
 		}
 
 		// Non-branch: advance and continue
@@ -537,22 +636,31 @@ func (d *Decoder) decodeInstruction(addr uint64) (*common.InstrInfo, error) {
 }
 
 // processTimestamp handles timestamp packets
+// Timestamps are accumulated - each packet updates only certain bits
 func (d *Decoder) processTimestamp(pkt Packet) ([]common.GenericTraceElement, error) {
 	if !d.syncFound {
 		return nil, nil
 	}
 
+	// Update accumulated timestamp - only update the bits specified by TSUpdateBits
+	if pkt.TSUpdateBits > 0 && pkt.TSUpdateBits <= 64 {
+		// Create mask for the bits being updated
+		var validMask uint64 = ^uint64(0) >> (64 - pkt.TSUpdateBits)
+		// Clear those bits in current timestamp and set new value
+		d.currentTimestamp = (d.currentTimestamp &^ validMask) | (pkt.Timestamp & validMask)
+	}
+
 	elem := common.GenericTraceElement{
 		Type:      common.ElemTypeTimestamp,
-		Timestamp: pkt.Timestamp,
+		Timestamp: d.currentTimestamp,
 	}
-	if d.currPktHasCC {
-		elem.CycleCount = d.currPktCycleCount
+	if pkt.CCValid {
+		elem.CycleCount = pkt.CycleCount
 		elem.HasCycleCount = true
 	}
 	d.elements = append(d.elements, elem)
 
-	d.Log.Logf(common.SeverityDebug, "Timestamp: 0x%x", pkt.Timestamp)
+	d.Log.Logf(common.SeverityDebug, "Timestamp: 0x%x (update %d bits)", d.currentTimestamp, pkt.TSUpdateBits)
 
 	return d.elements, nil
 }

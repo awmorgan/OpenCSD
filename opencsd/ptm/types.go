@@ -93,7 +93,8 @@ type Packet struct {
 	AtomCount uint8 // Number of atoms
 
 	// Timestamp specific fields
-	Timestamp uint64 // Timestamp value
+	Timestamp    uint64 // Timestamp value (raw bits from packet)
+	TSUpdateBits uint8  // Number of bits being updated (for accumulated timestamp)
 
 	// Branch Address specific fields
 	ExceptionNum uint16
@@ -314,6 +315,9 @@ func (d *Decoder) parseISync(buf []byte) (Packet, int, error) {
 	}
 	pkt.ISAValid = true
 
+	// Update parse-time ISA tracking so subsequent branch addresses use correct ISA
+	d.parseISA = pkt.ISA
+
 	// Clear LSB from address for alignment
 	pkt.Address = addr & 0xFFFFFFFE
 
@@ -349,26 +353,34 @@ func (d *Decoder) parseTimestamp(buf []byte) (Packet, int, error) {
 	pkt := Packet{Type: PacketTypeTimestamp}
 	size := 1
 	tsVal := uint64(0)
-	shift := 0
+	tsUpdateBits := uint8(0)
 
 	// Read timestamp bytes until we find one without continuation bit
-	maxBytes := 9 // Maximum 9 bytes for full 56-bit timestamp (7 bits per byte), index 1-9
+	// Each byte contributes 7 bits (except possibly the last one for 64-bit mode)
+	maxBytes := 9 // Maximum 9 bytes for full 64-bit timestamp
 	for size < len(buf) && size-1 < maxBytes {
 		currByte := buf[size]
 
-		// Extract 7 bits (bits 6:0)
-		tsVal |= uint64(currByte&0x7F) << shift
-		shift += 7
+		if size < 9 {
+			// First 8 data bytes: 7 bits each
+			tsVal |= uint64(currByte&0x7F) << tsUpdateBits
+			tsUpdateBits += 7
+		} else {
+			// 9th data byte (if present): full 8 bits
+			tsVal |= uint64(currByte) << tsUpdateBits
+			tsUpdateBits += 8
+		}
 		size++
 
-		// Check continuation bit (bit 7)
-		if (currByte & 0x80) == 0 {
+		// Check continuation bit (bit 7) - but not for the 9th byte
+		if size <= 9 && (currByte&0x80) == 0 {
 			// No continuation - we have the complete timestamp
 			break
 		}
 	}
 
 	pkt.Timestamp = tsVal
+	pkt.TSUpdateBits = tsUpdateBits
 
 	// In cycle-accurate mode, read cycle count bytes after timestamp
 	if d.CycleAccEnable && size < len(buf) {
@@ -531,13 +543,23 @@ func (d *Decoder) parseBranchAddress(buf []byte) (Packet, int, error) {
 		}
 	}
 
+	// If ISA wasn't specified by the packet (no 5th address byte), use the current parsing ISA
+	// This is inherited from the last ISYNC or branch address packet that did specify ISA
+	if !hasISA {
+		addrPktISA = d.parseISA
+	}
+
 	// Extract address bits
 	addrVal, addrBits := extractBranchAddressBits(buf, numAddrBytes, addrPktISA)
 	pkt.Address = addrVal
 	pkt.AddrBits = addrBits
+
+	// Always set ISA - either from packet or inherited from previous ISYNC/branch addr
+	pkt.ISA = addrPktISA
+	pkt.ISAValid = true
 	if hasISA {
-		pkt.ISA = addrPktISA
-		pkt.ISAValid = true
+		// Update parse-time ISA tracking only if packet explicitly specified it
+		d.parseISA = addrPktISA
 	}
 
 	// Parse optional cycle count if enabled

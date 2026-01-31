@@ -337,13 +337,18 @@ func instrTypeString(t common.InstrType) string {
 		return "BR  "
 	case common.InstrTypeBranchIndirect:
 		return "iBR "
+	case common.InstrTypeISB:
+		return "ISB "
+	case common.InstrTypeDSBDMB:
+		return "DSB.DMB"
 	default:
 		return "--- "
 	}
 }
 
 func instrSubTypeString(ar common.AddrRange) string {
-	if ar.LastInstrType == common.InstrTypeBranch && ar.LastInstrLink {
+	// b+link is shown for both direct and indirect branches with link
+	if ar.LastInstrLink {
 		return "b+link "
 	}
 	if ar.LastInstrType == common.InstrTypeBranchIndirect && ar.LastInstrReturn {

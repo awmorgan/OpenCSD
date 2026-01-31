@@ -13,6 +13,14 @@ const (
 	// InstrTypeBranchIndirect indicates an indirect branch (register-based)
 	InstrTypeBranchIndirect
 
+	// InstrTypeISB indicates an ISB (Instruction Synchronization Barrier) instruction
+	// ISB is a waypoint that always ends the instruction range
+	InstrTypeISB
+
+	// InstrTypeDSBDMB indicates a DSB or DMB barrier instruction
+	// Only treated as waypoint if configured
+	InstrTypeDSBDMB
+
 	// InstrTypeNormal indicates a non-branch instruction
 	InstrTypeNormal
 )
@@ -25,6 +33,10 @@ func (t InstrType) String() string {
 		return "Branch"
 	case InstrTypeBranchIndirect:
 		return "BranchIndirect"
+	case InstrTypeISB:
+		return "ISB"
+	case InstrTypeDSBDMB:
+		return "DSB.DMB"
 	case InstrTypeNormal:
 		return "Normal"
 	default:
