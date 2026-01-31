@@ -1,15 +1,22 @@
-package ptm
+package ptm_test
 
 import (
+	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
 	"opencsd/common"
 	"opencsd/printer"
+	"opencsd/ptm"
 	"opencsd/tests/helpers"
 )
+
+const snapshotPath = "../../decoder/tests/snapshots/trace_cov_a15"
 
 func TestCompareAgainstPPL(t *testing.T) {
 	// TODO: Remove skip once PTM instruction follower matches C++ parity.
@@ -17,17 +24,22 @@ func TestCompareAgainstPPL(t *testing.T) {
 	// Setup paths
 	pplPath := "../../decoder/tests/results/trace_cov_a15.ppl"
 	binPath := filepath.Join(snapshotPath, "PTM_0_2.bin")
+	traceIniPath := filepath.Join(snapshotPath, "trace.ini")
 
-	// Load expected elements
-	expected, err := helpers.LoadExpectedElements(pplPath)
+	packetID, elemID, err := parseTraceIDs(traceIniPath)
+	if err != nil {
+		t.Fatalf("Failed to parse trace IDs: %v", err)
+	}
+
+	// Load expected records (packets + elements)
+	expectedRecords, err := helpers.LoadPPLRecords(pplPath)
 	if err != nil {
 		t.Fatalf("Failed to load PPL file: %v", err)
 	}
-	t.Logf("Loaded %d expected elements from PPL", len(expected))
 
 	// Setup decoder
 	memAcc := loadMemorySnapshot(t)
-	decoder := NewDecoder(0) // ID 0 from PPL
+	decoder := ptm.NewDecoder(packetID)
 	decoder.SetMemoryAccessor(memAcc)
 
 	// Load trace data
@@ -42,73 +54,152 @@ func TestCompareAgainstPPL(t *testing.T) {
 		t.Fatalf("Parse error: %v", err)
 	}
 
-	// Process and collect elements
-	var actual []common.GenericTraceElement
-	// Manually add the init-decoder unsync element if needed, but ProcessPacket does it on first sync
-	// The C++ decoder emits NO_SYNC at start. Our ProcessPacket emits NO_SYNC on first ISYNC.
-	// Actually, the PPL shows:
-	// Idx:0; ID:0; [0x00 ...]; ASYNC
-	// Idx:0; ID:2; OCSD_GEN_TRC_ELEM_NO_SYNC( [init-decoder])
-	// Our ID is 0, but PPL shows ID 2?
-	// Ah, PPL output: "Idx:0; ID:0; ... ASYNC" (Packet)
-	//                 "Idx:0; ID:2; ... NO_SYNC" (Element)
-	// ID 2 seems to be the Trace ID?
-	// "Trace Packet Lister : Protocol printer PTM on Trace ID 0x0"
-	// Wait, the PPL screenshot says:
-	// Idx:0; ID:0; ... ASYNC
-	// Idx:0; ID:2; OCSD_GEN_TRC_ELEM_NO_SYNC
-	// Maybe ID 2 is the ID of the generic output stream? Or the decoder ID?
-	// Checking the PPL header: "Using PTM_0_2 as trace source"
-	// trace_cov_a15/snapshot.ini or trace.ini might clarify IDs.
-
-	// Let's ignore IDs for now and compare Type and Content.
-
-	// Emulate expected output sequence
-	// Initial NO_SYNC
-	actual = append(actual, *common.NewGenericTraceElement(common.ElemTypeNoSync))
-
+	// Generate actual output lines (packets + elements), interleaved
+	var actualLines []string
+	prevISA := common.ISAARM
+	prevISAValid := false
+	lastPacketAddr := uint64(0)
 	for _, pkt := range packets {
+		pktForPrint := pkt
+		if pkt.Type == ptm.PacketTypeBranchAddr && pkt.ISAValid && prevISAValid && pkt.ISA == prevISA {
+			pktForPrint.ISAValid = false
+		}
+		if pkt.Type == ptm.PacketTypeBranchAddr && pkt.AddrBits > 0 {
+			mask := (uint64(1) << pkt.AddrBits) - 1
+			pktForPrint.Address = (lastPacketAddr & ^mask) | (pktForPrint.Address & mask)
+		}
+		actualLines = append(actualLines, printer.FormatRawPacketLine(pkt.Offset, packetID, pktForPrint))
 		elems, err := decoder.ProcessPacket(pkt)
 		if err != nil {
 			t.Logf("ProcessPacket error: %v", err)
 		}
-		// Filter out duplicate NO_SYNC if our decoder emits it again
-		for _, e := range elems {
-			if e.Type == common.ElemTypeNoSync {
-				continue // We added it manually at start
+		for _, elem := range elems {
+			actualLines = append(actualLines, printer.FormatGenericElementLine(pkt.Offset, elemID, elem))
+		}
+
+		if pkt.Type == ptm.PacketTypeISYNC {
+			prevISA = pkt.ISA
+			prevISAValid = true
+			lastPacketAddr = pkt.Address
+		} else if pkt.Type == ptm.PacketTypeBranchAddr && pkt.ISAValid {
+			prevISA = pkt.ISA
+			prevISAValid = true
+			lastPacketAddr = pktForPrint.Address
+		} else if pkt.Type == ptm.PacketTypeBranchAddr {
+			lastPacketAddr = pktForPrint.Address
+		}
+	}
+
+	if len(packets) > 0 {
+		eotElem := common.GenericTraceElement{Type: common.ElemTypeEOTrace}
+		lastOffset := packets[len(packets)-1].Offset
+		actualLines = append(actualLines, printer.FormatGenericElementLine(lastOffset, elemID, eotElem))
+	}
+
+	// Filter expected records by trace IDs we use for packet/element streams
+	packetIDStr := fmt.Sprintf("%x", packetID)
+	elemIDStr := fmt.Sprintf("%x", elemID)
+	var expectedLines []string
+	for _, rec := range expectedRecords {
+		idLower := strings.ToLower(rec.ID)
+		switch rec.Kind {
+		case helpers.PPLRecordPacket:
+			if idLower == packetIDStr {
+				expectedLines = append(expectedLines, rec.Line)
 			}
-			actual = append(actual, e)
+		case helpers.PPLRecordElement:
+			if idLower == elemIDStr {
+				expectedLines = append(expectedLines, rec.Line)
+			}
 		}
 	}
 
-	// Match elements
-	matchCount := 0
-	expectedIdx := 0
+	minLen := len(expectedLines)
+	if len(actualLines) < minLen {
+		minLen = len(actualLines)
+	}
 
-	// Skip PPL elements that match ID 0 (Packets) - we only want OCSD_GEN_TRC_ELEM_*
-	var filteredExpected []helpers.PPLElement
-	for _, e := range expected {
-		if strings.HasPrefix(e.Type, "OCSD_GEN_TRC_ELEM_") {
-			filteredExpected = append(filteredExpected, e)
+	for i := 0; i < minLen; i++ {
+		if actualLines[i] != expectedLines[i] {
+			t.Fatalf("Mismatch at line %d:\nExpected: %s\nActual:   %s", i, expectedLines[i], actualLines[i])
 		}
 	}
 
-	if len(actual) != len(filteredExpected) {
-		t.Fatalf("Element count mismatch: expected %d, got %d", len(filteredExpected), len(actual))
-	}
-
-	for i, act := range actual {
-		exp := filteredExpected[expectedIdx]
-
-		actualLine := printer.FormatGenericElement(act)
-		expectedLine := exp.Type + "(" + exp.Content + ")"
-		if actualLine != expectedLine {
-			t.Fatalf("Mismatch at index %d:\nExpected: %s\nActual:   %s", i, expectedLine, actualLine)
+	if len(actualLines) != len(expectedLines) {
+		if len(actualLines) < len(expectedLines) {
+			t.Fatalf("Line count mismatch: expected %d, got %d. First missing expected line: %s", len(expectedLines), len(actualLines), expectedLines[minLen])
 		}
-		matchCount++
+		t.Fatalf("Line count mismatch: expected %d, got %d. First extra actual line: %s", len(expectedLines), len(actualLines), actualLines[minLen])
+	}
+}
 
-		expectedIdx++
+func loadMemorySnapshot(t *testing.T) common.MemoryAccessor {
+	t.Helper()
+
+	memMap := common.NewMultiRegionMemory()
+
+	regions := []struct {
+		addr uint64
+		file string
+	}{
+		{0x80000000, "mem_Cortex-A15_0_0_VECTORS.bin"},
+		{0x80000278, "mem_Cortex-A15_0_1_RO_CODE.bin"},
+		{0x80001C28, "mem_Cortex-A15_0_2_RO_DATA.bin"},
+		{0x80001D58, "mem_Cortex-A15_0_3_RW_DATA.bin"},
+		{0x80001D68, "mem_Cortex-A15_0_4_ZI_DATA.bin"},
+		{0x80040000, "mem_Cortex-A15_0_5_ARM_LIB_HEAP.bin"},
+		{0x80080000, "mem_Cortex-A15_0_6_ARM_LIB_STACK.bin"},
+		{0x80090000, "mem_Cortex-A15_0_7_IRQ_STACK.bin"},
+		{0x80100000, "mem_Cortex-A15_0_8_TTB.bin"},
 	}
 
-	t.Logf("Perfect matches: %d / %d", matchCount, len(filteredExpected))
+	for _, region := range regions {
+		path := filepath.Join(snapshotPath, region.file)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("Failed to load memory region %s: %v", region.file, err)
+		}
+		memMap.AddRegion(common.NewMemoryBuffer(region.addr, data))
+	}
+
+	return memMap
+}
+
+func parseTraceIDs(traceIniPath string) (uint8, uint8, error) {
+	file, err := os.Open(traceIniPath)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer file.Close()
+
+	nameRe := regexp.MustCompile(`(?i)^name=([a-z]+)_(\d+)_(\d+)`)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if matches := nameRe.FindStringSubmatch(line); len(matches) == 4 {
+			packetID, err := parseUint8(matches[2])
+			if err != nil {
+				return 0, 0, err
+			}
+			elemID, err := parseUint8(matches[3])
+			if err != nil {
+				return 0, 0, err
+			}
+			return packetID, elemID, nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return 0, 0, err
+	}
+
+	return 0, 0, fmt.Errorf("trace IDs not found in %s", traceIniPath)
+}
+
+func parseUint8(val string) (uint8, error) {
+	parsed, err := strconv.ParseUint(val, 10, 8)
+	if err != nil {
+		return 0, fmt.Errorf("invalid uint8: %s", val)
+	}
+	return uint8(parsed), nil
 }

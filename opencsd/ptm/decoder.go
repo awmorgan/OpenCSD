@@ -18,8 +18,9 @@ type Decoder struct {
 	CurrentElement *common.GenericTraceElement
 
 	// Synchronization state
-	syncFound    bool // true once we've seen ASYNC + ISYNC
-	waitingISync bool // true after ASYNC, waiting for ISYNC
+	syncFound     bool // true once we've seen ASYNC + ISYNC
+	waitingISync  bool // true after ASYNC, waiting for ISYNC
+	noSyncEmitted bool // true once NO_SYNC has been emitted for this decode run
 
 	// Current processor context
 	currentAddr    uint64                // Current program counter
@@ -70,6 +71,7 @@ func (d *Decoder) SetMemoryAccessor(memAcc common.MemoryAccessor) {
 func (d *Decoder) Reset() {
 	d.syncFound = false
 	d.waitingISync = false
+	d.noSyncEmitted = false
 	d.currentAddr = 0
 	d.lastPacketAddr = 0
 	d.currentISA = common.ISAARM
@@ -131,8 +133,15 @@ func (d *Decoder) processASYNC(pkt Packet) ([]common.GenericTraceElement, error)
 	if !d.syncFound {
 		d.Log.Debug("ASYNC packet received, waiting for ISYNC")
 		d.waitingISync = true
+		if !d.noSyncEmitted {
+			elem := common.GenericTraceElement{
+				Type: common.ElemTypeNoSync,
+			}
+			d.elements = append(d.elements, elem)
+			d.noSyncEmitted = true
+		}
 	}
-	return nil, nil
+	return d.elements, nil
 }
 
 // processISync handles ISYNC packets - establishes synchronization
@@ -145,10 +154,13 @@ func (d *Decoder) processISync(pkt Packet) ([]common.GenericTraceElement, error)
 		d.Log.Logf(common.SeverityInfo, "Synchronization established at address 0x%x", pkt.Address)
 
 		// Generate NO_SYNC element first (if we weren't synced before)
-		elem := common.GenericTraceElement{
-			Type: common.ElemTypeNoSync,
+		if !d.noSyncEmitted {
+			elem := common.GenericTraceElement{
+				Type: common.ElemTypeNoSync,
+			}
+			d.elements = append(d.elements, elem)
+			d.noSyncEmitted = true
 		}
-		d.elements = append(d.elements, elem)
 	}
 
 	prevISA := d.currentISA

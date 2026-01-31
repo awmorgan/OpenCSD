@@ -4,45 +4,70 @@ import (
 	"bufio"
 	"os"
 	"regexp"
-	"strings"
 )
 
-// PPLElement represents a single decoded element from a PPL file
-type PPLElement struct {
-	Index   string // The file offset index string (e.g., "0", "26571")
-	ID      string // The trace ID string
-	Type    string // The element type (e.g., "OCSD_GEN_TRC_ELEM_PE_CONTEXT")
-	Content string // The full text content of the element description
+// PPLRecordKind distinguishes between raw packet and generic element lines.
+type PPLRecordKind string
+
+const (
+	PPLRecordPacket  PPLRecordKind = "packet"
+	PPLRecordElement PPLRecordKind = "element"
+)
+
+// PPLRecord represents a single packet or element line from a PPL file.
+type PPLRecord struct {
+	Index       string        // Idx value
+	ID          string        // Trace ID string (hex without 0x)
+	Kind        PPLRecordKind // packet or element
+	Line        string        // Full original line
+	PacketType  string        // Packet type (if packet line)
+	ElemType    string        // Element type (if element line)
+	ElemContent string        // Element content without outer parens (if element line)
 }
 
-// LoadPPLoadExpectedElements parses a .ppl file and returns a slice of expect elements
-func LoadExpectedElements(path string) ([]PPLElement, error) {
+// LoadPPLRecords parses a .ppl file and returns packet/element lines in file order.
+func LoadPPLRecords(path string) ([]PPLRecord, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 
-	var elements []PPLElement
+	var records []PPLRecord
 	scanner := bufio.NewScanner(file)
 
-	// Regex to match element lines
-	// Example: Idx:6; ID:2; OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=A32) S; 32-bit; )
-	re := regexp.MustCompile(`^Idx:(\d+); ID:(\d+); (OCSD_GEN_TRC_ELEM_\w+)\((.*)\)\s*$`)
+	packetRe := regexp.MustCompile(`^Idx:(\d+); ID:([0-9a-fA-F]+); \[(.*)\];\s*(\w+)\s*:\s*(.*)$`)
+	elemRe := regexp.MustCompile(`^Idx:(\d+); ID:([0-9a-fA-F]+); (OCSD_GEN_TRC_ELEM_\w+)\((.*)\)\s*$`)
 
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		matches := re.FindStringSubmatch(line)
-		if len(matches) == 5 {
-			elem := PPLElement{
-				Index:   matches[1],
-				ID:      matches[2],
-				Type:    matches[3],
-				Content: matches[4],
-			}
-			elements = append(elements, elem)
+		line := scanner.Text()
+		if len(line) == 0 {
+			continue
+		}
+
+		if matches := packetRe.FindStringSubmatch(line); len(matches) == 6 {
+			records = append(records, PPLRecord{
+				Index:      matches[1],
+				ID:         matches[2],
+				Kind:       PPLRecordPacket,
+				Line:       line,
+				PacketType: matches[4],
+			})
+			continue
+		}
+
+		if matches := elemRe.FindStringSubmatch(line); len(matches) == 5 {
+			records = append(records, PPLRecord{
+				Index:       matches[1],
+				ID:          matches[2],
+				Kind:        PPLRecordElement,
+				Line:        line,
+				ElemType:    matches[3],
+				ElemContent: matches[4],
+			})
+			continue
 		}
 	}
 
-	return elements, scanner.Err()
+	return records, scanner.Err()
 }

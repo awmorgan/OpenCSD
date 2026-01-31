@@ -161,7 +161,8 @@ func (d *InstrDecoder) decodeARMOpcode(addr uint64, opcode uint32, info *common.
 			info.HasBranchTarget = false
 			rn := (opcode >> 16) & 0xF
 			wback := (opcode & 0x00200000) != 0
-			if rn == 0xD && wback {
+			postIndex := (opcode & 0x01000000) == 0
+			if rn == 0xD && (wback || postIndex) {
 				info.IsReturn = true
 			}
 			return info
