@@ -663,7 +663,6 @@ func extractBranchAddressBits(buf []byte, numAddrBytes int, isa ISA) (uint64, ui
 // Context ID packets have variable length based on configuration:
 // - Header byte (0x6E)
 // - 0-4 bytes of context ID data (depends on configuration)
-// For now, we parse up to 4 bytes to handle the maximum size
 func (d *Decoder) parseContextID(buf []byte) (Packet, int, error) {
 	// Minimum: just header (if ContextID size is 0)
 	// Maximum: header + 4 bytes
@@ -673,27 +672,45 @@ func (d *Decoder) parseContextID(buf []byte) (Packet, int, error) {
 
 	pkt := Packet{Type: PacketTypeContextID}
 
-	// For simplicity, we'll try to read up to 4 bytes of context ID
-	// In a full implementation, this should be based on the PTM configuration
-	// For now, we read what's available up to 4 bytes
+	if d.ContextIDConfigured {
+		ctxtBytes := d.ContextIDBytes
+		if ctxtBytes < 0 || ctxtBytes > 4 {
+			ctxtBytes = 0
+		}
+
+		if ctxtBytes == 0 {
+			pkt.ContextID = 0
+			pkt.Data = buf[0:1]
+			return pkt, 1, nil
+		}
+
+		if len(buf) < 1+ctxtBytes {
+			return Packet{Type: PacketTypeUnknown, Data: buf[0:1]}, 1, nil
+		}
+
+		ctxtID := uint32(0)
+		for i := 0; i < ctxtBytes; i++ {
+			ctxtID |= uint32(buf[1+i]) << (i * 8)
+		}
+
+		size := 1 + ctxtBytes
+		pkt.ContextID = ctxtID
+		pkt.Data = buf[0:size]
+		return pkt, size, nil
+	}
+
+	// Fallback (no config): try to read up to 4 bytes with heuristic
 	size := 1
 	ctxtID := uint32(0)
 	numBytes := 0
 
-	// Try to read up to 4 context ID bytes
 	for size < len(buf) && numBytes < 4 {
-		// Read context ID bytes (little endian)
 		ctxtID |= uint32(buf[size]) << (numBytes * 8)
 		size++
 		numBytes++
 
-		// Check if this looks like the start of another packet
-		// We use a simple heuristic: if we've read at least 1 byte and
-		// the next byte looks like a packet header, we stop
 		if size < len(buf) && numBytes >= 1 {
 			nextByte := buf[size]
-			// Common packet headers: 0x00, 0x08, 0x42, 0x46, 0x6E, 0x3C, 0x76, 0x0C, 0x66
-			// or high bit set for atoms/branches
 			if nextByte == 0x00 || nextByte == 0x08 || nextByte == 0x42 ||
 				nextByte == 0x46 || nextByte == 0x6E || nextByte == 0x3C ||
 				nextByte == 0x76 || nextByte == 0x0C || nextByte == 0x66 {
@@ -704,7 +721,6 @@ func (d *Decoder) parseContextID(buf []byte) (Packet, int, error) {
 
 	pkt.ContextID = ctxtID
 	pkt.Data = buf[0:size]
-
 	return pkt, size, nil
 }
 

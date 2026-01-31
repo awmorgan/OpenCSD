@@ -10,13 +10,22 @@ import (
 
 const (
 	etmcrCycleAccBit = 12
+	etmcrTimestampBit = 28
 	etmcrRetStackBit = 29
+	etmcrVmidBit      = 30
+
+	etmccerRetStackImplBit = 23
+	etmccerDsbDmbWayptBit  = 24
+	etmccerTsEncNatBit     = 28
+	etmccerTs64BitBit      = 29
 )
 
 // PTMDeviceConfig captures the subset of PTM configuration we need for decoding.
 type PTMDeviceConfig struct {
 	TraceID uint8
 	ETMCR   uint32
+	ETMIDR  uint32
+	ETMCCER uint32
 }
 
 // Apply applies the device configuration to the decoder.
@@ -24,8 +33,15 @@ func (d *Decoder) Apply(cfg PTMDeviceConfig) {
 	if cfg.TraceID != 0 {
 		d.TraceID = cfg.TraceID
 	}
-	d.CycleAccEnable = (cfg.ETMCR&(1<<etmcrCycleAccBit) != 0)
-	d.RetStackEnable = (cfg.ETMCR&(1<<etmcrRetStackBit) != 0)
+	d.CycleAccEnable = cfg.CycleAccEnabled()
+	d.RetStackEnable = cfg.HasRetStack() && cfg.RetStackEnabled()
+	d.VMIDEnable = cfg.VMIDEnabled()
+	d.TimestampEnable = cfg.TimestampEnabled()
+	d.Timestamp64Bit = cfg.Timestamp64Bit()
+	d.TimestampBinary = cfg.TimestampBinary()
+	d.DsbDmbWaypoint = cfg.DsbDmbWaypoint()
+	d.ContextIDBytes = cfg.ContextIDBytes()
+	d.ContextIDConfigured = true
 }
 
 // ConfigureFromDeviceIni reads a PTM device ini file and applies settings to the decoder.
@@ -60,6 +76,7 @@ func LoadPTMDeviceConfig(deviceIniPath string) (PTMDeviceConfig, error) {
 	}
 
 	cfg := PTMDeviceConfig{}
+	foundETMCR := false
 	section := ""
 	lines := strings.Split(string(data), "\n")
 	for _, line := range lines {
@@ -84,19 +101,76 @@ func LoadPTMDeviceConfig(deviceIniPath string) (PTMDeviceConfig, error) {
 			case "ETMCR":
 				if v, parseErr := parseHexUint32(value); parseErr == nil {
 					cfg.ETMCR = v
+					foundETMCR = true
+				}
+			case "ETMIDR":
+				if v, parseErr := parseHexUint32(value); parseErr == nil {
+					cfg.ETMIDR = v
+				}
+			case "ETMCCER":
+				if v, parseErr := parseHexUint32(value); parseErr == nil {
+					cfg.ETMCCER = v
 				}
 			case "ETMTRACEIDR":
 				if v, parseErr := parseHexUint32(value); parseErr == nil {
-					cfg.TraceID = uint8(v & 0xFF)
+					cfg.TraceID = uint8(v & 0x7F)
 				}
 			}
 		}
 	}
 
-	if cfg.ETMCR == 0 {
+	if !foundETMCR {
 		return PTMDeviceConfig{}, fmt.Errorf("ETMCR not found in %s", deviceIniPath)
 	}
 	return cfg, nil
+}
+
+func (cfg PTMDeviceConfig) CycleAccEnabled() bool {
+	return (cfg.ETMCR & (1 << etmcrCycleAccBit)) != 0
+}
+
+func (cfg PTMDeviceConfig) RetStackEnabled() bool {
+	return (cfg.ETMCR & (1 << etmcrRetStackBit)) != 0
+}
+
+func (cfg PTMDeviceConfig) TimestampEnabled() bool {
+	return (cfg.ETMCR & (1 << etmcrTimestampBit)) != 0
+}
+
+func (cfg PTMDeviceConfig) VMIDEnabled() bool {
+	return (cfg.ETMCR & (1 << etmcrVmidBit)) != 0
+}
+
+func (cfg PTMDeviceConfig) HasRetStack() bool {
+	return (cfg.ETMCCER & (1 << etmccerRetStackImplBit)) != 0
+}
+
+func (cfg PTMDeviceConfig) DsbDmbWaypoint() bool {
+	return (cfg.ETMCCER & (1 << etmccerDsbDmbWayptBit)) != 0
+}
+
+func (cfg PTMDeviceConfig) TimestampBinary() bool {
+	if cfg.MinorRev() == 0 {
+		return false
+	}
+	return (cfg.ETMCCER & (1 << etmccerTsEncNatBit)) != 0
+}
+
+func (cfg PTMDeviceConfig) Timestamp64Bit() bool {
+	if cfg.MinorRev() == 0 {
+		return false
+	}
+	return (cfg.ETMCCER & (1 << etmccerTs64BitBit)) != 0
+}
+
+func (cfg PTMDeviceConfig) MinorRev() uint32 {
+	return (cfg.ETMIDR >> 4) & 0xF
+}
+
+func (cfg PTMDeviceConfig) ContextIDBytes() int {
+	sizes := []int{0, 1, 2, 4}
+	idx := (cfg.ETMCR >> 14) & 0x3
+	return sizes[idx]
 }
 
 // FindPTMDeviceIniByTraceID scans snapshot.ini and device ini files for matching trace ID.

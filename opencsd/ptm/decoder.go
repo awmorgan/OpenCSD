@@ -15,6 +15,13 @@ type Decoder struct {
 	MemAcc         common.MemoryAccessor // Memory accessor for reading instruction opcodes
 	CycleAccEnable bool                  // Cycle accurate tracing enabled
 	RetStackEnable bool                  // Return stack enabled (from ETMCR bit 29)
+	VMIDEnable     bool                  // VMID tracing enabled
+	TimestampEnable bool                 // Timestamp tracing enabled
+	Timestamp64Bit bool                  // Timestamp is 64-bit
+	TimestampBinary bool                 // Timestamp encoding is natural binary
+	DsbDmbWaypoint bool                  // DSB/DMB treated as waypoints
+	ContextIDBytes int                   // Context ID packet size in bytes
+	ContextIDConfigured bool             // Context ID size configured from device
 
 	// Current element being built
 	CurrentElement *common.GenericTraceElement
@@ -346,11 +353,10 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 
 		// Check if this is a waypoint (not a normal instruction)
 		// ISB is always a waypoint
-		// DSB/DMB are only waypoints if configured (DSBDMBWaypoint flag)
-		// For now, we don't treat DSB/DMB as waypoints (default C++ behavior)
+		// DSB/DMB are waypoints only when configured
 		isWaypoint := instrInfo.Type != common.InstrTypeNormal &&
 			instrInfo.Type != common.InstrTypeUnknown &&
-			instrInfo.Type != common.InstrTypeDSBDMB // DSB/DMB not a waypoint by default
+			(d.DsbDmbWaypoint || instrInfo.Type != common.InstrTypeDSBDMB)
 
 		if isWaypoint {
 			// Handle ISB (barrier) - emit range, return false (no atom consumed)
