@@ -5,9 +5,9 @@ COMPLETED:
 2. ✓ Processor with unsync scanning (finds ASYNC, emits raw data).
 3. ✓ Packet types: TRIGGER, WPOINT_UPDATE, IGNORE, unsync markers (NOTSYNC, INCOMPLETE_EOT, BAD_SEQUENCE, RESERVED).
 4. ✓ Parser extensions for TRIGGER/WPOINT_UPDATE + config-based ContextID sizing.
+5. ✓ Decode FSM parity (8 states: NO_SYNC/WAIT_SYNC/WAIT_ISYNC/DECODE_PKTS/CONT*).
 
 REMAINING:
-5. Decode FSM parity (NO_SYNC/WAIT_SYNC/WAIT_ISYNC/DECODE/CONT* states).
 6. Waypoint update + TRACE_TO_ADDR_INCL/EXCL behaviors.
 7. Instruction follower config (DSB/DMB waypoint, WFI/WFE, IT-block).
 8. Tighten golden tests (timestamp accumulation, ADDR_NACC matching).
