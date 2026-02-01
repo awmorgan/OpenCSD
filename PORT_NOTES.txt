@@ -6,7 +6,7 @@ PROJECT: Go port of ARM's CoreSight trace decoder library (OpenCSD).
 Scope: ~22,400 lines of C++ → Go across 6 trace protocols + framework.
 
 STATUS (2026-01-31):
-  PTM protocol: ✅ COMPLETE
+  PTM protocol: ✅ MOSTLY COMPLETE (parity gaps remain – see TESTING GAPS)
   ETMv4: ⚠️ IN PROGRESS (config parser complete)
   ETMv3, ETE, STM, ITM: ⚠️ NOT STARTED
   Framework: PARTIAL (memory accessor, frame demux, printer done)
@@ -98,7 +98,7 @@ PPL header tip (useful for verification):
 PROGRESS TRACKING:
 -----------------
 
-PTM Protocol (COMPLETE):
+PTM Protocol (MOSTLY COMPLETE):
   - Config parsing: IDR/CTRL/CCER registers
   - Packet processor with unsync scanning
   - All packet types (ASYNC, ISYNC, ATOM, BRANCH_ADDRESS, TIMESTAMP, CONTEXT_ID, VMID, EXCEPTION_RETURN, TRIGGER, WPOINT_UPDATE, IGNORE)
@@ -107,6 +107,46 @@ PTM Protocol (COMPLETE):
   - ARM/Thumb instruction decode with DSB/DMB/ISB barrier handling
   - Return stack for indirect branch prediction
   - Line-by-line .ppl verification (trace_cov_a15, tc2-ptm-rstk-t32, Snowball, TC2)
+  - NOTE: PTM test suite currently filters or skips some outputs (e.g., ADDR_NACC)
+    and does not yet cover all C++ decoder modes or error paths.
+
+TESTING GAPS (PTM):
+-------------------
+These explain how PTM can appear “complete” while missing functionality:
+
+1) **Snapshot-only coverage**
+   - Current Go tests compare against a subset of .ppl outputs and only for
+     certain trace IDs.
+   - Some tests compare just the first N lines or filter out ADDR_NACC lines.
+     This can hide real mismatches in memory-access handling.
+
+2) **Missing C++ execution modes**
+   - No Go tests cover C++ `-pkt_mon` output, raw packet printing, or
+     deformatter/dstream format outputs.
+   - Error-mode variants from C++ (range limits, bad opcode flags, etc.) are
+     not mirrored in Go tests.
+
+3) **Streaming / chunked input not tested**
+   - Go tests parse full buffers in one shot. C++ supports streaming with
+     partial packets, flush, and EOT handling. This can hide state machine and
+     resync bugs.
+
+4) **Config and register-variant coverage is thin**
+   - Context-ID width, VMID enable, timestamp encoding (binary/Gray), 64‑bit
+     timestamps, and cycle-accurate tracing are not tested across multiple
+     register combinations.
+
+5) **Loss-of-sync & invalid packet paths**
+   - Go tests rarely exercise BAD/RESERVED packet handling, unsync buffers, or
+     explicit NO_SYNC/EO_TRACE paths from stream errors.
+
+Suggested next tests:
+  - Add packet-level parity tests against C++ “packet monitor” output.
+  - Add stream-chunking tests (varying block sizes, random splits) to exercise
+    partial packets + flush + EOT.
+  - Add C++ error-mode snapshot tests (range limit, bad opcode flags) and verify
+    matching element output.
+  - Stop filtering ADDR_NACC in TC2 tests; instead fix NACC logic to match C++.
 
 ETMv4 Protocol (IN PROGRESS):
   - Config parsing: TRCIDR0-13, TRCCONFIGR, TRCTRACEIDR registers (COMPLETE)
