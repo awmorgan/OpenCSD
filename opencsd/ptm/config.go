@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"opencsd/common"
 )
 
 const (
@@ -193,35 +195,11 @@ func FindPTMDeviceIniByTraceID(snapshotDir string, traceID uint8) (string, PTMDe
 }
 
 func loadSnapshotDeviceList(snapshotDir string) ([]string, error) {
-	data, err := os.ReadFile(filepath.Join(snapshotDir, "snapshot.ini"))
+	cfg, err := common.ParseSnapshotIni(snapshotDir)
 	if err != nil {
-		return nil, fmt.Errorf("read snapshot.ini: %w", err)
+		return nil, err
 	}
-	section := ""
-	var devices []string
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.ToLower(strings.Trim(line, "[]"))
-			continue
-		}
-		if section != "device_list" {
-			continue
-		}
-		_, value, ok := splitIniKV(line)
-		if !ok {
-			continue
-		}
-		devices = append(devices, value)
-	}
-	if len(devices) == 0 {
-		return nil, fmt.Errorf("no devices found in snapshot.ini")
-	}
-	return devices, nil
+	return cfg.DeviceList, nil
 }
 
 func splitIniKV(line string) (string, string, bool) {
