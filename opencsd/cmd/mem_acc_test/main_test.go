@@ -16,7 +16,7 @@ func TestMemAccOutputMatchesCpp(t *testing.T) {
 	var goErr bytes.Buffer
 	goCmd.Stdout = &goOut
 	goCmd.Stderr = &goErr
-	
+
 	if err := goCmd.Run(); err != nil {
 		t.Fatalf("Go mem_acc_test failed: %v\nStderr: %s", err, goErr.String())
 	}
@@ -35,7 +35,7 @@ func TestMemAccOutputMatchesCpp(t *testing.T) {
 	var cppErr bytes.Buffer
 	cppCmd.Stdout = &cppOut
 	cppCmd.Stderr = &cppErr
-	
+
 	if err := cppCmd.Run(); err != nil {
 		t.Fatalf("C++ mem-acc-test failed: %v\nStderr: %s", err, cppErr.String())
 	}
