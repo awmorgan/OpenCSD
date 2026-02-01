@@ -6,7 +6,7 @@ PROJECT: Go port of ARM's CoreSight trace decoder library (OpenCSD).
 Scope: ~22,400 lines of C++ → Go across 6 trace protocols + framework.
 
 STATUS (2026-01-31):
-  PTM protocol: ⚠️ IN PROGRESS
+  PTM protocol: ✅ COMPLETE (all PTM .ppl files compared line-by-line)
     - ✅ Full line-by-line compare: trace_cov_a15.ppl
     - ✅ Full line-by-line compare: tc2-ptm-rstk-t32.ppl
     - ✅ Full line-by-line compare: Snowball.ppl (PTM IDs 0x10/0x11)
@@ -53,6 +53,12 @@ Current PTM verification:
   ✅ Full line-by-line compare: Snowball.ppl (TestSnowballCompare)
   ✅ Full line-by-line compare: TC2.ppl (TestTC2PPLCompare)
 
+Audit (2026-01-31): PTM-containing .ppl files are limited to:
+  - trace_cov_a15.ppl
+  - tc2-ptm-rstk-t32.ppl
+  - Snowball.ppl (PTM IDs 0x10/0x11)
+  - TC2.ppl (PTM IDs 0x13/0x14)
+
 PPL generation & formats (C++):
   - decoder/tests/run_pkt_decode_tests.bash generates most decoder/tests/results/*.ppl
     * Full decode: juno-ret-stck, a57_single_step, bugfix-exact-match, juno-uname-001,
@@ -67,8 +73,7 @@ PPL generation & formats (C++):
     mem_buff_demo.ppl/mem_buff_demo_cb.ppl, itm-decode-test.ppl
   - The first lines of each .ppl include the exact command-line and protocol/trace IDs.
 
-Next dev: Do NOT mark PTM complete until all PTM .ppl files above are compared
-line-by-line in Go tests.
+Next dev: Start ETMv4 port.
 
 TEST SNAPSHOT STRUCTURE:
 ------------------------
