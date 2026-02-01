@@ -8,12 +8,15 @@ package common
 // - In-memory buffers loaded from snapshot .bin files
 // - Mocked memory for unit tests
 // - Live memory access for online decoding scenarios
+// - Callback-based accessors for dynamic memory ranges
 type MemoryAccessor interface {
 	// ReadMemory reads bytes from memory at the specified address.
 	// Returns the number of bytes successfully read and any error encountered.
 	//
 	// Parameters:
 	//   addr: The memory address to read from
+	//   traceID: The trace source ID (for multi-core scenarios)
+	//   space: The memory space to read from
 	//   data: Buffer to store the read bytes
 	//
 	// Returns:
@@ -25,10 +28,16 @@ type MemoryAccessor interface {
 	// - Return partial reads when the requested range exceeds available memory
 	// - Return an error for completely invalid addresses
 	// - Support unaligned accesses (common in ARM instruction sets)
-	ReadMemory(addr uint64, data []byte) (int, error)
+	ReadMemory(addr uint64, traceID uint8, space MemorySpace, data []byte) (int, error)
 
 	// ReadTargetMemory reads bytes from memory at the specified address.
 	// This mirrors the C++ naming convention used by the OpenCSD library.
 	// Implementations may delegate this to ReadMemory.
-	ReadTargetMemory(addr uint64, data []byte) (int, error)
+	ReadTargetMemory(addr uint64, traceID uint8, space MemorySpace, data []byte) (int, error)
+
+	// MemSpace returns the memory space(s) this accessor covers.
+	MemSpace() MemorySpace
+
+	// SetMemSpace sets the memory space(s) this accessor covers.
+	SetMemSpace(space MemorySpace)
 }

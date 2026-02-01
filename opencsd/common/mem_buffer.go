@@ -11,6 +11,8 @@ type MemoryBuffer struct {
 	BaseAddr uint64
 	// Data holds the actual memory contents
 	Data []byte
+	// memSpace specifies which memory space(s) this buffer covers
+	memSpace MemorySpace
 }
 
 // NewMemoryBuffer creates a new memory buffer for the given address range.
@@ -18,12 +20,19 @@ func NewMemoryBuffer(baseAddr uint64, data []byte) *MemoryBuffer {
 	return &MemoryBuffer{
 		BaseAddr: baseAddr,
 		Data:     data,
+		memSpace: MemSpaceANY, // Default to ANY space
 	}
 }
 
 // ReadMemory implements MemoryAccessor.ReadMemory.
 // Reads bytes from the memory buffer at the specified address.
-func (mb *MemoryBuffer) ReadMemory(addr uint64, data []byte) (int, error) {
+func (mb *MemoryBuffer) ReadMemory(addr uint64, traceID uint8, space MemorySpace, data []byte) (int, error) {
+	// Check if the requested space matches this buffer's space
+	if !mb.memSpace.InMemSpace(space) {
+		return 0, fmt.Errorf("address 0x%X space mismatch: requested %s but buffer is %s",
+			addr, space.String(), mb.memSpace.String())
+	}
+
 	// Check if address is before our region
 	if addr < mb.BaseAddr {
 		return 0, fmt.Errorf("address 0x%X is before buffer base 0x%X", addr, mb.BaseAddr)
@@ -53,8 +62,8 @@ func (mb *MemoryBuffer) ReadMemory(addr uint64, data []byte) (int, error) {
 
 // ReadTargetMemory implements MemoryAccessor.ReadTargetMemory.
 // This mirrors the C++ naming and delegates to ReadMemory.
-func (mb *MemoryBuffer) ReadTargetMemory(addr uint64, data []byte) (int, error) {
-	return mb.ReadMemory(addr, data)
+func (mb *MemoryBuffer) ReadTargetMemory(addr uint64, traceID uint8, space MemorySpace, data []byte) (int, error) {
+	return mb.ReadMemory(addr, traceID, space, data)
 }
 
 // Contains checks if the given address falls within this buffer's range.
@@ -67,16 +76,28 @@ func (mb *MemoryBuffer) EndAddr() uint64 {
 	return mb.BaseAddr + uint64(len(mb.Data))
 }
 
+// MemSpace returns the memory space(s) this buffer covers.
+func (mb *MemoryBuffer) MemSpace() MemorySpace {
+	return mb.memSpace
+}
+
+// SetMemSpace sets the memory space(s) this buffer covers.
+func (mb *MemoryBuffer) SetMemSpace(space MemorySpace) {
+	mb.memSpace = space
+}
+
 // MultiRegionMemory implements MemoryAccessor for multiple non-overlapping memory regions.
 // This allows modeling a full system memory map with multiple .bin files (e.g., VECTORS, RAM, ROM).
 type MultiRegionMemory struct {
-	Regions []*MemoryBuffer
+	Regions  []*MemoryBuffer
+	memSpace MemorySpace
 }
 
 // NewMultiRegionMemory creates a memory accessor that spans multiple regions.
 func NewMultiRegionMemory() *MultiRegionMemory {
 	return &MultiRegionMemory{
-		Regions: make([]*MemoryBuffer, 0),
+		Regions:  make([]*MemoryBuffer, 0),
+		memSpace: MemSpaceANY,
 	}
 }
 
@@ -88,11 +109,17 @@ func (mrm *MultiRegionMemory) AddRegion(region *MemoryBuffer) {
 
 // ReadMemory implements MemoryAccessor.ReadMemory.
 // Searches all regions for the requested address and reads from the matching region.
-func (mrm *MultiRegionMemory) ReadMemory(addr uint64, data []byte) (int, error) {
+func (mrm *MultiRegionMemory) ReadMemory(addr uint64, traceID uint8, space MemorySpace, data []byte) (int, error) {
+	// Check if the requested space matches this accessor's space
+	if !mrm.memSpace.InMemSpace(space) {
+		return 0, fmt.Errorf("address 0x%X space mismatch: requested %s but accessor is %s",
+			addr, space.String(), mrm.memSpace.String())
+	}
+
 	// Find the region containing this address
 	for _, region := range mrm.Regions {
 		if region.Contains(addr) {
-			return region.ReadMemory(addr, data)
+			return region.ReadMemory(addr, traceID, space, data)
 		}
 	}
 
@@ -101,6 +128,16 @@ func (mrm *MultiRegionMemory) ReadMemory(addr uint64, data []byte) (int, error) 
 
 // ReadTargetMemory implements MemoryAccessor.ReadTargetMemory.
 // This mirrors the C++ naming and delegates to ReadMemory.
-func (mrm *MultiRegionMemory) ReadTargetMemory(addr uint64, data []byte) (int, error) {
-	return mrm.ReadMemory(addr, data)
+func (mrm *MultiRegionMemory) ReadTargetMemory(addr uint64, traceID uint8, space MemorySpace, data []byte) (int, error) {
+	return mrm.ReadMemory(addr, traceID, space, data)
+}
+
+// MemSpace returns the memory space(s) this accessor covers.
+func (mrm *MultiRegionMemory) MemSpace() MemorySpace {
+	return mrm.memSpace
+}
+
+// SetMemSpace sets the memory space(s) this accessor covers.
+func (mrm *MultiRegionMemory) SetMemSpace(space MemorySpace) {
+	mrm.memSpace = space
 }

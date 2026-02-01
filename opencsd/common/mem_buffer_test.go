@@ -68,7 +68,7 @@ func TestMemoryBuffer_ReadMemory(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := make([]byte, tt.size)
-			n, err := mb.ReadMemory(tt.addr, buf)
+			n, err := mb.ReadMemory(tt.addr, 0, MemSpaceANY, buf)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReadMemory() error = %v, wantErr %v", err, tt.wantErr)
@@ -188,7 +188,7 @@ func TestMultiRegionMemory_ReadMemory(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := make([]byte, tt.size)
-			n, err := mrm.ReadMemory(tt.addr, buf)
+			n, err := mrm.ReadMemory(tt.addr, 0, MemSpaceANY, buf)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReadMemory() error = %v, wantErr %v", err, tt.wantErr)
@@ -224,7 +224,7 @@ func TestMultiRegionMemory_ARM_Scenario(t *testing.T) {
 
 	// Read instruction from vectors
 	buf := make([]byte, 4)
-	n, err := mrm.ReadMemory(0x80000000, buf)
+	n, err := mrm.ReadMemory(0x80000000, 0, MemSpaceANY, buf)
 	if err != nil {
 		t.Fatalf("Failed to read vectors: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestMultiRegionMemory_ARM_Scenario(t *testing.T) {
 	t.Logf("Read from VECTORS (0x80000000): %02X %02X %02X %02X", buf[0], buf[1], buf[2], buf[3])
 
 	// Read instruction from code
-	n, err = mrm.ReadMemory(0x80000278, buf)
+	n, err = mrm.ReadMemory(0x80000278, 0, MemSpaceANY, buf)
 	if err != nil {
 		t.Fatalf("Failed to read code: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestMultiRegionMemory_ARM_Scenario(t *testing.T) {
 	t.Logf("Read from CODE (0x80000278): %02X %02X %02X %02X", buf[0], buf[1], buf[2], buf[3])
 
 	// Read data
-	n, err = mrm.ReadMemory(0x80001C28, buf)
+	n, err = mrm.ReadMemory(0x80001C28, 0, MemSpaceANY, buf)
 	if err != nil {
 		t.Fatalf("Failed to read data: %v", err)
 	}
