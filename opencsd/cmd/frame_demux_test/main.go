@@ -52,12 +52,12 @@ const (
 
 // FrameDeformatter processes raw trace frames
 type FrameDeformatter struct {
-	flags          FrameFormatFlags
-	inputCount     uint64
-	outputCount    uint64
-	frameCount     uint64
-	errorLog       *ErrorLogger
-	lastError      error
+	flags       FrameFormatFlags
+	inputCount  uint64
+	outputCount uint64
+	frameCount  uint64
+	errorLog    *ErrorLogger
+	lastError   error
 }
 
 // NewFrameDeformatter creates a new frame deformatter
@@ -75,7 +75,7 @@ func (f *FrameDeformatter) Configure(flags FrameFormatFlags) error {
 	}
 
 	// Check for invalid flag combinations
-	if (flags & FrmtMemAlign) != 0 && (flags & FrmtHasFsyncs) != 0 {
+	if (flags&FrmtMemAlign) != 0 && (flags&FrmtHasFsyncs) != 0 {
 		return fmt.Errorf("OCSD_ERR_INVALID_PARAM_VAL: invalid flag combination")
 	}
 

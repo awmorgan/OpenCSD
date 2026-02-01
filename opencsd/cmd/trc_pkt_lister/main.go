@@ -44,10 +44,10 @@ type Config struct {
 	LogToFile          bool
 	IDFilter           []uint8
 	ConsistencyChecks  struct {
-		AA64OpcodeChk  bool
-		DirectBrCond   bool
-		StrictBrCond   bool
-		RangeCont      bool
+		AA64OpcodeChk bool
+		DirectBrCond  bool
+		StrictBrCond  bool
+		RangeCont     bool
 	}
 	CacheSettings struct {
 		PageSize uint32
@@ -109,13 +109,13 @@ func (s *SnapshotReader) GetSourceNames() ([]string, error) {
 
 // TracePacket represents a decoded trace packet
 type TracePacket struct {
-	Index        uint64
-	SourceID     uint8
-	PacketType   string
-	Size         uint32
-	Data         []byte
-	Decoded      bool
-	DecodedInfo  string
+	Index       uint64
+	SourceID    uint8
+	PacketType  string
+	Size        uint32
+	Data        []byte
+	Decoded     bool
+	DecodedInfo string
 }
 
 // String formats the packet for display
@@ -156,12 +156,12 @@ func (p *PacketDecoder) DecodeTraceData(filename string) error {
 		// Simple heuristic: ID bytes have bit 0 set (odd values)
 		if data[i]%2 == 1 {
 			packet := TracePacket{
-				Index:    p.packetIdx,
-				SourceID: data[i] >> 1,
+				Index:      p.packetIdx,
+				SourceID:   data[i] >> 1,
 				PacketType: "ID",
-				Size:     1,
-				Data:     []byte{data[i]},
-				Decoded:  false,
+				Size:       1,
+				Data:       []byte{data[i]},
+				Decoded:    false,
 			}
 			p.packets = append(p.packets, packet)
 			p.packetIdx++

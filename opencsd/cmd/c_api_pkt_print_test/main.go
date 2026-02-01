@@ -72,29 +72,29 @@ func (op TestOperation) String() string {
 
 // Config holds the test configuration
 type Config struct {
-	Protocol              TraceProtocol
-	Operation             TestOperation
-	TraceIDOverride       uint8
-	UseMemAccCallback     bool
-	UseMemAccCallbackID   bool
-	UseRegionFile         bool
-	TestExternalDecoder   bool
-	OutputRawUnpacked     bool
-	OutputRawPacked       bool
-	TestPrintStr          bool
-	TestLibPrinters       bool
-	TestErrorAPI          bool
-	OutputStats           bool
-	SnapshotPath          string
-	LogFileName           string
-	DirectBranchCheck     bool
-	StrictBranchCheck     bool
-	RangeContinuity       bool
-	HaltOnError           bool
-	SelectedSnapshot      string
-	MemDumpAddress        uint64
-	TraceDataFile         string
-	MemoryDumpFile        string
+	Protocol            TraceProtocol
+	Operation           TestOperation
+	TraceIDOverride     uint8
+	UseMemAccCallback   bool
+	UseMemAccCallbackID bool
+	UseRegionFile       bool
+	TestExternalDecoder bool
+	OutputRawUnpacked   bool
+	OutputRawPacked     bool
+	TestPrintStr        bool
+	TestLibPrinters     bool
+	TestErrorAPI        bool
+	OutputStats         bool
+	SnapshotPath        string
+	LogFileName         string
+	DirectBranchCheck   bool
+	StrictBranchCheck   bool
+	RangeContinuity     bool
+	HaltOnError         bool
+	SelectedSnapshot    string
+	MemDumpAddress      uint64
+	TraceDataFile       string
+	MemoryDumpFile      string
 }
 
 // DefaultConfig creates a default configuration
@@ -115,12 +115,12 @@ func DefaultConfig() *Config {
 
 // MemoryAccessor provides access to memory files
 type MemoryAccessor struct {
-	filePath      string
-	data          []byte
-	startAddress  uint64
-	endAddress    uint64
-	memSpace      int
-	logger        *log.Logger
+	filePath     string
+	data         []byte
+	startAddress uint64
+	endAddress   uint64
+	memSpace     int
+	logger       *log.Logger
 }
 
 // NewMemoryAccessor creates a new memory accessor
@@ -179,20 +179,20 @@ func (t TracePacket) String() string {
 
 // TraceDecoder decodes trace packets from a trace data stream
 type TraceDecoder struct {
-	config     *Config
-	traceData  []byte
-	memAcc     *MemoryAccessor
-	packets    []TracePacket
-	packetIdx  uint64
-	logger     *log.Logger
+	config    *Config
+	traceData []byte
+	memAcc    *MemoryAccessor
+	packets   []TracePacket
+	packetIdx uint64
+	logger    *log.Logger
 }
 
 // NewTraceDecoder creates a new trace decoder
 func NewTraceDecoder(config *Config) *TraceDecoder {
 	return &TraceDecoder{
-		config:    config,
-		packets:   make([]TracePacket, 0),
-		logger:    log.New(os.Stdout, "", 0),
+		config:  config,
+		packets: make([]TracePacket, 0),
+		logger:  log.New(os.Stdout, "", 0),
 	}
 }
 

@@ -1,16 +1,18 @@
 # OpenCSD Test Utilities - Go Port
 
-> IMPORTANT: This document is deprecated.
-> The listed utilities are scaffolds and are not wired to the real protocol decoders yet.
-> Do not treat them as complete ports.
-
 This document describes the Go implementations of the OpenCSD C/C++ test utilities that have been ported to the Go codebase.
+
+## Status
+
+These utilities are scaffolds that demonstrate the structure and interfaces of the original C/C++ test programs. Some utilities like `mem_acc_test`, `frame_demux_test`, and `ocsd_err` are standalone and functional for their specific purposes. Others like `c_api_pkt_print_test`, `trc_pkt_lister`, and `mem_buffer_eg` currently include warnings and will require integration with protocol decoders (ETMv3, ETMv4, PTM, STM) as those are implemented in Go.
 
 ## Ported Test Utilities
 
 ### 1. c_api_pkt_print_test (`opencsd/cmd/c_api_pkt_print_test/main.go`)
 **Purpose:** Tests C API functionality with trace packet printing and decoding  
 **Original:** `decoder/tests/source/c_api_pkt_print_test.c`  
+**Status:** Scaffold - includes fail-fast warning until protocol decoders are integrated
+
 **Features:**
 - Tests different trace protocols (ETMv4, ETMv3, PTM, STM)
 - Supports external decoder testing
@@ -64,22 +66,8 @@ go build ./cmd/c_api_pkt_print_test && ./c_api_pkt_print_test -etmv3 -decode
 ### 2. ocsd_err (`opencsd/cmd/ocsd_err/main.go`)
 **Purpose:** Lists all OCSD error codes and their descriptions  
 **Original:** `decoder/tests/source/perr.cpp`  
-**Features:**
-- Enumerates all error codes from 0 to OCSD_ERR_LAST
-- Displays descriptive messages for each error code
-- Useful for quick reference of error meanings
+**Status:** Functional - uses hardcoded error list for reference
 
-**Usage:**
-```bash
-go run ./cmd/ocsd_err/main.go
-go build ./cmd/ocsd_err && ./ocsd_err
-```
-
----
-
-### 2. ocsd_err (`opencsd/cmd/ocsd_err/main.go`)
-**Purpose:** Lists all OCSD error codes and their descriptions  
-**Original:** `decoder/tests/source/perr.cpp`  
 **Features:**
 - Enumerates all error codes from 0 to OCSD_ERR_LAST
 - Displays descriptive messages for each error code
@@ -96,31 +84,8 @@ go build ./cmd/ocsd_err && ./ocsd_err
 ### 3. mem_acc_test (`opencsd/cmd/mem_acc_test/main.go`)
 **Purpose:** Tests memory accessor interfaces and caching mechanisms  
 **Original:** `decoder/tests/source/mem_acc_test.cpp`  
-**Features:**
-- Tests adding overlapping memory regions
-- Validates memory space separation
-- Tests memory read operations
-- Verifies address boundary checks
-- Tests for proper error handling
-- Pass/fail test statistics
+**Status:** Functional - standalone test for memory accessor logic
 
-**Key Classes:**
-- `MemorySpace` - Enum for different memory spaces (EL0/EL1/EL2/EL3, Secure/Non-secure/Realm)
-- `MemoryAccessor` - Provides access to a specific memory region
-- `MemoryMap` - Manages multiple memory accessors with overlap detection
-- `TestRunner` - Orchestrates test execution
-
-**Usage:**
-```bash
-go run ./cmd/mem_acc_test/main.go
-go build ./cmd/mem_acc_test && ./mem_acc_test
-```
-
----
-
-### 3. mem_acc_test (`opencsd/cmd/mem_acc_test/main.go`)
-**Purpose:** Tests memory accessor interfaces and caching mechanisms  
-**Original:** `decoder/tests/source/mem_acc_test.cpp`  
 **Features:**
 - Tests adding overlapping memory regions
 - Validates memory space separation
@@ -146,31 +111,8 @@ go build ./cmd/mem_acc_test && ./mem_acc_test
 ### 4. frame_demux_test (`opencsd/cmd/frame_demux_test/main.go`)
 **Purpose:** Tests frame deformatter functionality for trace data  
 **Original:** `decoder/tests/source/frame_demux_test.cpp`  
-**Features:**
-- Tests frame deformatter initialization
-- Validates frame format flags and flag combinations
-- Tests frame synchronization marker detection (FSYNC, HSYNC)
-- Validates error handling for invalid configurations
-- Processes sample frame data
-- Test pass/fail reporting
+**Status:** Functional - standalone test for frame parsing behavior
 
-**Key Classes:**
-- `FrameDeformatter` - Processes raw trace frames
-- `DataPathResponse` - Response types from data processing
-- `FrameFormatFlags` - Configuration flags for frame formatting
-- `TestRunner` - Manages test execution
-
-**Usage:**
-```bash
-go run ./cmd/frame_demux_test/main.go
-go build ./cmd/frame_demux_test && ./frame_demux_test
-```
-
----
-
-### 4. frame_demux_test (`opencsd/cmd/frame_demux_test/main.go`)
-**Purpose:** Tests frame deformatter functionality for trace data  
-**Original:** `decoder/tests/source/frame_demux_test.cpp`  
 **Features:**
 - Tests frame deformatter initialization
 - Validates frame format flags and flag combinations
@@ -196,31 +138,8 @@ go build ./cmd/frame_demux_test && ./frame_demux_test
 ### 5. mem_buffer_eg (`opencsd/cmd/mem_buffer_eg/main.go`)
 **Purpose:** Example demonstrating trace decoding using memory buffers  
 **Original:** `decoder/tests/source/mem_buff_demo.cpp`  
-**Features:**
-- Demonstrates loading trace data from snapshot files
-- Loads program memory images at specified addresses
-- Provides memory access without file I/O during decode
-- Shows integration between trace data and memory access
-- Example trace element processing
-- Automatic snapshot directory discovery
+**Status:** Scaffold - includes fail-fast warning until protocol decoders are integrated
 
-**Key Classes:**
-- `MemBufferDemo` - Orchestrates the demo
-- `MemoryAccessor` - Provides memory reads from a buffer
-- `Decoder` - Processes trace data and outputs decoded elements
-- `TraceElement` - Represents a decoded trace element
-
-**Usage:**
-```bash
-go run ./cmd/mem_buffer_eg/main.go
-go build ./cmd/mem_buffer_eg && ./mem_buffer_eg
-```
-
----
-
-### 5. mem_buffer_eg (`opencsd/cmd/mem_buffer_eg/main.go`)
-**Purpose:** Example demonstrating trace decoding using memory buffers  
-**Original:** `decoder/tests/source/mem_buff_demo.cpp`  
 **Features:**
 - Demonstrates loading trace data from snapshot files
 - Loads program memory images at specified addresses
@@ -246,6 +165,8 @@ go build ./cmd/mem_buffer_eg && ./mem_buffer_eg
 ### 6. trc_pkt_lister (`opencsd/cmd/trc_pkt_lister/main.go`)
 **Purpose:** Main utility for listing and decoding trace packets from snapshots  
 **Original:** `decoder/tests/source/trc_pkt_lister.cpp`  
+**Status:** Scaffold - includes fail-fast warning until protocol decoders are integrated
+
 **Features:**
 - Reads trace snapshot directories
 - Lists available trace sources
@@ -306,6 +227,7 @@ From the `opencsd` directory:
 
 ```bash
 # Build individual utilities
+go build ./cmd/c_api_pkt_print_test
 go build ./cmd/ocsd_err
 go build ./cmd/mem_acc_test
 go build ./cmd/frame_demux_test
@@ -338,7 +260,7 @@ Run any of the utilities directly:
 ## Notes
 
 - All utilities compile successfully with Go 1.25.6
-- The Go implementations provide equivalent functionality to the C++ originals
-- They can be used for testing and validating the Go OpenCSD implementation
-- Some features require actual snapshot files to be fully functional
+- The Go implementations provide equivalent functionality to the C/C++ originals
+- Some utilities (c_api_pkt_print_test, trc_pkt_lister, mem_buffer_eg) include warnings that they are scaffolds awaiting integration with protocol decoders
+- Standalone utilities (mem_acc_test, frame_demux_test, ocsd_err) are functional and can be used for testing specific components
 - Error handling and logging follow Go conventions
