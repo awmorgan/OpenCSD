@@ -116,19 +116,42 @@ func (m *MemoryMap) AddAccessor(startAddr uint64, buffer []byte, memSpace Memory
 
 // memSpacesOverlap checks if two memory spaces can overlap
 func (m *MemoryMap) memSpacesOverlap(space1, space2 MemorySpace) bool {
-	// General spaces overlap with specific spaces
-	// For simplicity, we consider overlap if they share any execution level
+	// ANY space overlaps with everything
 	if space1 == MemSpaceANY || space2 == MemSpaceANY {
 		return true
 	}
+	
+	// Same space always overlaps
 	if space1 == space2 {
 		return true
 	}
-	// Check if both are in same general category
-	if (space1 == MemSpaceS || space1 == MemSpaceN || space1 == MemSpaceR) &&
-		(space2 == MemSpaceS || space2 == MemSpaceN || space2 == MemSpaceR) {
-		return space1 == space2
+	
+	// Check if one is a general space and the other is a specific space within it
+	// Non-secure spaces
+	if space1 == MemSpaceN {
+		return space2 == MemSpaceEL0NS || space2 == MemSpaceEL1NS || space2 == MemSpaceEL2NS
 	}
+	if space2 == MemSpaceN {
+		return space1 == MemSpaceEL0NS || space1 == MemSpaceEL1NS || space1 == MemSpaceEL2NS
+	}
+	
+	// Secure spaces
+	if space1 == MemSpaceS {
+		return space2 == MemSpaceEL1S || space2 == MemSpaceEL2S || space2 == MemSpaceEL3
+	}
+	if space2 == MemSpaceS {
+		return space1 == MemSpaceEL1S || space1 == MemSpaceEL2S || space1 == MemSpaceEL3
+	}
+	
+	// Realm spaces
+	if space1 == MemSpaceR {
+		return space2 == MemSpaceEL1R || space2 == MemSpaceEL2R
+	}
+	if space2 == MemSpaceR {
+		return space1 == MemSpaceEL1R || space1 == MemSpaceEL2R
+	}
+	
+	// No overlap between different security domains
 	return false
 }
 
@@ -203,24 +226,32 @@ func (t *TestRunner) TestOverlapRegions(memMap *MemoryMap) {
 	defer t.LogTestEnd("TestOverlapRegions")
 
 	// Create some test memory blocks
-	block1 := make([]byte, 4096)
-	block2 := make([]byte, 4096)
-	block3 := make([]byte, 4096)
+	// BLOCK_SIZE_BYTES = 4 * 8192 = 32768
+	const blockSize = 32768
+	block1 := make([]byte, blockSize)
+	block2 := make([]byte, blockSize)
+	block3 := make([]byte, blockSize)
 
 	// Add non-overlapping regions
 	err := memMap.AddAccessor(0x0000, block1, MemSpaceEL1NS)
 	t.Assert(err == nil, "Add first accessor at 0x0000")
 
-	err = memMap.AddAccessor(0x2000, block2, MemSpaceEL1NS)
-	t.Assert(err == nil, "Add non-overlapping accessor at 0x2000")
-
 	// Try to add overlapping region in same memory space (should fail)
 	err = memMap.AddAccessor(0x1000, block2, MemSpaceEL1NS)
 	t.Assert(err != nil, "Overlapping region in same memory space rejected")
 
+	// Add non-overlapping region in same memory space (should succeed)
+	err = memMap.AddAccessor(0x8000, block2, MemSpaceEL1NS)
+	t.Assert(err == nil, "Add non-overlapping accessor at 0x8000")
+
 	// Add overlapping region in different memory space (should succeed)
 	err = memMap.AddAccessor(0x0000, block3, MemSpaceEL1S)
 	t.Assert(err == nil, "Overlapping region in different memory space accepted")
+
+	// Try to add overlapping region in more general memory space (should fail)
+	block4 := make([]byte, blockSize)
+	err = memMap.AddAccessor(0x0000, block4, MemSpaceS)
+	t.Assert(err != nil, "Overlapping region in more general memory space rejected")
 
 	memMap.RemoveAllAccessors()
 }
