@@ -2,6 +2,7 @@ package ptm
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -198,6 +199,93 @@ func TestAtomProcessing_DetailedTracking(t *testing.T) {
 	// Verify we generated at least some ranges
 	if addrRangeCount == 0 {
 		t.Error("Expected at least one ADDR_RANGE element from atom processing")
+	}
+}
+
+type mockMemory struct {
+	base uint64
+	data []byte
+}
+
+func (m *mockMemory) ReadMemory(addr uint64, buf []byte) (int, error) {
+	return m.read(addr, buf)
+}
+
+func (m *mockMemory) ReadTargetMemory(addr uint64, buf []byte) (int, error) {
+	return m.read(addr, buf)
+}
+
+func (m *mockMemory) read(addr uint64, buf []byte) (int, error) {
+	if addr < m.base {
+		return 0, errors.New("address below base")
+	}
+	offset := addr - m.base
+	if offset >= uint64(len(m.data)) {
+		return 0, errors.New("address out of range")
+	}
+	remaining := uint64(len(m.data)) - offset
+	n := len(buf)
+	if remaining < uint64(n) {
+		n = int(remaining)
+	}
+	copy(buf[:n], m.data[offset:offset+uint64(n)])
+	if n < len(buf) {
+		return n, errors.New("partial read")
+	}
+	return n, nil
+}
+
+func TestAtomRange_EmitsRangeBeforeNacc(t *testing.T) {
+	// Two ARM NOPs at 0x1000, then memory ends to trigger NACC.
+	mem := &mockMemory{
+		base: 0x1000,
+		data: []byte{
+			0x00, 0x00, 0xA0, 0xE1, // NOP
+			0x00, 0x00, 0xA0, 0xE1, // NOP
+		},
+	}
+
+	decoder := NewDecoder(0)
+	decoder.SetMemoryAccessor(mem)
+
+	_, err := decoder.ProcessPacket(Packet{
+		Type:        PacketTypeISYNC,
+		Address:     0x1000,
+		ISA:         common.ISAARM,
+		ISAValid:    true,
+		SecureState: true,
+		SecureValid: true,
+		ISyncReason: ISyncPeriodic,
+	})
+	if err != nil {
+		t.Fatalf("ISYNC error: %v", err)
+	}
+
+	elems, err := decoder.ProcessPacket(Packet{
+		Type:      PacketTypeATOM,
+		AtomCount: 1,
+		AtomBits:  1, // E
+	})
+	if err != nil {
+		t.Fatalf("ATOM error: %v", err)
+	}
+	if len(elems) < 2 {
+		t.Fatalf("expected at least 2 elements, got %d", len(elems))
+	}
+	if elems[0].Type != common.ElemTypeAddrRange {
+		t.Fatalf("expected first element ADDR_RANGE, got %s", elems[0].Type)
+	}
+	if elems[1].Type != common.ElemTypeAddrNacc {
+		t.Fatalf("expected second element ADDR_NACC, got %s", elems[1].Type)
+	}
+	if elems[0].AddrRange.StartAddr != 0x1000 || elems[0].AddrRange.EndAddr != 0x1008 {
+		t.Fatalf("unexpected range: 0x%X-0x%X", elems[0].AddrRange.StartAddr, elems[0].AddrRange.EndAddr)
+	}
+	if elems[0].AddrRange.NumInstr != 2 {
+		t.Fatalf("expected 2 instructions in range, got %d", elems[0].AddrRange.NumInstr)
+	}
+	if elems[1].NaccAddr != 0x1008 {
+		t.Fatalf("unexpected NACC addr: 0x%X", elems[1].NaccAddr)
 	}
 }
 

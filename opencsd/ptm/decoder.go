@@ -483,8 +483,30 @@ func (d *Decoder) traceToWaypoint(atom common.Atom) (bool, error) {
 		prevAddr := d.currentAddr
 		instrInfo, err := d.decodeInstruction(prevAddr)
 		if err != nil {
-			// Memory access error - emit ADDR_NACC and invalidate address
+			// Memory access error - emit any partial range then ADDR_NACC
 			d.Log.Logf(common.SeverityWarning, "Memory access error at 0x%X: %v", prevAddr, err)
+			if instrCount > 0 && lastInstrInfo != nil {
+				elem := common.GenericTraceElement{
+					Type: common.ElemTypeAddrRange,
+					AddrRange: common.AddrRange{
+						StartAddr:       rangeStart,
+						EndAddr:         prevAddr,
+						ISA:             d.currentISA,
+						NumInstr:        instrCount,
+						LastInstrSz:     uint8(lastInstrInfo.Size),
+						LastInstrExec:   true,
+						LastInstrType:   lastInstrInfo.Type,
+						LastInstrCond:   lastInstrInfo.IsConditional,
+						LastInstrLink:   lastInstrInfo.IsLink,
+						LastInstrReturn: lastInstrInfo.IsReturn,
+					},
+				}
+				if d.currPktHasCC {
+					elem.CycleCount = d.currPktCycleCount
+					elem.HasCycleCount = true
+				}
+				d.elements = append(d.elements, elem)
+			}
 			elem := common.GenericTraceElement{
 				Type:         common.ElemTypeAddrNacc,
 				NaccAddr:     prevAddr,
@@ -1011,8 +1033,30 @@ func (d *Decoder) traceToWaypointAddr(waypointAddr uint64, inclusive bool) error
 
 		instrInfo, err := d.decodeInstruction(prevAddr)
 		if err != nil {
-			// Memory access error - emit ADDR_NACC
+			// Memory access error - emit any partial range then ADDR_NACC
 			d.Log.Logf(common.SeverityWarning, "Memory access error at 0x%X: %v", prevAddr, err)
+			if instrCount > 0 && lastInstrInfo != nil {
+				elem := common.GenericTraceElement{
+					Type: common.ElemTypeAddrRange,
+					AddrRange: common.AddrRange{
+						StartAddr:       rangeStart,
+						EndAddr:         prevAddr,
+						ISA:             d.currentISA,
+						NumInstr:        instrCount,
+						LastInstrSz:     uint8(lastInstrInfo.Size),
+						LastInstrExec:   true,
+						LastInstrType:   lastInstrInfo.Type,
+						LastInstrCond:   lastInstrInfo.IsConditional,
+						LastInstrLink:   lastInstrInfo.IsLink,
+						LastInstrReturn: lastInstrInfo.IsReturn,
+					},
+				}
+				if d.currPktHasCC {
+					elem.CycleCount = d.currPktCycleCount
+					elem.HasCycleCount = true
+				}
+				d.elements = append(d.elements, elem)
+			}
 			elem := common.GenericTraceElement{
 				Type:         common.ElemTypeAddrNacc,
 				NaccAddr:     prevAddr,
