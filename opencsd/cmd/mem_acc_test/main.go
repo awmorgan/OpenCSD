@@ -120,12 +120,12 @@ func (m *MemoryMap) memSpacesOverlap(space1, space2 MemorySpace) bool {
 	if space1 == MemSpaceANY || space2 == MemSpaceANY {
 		return true
 	}
-	
+
 	// Same space always overlaps
 	if space1 == space2 {
 		return true
 	}
-	
+
 	// Check if one is a general space and the other is a specific space within it
 	// Non-secure spaces
 	if space1 == MemSpaceN {
@@ -134,7 +134,7 @@ func (m *MemoryMap) memSpacesOverlap(space1, space2 MemorySpace) bool {
 	if space2 == MemSpaceN {
 		return space1 == MemSpaceEL0NS || space1 == MemSpaceEL1NS || space1 == MemSpaceEL2NS
 	}
-	
+
 	// Secure spaces
 	if space1 == MemSpaceS {
 		return space2 == MemSpaceEL1S || space2 == MemSpaceEL2S || space2 == MemSpaceEL3
@@ -142,7 +142,7 @@ func (m *MemoryMap) memSpacesOverlap(space1, space2 MemorySpace) bool {
 	if space2 == MemSpaceS {
 		return space1 == MemSpaceEL1S || space1 == MemSpaceEL2S || space1 == MemSpaceEL3
 	}
-	
+
 	// Realm spaces
 	if space1 == MemSpaceR {
 		return space2 == MemSpaceEL1R || space2 == MemSpaceEL2R
@@ -150,7 +150,7 @@ func (m *MemoryMap) memSpacesOverlap(space1, space2 MemorySpace) bool {
 	if space2 == MemSpaceR {
 		return space1 == MemSpaceEL1R || space1 == MemSpaceEL2R
 	}
-	
+
 	// No overlap between different security domains
 	return false
 }

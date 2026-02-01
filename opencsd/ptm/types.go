@@ -92,20 +92,20 @@ type Packet struct {
 	Offset uint64 // Byte offset in trace stream
 
 	// I-Sync specific fields
-	Address     uint64
-	ISA         ISA
-	ISAValid    bool
-	ISAChanged  bool
-	ISyncReason ISyncReason
-	SecureState bool // Secure if true
-	SecureValid bool
-	AltISA      bool
-	Hypervisor  bool
-	ContextID   uint32
-	CycleCount  uint32
-	CCValid     bool // Cycle count is valid
-	VMID        uint8
-	AddrBits    uint8 // Number of valid address bits in Address
+	Address       uint64
+	ISA           ISA
+	ISAValid      bool
+	ISAChanged    bool
+	ISyncReason   ISyncReason
+	SecureState   bool // Secure if true
+	SecureValid   bool
+	AltISA        bool
+	Hypervisor    bool
+	ContextID     uint32
+	CycleCount    uint32
+	CCValid       bool // Cycle count is valid
+	VMID          uint8
+	AddrBits      uint8 // Number of valid address bits in Address
 	AddrValidBits uint8 // Accumulated valid address bits
 
 	// Atom specific fields
