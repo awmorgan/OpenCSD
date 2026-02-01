@@ -600,26 +600,6 @@ func blockToBytes(block []uint32) []byte {
 	return data
 }
 
-func testReadAndCheck(addr uint64, expectedBlock []uint32, space common.MemorySpace) bool {
-	data := make([]byte, 4)
-	n, err := mapper.ReadMemory(addr, 0, space, data)
-	if err != nil || n != 4 {
-		fmt.Printf("Error reading address 0x%X in space %s: err=%v, n=%d\n", addr, space.String(), err, n)
-		return false
-	}
-
-	// Verify first word matches
-	expectedBytes := blockToBytes(expectedBlock[:1])
-	if data[0] != expectedBytes[0] || data[1] != expectedBytes[1] ||
-		data[2] != expectedBytes[2] || data[3] != expectedBytes[3] {
-		fmt.Printf("Data mismatch at address 0x%X in space %s\n", addr, space.String())
-		return false
-	}
-
-	fmt.Printf("  Read address 0x%X - %02X %02X %02X %02X\n", addr, data[0], data[1], data[2], data[3])
-	return true
-}
-
 func testReadSpecific(addr uint64, spaceName string, space common.MemorySpace, expectedValue uint32) bool {
 	data := make([]byte, 4)
 	n, err := mapper.ReadMemory(addr, 0, space, data)
@@ -674,8 +654,10 @@ func testReadWithOffset(addr uint64, offset uint64, spaceName string, space comm
 
 func main() {
 	fmt.Println("OpenCSD memory access tests.")
-	fmt.Println("----------------------------\n")
-	fmt.Printf("Library Version : Go port\n\n")
+	fmt.Println("----------------------------")
+	fmt.Println()
+	fmt.Println("Library Version : Go port")
+	fmt.Println()
 
 	// Initialize mapper
 	mapper = common.NewMemoryAccessorMapper()
