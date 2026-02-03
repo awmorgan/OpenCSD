@@ -354,7 +354,7 @@ Version and Modification Information
     - __Update__: ete: add FEAT_CMPBR instructions for decode (Arch v9.6)
 
 - _Version 1.6.1_:
-    - __Bugfix__: docs: Fix name of funciton referenced in API document. (github pr #71 kesyog)
+    - __Bugfix__: docs: Fix name of function referenced in API document. (github pr #71 kesyog)
     - __Bugfix__: etmv4: ete: Spec trace: Fix handling of uncommitted P0 on initial sync (github issue #76)
     - __Bugfix__: etmv4: ete: Spec trace: Fix handling of periodic TINFO packets (github issue #75)
     - __Bugfix__: etmv4: ete: Spec trace: Commit elements in cycle count packets no processed (github issue #74)
@@ -364,6 +364,15 @@ Version and Modification Information
     - __Update__: ITM: Add in new ITM decoder to the library.
                   Adds in tests and support in snapshot read and trc_pkt_lister.
     - __Bugfix__: Fix compile warning on init list order. (github #77, #80)
+
+- _Version 1.8.0_:
+    - __Update__: ete: Add support for FEAT_S1POE2 - handle TEXIT as branch for trace decode.
+    - __Update__: ARM64 build: Add in support for ARM64 target in windows VS2022.
+    - __Update__: etm4x: Add support for V8.1M additional T32 instructions LE, LETP, WS, WSTP as branches for 
+                  trace decode. (github PR #73)
+    - __Update__: build: Add in #include <new> required by later versions of CLANG tools. (github PR #82)
+    - __Bugfix__: Fix double run of ITM test.
+    - __Bugfix__: Fix build warnings in windows builds.
 
 Licence Information
 ===================
