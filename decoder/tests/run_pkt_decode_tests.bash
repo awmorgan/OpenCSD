@@ -2,31 +2,31 @@
 #################################################################################
 # Copyright 2018 ARM. All rights reserved.
 #
-# Redistribution and use in source and binary forms, with or without modification, 
+# Redistribution and use in source and binary forms, with or without modification,
 # are permitted provided that the following conditions are met:
-# 
-# 1. Redistributions of source code must retain the above copyright notice, 
+#
+# 1. Redistributions of source code must retain the above copyright notice,
 # this list of conditions and the following disclaimer.
-# 
-# 2. Redistributions in binary form must reproduce the above copyright notice, 
-# this list of conditions and the following disclaimer in the documentation 
-# and/or other materials provided with the distribution. 
-# 
-# 3. Neither the name of the copyright holder nor the names of its contributors 
-# may be used to endorse or promote products derived from this software without 
-# specific prior written permission. 
-# 
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 'AS IS' AND 
-# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. 
-# IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, 
-# INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
-# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; 
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND 
-# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
-# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
-# 
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+#
+# 3. Neither the name of the copyright holder nor the names of its contributors
+# may be used to endorse or promote products derived from this software without
+# specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 'AS IS' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+# IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+# INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
 #################################################################################
 # OpenCSD library: Test script.
 #
@@ -51,22 +51,22 @@ SNAPSHOT_DIR=./snapshots
 BIN_DIR=./bin/linux64/rel/
 
 # directories for tests using full decode
-declare -a test_dirs_decode=( 
-                              "Snowball"
-                              "TC2"
+declare -a test_dirs_decode=(
                               "a57_single_step"
                               "armv8_1m_branches"
                               "bugfix-exact-match"
-                              "itm_only_csformat"                              
+                              "itm_only_csformat"
                               "itm_only_raw"
+                              "juno_r1_1"
                               "juno-ret-stck"
                               "juno-uname-001"
                               "juno-uname-002"
-                              "juno_r1_1"
+                              "Snowball"
                               "stm-issue-27"
                               "stm_only"
                               "stm_only-2"
                               "stm_only-juno"
+                              "TC2"
                               "tc2-ptm-rstk-t32"
                               "test-file-mem-offsets"
                               "trace_cov_a15"
@@ -163,13 +163,6 @@ if [ "$1" != "use-installed" ]; then
 
     # === run the itm decoder test program ===
     echo "Running ITM decoder test"
-    ${BIN_DIR}itm-decode-test -logfilename  "${OUT_DIR}/itm-decode-test.ppl" 
-    echo "Done : Return $?"
-fi
-
-# === run the itm decoder test program ===
-if [ "$1" != "use-installed" ]; then
-    echo "Running ITM decoder test"
-    ${BIN_DIR}itm-decode-test -decode -logfilename  "${OUT_DIR}/itm-decode-test.ppl" 
+    ${BIN_DIR}itm-decode-test -logfilename  "${OUT_DIR}/itm-decode-test.ppl"
     echo "Done : Return $?"
 fi
