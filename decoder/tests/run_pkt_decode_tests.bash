@@ -100,6 +100,13 @@ run_cmd() {
     echo "Done : Return $?"
 }
 
+# helper to print command while discarding its stdout
+run_cmd_quiet() {
+    echo "running command: $*"
+    "$@" > /dev/null
+    echo "Done : Return $?"
+}
+
 # === test the decode set ===
 for test_dir in "${test_dirs_decode[@]}"
 do
@@ -139,13 +146,13 @@ if [ "$1" != "use-installed" ]; then
 
     # === test the C-API lib ===
     echo "Testing C-API library"
-    run_cmd ${BIN_DIR}c_api_pkt_print_test -ss_path ${SNAPSHOT_DIR} -decode > /dev/null
+    run_cmd_quiet ${BIN_DIR}c_api_pkt_print_test -ss_path ${SNAPSHOT_DIR} -decode
     echo "moving result file."
     mv ./c_api_test.log ./${OUT_DIR}/c_api_test.ppl
 
     # === run the Frame decoder test ===
     echo "Running Frame demux test"
-    run_cmd ${BIN_DIR}frame-demux-test > /dev/null
+    run_cmd_quiet ${BIN_DIR}frame-demux-test
     echo "moving result file."
     mv ./frame_demux_test.ppl ./${OUT_DIR}/.
 
