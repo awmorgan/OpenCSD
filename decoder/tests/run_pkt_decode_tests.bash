@@ -93,12 +93,18 @@ if [ "${BIN_DIR}" != "" ]; then
     echo "LD_LIBRARY_PATH set to ${BIN_DIR}"
 fi
 
+# helper to print then run a command
+run_cmd() {
+    echo "running command: $*"
+    "$@"
+    echo "Done : Return $?"
+}
+
 # === test the decode set ===
 for test_dir in "${test_dirs_decode[@]}"
 do
     echo "Testing $test_dir..."
-    ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/$test_dir" $@ -decode -no_time_print -logfilename "${OUT_DIR}/$test_dir.ppl"
-    echo "Done : Return $?"
+    run_cmd ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/$test_dir" $@ -decode -no_time_print -logfilename "${OUT_DIR}/$test_dir.ppl"
 done
 
 # === test for debugging issues ===
@@ -106,63 +112,53 @@ done
 echo "Test with run limit on..."
 export OPENCSD_INSTR_RANGE_LIMIT=100
 env | grep OPENCSD
-${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/juno_r1_1" $@ -decode -no_time_print -logfilename "${OUT_DIR}/juno_r1_1_rangelimit.ppl"
+run_cmd ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/juno_r1_1" $@ -decode -no_time_print -logfilename "${OUT_DIR}/juno_r1_1_rangelimit.ppl"
 unset OPENCSD_INSTR_RANGE_LIMIT
-echo "Done : Return $?"
 env | grep OPENCSD
 
 echo "Test with bad opcode detect on using env var..."
 export OPENCSD_ERR_ON_AA64_BAD_OPCODE=1
 env | grep OPENCSD
-${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/juno_r1_1" $@ -decode -no_time_print -logfilename "${OUT_DIR}/juno_r1_1_badopcode.ppl"
+run_cmd ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/juno_r1_1" $@ -decode -no_time_print -logfilename "${OUT_DIR}/juno_r1_1_badopcode.ppl"
 unset OPENCSD_ERR_ON_AA64_BAD_OPCODE
-echo "Done : Return $?"
 env | grep OPENCSD
 
 echo "Test with bad opcode detect on using flag..."
-${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/juno_r1_1" $@ -decode -no_time_print -aa64_opcode_chk -logfilename "${OUT_DIR}/juno_r1_1_badopcode_flag.ppl"
-echo "Done : Return $?"
+run_cmd ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/juno_r1_1" $@ -decode -no_time_print -aa64_opcode_chk -logfilename "${OUT_DIR}/juno_r1_1_badopcode_flag.ppl"
 
 # === test a packet only example ===
 echo "Testing init-short-addr..."
-${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/init-short-addr" $@ -pkt_mon -no_time_print -logfilename "${OUT_DIR}/init-short-addr.ppl"
-echo "Done : Return $?"
+run_cmd ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/init-short-addr" $@ -pkt_mon -no_time_print -logfilename "${OUT_DIR}/init-short-addr.ppl"
 
 # === test the TPIU deformatter ===
 echo "Testing a55-test-tpiu..."
-${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/a55-test-tpiu" $@ -dstream_format -no_time_print -o_raw_packed -o_raw_unpacked -logfilename "${OUT_DIR}/a55-test-tpiu.ppl"
-echo "Done : Return $?"
+run_cmd ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/a55-test-tpiu" $@ -dstream_format -no_time_print -o_raw_packed -o_raw_unpacked -logfilename "${OUT_DIR}/a55-test-tpiu.ppl"
 
 # === Run uninstalled test programs ===
 if [ "$1" != "use-installed" ]; then
 
     # === test the C-API lib ===
     echo "Testing C-API library"
-    ${BIN_DIR}c_api_pkt_print_test -ss_path ${SNAPSHOT_DIR} -decode > /dev/null
-    echo "Done : Return $?"
+    run_cmd ${BIN_DIR}c_api_pkt_print_test -ss_path ${SNAPSHOT_DIR} -decode > /dev/null
     echo "moving result file."
     mv ./c_api_test.log ./${OUT_DIR}/c_api_test.ppl
 
     # === run the Frame decoder test ===
     echo "Running Frame demux test"
-    ${BIN_DIR}frame-demux-test > /dev/null
-    echo "Done : Return $?"
+    run_cmd ${BIN_DIR}frame-demux-test > /dev/null
     echo "moving result file."
     mv ./frame_demux_test.ppl ./${OUT_DIR}/.
 
     # === run the memory accessor tests ===
     echo "Running memacc tests"
     echo "Using memory buffer"
-    ${BIN_DIR}mem-buffer-eg   -logfile  -ss_path  ./snapshots  -noprint
-    echo "Done : Return $?"
+    run_cmd ${BIN_DIR}mem-buffer-eg   -logfile  -ss_path  ./snapshots  -noprint
     echo "Using callback function"
-    ${BIN_DIR}mem-buffer-eg   -logfile  -ss_path  ./snapshots  -noprint -callback
-    echo "Done : Return $?"
+    run_cmd ${BIN_DIR}mem-buffer-eg   -logfile  -ss_path  ./snapshots  -noprint -callback
     echo "moving result files."
     mv ./mem_buff_demo*.ppl ./${OUT_DIR}/.
 
     # === run the itm decoder test program ===
     echo "Running ITM decoder test"
-    ${BIN_DIR}itm-decode-test -logfilename  "${OUT_DIR}/itm-decode-test.ppl"
-    echo "Done : Return $?"
+    run_cmd ${BIN_DIR}itm-decode-test -logfilename  "${OUT_DIR}/itm-decode-test.ppl"
 fi
