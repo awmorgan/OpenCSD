@@ -8,7 +8,7 @@ BIN_DIR="$TESTS_DIR/bin/mingw64/rel/"
 
 echo "==> Building OpenCSD libs and test tools (mingw64/rel)"
 cd "$BUILD_DIR"
-make -f makefile.dev
+make -f makefile.dev -j$(nproc)
 
 echo "==> Regenerating .ppl outputs into decoder/tests/results"
 cd "$TESTS_DIR"
