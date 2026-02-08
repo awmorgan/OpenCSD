@@ -21,32 +21,31 @@ type goldenCase struct {
 
 func TestLoadSnapshotGolden(t *testing.T) {
 	testDir := testFileDir(t)
-	repoRoot := filepath.Clean(filepath.Join(testDir, "..", "..", ".."))
 
 	cases := []goldenCase{
 		{
 			name:        "bugfix-exact-match",
-			snapshotDir: filepath.Join(repoRoot, "decoder", "tests", "snapshots", "bugfix-exact-match"),
+			snapshotDir: filepath.Join(testDir, "testdata", "bugfix-exact-match"),
 			goldenFile:  filepath.Join(testDir, "testdata", "bugfix-exact-match.snapshot_parsed.txt"),
 		},
 		{
 			name:        "juno_r1_1",
-			snapshotDir: filepath.Join(repoRoot, "decoder", "tests", "snapshots", "juno_r1_1"),
+			snapshotDir: filepath.Join(testDir, "testdata", "juno_r1_1"),
 			goldenFile:  filepath.Join(testDir, "testdata", "juno_r1_1.snapshot_parsed.txt"),
 		},
 		{
 			name:        "test-file-mem-offsets",
-			snapshotDir: filepath.Join(repoRoot, "decoder", "tests", "snapshots", "test-file-mem-offsets"),
+			snapshotDir: filepath.Join(testDir, "testdata", "test-file-mem-offsets"),
 			goldenFile:  filepath.Join(testDir, "testdata", "test-file-mem-offsets.snapshot_parsed.txt"),
 		},
 		{
 			name:        "feat_cmpbr",
-			snapshotDir: filepath.Join(repoRoot, "decoder", "tests", "snapshots-ete", "feat_cmpbr"),
+			snapshotDir: filepath.Join(testDir, "testdata", "feat_cmpbr"),
 			goldenFile:  filepath.Join(testDir, "testdata", "feat_cmpbr.snapshot_parsed.txt"),
 		},
 		{
 			name:        "ts_marker",
-			snapshotDir: filepath.Join(repoRoot, "decoder", "tests", "snapshots-ete", "ts_marker"),
+			snapshotDir: filepath.Join(testDir, "testdata", "ts_marker"),
 			goldenFile:  filepath.Join(testDir, "testdata", "ts_marker.snapshot_parsed.txt"),
 		},
 	}
