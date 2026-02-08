@@ -317,8 +317,8 @@ func parseRegKey(key string) (string, string, string, string) {
 	if openIdx := strings.Index(rawKey, "("); openIdx != -1 && strings.HasSuffix(rawKey, ")") {
 		regName = strings.TrimSpace(rawKey[:openIdx])
 		inner := strings.TrimSpace(rawKey[openIdx+1 : len(rawKey)-1])
-		if strings.HasPrefix(inner, "size:") {
-			size = strings.TrimSpace(strings.TrimPrefix(inner, "size:"))
+		if after, ok := strings.CutPrefix(inner, "size:"); ok {
+			size = strings.TrimSpace(after)
 		} else if inner != "" {
 			id = inner
 		}
