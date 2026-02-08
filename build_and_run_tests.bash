@@ -13,5 +13,8 @@ make -f makefile.dev -j$(nproc)
 echo "==> Regenerating .ppl outputs into decoder/tests/results"
 cd "$TESTS_DIR"
 ./run_pkt_decode_tests.bash -bindir "$BIN_DIR"
-
 echo "==> Done. Results in: $TESTS_DIR/results"
+
+echo "==> Running ETE tests"
+./run_pkt_decode_tests-ete.bash -bindir "$BIN_DIR"
+echo "==> Done. Results in: $TESTS_DIR/results-ete"
