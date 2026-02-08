@@ -107,11 +107,24 @@ run_cmd_quiet() {
     echo "Done : Return $?"
 }
 
+# helper to print, run, and stop on failure
+run_cmd_or_exit() {
+    echo "running command: $*"
+    "$@"
+    local status=$?
+    echo "Done : Return $status"
+    if [ $status -ne 0 ]; then
+        echo "Command failed, exiting."
+        exit $status
+    fi
+}
+
 # === test the decode set ===
 for test_dir in "${test_dirs_decode[@]}"
 do
     echo "Testing $test_dir..."
     run_cmd ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/$test_dir" $@ -decode -no_time_print -logfilename "${OUT_DIR}/$test_dir.ppl"
+    run_cmd_or_exit ${BIN_DIR}snapshot_parse_dump -ss_dir "${SNAPSHOT_DIR}/$test_dir" -o "${OUT_DIR}/$test_dir.snapshot_parsed.txt" -quiet
 done
 
 # === test for debugging issues ===
@@ -136,10 +149,12 @@ run_cmd ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/juno_r1_1" $@ -decode 
 # === test a packet only example ===
 echo "Testing init-short-addr..."
 run_cmd ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/init-short-addr" $@ -pkt_mon -no_time_print -logfilename "${OUT_DIR}/init-short-addr.ppl"
+run_cmd_or_exit ${BIN_DIR}snapshot_parse_dump -ss_dir "${SNAPSHOT_DIR}/init-short-addr" -o "${OUT_DIR}/init-short-addr.snapshot_parsed.txt" -quiet
 
 # === test the TPIU deformatter ===
 echo "Testing a55-test-tpiu..."
 run_cmd ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/a55-test-tpiu" $@ -dstream_format -no_time_print -o_raw_packed -o_raw_unpacked -logfilename "${OUT_DIR}/a55-test-tpiu.ppl"
+run_cmd_or_exit ${BIN_DIR}snapshot_parse_dump -ss_dir "${SNAPSHOT_DIR}/a55-test-tpiu" -o "${OUT_DIR}/a55-test-tpiu.snapshot_parsed.txt" -quiet
 
 # === Run uninstalled test programs ===
 if [ "$1" != "use-installed" ]; then

@@ -175,6 +175,7 @@ $(LIB_CAPI_NAME)_all:  $(LIB_BASE_NAME)_lib
 tests: libs
 	cd $(OCSD_ROOT)/tests/build/unix_common/echo_test_dcd_lib && $(MAKE)
 	cd $(OCSD_ROOT)/tests/build/unix_common/snapshot_parser_lib && $(MAKE)
+	cd $(OCSD_ROOT)/tests/build/unix_common/snapshot_parse_dump && $(MAKE)
 	cd $(OCSD_ROOT)/tests/build/unix_common/trc_pkt_lister && $(MAKE)
 	cd $(OCSD_ROOT)/tests/build/unix_common/c_api_pkt_print_test && $(MAKE)
 	cd $(OCSD_ROOT)/tests/build/unix_common/mem_buffer_eg && $(MAKE)
@@ -204,6 +205,7 @@ clean_libs:
 clean_tests:
 	cd $(OCSD_ROOT)/tests/build/unix_common/echo_test_dcd_lib && $(MAKE) clean
 	cd $(OCSD_ROOT)/tests/build/unix_common/snapshot_parser_lib && $(MAKE) clean
+	cd $(OCSD_ROOT)/tests/build/unix_common/snapshot_parse_dump && $(MAKE) clean
 	cd $(OCSD_ROOT)/tests/build/unix_common/trc_pkt_lister && $(MAKE) clean
 	cd $(OCSD_ROOT)/tests/build/unix_common/c_api_pkt_print_test && $(MAKE) clean
 	cd $(OCSD_ROOT)/tests/build/unix_common/mem_buffer_eg && $(MAKE) clean
