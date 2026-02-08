@@ -18,3 +18,18 @@ echo "==> Done. Results in: $TESTS_DIR/results"
 echo "==> Running ETE tests"
 ./run_pkt_decode_tests-ete.bash -bindir "$BIN_DIR"
 echo "==> Done. Results in: $TESTS_DIR/results-ete"
+
+echo "==> Generating snapshot parsed dumps"
+for ss_dir in snapshots/*; do
+	if [[ -d "$ss_dir" && -f "$ss_dir/snapshot.ini" ]]; then
+		name="$(basename "$ss_dir")"
+		"$BIN_DIR/snapshot_parse_dump.exe" -ss_dir "$ss_dir" -o "results/${name}.snapshot_parsed.txt"
+	fi
+done
+for ss_dir in snapshots-ete/*; do
+	if [[ -d "$ss_dir" && -f "$ss_dir/snapshot.ini" ]]; then
+		name="$(basename "$ss_dir")"
+		"$BIN_DIR/snapshot_parse_dump.exe" -ss_dir "$ss_dir" -o "results-ete/${name}.snapshot_parsed.txt"
+	fi
+done
+echo "==> Done. Snapshot parsed dumps in: $TESTS_DIR/results and $TESTS_DIR/results-ete"

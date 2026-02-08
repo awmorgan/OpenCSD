@@ -126,24 +126,11 @@ run_cmd() {
     echo "Done : Return $?"
 }
 
-# helper to print, run, and stop on failure
-run_cmd_or_exit() {
-    echo "running command: $*"
-    "$@"
-    local status=$?
-    echo "Done : Return $status"
-    if [ $status -ne 0 ]; then
-        echo "Command failed, exiting."
-        exit $status
-    fi
-}
-
 # === test the decode set ===
 for test_dir in "${test_dirs_decode[@]}"
 do
     echo "Testing $test_dir..."
     run_cmd ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/$test_dir" $@ -decode -no_time_print -logfilename "${OUT_DIR}/$test_dir.ppl"
-    run_cmd_or_exit ${BIN_DIR}snapshot_parse_dump -ss_dir "${SNAPSHOT_DIR}/$test_dir" -o "${OUT_DIR}/$test_dir.snapshot_parsed.txt" -quiet
 done
 
 for test_dir_n in "${test_dirs_decode_src_addr_opt[@]}"
