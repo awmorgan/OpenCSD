@@ -72,6 +72,224 @@ func TestLoadSnapshotGolden(t *testing.T) {
 	}
 }
 
+func TestLoadSnapshotCppParityMissing(t *testing.T) {
+	baseDir := t.TempDir()
+
+	writeSnapshot := func(t *testing.T, snapshotIni string, files map[string]string) string {
+		t.Helper()
+		dir := filepath.Join(baseDir, t.Name())
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		writeFile(t, filepath.Join(dir, "snapshot.ini"), snapshotIni)
+		for name, content := range files {
+			writeFile(t, filepath.Join(dir, name), content)
+		}
+		return dir
+	}
+
+	t.Run("device-list-arbitrary-keys", func(t *testing.T) {
+		dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+foo=cpu_0.ini
+`, map[string]string{
+			"cpu_0.ini": `[device]
+name=cpu_0
+class=core
+type=Cortex-A
+`,
+		})
+
+		cfg, err := LoadSnapshot(dir)
+		if err != nil {
+			t.Fatalf("LoadSnapshot error: %v", err)
+		}
+		if len(cfg.Devices) != 1 {
+			t.Fatalf("expected 1 device, got %d", len(cfg.Devices))
+		}
+	})
+
+	t.Run("inline-comments-parsed", func(t *testing.T) {
+		dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+`, map[string]string{
+			"cpu_0.ini": `[device]
+name=cpu_0
+
+[dump0]
+file=mem.bin
+address=0x1000 ; comment should be ignored
+`,
+		})
+
+		if _, err := LoadSnapshot(dir); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("dump-mandatory-fields", func(t *testing.T) {
+		dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+`, map[string]string{
+			"cpu_0.ini": `[device]
+name=cpu_0
+
+[dump0]
+file=mem.bin
+`,
+		})
+
+		if _, err := LoadSnapshot(dir); err == nil {
+			t.Fatalf("expected error for missing dump address")
+		}
+	})
+
+	t.Run("dump-unknown-keys", func(t *testing.T) {
+		dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+`, map[string]string{
+			"cpu_0.ini": `[device]
+name=cpu_0
+
+[dump0]
+file=mem.bin
+address=0x1000
+unknown=1
+`,
+		})
+
+		if _, err := LoadSnapshot(dir); err == nil {
+			t.Fatalf("expected error for unknown dump key")
+		}
+	})
+
+	t.Run("trace-core-source-mapping", func(t *testing.T) {
+		dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+
+[trace]
+metadata=trace.ini
+`, map[string]string{
+			"cpu_0.ini": `[device]
+name=cpu_0
+class=core
+type=Cortex-A
+`,
+			"trace.ini": `[trace_buffers]
+buffers=buffer0
+
+[buffer0]
+name=buffer0
+file=trace.bin
+
+[core_trace_sources]
+cpu_0=etm_0
+`,
+		})
+
+		cfg, err := LoadSnapshot(dir)
+		if err != nil {
+			t.Fatalf("LoadSnapshot error: %v", err)
+		}
+		if cfg.Trace == nil {
+			t.Fatalf("expected trace metadata")
+		}
+		if got := cfg.Trace.CoreTraceSources["etm_0"]; got != "cpu_0" {
+			t.Fatalf("expected source->core mapping, got %q", got)
+		}
+	})
+
+	t.Run("trace-buffer-required-fields", func(t *testing.T) {
+		dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+
+[trace]
+metadata=trace.ini
+`, map[string]string{
+			"cpu_0.ini": `[device]
+name=cpu_0
+class=core
+type=Cortex-A
+`,
+			"trace.ini": `[trace_buffers]
+buffers=buffer0
+
+[buffer0]
+format=source_data
+`,
+		})
+
+		if _, err := LoadSnapshot(dir); err == nil {
+			t.Fatalf("expected error for missing trace buffer name/file")
+		}
+	})
+
+	t.Run("snapshot-version-validation", func(t *testing.T) {
+		dir := writeSnapshot(t, `[snapshot]
+version=2.0
+
+[device_list]
+device0=cpu_0.ini
+`, map[string]string{
+			"cpu_0.ini": `[device]
+name=cpu_0
+class=core
+type=Cortex-A
+`,
+		})
+
+		if _, err := LoadSnapshot(dir); err == nil {
+			t.Fatalf("expected error for unsupported snapshot version")
+		}
+	})
+
+	t.Run("quoted-register-values", func(t *testing.T) {
+		dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+`, map[string]string{
+			"cpu_0.ini": `[device]
+name=cpu_0
+class=core
+type=Cortex-A
+
+[regs]
+TRCIDR0="0x1"
+`,
+		})
+
+		if _, err := LoadSnapshot(dir); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func writeFile(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
 func testFileDir(t *testing.T) string {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
