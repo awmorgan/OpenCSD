@@ -1,0 +1,473 @@
+dump_format.version = 1
+snapshot_dir = snapshots/bugfix-exact-match
+snapshot_ini = snapshot.ini
+snapshot.version = 1.0
+snapshot.description = <none>
+device_list.count = 12
+device_list.device0 = cpu_0.ini
+device_list.device1 = cpu_1.ini
+device_list.device10 = etm_4.ini
+device_list.device11 = etm_5.ini
+device_list.device2 = cpu_2.ini
+device_list.device3 = cpu_3.ini
+device_list.device4 = cpu_4.ini
+device_list.device5 = cpu_5.ini
+device_list.device6 = etm_0.ini
+device_list.device7 = etm_1.ini
+device_list.device8 = etm_2.ini
+device_list.device9 = etm_3.ini
+[[device]]
+name = cpu_0
+class = core
+type = Cortex-A53
+location = <none>
+ini = cpu_0.ini
+regs.count = 4
+dump.count = 5
+reg.CPSR = 0x1c5 ; id=<none> size=<none> raw_key="CPSR"
+reg.PC = 0xffffffc000081000 ; id=<none> size=64 raw_key="PC(size:64)"
+reg.SCTLR_EL1 = 0x1007 ; id=<none> size=<none> raw_key="SCTLR_EL1"
+reg.SP = 0x0000000000000000 ; id=<none> size=64 raw_key="SP(size:64)"
+[[dump]]
+section = dump.fini
+file = cc1.fini_dump.bin
+space = <none>
+address = 0x00000000005CF700
+length = <none>
+offset = <none>
+[[dump]]
+section = dump.init
+file = cc1.init_dump.bin
+space = <none>
+address = 0x00000000004001D8
+length = <none>
+offset = <none>
+[[dump]]
+section = dump.text
+file = cc1.text_dump.bin
+space = <none>
+address = 0x0000000000400200
+length = <none>
+offset = <none>
+[[dump]]
+section = dump__libc_freeres_fn
+file = cc1__libc_freeres_fn_dump.bin
+space = <none>
+address = 0x00000000005CE9C0
+length = <none>
+offset = <none>
+[[dump]]
+section = dump__libc_thread_freeres_fn
+file = cc1__libc_thread_freeres_fn_dump.bin
+space = <none>
+address = 0x00000000005CF610
+length = <none>
+offset = <none>
+[[device]]
+name = cpu_1
+class = core
+type = Cortex-A72
+location = <none>
+ini = cpu_1.ini
+regs.count = 4
+dump.count = 5
+reg.CPSR = 0x1c5 ; id=<none> size=<none> raw_key="CPSR"
+reg.PC = 0xffffffc000081000 ; id=<none> size=64 raw_key="PC(size:64)"
+reg.SCTLR_EL1 = 0x1007 ; id=<none> size=<none> raw_key="SCTLR_EL1"
+reg.SP = 0x0000000000000000 ; id=<none> size=64 raw_key="SP(size:64)"
+[[dump]]
+section = dump.fini
+file = cc1.fini_dump.bin
+space = <none>
+address = 0x00000000005CF700
+length = <none>
+offset = <none>
+[[dump]]
+section = dump.init
+file = cc1.init_dump.bin
+space = <none>
+address = 0x00000000004001D8
+length = <none>
+offset = <none>
+[[dump]]
+section = dump.text
+file = cc1.text_dump.bin
+space = <none>
+address = 0x0000000000400200
+length = <none>
+offset = <none>
+[[dump]]
+section = dump__libc_freeres_fn
+file = cc1__libc_freeres_fn_dump.bin
+space = <none>
+address = 0x00000000005CE9C0
+length = <none>
+offset = <none>
+[[dump]]
+section = dump__libc_thread_freeres_fn
+file = cc1__libc_thread_freeres_fn_dump.bin
+space = <none>
+address = 0x00000000005CF610
+length = <none>
+offset = <none>
+[[device]]
+name = cpu_2
+class = core
+type = Cortex-A72
+location = <none>
+ini = cpu_2.ini
+regs.count = 4
+dump.count = 5
+reg.CPSR = 0x1c5 ; id=<none> size=<none> raw_key="CPSR"
+reg.PC = 0xffffffc000081000 ; id=<none> size=64 raw_key="PC(size:64)"
+reg.SCTLR_EL1 = 0x1007 ; id=<none> size=<none> raw_key="SCTLR_EL1"
+reg.SP = 0x0000000000000000 ; id=<none> size=64 raw_key="SP(size:64)"
+[[dump]]
+section = dump.fini
+file = cc1.fini_dump.bin
+space = <none>
+address = 0x00000000005CF700
+length = <none>
+offset = <none>
+[[dump]]
+section = dump.init
+file = cc1.init_dump.bin
+space = <none>
+address = 0x00000000004001D8
+length = <none>
+offset = <none>
+[[dump]]
+section = dump.text
+file = cc1.text_dump.bin
+space = <none>
+address = 0x0000000000400200
+length = <none>
+offset = <none>
+[[dump]]
+section = dump__libc_freeres_fn
+file = cc1__libc_freeres_fn_dump.bin
+space = <none>
+address = 0x00000000005CE9C0
+length = <none>
+offset = <none>
+[[dump]]
+section = dump__libc_thread_freeres_fn
+file = cc1__libc_thread_freeres_fn_dump.bin
+space = <none>
+address = 0x00000000005CF610
+length = <none>
+offset = <none>
+[[device]]
+name = cpu_3
+class = core
+type = Cortex-A53
+location = <none>
+ini = cpu_3.ini
+regs.count = 4
+dump.count = 5
+reg.CPSR = 0x1c5 ; id=<none> size=<none> raw_key="CPSR"
+reg.PC = 0xffffffc000081000 ; id=<none> size=64 raw_key="PC(size:64)"
+reg.SCTLR_EL1 = 0x1007 ; id=<none> size=<none> raw_key="SCTLR_EL1"
+reg.SP = 0x0000000000000000 ; id=<none> size=64 raw_key="SP(size:64)"
+[[dump]]
+section = dump.fini
+file = cc1.fini_dump.bin
+space = <none>
+address = 0x00000000005CF700
+length = <none>
+offset = <none>
+[[dump]]
+section = dump.init
+file = cc1.init_dump.bin
+space = <none>
+address = 0x00000000004001D8
+length = <none>
+offset = <none>
+[[dump]]
+section = dump.text
+file = cc1.text_dump.bin
+space = <none>
+address = 0x0000000000400200
+length = <none>
+offset = <none>
+[[dump]]
+section = dump__libc_freeres_fn
+file = cc1__libc_freeres_fn_dump.bin
+space = <none>
+address = 0x00000000005CE9C0
+length = <none>
+offset = <none>
+[[dump]]
+section = dump__libc_thread_freeres_fn
+file = cc1__libc_thread_freeres_fn_dump.bin
+space = <none>
+address = 0x00000000005CF610
+length = <none>
+offset = <none>
+[[device]]
+name = cpu_4
+class = core
+type = Cortex-A53
+location = <none>
+ini = cpu_4.ini
+regs.count = 4
+dump.count = 5
+reg.CPSR = 0x1c5 ; id=<none> size=<none> raw_key="CPSR"
+reg.PC = 0xffffffc000081000 ; id=<none> size=64 raw_key="PC(size:64)"
+reg.SCTLR_EL1 = 0x1007 ; id=<none> size=<none> raw_key="SCTLR_EL1"
+reg.SP = 0x0000000000000000 ; id=<none> size=64 raw_key="SP(size:64)"
+[[dump]]
+section = dump.fini
+file = cc1.fini_dump.bin
+space = <none>
+address = 0x00000000005CF700
+length = <none>
+offset = <none>
+[[dump]]
+section = dump.init
+file = cc1.init_dump.bin
+space = <none>
+address = 0x00000000004001D8
+length = <none>
+offset = <none>
+[[dump]]
+section = dump.text
+file = cc1.text_dump.bin
+space = <none>
+address = 0x0000000000400200
+length = <none>
+offset = <none>
+[[dump]]
+section = dump__libc_freeres_fn
+file = cc1__libc_freeres_fn_dump.bin
+space = <none>
+address = 0x00000000005CE9C0
+length = <none>
+offset = <none>
+[[dump]]
+section = dump__libc_thread_freeres_fn
+file = cc1__libc_thread_freeres_fn_dump.bin
+space = <none>
+address = 0x00000000005CF610
+length = <none>
+offset = <none>
+[[device]]
+name = cpu_5
+class = core
+type = Cortex-A53
+location = <none>
+ini = cpu_5.ini
+regs.count = 4
+dump.count = 5
+reg.CPSR = 0x1c5 ; id=<none> size=<none> raw_key="CPSR"
+reg.PC = 0xffffffc000081000 ; id=<none> size=64 raw_key="PC(size:64)"
+reg.SCTLR_EL1 = 0x1007 ; id=<none> size=<none> raw_key="SCTLR_EL1"
+reg.SP = 0x0000000000000000 ; id=<none> size=64 raw_key="SP(size:64)"
+[[dump]]
+section = dump.fini
+file = cc1.fini_dump.bin
+space = <none>
+address = 0x00000000005CF700
+length = <none>
+offset = <none>
+[[dump]]
+section = dump.init
+file = cc1.init_dump.bin
+space = <none>
+address = 0x00000000004001D8
+length = <none>
+offset = <none>
+[[dump]]
+section = dump.text
+file = cc1.text_dump.bin
+space = <none>
+address = 0x0000000000400200
+length = <none>
+offset = <none>
+[[dump]]
+section = dump__libc_freeres_fn
+file = cc1__libc_freeres_fn_dump.bin
+space = <none>
+address = 0x00000000005CE9C0
+length = <none>
+offset = <none>
+[[dump]]
+section = dump__libc_thread_freeres_fn
+file = cc1__libc_thread_freeres_fn_dump.bin
+space = <none>
+address = 0x00000000005CF610
+length = <none>
+offset = <none>
+[[device]]
+name = etm_0
+class = trace_source
+type = ETM4
+location = <none>
+ini = etm_0.ini
+regs.count = 12
+dump.count = 0
+reg.TRCAUTHSTATUS = 0x000000cc ; id=0x3EE size=<none> raw_key="TRCAUTHSTATUS(0x3EE)"
+reg.TRCCONFIGR = 0x00000001 ; id=0x004 size=<none> raw_key="TRCCONFIGR(0x004)"
+reg.TRCIDR0 = 0x28000ea1 ; id=0x078 size=<none> raw_key="TRCIDR0(0x078)"
+reg.TRCIDR1 = 0x4100f403 ; id=0x079 size=<none> raw_key="TRCIDR1(0x079)"
+reg.TRCIDR10 = 0x00000000 ; id=0x062 size=<none> raw_key="TRCIDR10(0x062)"
+reg.TRCIDR11 = 0x00000000 ; id=0x063 size=<none> raw_key="TRCIDR11(0x063)"
+reg.TRCIDR12 = 0x00000000 ; id=0x064 size=<none> raw_key="TRCIDR12(0x064)"
+reg.TRCIDR13 = 0x00000000 ; id=0x065 size=<none> raw_key="TRCIDR13(0x065)"
+reg.TRCIDR2 = 0x00000488 ; id=0x07A size=<none> raw_key="TRCIDR2(0x07A)"
+reg.TRCIDR8 = 0x00000000 ; id=0x060 size=<none> raw_key="TRCIDR8(0x060)"
+reg.TRCIDR9 = 0x00000000 ; id=0x061 size=<none> raw_key="TRCIDR9(0x061)"
+reg.TRCTRACEIDR = 0x00000010 ; id=0x010 size=<none> raw_key="TRCTRACEIDR(0x010)"
+[[device]]
+name = etm_1
+class = trace_source
+type = ETM4
+location = <none>
+ini = etm_1.ini
+regs.count = 12
+dump.count = 0
+reg.TRCAUTHSTATUS = 0x000000cc ; id=0x3EE size=<none> raw_key="TRCAUTHSTATUS(0x3EE)"
+reg.TRCCONFIGR = 0x00000001 ; id=0x004 size=<none> raw_key="TRCCONFIGR(0x004)"
+reg.TRCIDR0 = 0x28000ea1 ; id=0x078 size=<none> raw_key="TRCIDR0(0x078)"
+reg.TRCIDR1 = 0x4100f400 ; id=0x079 size=<none> raw_key="TRCIDR1(0x079)"
+reg.TRCIDR10 = 0x00000000 ; id=0x062 size=<none> raw_key="TRCIDR10(0x062)"
+reg.TRCIDR11 = 0x00000000 ; id=0x063 size=<none> raw_key="TRCIDR11(0x063)"
+reg.TRCIDR12 = 0x00000000 ; id=0x064 size=<none> raw_key="TRCIDR12(0x064)"
+reg.TRCIDR13 = 0x00000000 ; id=0x065 size=<none> raw_key="TRCIDR13(0x065)"
+reg.TRCIDR2 = 0x00000488 ; id=0x07A size=<none> raw_key="TRCIDR2(0x07A)"
+reg.TRCIDR8 = 0x00000000 ; id=0x060 size=<none> raw_key="TRCIDR8(0x060)"
+reg.TRCIDR9 = 0x00000000 ; id=0x061 size=<none> raw_key="TRCIDR9(0x061)"
+reg.TRCTRACEIDR = 0x00000012 ; id=0x010 size=<none> raw_key="TRCTRACEIDR(0x010)"
+[[device]]
+name = etm_2
+class = trace_source
+type = ETM4
+location = <none>
+ini = etm_2.ini
+regs.count = 12
+dump.count = 0
+reg.TRCAUTHSTATUS = 0x000000cc ; id=0x3EE size=<none> raw_key="TRCAUTHSTATUS(0x3EE)"
+reg.TRCCONFIGR = 0x00000001 ; id=0x004 size=<none> raw_key="TRCCONFIGR(0x004)"
+reg.TRCIDR0 = 0x28000ea1 ; id=0x078 size=<none> raw_key="TRCIDR0(0x078)"
+reg.TRCIDR1 = 0x4100f400 ; id=0x079 size=<none> raw_key="TRCIDR1(0x079)"
+reg.TRCIDR10 = 0x00000000 ; id=0x062 size=<none> raw_key="TRCIDR10(0x062)"
+reg.TRCIDR11 = 0x00000000 ; id=0x063 size=<none> raw_key="TRCIDR11(0x063)"
+reg.TRCIDR12 = 0x00000000 ; id=0x064 size=<none> raw_key="TRCIDR12(0x064)"
+reg.TRCIDR13 = 0x00000000 ; id=0x065 size=<none> raw_key="TRCIDR13(0x065)"
+reg.TRCIDR2 = 0x00000488 ; id=0x07A size=<none> raw_key="TRCIDR2(0x07A)"
+reg.TRCIDR8 = 0x00000000 ; id=0x060 size=<none> raw_key="TRCIDR8(0x060)"
+reg.TRCIDR9 = 0x00000000 ; id=0x061 size=<none> raw_key="TRCIDR9(0x061)"
+reg.TRCTRACEIDR = 0x00000014 ; id=0x010 size=<none> raw_key="TRCTRACEIDR(0x010)"
+[[device]]
+name = etm_3
+class = trace_source
+type = ETM4
+location = <none>
+ini = etm_3.ini
+regs.count = 12
+dump.count = 0
+reg.TRCAUTHSTATUS = 0x000000cc ; id=0x3EE size=<none> raw_key="TRCAUTHSTATUS(0x3EE)"
+reg.TRCCONFIGR = 0x00000001 ; id=0x004 size=<none> raw_key="TRCCONFIGR(0x004)"
+reg.TRCIDR0 = 0x28000ea1 ; id=0x078 size=<none> raw_key="TRCIDR0(0x078)"
+reg.TRCIDR1 = 0x4100f403 ; id=0x079 size=<none> raw_key="TRCIDR1(0x079)"
+reg.TRCIDR10 = 0x00000000 ; id=0x062 size=<none> raw_key="TRCIDR10(0x062)"
+reg.TRCIDR11 = 0x00000000 ; id=0x063 size=<none> raw_key="TRCIDR11(0x063)"
+reg.TRCIDR12 = 0x00000000 ; id=0x064 size=<none> raw_key="TRCIDR12(0x064)"
+reg.TRCIDR13 = 0x00000000 ; id=0x065 size=<none> raw_key="TRCIDR13(0x065)"
+reg.TRCIDR2 = 0x00000488 ; id=0x07A size=<none> raw_key="TRCIDR2(0x07A)"
+reg.TRCIDR8 = 0x00000000 ; id=0x060 size=<none> raw_key="TRCIDR8(0x060)"
+reg.TRCIDR9 = 0x00000000 ; id=0x061 size=<none> raw_key="TRCIDR9(0x061)"
+reg.TRCTRACEIDR = 0x00000016 ; id=0x010 size=<none> raw_key="TRCTRACEIDR(0x010)"
+[[device]]
+name = etm_4
+class = trace_source
+type = ETM4
+location = <none>
+ini = etm_4.ini
+regs.count = 12
+dump.count = 0
+reg.TRCAUTHSTATUS = 0x000000cc ; id=0x3EE size=<none> raw_key="TRCAUTHSTATUS(0x3EE)"
+reg.TRCCONFIGR = 0x00000001 ; id=0x004 size=<none> raw_key="TRCCONFIGR(0x004)"
+reg.TRCIDR0 = 0x28000ea1 ; id=0x078 size=<none> raw_key="TRCIDR0(0x078)"
+reg.TRCIDR1 = 0x4100f403 ; id=0x079 size=<none> raw_key="TRCIDR1(0x079)"
+reg.TRCIDR10 = 0x00000000 ; id=0x062 size=<none> raw_key="TRCIDR10(0x062)"
+reg.TRCIDR11 = 0x00000000 ; id=0x063 size=<none> raw_key="TRCIDR11(0x063)"
+reg.TRCIDR12 = 0x00000000 ; id=0x064 size=<none> raw_key="TRCIDR12(0x064)"
+reg.TRCIDR13 = 0x00000000 ; id=0x065 size=<none> raw_key="TRCIDR13(0x065)"
+reg.TRCIDR2 = 0x00000488 ; id=0x07A size=<none> raw_key="TRCIDR2(0x07A)"
+reg.TRCIDR8 = 0x00000000 ; id=0x060 size=<none> raw_key="TRCIDR8(0x060)"
+reg.TRCIDR9 = 0x00000000 ; id=0x061 size=<none> raw_key="TRCIDR9(0x061)"
+reg.TRCTRACEIDR = 0x00000018 ; id=0x010 size=<none> raw_key="TRCTRACEIDR(0x010)"
+[[device]]
+name = etm_5
+class = trace_source
+type = ETM4
+location = <none>
+ini = etm_5.ini
+regs.count = 12
+dump.count = 0
+reg.TRCAUTHSTATUS = 0x000000cc ; id=0x3EE size=<none> raw_key="TRCAUTHSTATUS(0x3EE)"
+reg.TRCCONFIGR = 0x00000001 ; id=0x004 size=<none> raw_key="TRCCONFIGR(0x004)"
+reg.TRCIDR0 = 0x28000ea1 ; id=0x078 size=<none> raw_key="TRCIDR0(0x078)"
+reg.TRCIDR1 = 0x4100f403 ; id=0x079 size=<none> raw_key="TRCIDR1(0x079)"
+reg.TRCIDR10 = 0x00000000 ; id=0x062 size=<none> raw_key="TRCIDR10(0x062)"
+reg.TRCIDR11 = 0x00000000 ; id=0x063 size=<none> raw_key="TRCIDR11(0x063)"
+reg.TRCIDR12 = 0x00000000 ; id=0x064 size=<none> raw_key="TRCIDR12(0x064)"
+reg.TRCIDR13 = 0x00000000 ; id=0x065 size=<none> raw_key="TRCIDR13(0x065)"
+reg.TRCIDR2 = 0x00000488 ; id=0x07A size=<none> raw_key="TRCIDR2(0x07A)"
+reg.TRCIDR8 = 0x00000000 ; id=0x060 size=<none> raw_key="TRCIDR8(0x060)"
+reg.TRCIDR9 = 0x00000000 ; id=0x061 size=<none> raw_key="TRCIDR9(0x061)"
+reg.TRCTRACEIDR = 0x0000001a ; id=0x010 size=<none> raw_key="TRCTRACEIDR(0x010)"
+clusters.count = 2
+cluster.Cluster 0 = cpu_1,cpu_2
+cluster.Cluster 1 = cpu_0,cpu_3,cpu_4,cpu_5
+trace.metadata = trace.ini
+trace_buffers.ids = buffer0
+[[trace_buffer]]
+id = buffer0
+name = etr_0
+format = coresight
+files = cstrace.bin
+[[core_trace_source]]
+core = cpu_0
+source = etm_0
+[[core_trace_source]]
+core = cpu_1
+source = etm_1
+[[core_trace_source]]
+core = cpu_2
+source = etm_2
+[[core_trace_source]]
+core = cpu_3
+source = etm_3
+[[core_trace_source]]
+core = cpu_4
+source = etm_4
+[[core_trace_source]]
+core = cpu_5
+source = etm_5
+[[source_buffer]]
+source = etm_0
+buffers = etr_0
+[[source_buffer]]
+source = etm_1
+buffers = etr_0
+[[source_buffer]]
+source = etm_2
+buffers = etr_0
+[[source_buffer]]
+source = etm_3
+buffers = etr_0
+[[source_buffer]]
+source = etm_4
+buffers = etr_0
+[[source_buffer]]
+source = etm_5
+buffers = etr_0
+[[validation]]
+devices.total = 12
+devices.cores = 6
+devices.trace_sources = 6
+trace.buffers = 1
+trace.core_trace_sources = 6
+trace.required_regs_present = true
