@@ -1,6 +1,5 @@
 package ptm
 
-func ParsePtmPackets(data []byte) []string {
-	// Placeholder implementation
-	return []string{}
+func ParsePtmPackets(data []byte) ([]string, error) {
+	return []string{}, nil
 }

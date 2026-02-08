@@ -16,7 +16,10 @@ func TestPtmParity(t *testing.T) {
 		t.Fatalf("Failed to read trace bin: %v", err)
 	}
 
-	goOutput := ParsePtmPackets(data)
+	goOutput, err := ParsePtmPackets(data)
+	if err != nil {
+		t.Fatalf("ParsePtmPackets failed: %v", err)
+	}
 	logLines := loadLogLines(t, cppLog)
 	if len(logLines) != len(goOutput) {
 		t.Fatalf("Mismatched number of lines: expected %d, got %d", len(logLines), len(goOutput))
