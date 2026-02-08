@@ -1,6 +1,13 @@
 package snapshot
 
-import "errors"
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+)
 
 // SnapshotConfig holds the parsed snapshot model.
 type SnapshotConfig struct {
@@ -51,5 +58,323 @@ type TraceBuffer struct {
 
 // LoadSnapshot parses a snapshot directory into a canonical model.
 func LoadSnapshot(dirPath string) (*SnapshotConfig, error) {
-	return nil, errors.New("LoadSnapshot not implemented")
+	snapshotPath := filepath.Join(dirPath, "snapshot.ini")
+	entries, err := readSnapshotIni(snapshotPath)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := &SnapshotConfig{}
+	var deviceFiles []string
+	var traceMetadata string
+	clusters := map[string][]string{}
+
+	for _, entry := range entries {
+		switch entry.section {
+		case "snapshot":
+			if entry.key == "version" {
+				cfg.Version = entry.value
+			}
+		case "device_list":
+			if strings.HasPrefix(entry.key, "device") {
+				deviceFiles = append(deviceFiles, entry.value)
+			}
+		case "clusters":
+			clusters[entry.key] = snapshotSplitCSV(entry.value)
+		case "trace":
+			if entry.key == "metadata" {
+				traceMetadata = entry.value
+			}
+		}
+	}
+
+	if len(clusters) > 0 {
+		cfg.Clusters = clusters
+	}
+
+	for _, deviceFile := range deviceFiles {
+		devicePath := filepath.Join(dirPath, deviceFile)
+		dev, err := parseDeviceIni(devicePath)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Devices = append(cfg.Devices, *dev)
+	}
+
+	if traceMetadata != "" {
+		tracePath := filepath.Join(dirPath, traceMetadata)
+		traceCfg, err := parseTraceIni(tracePath)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Trace = traceCfg
+	}
+
+	return cfg, nil
+}
+
+type iniEntry struct {
+	section string
+	key     string
+	value   string
+}
+
+func readSnapshotIni(path string) ([]iniEntry, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var entries []iniEntry
+	section := ""
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "\uFEFF") {
+			line = strings.TrimPrefix(line, "\uFEFF")
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+		}
+		if strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			section = strings.TrimSpace(line[1 : len(line)-1])
+			continue
+		}
+		key, value, ok := snapshotSplitKV(line)
+		if !ok {
+			return nil, fmt.Errorf("invalid ini line in %s: %s", path, line)
+		}
+		entries = append(entries, iniEntry{section: section, key: key, value: value})
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+func snapshotSplitKV(line string) (string, string, bool) {
+	parts := strings.SplitN(line, "=", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), true
+}
+
+func snapshotSplitCSV(value string) []string {
+	items := strings.Split(value, ",")
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		trimmed := strings.TrimSpace(item)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+func parseDeviceIni(path string) (*Device, error) {
+	entries, err := readSnapshotIni(path)
+	if err != nil {
+		return nil, err
+	}
+
+	dev := &Device{Registers: map[string][]RegisterValue{}}
+	dumpOrder := []string{}
+	dumps := map[string]*MemoryDump{}
+
+	for _, entry := range entries {
+		switch entry.section {
+		case "device":
+			switch entry.key {
+			case "name":
+				dev.Name = snapshotNoneToEmpty(entry.value)
+			case "class":
+				dev.Class = snapshotNoneToEmpty(entry.value)
+			case "type":
+				dev.Type = snapshotNoneToEmpty(entry.value)
+			}
+		case "regs":
+			regName, id, size, rawKey := parseRegKey(entry.key)
+			normValue, err := normalizeRegValue(entry.value, size)
+			if err != nil {
+				return nil, err
+			}
+			dev.Registers[regName] = append(dev.Registers[regName], RegisterValue{
+				Value:  normValue,
+				ID:     id,
+				Size:   size,
+				RawKey: rawKey,
+			})
+		default:
+			if !strings.HasPrefix(entry.section, "dump") {
+				continue
+			}
+			dump := dumps[entry.section]
+			if dump == nil {
+				dump = &MemoryDump{}
+				dumps[entry.section] = dump
+				dumpOrder = append(dumpOrder, entry.section)
+			}
+			switch entry.key {
+			case "file":
+				dump.FilePath = entry.value
+			case "space":
+				dump.Space = snapshotNoneToEmpty(entry.value)
+			case "address":
+				addr, err := snapshotParseUint64(entry.value)
+				if err != nil {
+					return nil, err
+				}
+				dump.Address = addr
+			case "length":
+				length, err := snapshotParseOptionalUint64(entry.value)
+				if err != nil {
+					return nil, err
+				}
+				dump.Length = length
+			}
+		}
+	}
+
+	for _, section := range dumpOrder {
+		if dump := dumps[section]; dump != nil {
+			dev.Dumps = append(dev.Dumps, *dump)
+		}
+	}
+
+	return dev, nil
+}
+
+func parseTraceIni(path string) (*TraceMetadata, error) {
+	entries, err := readSnapshotIni(path)
+	if err != nil {
+		return nil, err
+	}
+
+	trace := &TraceMetadata{
+		Buffers:          map[string]TraceBuffer{},
+		CoreTraceSources: map[string]string{},
+		SourceBuffers:    map[string][]string{},
+	}
+
+	bufferIDs := []string{}
+	bufferMeta := map[string]*TraceBuffer{}
+
+	for _, entry := range entries {
+		switch entry.section {
+		case "trace_buffers":
+			if entry.key == "buffers" {
+				bufferIDs = snapshotSplitCSV(entry.value)
+			}
+		case "source_buffers":
+			trace.SourceBuffers[entry.key] = snapshotSplitCSV(entry.value)
+		case "core_trace_sources":
+			trace.CoreTraceSources[entry.key] = entry.value
+		default:
+			for _, id := range bufferIDs {
+				if entry.section == id {
+					buf := bufferMeta[id]
+					if buf == nil {
+						buf = &TraceBuffer{}
+						bufferMeta[id] = buf
+					}
+					switch entry.key {
+					case "name":
+						buf.Name = entry.value
+					case "format":
+						buf.Format = snapshotNoneToEmpty(entry.value)
+					case "file", "files":
+						buf.Files = snapshotSplitCSV(entry.value)
+					}
+				}
+			}
+		}
+	}
+
+	for _, id := range bufferIDs {
+		if buf := bufferMeta[id]; buf != nil {
+			trace.Buffers[id] = *buf
+		}
+	}
+
+	return trace, nil
+}
+
+func parseRegKey(key string) (string, string, string, string) {
+	rawKey := strings.TrimSpace(key)
+	regName := rawKey
+	id := "<none>"
+	size := "<none>"
+
+	if openIdx := strings.Index(rawKey, "("); openIdx != -1 && strings.HasSuffix(rawKey, ")") {
+		regName = strings.TrimSpace(rawKey[:openIdx])
+		inner := strings.TrimSpace(rawKey[openIdx+1 : len(rawKey)-1])
+		if strings.HasPrefix(inner, "size:") {
+			size = strings.TrimSpace(strings.TrimPrefix(inner, "size:"))
+		} else if inner != "" {
+			id = inner
+		}
+	}
+
+	return regName, id, size, rawKey
+}
+
+func normalizeRegValue(value string, size string) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if size != "<none>" {
+		sizeBits, err := strconv.Atoi(size)
+		if err != nil {
+			return "", fmt.Errorf("invalid size %q", size)
+		}
+		num, err := strconv.ParseUint(trimmed, 0, 64)
+		if err != nil {
+			return "", fmt.Errorf("invalid register value %q", value)
+		}
+		width := (sizeBits + 3) / 4
+		return fmt.Sprintf("0x%0*x", width, num), nil
+	}
+
+	if strings.HasPrefix(trimmed, "0x") || strings.HasPrefix(trimmed, "0X") {
+		return "0x" + strings.ToLower(trimmed[2:]), nil
+	}
+
+	num, err := strconv.ParseUint(trimmed, 0, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid register value %q", value)
+	}
+	return fmt.Sprintf("0x%x", num), nil
+}
+
+func snapshotParseUint64(value string) (uint64, error) {
+	v, err := strconv.ParseUint(value, 0, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid uint64: %s", value)
+	}
+	return v, nil
+}
+
+func snapshotParseOptionalUint64(value string) (*uint64, error) {
+	if value == "" || value == "<none>" {
+		return nil, nil
+	}
+	v, err := snapshotParseUint64(value)
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+func snapshotNoneToEmpty(value string) string {
+	if value == "<none>" {
+		return ""
+	}
+	return value
 }
