@@ -39,6 +39,7 @@ type MemoryDump struct {
 	FilePath string
 	Address  uint64
 	Length   *uint64
+	Offset   *uint64
 	Space    string
 }
 
@@ -68,16 +69,14 @@ func LoadSnapshot(dirPath string) (*SnapshotConfig, error) {
 	var deviceFiles []string
 	var traceMetadata string
 	clusters := map[string][]string{}
+	var snapshotVersion string
 
 	for _, entry := range entries {
 		switch entry.section {
 		case "snapshot":
 			if entry.key == "version" {
+				snapshotVersion = entry.value
 				cfg.Version = entry.value
-			}
-		case "device_list":
-			if strings.HasPrefix(entry.key, "device") {
-				deviceFiles = append(deviceFiles, entry.value)
 			}
 		case "clusters":
 			clusters[entry.key] = snapshotSplitCSV(entry.value)
@@ -85,7 +84,13 @@ func LoadSnapshot(dirPath string) (*SnapshotConfig, error) {
 			if entry.key == "metadata" {
 				traceMetadata = entry.value
 			}
+		default:
+			deviceFiles = append(deviceFiles, entry.value)
 		}
+	}
+
+	if snapshotVersion != "" && snapshotVersion != "1" && snapshotVersion != "1.0" {
+		return nil, fmt.Errorf("illegal snapshot file version: %s", snapshotVersion)
 	}
 
 	if len(clusters) > 0 {
@@ -130,7 +135,8 @@ func readSnapshotIni(path string) ([]iniEntry, error) {
 	section := ""
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		line := scanner.Text()
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
@@ -141,12 +147,19 @@ func readSnapshotIni(path string) ([]iniEntry, error) {
 				continue
 			}
 		}
-		if strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
+		if idx := strings.IndexAny(line, "\r;#"); idx != -1 {
+			line = line[:idx]
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
 			continue
 		}
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
 			section = strings.TrimSpace(line[1 : len(line)-1])
 			continue
+		}
+		if section == "" {
+			return nil, fmt.Errorf("invalid ini line in %s: %s", path, line)
 		}
 		key, value, ok := snapshotSplitKV(line)
 		if !ok {
@@ -189,6 +202,8 @@ func parseDeviceIni(path string) (*Device, error) {
 	dev := &Device{Registers: map[string][]RegisterValue{}}
 	dumpOrder := []string{}
 	dumps := map[string]*MemoryDump{}
+	dumpFields := map[string]*dumpFieldState{}
+	regKeys := map[string]struct{}{}
 
 	for _, entry := range entries {
 		switch entry.section {
@@ -203,7 +218,12 @@ func parseDeviceIni(path string) (*Device, error) {
 			}
 		case "regs":
 			regName, id, size, rawKey := parseRegKey(entry.key)
-			normValue, err := normalizeRegValue(entry.value, size)
+			regKey := strings.ToLower(rawKey)
+			if _, exists := regKeys[regKey]; exists {
+				return nil, fmt.Errorf("duplicate register key: %s", rawKey)
+			}
+			regKeys[regKey] = struct{}{}
+			normValue, err := normalizeRegValue(snapshotTrimQuotes(entry.value), size)
 			if err != nil {
 				return nil, err
 			}
@@ -217,6 +237,11 @@ func parseDeviceIni(path string) (*Device, error) {
 			if !strings.HasPrefix(entry.section, "dump") {
 				continue
 			}
+			fields := dumpFields[entry.section]
+			if fields == nil {
+				fields = &dumpFieldState{}
+				dumpFields[entry.section] = fields
+			}
 			dump := dumps[entry.section]
 			if dump == nil {
 				dump = &MemoryDump{}
@@ -225,26 +250,43 @@ func parseDeviceIni(path string) (*Device, error) {
 			}
 			switch entry.key {
 			case "file":
-				dump.FilePath = entry.value
+				dump.FilePath = snapshotTrimQuotes(entry.value)
+				fields.gotFile = true
 			case "space":
-				dump.Space = snapshotNoneToEmpty(entry.value)
+				dump.Space = snapshotNoneToEmpty(snapshotTrimQuotes(entry.value))
 			case "address":
 				addr, err := snapshotParseUint64(entry.value)
 				if err != nil {
 					return nil, err
 				}
 				dump.Address = addr
+				fields.gotAddress = true
 			case "length":
 				length, err := snapshotParseOptionalUint64(entry.value)
 				if err != nil {
 					return nil, err
 				}
 				dump.Length = length
+			case "offset":
+				offset, err := snapshotParseOptionalUint64(entry.value)
+				if err != nil {
+					return nil, err
+				}
+				dump.Offset = offset
+			default:
+				return nil, fmt.Errorf("unknown dump key: %s", entry.key)
 			}
 		}
 	}
 
 	for _, section := range dumpOrder {
+		fields := dumpFields[section]
+		if fields == nil || !fields.gotAddress {
+			return nil, fmt.Errorf("dump section missing mandatory address definition")
+		}
+		if !fields.gotFile {
+			return nil, fmt.Errorf("dump section missing mandatory file definition")
+		}
 		if dump := dumps[section]; dump != nil {
 			dev.Dumps = append(dev.Dumps, *dump)
 		}
@@ -275,9 +317,10 @@ func parseTraceIni(path string) (*TraceMetadata, error) {
 				bufferIDs = snapshotSplitCSV(entry.value)
 			}
 		case "source_buffers":
-			trace.SourceBuffers[entry.key] = snapshotSplitCSV(entry.value)
+			value := strings.TrimSpace(entry.value)
+			trace.SourceBuffers[entry.key] = []string{value}
 		case "core_trace_sources":
-			trace.CoreTraceSources[entry.key] = entry.value
+			trace.CoreTraceSources[entry.value] = entry.key
 		default:
 			for _, id := range bufferIDs {
 				if entry.section == id {
@@ -291,7 +334,7 @@ func parseTraceIni(path string) (*TraceMetadata, error) {
 						buf.Name = entry.value
 					case "format":
 						buf.Format = snapshotNoneToEmpty(entry.value)
-					case "file", "files":
+					case "file":
 						buf.Files = snapshotSplitCSV(entry.value)
 					}
 				}
@@ -301,7 +344,15 @@ func parseTraceIni(path string) (*TraceMetadata, error) {
 
 	for _, id := range bufferIDs {
 		if buf := bufferMeta[id]; buf != nil {
+			if buf.Name == "" {
+				return nil, fmt.Errorf("trace buffer section missing required buffer name")
+			}
+			if len(buf.Files) == 0 {
+				return nil, fmt.Errorf("trace buffer section is missing mandatory file definition")
+			}
 			trace.Buffers[id] = *buf
+		} else {
+			return nil, fmt.Errorf("trace buffer section missing required buffer name")
 		}
 	}
 
@@ -328,7 +379,7 @@ func parseRegKey(key string) (string, string, string, string) {
 }
 
 func normalizeRegValue(value string, size string) (string, error) {
-	trimmed := strings.TrimSpace(value)
+	trimmed := strings.TrimSpace(snapshotTrimQuotes(value))
 	if size != "<none>" {
 		sizeBits, err := strconv.Atoi(size)
 		if err != nil {
@@ -377,4 +428,14 @@ func snapshotNoneToEmpty(value string) string {
 		return ""
 	}
 	return value
+}
+
+type dumpFieldState struct {
+	gotAddress bool
+	gotFile    bool
+}
+
+func snapshotTrimQuotes(value string) string {
+	trimmed := strings.TrimSpace(value)
+	return strings.Trim(trimmed, "\"'")
 }

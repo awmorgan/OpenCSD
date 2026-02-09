@@ -423,6 +423,12 @@ func parseGoldenSnapshot(path string) (*SnapshotConfig, error) {
 					return nil, err
 				}
 				currentDump.Length = length
+			case "offset":
+				offset, err := parseOptionalUint64(value)
+				if err != nil {
+					return nil, err
+				}
+				currentDump.Offset = offset
 			}
 		case section == "trace_buffer":
 			ensureTrace(cfg)
@@ -448,7 +454,7 @@ func parseGoldenSnapshot(path string) (*SnapshotConfig, error) {
 				currentCoreSource = value
 			}
 			if currentCore != "" && currentCoreSource != "" {
-				cfg.Trace.CoreTraceSources[currentCore] = currentCoreSource
+				cfg.Trace.CoreTraceSources[currentCoreSource] = currentCore
 			}
 		case section == "source_buffer":
 			ensureTrace(cfg)
