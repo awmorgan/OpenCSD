@@ -169,7 +169,7 @@ public:
     virtual void printOutStr(const std::string &outStr)
     {
         if(m_c_api_cb_fn)
-            m_c_api_cb_fn(m_p_context, outStr.c_str(), outStr.length());
+            m_c_api_cb_fn(m_p_context, outStr.c_str(), (int)outStr.length());
     }
 
 private:

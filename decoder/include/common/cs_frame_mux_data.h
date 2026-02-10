@@ -71,7 +71,7 @@ public:
 	const bool hasIncompleteFrame() const { return (bool)(curr_frame_idx != 0); };
 
 	/* number of complete frames in the buffer */
-	const int numFrames() const { return (cs_frames.size() / frame_size_bytes); };
+	const int numFrames() const { return ((int)cs_frames.size() / frame_size_bytes); };
 
 	/* direct access to frame buffer and size */
 	const uint8_t* getFrameBuffer() { return cs_frames.data(); };

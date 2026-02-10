@@ -97,7 +97,7 @@ void EtmV3TrcPacket::UpdateDataAddress(const uint32_t value, const uint8_t valid
     uint32_t validMask = 0xFFFFFFFF;
     validMask >>= 32-valid_bits;
     m_pkt_data.addr.pkt_bits = valid_bits;
-    m_pkt_data.addr.val &= ~validMask;
+    m_pkt_data.addr.val &= ~((ocsd_vaddr_t)validMask);
     m_pkt_data.addr.val |= (value & validMask);
     if(valid_bits > m_pkt_data.addr.valid_bits)
         m_pkt_data.addr.valid_bits = valid_bits;

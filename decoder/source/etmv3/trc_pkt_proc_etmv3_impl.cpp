@@ -208,7 +208,7 @@ ocsd_datapath_resp_t EtmV3PktProcImpl::outputPacket()
             // sending part packet, still some data in the main packet
             dp_resp = m_interface->outputOnAllInterfaces(m_packet_index,&m_curr_packet,&type,m_partPktData);
             m_process_state = m_post_part_pkt_state;
-            m_packet_index += m_partPktData.size();
+            m_packet_index += (ocsd_trc_index_t)m_partPktData.size();
             m_bSendPartPkt = false;
             m_curr_packet.SetType(m_post_part_pkt_type);
         }
@@ -254,7 +254,7 @@ uint32_t EtmV3PktProcImpl::waitForSync(const uint32_t dataBlockSize, const uint8
                 {
                     m_currPacketData.pop_back();
                     bytesProcessed--;   // return 0x80 to the input buffer to re-process next pass after stripping 0's
-                    setBytesPartPkt(m_currPacketData.size()-5,WAIT_SYNC,ETM3_PKT_NOTSYNC);
+                    setBytesPartPkt((int)m_currPacketData.size()-5,WAIT_SYNC,ETM3_PKT_NOTSYNC);
                 }
                 else
                 {
@@ -659,7 +659,7 @@ ocsd_err_t EtmV3PktProcImpl::processPayloadByte(uint8_t by)
 		// fall through when we have the first non-cycle count byte
 	case ETM3_PKT_I_SYNC:
 		if(m_bytesExpectedThisPkt == 0) {
-			int cycCountBytes = m_currPacketData.size() - 2;
+			int cycCountBytes = (int)m_currPacketData.size() - 2;
             int ctxtIDBytes = m_config.CtxtIDBytes();
 			// bytes expected = header + n x ctxt id + info byte + 4 x addr; 
             if(m_config.isInstrTrace())
@@ -694,7 +694,7 @@ ocsd_err_t EtmV3PktProcImpl::processPayloadByte(uint8_t by)
 			if((by & 0x80) != 0x80) {
 				m_bFoundDataAddress = true;
 				// add on the bytes we have found for the address to the expected data bytes
-				m_bytesExpectedThisPkt += ( m_currPacketData.size() - 1);   					
+				m_bytesExpectedThisPkt += ( (int)m_currPacketData.size() - 1);   					
 			}
 			else 
 				break;

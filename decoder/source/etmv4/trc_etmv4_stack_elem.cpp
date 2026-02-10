@@ -56,7 +56,7 @@ TrcStackElemParam *EtmV4P0Stack::createParamElem(const p0_elem_t p0_type, const 
     if (pElem)
     {
         int param_idx = 0;
-        int params_to_fill = params.size();
+        int params_to_fill = (int)params.size();
         while ((param_idx < 4) && params_to_fill)
         {
             pElem->setParam(params[param_idx], param_idx);

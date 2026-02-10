@@ -405,7 +405,7 @@ void TrcPktProcItm::itmPktLocalTS()
 
     if (bGotContVal)
     {
-        m_curr_packet.setValue(extractContVal32(), (int)m_packet_data.size() - 1);
+        m_curr_packet.setValue(extractContVal32(), (uint8_t)m_packet_data.size() - 1);
         m_proc_state = SEND_PKT;
     }
     else if (m_packet_data.size() == pkt_size_limit)
@@ -434,7 +434,7 @@ void TrcPktProcItm::itmPktGlobalTS1()
             // clear those bits from the data before extracting thevalue
             m_packet_data[4] = byte & 0x1F;
         }
-        m_curr_packet.setValue(extractContVal32(), (int)m_packet_data.size() - 1);
+        m_curr_packet.setValue(extractContVal32(), (uint8_t)m_packet_data.size() - 1);
         m_proc_state = SEND_PKT;
     }
     else if (m_packet_data.size() == pkt_size_limit)
@@ -454,7 +454,7 @@ void TrcPktProcItm::itmPktGlobalTS2()
     if (bGotContVal)
     {
         if (m_packet_data.size() <= 5)
-            m_curr_packet.setValue(extractContVal32(), (int)m_packet_data.size() - 1);
+            m_curr_packet.setValue(extractContVal32(), (uint8_t)m_packet_data.size() - 1);
         else
             m_curr_packet.setExtValue(extractContVal64());
         m_proc_state = SEND_PKT;

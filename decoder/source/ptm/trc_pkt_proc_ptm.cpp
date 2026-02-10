@@ -279,7 +279,7 @@ ocsd_datapath_resp_t TrcPktProcPtm::waitASync()
     bool bHaveASync = false;
     int unsynced_bytes = 0;
     int unsync_scan_block_start = 0;
-    int pktBytesOnEntry = m_currPacketData.size();  // did we have part of a potential async last time?
+    int pktBytesOnEntry = (int)m_currPacketData.size();  // did we have part of a potential async last time?
 
     while(doScan && OCSD_DATA_RESP_IS_CONT(resp))
     {
@@ -305,7 +305,7 @@ ocsd_datapath_resp_t TrcPktProcPtm::waitASync()
                 break;
 
             case NOT_ASYNC:
-                unsynced_bytes += m_currPacketData.size();
+                unsynced_bytes += (int)m_currPacketData.size();
                 m_waitASyncSOPkt = false;
                 m_currPacketData.clear();
                 break;
@@ -443,7 +443,7 @@ TrcPktProcPtm::async_result_t TrcPktProcPtm::findAsync()
 void TrcPktProcPtm::pktISync()
 {
     uint8_t currByte = 0;
-    int pktIndex = m_currPacketData.size() - 1;
+    int pktIndex = (int)m_currPacketData.size() - 1;
     bool bGotBytes = false, validByte = true;
 
     if(pktIndex == 0)
@@ -459,7 +459,7 @@ void TrcPktProcPtm::pktISync()
     {
         if(readByte(currByte))
         {           
-            pktIndex = m_currPacketData.size() - 1;
+            pktIndex = (int)m_currPacketData.size() - 1;
             if(pktIndex == 5)
             {
                 // got the info byte  
@@ -569,7 +569,7 @@ void TrcPktProcPtm::pktWPointUpdate()
         if(readByte(currByte))
         {
             
-            byteIdx = m_currPacketData.size() - 1;
+            byteIdx = (int)m_currPacketData.size() - 1;
             if(!m_gotAddrBytes)
             {
                 // byteIdx for address byte will run from 1 to 5 - first 4 my have continuation or not.
@@ -644,7 +644,7 @@ void TrcPktProcPtm::pktIgnore()
 
 void TrcPktProcPtm::pktCtxtID()
 {
-    int pktIndex = m_currPacketData.size() - 1;
+    int pktIndex = (int)m_currPacketData.size() - 1;
 
     // if at the header, determine how many more bytes we need.
     if(pktIndex == 0)
@@ -738,7 +738,7 @@ void TrcPktProcPtm::pktAtom()
 void TrcPktProcPtm::pktTimeStamp()
 {
     uint8_t currByte = 0;
-    int pktIndex = m_currPacketData.size() - 1;
+    int pktIndex = (int)m_currPacketData.size() - 1;
     bool bGotBytes = false, byteAvail = true;
 
     if(pktIndex == 0)
@@ -838,7 +838,7 @@ void TrcPktProcPtm::pktBranchAddr()
     {
         if(readByte(currByte))
         {
-            byteIdx = m_currPacketData.size() - 1;
+            byteIdx = (int)m_currPacketData.size() - 1;
             if(!m_gotAddrBytes)
             {
                 if(byteIdx < 4)

@@ -82,7 +82,7 @@ ItemPrinter *PktPrinterFact::createProtocolPrinter(std::vector<ItemPrinter *> &p
 
 const int PktPrinterFact::numPrinters(std::vector<ItemPrinter *> &printer_list)
 {
-    return printer_list.size();
+    return (int)printer_list.size();
 }
 
 void PktPrinterFact::SavePrinter(std::vector<ItemPrinter *> &printer_list, ItemPrinter *pPrinter, ocsdMsgLogger *pMsgLogger)
