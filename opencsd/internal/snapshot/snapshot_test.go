@@ -279,6 +279,303 @@ TRCIDR0="0x1"
 	}
 }
 
+func TestLoadSnapshotUnknownSectionIgnored(t *testing.T) {
+	dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+
+[unexpected]
+foo=missing.ini
+`, map[string]string{
+		"cpu_0.ini": `[device]
+name=cpu_0
+class=core
+type=Cortex-A
+`,
+	})
+
+	cfg, err := LoadSnapshot(dir)
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	if len(cfg.Devices) != 1 {
+		t.Fatalf("expected 1 device, got %d", len(cfg.Devices))
+	}
+}
+
+func TestLoadSnapshotLinesBeforeSectionIgnored(t *testing.T) {
+	dir := writeSnapshot(t, `orphan=cpu_0.ini
+
+[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+`, map[string]string{
+		"cpu_0.ini": `[device]
+name=cpu_0
+class=core
+type=Cortex-A
+`,
+	})
+
+	if _, err := LoadSnapshot(dir); err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+}
+
+func TestLoadSnapshotDeviceGlobalUnknownKeyErrors(t *testing.T) {
+	dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+`, map[string]string{
+		"cpu_0.ini": `[global]
+unknown=1
+
+[device]
+name=cpu_0
+class=core
+type=Cortex-A
+`,
+	})
+
+	if _, err := LoadSnapshot(dir); err == nil {
+		t.Fatalf("expected error for unknown global key")
+	}
+}
+
+func TestLoadSnapshotDeviceExtendregsDuplicateKeysError(t *testing.T) {
+	dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+`, map[string]string{
+		"cpu_0.ini": `[extendregs]
+0x1=0x2
+0x1=0x3
+
+[device]
+name=cpu_0
+class=core
+type=Cortex-A
+`,
+	})
+
+	if _, err := LoadSnapshot(dir); err == nil {
+		t.Fatalf("expected error for duplicate extendregs key")
+	}
+}
+
+func TestLoadSnapshotDuplicateVersionErrors(t *testing.T) {
+	dir := writeSnapshot(t, `[snapshot]
+version=1.0
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+`, map[string]string{
+		"cpu_0.ini": `[device]
+name=cpu_0
+class=core
+type=Cortex-A
+`,
+	})
+
+	if _, err := LoadSnapshot(dir); err == nil {
+		t.Fatalf("expected error for duplicate snapshot version key")
+	}
+}
+
+func TestLoadSnapshotDeviceDuplicateNameErrors(t *testing.T) {
+	dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+`, map[string]string{
+		"cpu_0.ini": `[device]
+name=cpu_0
+name=cpu_1
+class=core
+type=Cortex-A
+`,
+	})
+
+	if _, err := LoadSnapshot(dir); err == nil {
+		t.Fatalf("expected error for duplicate device name key")
+	}
+}
+
+func TestLoadSnapshotDumpDuplicateFileErrors(t *testing.T) {
+	dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+`, map[string]string{
+		"cpu_0.ini": `[device]
+name=cpu_0
+class=core
+type=Cortex-A
+
+[dump0]
+file=mem.bin
+file=mem2.bin
+address=0x1000
+`,
+	})
+
+	if _, err := LoadSnapshot(dir); err == nil {
+		t.Fatalf("expected error for duplicate dump file key")
+	}
+}
+
+func TestLoadSnapshotTraceBufferDuplicateNameErrors(t *testing.T) {
+	dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+
+[trace]
+metadata=trace.ini
+`, map[string]string{
+		"cpu_0.ini": `[device]
+name=cpu_0
+class=core
+type=Cortex-A
+`,
+		"trace.ini": `[trace_buffers]
+buffers=buffer0
+
+[buffer0]
+name=buf
+name=buf2
+file=trace.bin
+`,
+	})
+
+	if _, err := LoadSnapshot(dir); err == nil {
+		t.Fatalf("expected error for duplicate trace buffer name key")
+	}
+}
+
+func TestLoadSnapshotTraceBufferListMissingSectionsIgnored(t *testing.T) {
+	dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+
+[trace]
+metadata=trace.ini
+`, map[string]string{
+		"cpu_0.ini": `[device]
+name=cpu_0
+class=core
+type=Cortex-A
+`,
+		"trace.ini": `[trace_buffers]
+buffers=buffer0
+`,
+	})
+
+	if _, err := LoadSnapshot(dir); err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+}
+
+func TestLoadSnapshotTraceBufferListWhitespaceNotTrimmed(t *testing.T) {
+	dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+
+[trace]
+metadata=trace.ini
+`, map[string]string{
+		"cpu_0.ini": `[device]
+name=cpu_0
+class=core
+type=Cortex-A
+`,
+		"trace.ini": `[trace_buffers]
+buffers=buffer0, buffer1
+
+[buffer0]
+name=buf0
+file=trace0.bin
+
+[buffer1]
+name=buf1
+file=trace1.bin
+`,
+	})
+
+	cfg, err := LoadSnapshot(dir)
+	if err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+	if cfg.Trace == nil {
+		t.Fatalf("expected trace metadata")
+	}
+	if _, ok := cfg.Trace.Buffers["buffer1"]; ok {
+		t.Fatalf("expected buffer1 to be ignored due to whitespace in list")
+	}
+}
+
+func TestLoadSnapshotRegsInvalidValuesAccepted(t *testing.T) {
+	dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+`, map[string]string{
+		"cpu_0.ini": `[device]
+name=cpu_0
+class=core
+type=Cortex-A
+
+[regs]
+TRCIDR0=not_hex
+`,
+	})
+
+	if _, err := LoadSnapshot(dir); err != nil {
+		t.Fatalf("expected success, got error: %v", err)
+	}
+}
+
+func TestLoadSnapshotDumpLengthNoneErrors(t *testing.T) {
+	dir := writeSnapshot(t, `[snapshot]
+version=1.0
+
+[device_list]
+device0=cpu_0.ini
+`, map[string]string{
+		"cpu_0.ini": `[device]
+name=cpu_0
+class=core
+type=Cortex-A
+
+[dump0]
+file=mem.bin
+address=0x1000
+length=<none>
+`,
+	})
+
+	if _, err := LoadSnapshot(dir); err == nil {
+		t.Fatalf("expected error for dump length <none>")
+	}
+}
+
 func writeFile(t *testing.T, path string, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
