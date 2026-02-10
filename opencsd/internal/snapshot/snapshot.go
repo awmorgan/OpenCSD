@@ -60,7 +60,7 @@ type TraceBuffer struct {
 // LoadSnapshot parses a snapshot directory into a canonical model.
 func LoadSnapshot(dirPath string) (*SnapshotConfig, error) {
 	snapshotPath := filepath.Join(dirPath, "snapshot.ini")
-	entries, err := readSnapshotIni(snapshotPath)
+	entries, err := readSnapshotIni(snapshotPath, true)
 	if err != nil {
 		return nil, err
 	}
@@ -70,21 +70,38 @@ func LoadSnapshot(dirPath string) (*SnapshotConfig, error) {
 	var traceMetadata string
 	clusters := map[string][]string{}
 	var snapshotVersion string
+	var gotSnapshotVersion bool
+	var gotSnapshotDescription bool
+	var gotTraceMetadata bool
 
 	for _, entry := range entries {
 		switch entry.section {
 		case "snapshot":
-			if entry.key == "version" {
+			switch entry.key {
+			case "version":
+				if gotSnapshotVersion {
+					return nil, fmt.Errorf("duplicate snapshot version key")
+				}
+				gotSnapshotVersion = true
 				snapshotVersion = entry.value
 				cfg.Version = entry.value
+			case "description":
+				if gotSnapshotDescription {
+					return nil, fmt.Errorf("duplicate snapshot description key")
+				}
+				gotSnapshotDescription = true
 			}
 		case "clusters":
 			clusters[entry.key] = snapshotSplitCSV(entry.value)
 		case "trace":
 			if entry.key == "metadata" {
+				if gotTraceMetadata {
+					return nil, fmt.Errorf("duplicate trace metadata key")
+				}
+				gotTraceMetadata = true
 				traceMetadata = entry.value
 			}
-		default:
+		case "device_list":
 			deviceFiles = append(deviceFiles, entry.value)
 		}
 	}
@@ -124,7 +141,7 @@ type iniEntry struct {
 	value   string
 }
 
-func readSnapshotIni(path string) ([]iniEntry, error) {
+func readSnapshotIni(path string, allowNoSection bool) ([]iniEntry, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -159,6 +176,9 @@ func readSnapshotIni(path string) ([]iniEntry, error) {
 			continue
 		}
 		if section == "" {
+			if allowNoSection {
+				continue
+			}
 			return nil, fmt.Errorf("invalid ini line in %s: %s", path, line)
 		}
 		key, value, ok := snapshotSplitKV(line)
@@ -194,7 +214,7 @@ func snapshotSplitCSV(value string) []string {
 }
 
 func parseDeviceIni(path string) (*Device, error) {
-	entries, err := readSnapshotIni(path)
+	entries, err := readSnapshotIni(path, false)
 	if err != nil {
 		return nil, err
 	}
@@ -204,17 +224,54 @@ func parseDeviceIni(path string) (*Device, error) {
 	dumps := map[string]*MemoryDump{}
 	dumpFields := map[string]*dumpFieldState{}
 	regKeys := map[string]struct{}{}
+	var gotDeviceName bool
+	var gotDeviceClass bool
+	var gotDeviceType bool
+	var gotGlobalCore bool
+	extendRegs := map[uint64]struct{}{}
 
 	for _, entry := range entries {
 		switch entry.section {
 		case "device":
 			switch entry.key {
 			case "name":
+				if gotDeviceName {
+					return nil, fmt.Errorf("duplicate device name key")
+				}
+				gotDeviceName = true
 				dev.Name = snapshotNoneToEmpty(entry.value)
 			case "class":
+				if gotDeviceClass {
+					return nil, fmt.Errorf("duplicate device class key")
+				}
+				gotDeviceClass = true
 				dev.Class = snapshotNoneToEmpty(entry.value)
 			case "type":
+				if gotDeviceType {
+					return nil, fmt.Errorf("duplicate device type key")
+				}
+				gotDeviceType = true
 				dev.Type = snapshotNoneToEmpty(entry.value)
+			}
+		case "global":
+			if entry.key != "core" {
+				return nil, fmt.Errorf("unknown global option %q", entry.key)
+			}
+			if gotGlobalCore {
+				return nil, fmt.Errorf("duplicate global core key")
+			}
+			gotGlobalCore = true
+		case "extendregs":
+			key, err := snapshotParseUint64(entry.key)
+			if err != nil {
+				return nil, err
+			}
+			if _, exists := extendRegs[key]; exists {
+				return nil, fmt.Errorf("duplicate extendregs key")
+			}
+			extendRegs[key] = struct{}{}
+			if _, err := snapshotParseUint64(entry.value); err != nil {
+				return nil, err
 			}
 		case "regs":
 			regName, id, size, rawKey := parseRegKey(entry.key)
@@ -250,11 +307,21 @@ func parseDeviceIni(path string) (*Device, error) {
 			}
 			switch entry.key {
 			case "file":
+				if fields.gotFile {
+					return nil, fmt.Errorf("duplicate dump file key")
+				}
 				dump.FilePath = snapshotTrimQuotes(entry.value)
 				fields.gotFile = true
 			case "space":
+				if fields.gotSpace {
+					return nil, fmt.Errorf("duplicate dump space key")
+				}
 				dump.Space = snapshotNoneToEmpty(snapshotTrimQuotes(entry.value))
+				fields.gotSpace = true
 			case "address":
+				if fields.gotAddress {
+					return nil, fmt.Errorf("duplicate dump address key")
+				}
 				addr, err := snapshotParseUint64(entry.value)
 				if err != nil {
 					return nil, err
@@ -262,17 +329,25 @@ func parseDeviceIni(path string) (*Device, error) {
 				dump.Address = addr
 				fields.gotAddress = true
 			case "length":
+				if fields.gotLength {
+					return nil, fmt.Errorf("duplicate dump length key")
+				}
 				length, err := snapshotParseOptionalUint64(entry.value)
 				if err != nil {
 					return nil, err
 				}
 				dump.Length = length
+				fields.gotLength = true
 			case "offset":
+				if fields.gotOffset {
+					return nil, fmt.Errorf("duplicate dump offset key")
+				}
 				offset, err := snapshotParseOptionalUint64(entry.value)
 				if err != nil {
 					return nil, err
 				}
 				dump.Offset = offset
+				fields.gotOffset = true
 			default:
 				return nil, fmt.Errorf("unknown dump key: %s", entry.key)
 			}
@@ -296,7 +371,7 @@ func parseDeviceIni(path string) (*Device, error) {
 }
 
 func parseTraceIni(path string) (*TraceMetadata, error) {
-	entries, err := readSnapshotIni(path)
+	entries, err := readSnapshotIni(path, false)
 	if err != nil {
 		return nil, err
 	}
@@ -309,51 +384,65 @@ func parseTraceIni(path string) (*TraceMetadata, error) {
 
 	bufferIDs := []string{}
 	bufferMeta := map[string]*TraceBuffer{}
+	bufferKeys := map[string]map[string]bool{}
+	bufferIDSet := map[string]struct{}{}
+	var gotBufferList bool
 
 	for _, entry := range entries {
 		switch entry.section {
 		case "trace_buffers":
 			if entry.key == "buffers" {
-				bufferIDs = snapshotSplitCSV(entry.value)
+				if gotBufferList {
+					return nil, fmt.Errorf("duplicate trace buffer list key")
+				}
+				gotBufferList = true
+				bufferIDs = snapshotSplitCSVRaw(entry.value)
+				bufferIDSet = map[string]struct{}{}
+				for _, id := range bufferIDs {
+					bufferIDSet[id] = struct{}{}
+				}
 			}
 		case "source_buffers":
-			value := strings.TrimSpace(entry.value)
-			trace.SourceBuffers[entry.key] = []string{value}
+			trace.SourceBuffers[entry.key] = []string{entry.value}
 		case "core_trace_sources":
 			trace.CoreTraceSources[entry.value] = entry.key
 		default:
-			for _, id := range bufferIDs {
-				if entry.section == id {
-					buf := bufferMeta[id]
-					if buf == nil {
-						buf = &TraceBuffer{}
-						bufferMeta[id] = buf
-					}
-					switch entry.key {
-					case "name":
-						buf.Name = entry.value
-					case "format":
-						buf.Format = snapshotNoneToEmpty(entry.value)
-					case "file":
-						buf.Files = snapshotSplitCSV(entry.value)
-					}
-				}
+			if _, ok := bufferIDSet[entry.section]; !ok {
+				continue
+			}
+			buf := bufferMeta[entry.section]
+			if buf == nil {
+				buf = &TraceBuffer{}
+				bufferMeta[entry.section] = buf
+			}
+			keys := bufferKeys[entry.section]
+			if keys == nil {
+				keys = map[string]bool{}
+				bufferKeys[entry.section] = keys
+			}
+			if keys[entry.key] {
+				return nil, fmt.Errorf("duplicate trace buffer key")
+			}
+			keys[entry.key] = true
+			switch entry.key {
+			case "name":
+				buf.Name = entry.value
+			case "format":
+				buf.Format = snapshotNoneToEmpty(entry.value)
+			case "file":
+				buf.Files = snapshotSplitCSV(entry.value)
 			}
 		}
 	}
 
-	for _, id := range bufferIDs {
-		if buf := bufferMeta[id]; buf != nil {
-			if buf.Name == "" {
-				return nil, fmt.Errorf("trace buffer section missing required buffer name")
-			}
-			if len(buf.Files) == 0 {
-				return nil, fmt.Errorf("trace buffer section is missing mandatory file definition")
-			}
-			trace.Buffers[id] = *buf
-		} else {
+	for id, buf := range bufferMeta {
+		if buf.Name == "" {
 			return nil, fmt.Errorf("trace buffer section missing required buffer name")
 		}
+		if len(buf.Files) == 0 {
+			return nil, fmt.Errorf("trace buffer section is missing mandatory file definition")
+		}
+		trace.Buffers[id] = *buf
 	}
 
 	return trace, nil
@@ -383,11 +472,11 @@ func normalizeRegValue(value string, size string) (string, error) {
 	if size != "<none>" {
 		sizeBits, err := strconv.Atoi(size)
 		if err != nil {
-			return "", fmt.Errorf("invalid size %q", size)
+			return trimmed, nil
 		}
 		num, err := strconv.ParseUint(trimmed, 0, 64)
 		if err != nil {
-			return "", fmt.Errorf("invalid register value %q", value)
+			return trimmed, nil
 		}
 		width := (sizeBits + 3) / 4
 		return fmt.Sprintf("0x%0*x", width, num), nil
@@ -399,7 +488,7 @@ func normalizeRegValue(value string, size string) (string, error) {
 
 	num, err := strconv.ParseUint(trimmed, 0, 64)
 	if err != nil {
-		return "", fmt.Errorf("invalid register value %q", value)
+		return trimmed, nil
 	}
 	return fmt.Sprintf("0x%x", num), nil
 }
@@ -414,7 +503,7 @@ func snapshotParseUint64(value string) (uint64, error) {
 
 func snapshotParseOptionalUint64(value string) (*uint64, error) {
 	if value == "" || value == "<none>" {
-		return nil, nil
+		return nil, fmt.Errorf("invalid uint64: %s", value)
 	}
 	v, err := snapshotParseUint64(value)
 	if err != nil {
@@ -433,9 +522,23 @@ func snapshotNoneToEmpty(value string) string {
 type dumpFieldState struct {
 	gotAddress bool
 	gotFile    bool
+	gotLength  bool
+	gotOffset  bool
+	gotSpace   bool
 }
 
 func snapshotTrimQuotes(value string) string {
 	trimmed := strings.TrimSpace(value)
 	return strings.Trim(trimmed, "\"'")
+}
+
+func snapshotSplitCSVRaw(value string) []string {
+	items := strings.Split(value, ",")
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }
