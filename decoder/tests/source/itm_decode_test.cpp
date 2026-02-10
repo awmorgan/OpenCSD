@@ -210,7 +210,7 @@ void dump_test_data()
         outfile.write((const char *)frameMux.getFrameBuffer(), frameMux.getFrameBufferSize());
 
         // clear the frames we copied directly
-        frameMux.clearFrames(frameMux.getFrameBufferSize() / 16);
+        frameMux.clearFrames((int)frameMux.getFrameBufferSize() / 16);
     }
 
     outfile.close();
@@ -616,7 +616,7 @@ ocsd_err_t process_binfile()
             std::streamsize nBuffRead = in.gcount();    // get count of data loaded.
             uint32_t nBuffProcessed = 0;         // amount processed in this buffer.
 
-            err = process_block(trace_index, trace_buffer, nBuffRead, nBuffProcessed, dataPathResp);            
+            err = process_block(trace_index, trace_buffer, (uint32_t)nBuffRead, nBuffProcessed, dataPathResp);            
         }
 
         if (!OCSD_DATA_RESP_IS_FATAL(dataPathResp))

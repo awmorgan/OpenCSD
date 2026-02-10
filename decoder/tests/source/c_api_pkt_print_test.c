@@ -220,7 +220,7 @@ static int process_cmd_line(int argc, char *argv[])
             }
             else
             {
-                len = strlen(argv[idx]);
+                len = (int)strlen(argv[idx]);
                 if (len > (MAX_TRACE_FILE_PATH_LEN - 32))
                 {
                     printf("-ss_path: path too long\n");
@@ -331,7 +331,7 @@ static uint32_t do_mem_acc_cb(const void *p_context, const ocsd_vaddr_t address,
         fseek(dump_file,(long)(address-mem_dump_address),SEEK_SET);
         file_read_bytes = fread(byteBuffer,sizeof(uint8_t),read_bytes,dump_file);
         if(file_read_bytes < read_bytes)
-            read_bytes = file_read_bytes;
+            read_bytes = (uint32_t)file_read_bytes;
     }
 #ifdef LOG_MEMACC_CB
     sprintf(packet_str, "mem_acc_cb(addr 0x%08llX, size %d, trcID 0x%02X)\n", address, reqBytes, trc_id);
@@ -474,7 +474,7 @@ ocsd_datapath_resp_t packet_handler(void *context, const ocsd_datapath_op_t op, 
     {
     case OCSD_OP_DATA:
         sprintf(packet_str,"Idx:%"  OCSD_TRC_IDX_STR "; ", index_sop);
-        offset = strlen(packet_str);
+        offset = (int)strlen(packet_str);
    
         /* 
         * got a packet - convert to string and use the libraries' message output to print to file and stdoout 
@@ -556,7 +556,7 @@ void packet_monitor(    void *context,
     default: break;
     case OCSD_OP_DATA:
         sprintf(packet_str,"Idx:%"  OCSD_TRC_IDX_STR ";", index_sop);
-        offset = strlen(packet_str);
+        offset = (int)strlen(packet_str);
         offset+= print_data_array(p_data,size,packet_str+offset,PACKET_STR_LEN-offset);
 
         /* got a packet - convert to string and use the libraries' message output to print to file and stdoout */
@@ -590,7 +590,7 @@ ocsd_datapath_resp_t gen_trace_elem_print(const void *p_context, const ocsd_trc_
     int offset = 0;
 
     sprintf(packet_str,"Idx:%"  OCSD_TRC_IDX_STR "; TrcID:0x%02X; ", index_sop, trc_chan_id);
-    offset = strlen(packet_str);
+    offset = (int)strlen(packet_str);
 
     if(ocsd_gen_elem_str(elem, packet_str+offset,PACKET_STR_LEN - offset) == OCSD_OK)
     {
@@ -1003,8 +1003,8 @@ int process_trace_data(FILE *pf)
                 ret = process_data_block(dcdtree_handle, 
                                 index,
                                 data_buffer,
-                                data_read);
-                index += data_read;
+                                (int)data_read);
+                index += (ocsd_trc_index_t)data_read;
             }
             else if(ferror(pf))
                 ret = OCSD_ERR_FILE_ERROR;
@@ -1131,7 +1131,7 @@ int main(int argc, char *argv[])
         len = 0;
         for (i = 0; i < argc; i++)
         {
-            len += strlen(argv[i]) + 1;
+            len += (int)strlen(argv[i]) + 1;
             if (len < 512)
             {
                 strcat(message, argv[i]);

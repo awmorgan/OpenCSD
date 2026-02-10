@@ -109,7 +109,7 @@ size_t ModernSnapshotParser::getDeviceCount() const
 {
     unsigned int deviceCount = 0;
     if (isInitialised())
-        deviceCount = deviceMap.size();
+        deviceCount = (unsigned int)deviceMap.size();
     return deviceCount;
 }
 

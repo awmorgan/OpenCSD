@@ -288,7 +288,7 @@ uint32_t TestMemAccCB(const void* p_context, const ocsd_vaddr_t address, const o
                )
             {
                 // in range - get offset into buffer
-                uint32_t offset =  address - ranges->ranges[i].s_address;
+                uint32_t offset =  (uint32_t)address - (uint32_t)(ranges->ranges[i].s_address);
 
                 // copy all bytes if enough left in range - otherwise what if left
                 if (ranges->ranges[i].size - offset >= reqBytes)
