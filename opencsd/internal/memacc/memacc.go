@@ -3,6 +3,10 @@ package memacc
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
+	"os"
+	"sort"
+	"sync"
 )
 
 // MemSpace represents the memory space bitmask.
@@ -25,86 +29,148 @@ const (
 )
 
 func (m MemSpace) String() string {
-	return fmt.Sprintf("MemSpace(0x%x)", uint32(m))
+	var s string
+	if m&MemSpaceEL1N != 0 {
+		s += "EL1N,"
+	}
+	if m&MemSpaceEL2 != 0 {
+		s += "EL2,"
+	}
+	if m&MemSpaceEL3 != 0 {
+		s += "EL3,"
+	}
+	if m&MemSpaceEL1S != 0 {
+		s += "EL1S,"
+	}
+	if m&MemSpaceEL2S != 0 {
+		s += "EL2S,"
+	}
+	if m&MemSpaceEL1R != 0 {
+		s += "EL1R,"
+	}
+	if m&MemSpaceEL2R != 0 {
+		s += "EL2R,"
+	}
+	if m&MemSpaceRoot != 0 {
+		s += "Root,"
+	}
+	if s == "" {
+		return "None"
+	}
+	return s[:len(s)-1] // Remove trailing comma
 }
 
 // Common errors
 var (
-	ErrMemAccOverlap = fmt.Errorf("memory accessor overlap")
+	ErrMemAccOverlap  = fmt.Errorf("memory accessor overlap")
+	ErrOutOfRange     = fmt.Errorf("address out of range")
+	ErrAccessInvalid  = fmt.Errorf("memory access invalid")
+	ErrNotInitialized = fmt.Errorf("accessor not initialized")
+	ErrFileAccess     = fmt.Errorf("file access error")
 )
 
 // Accessor is the interface for memory access objects.
+// Idiomatic Note: Getters renamed to remove "Get" prefix where appropriate.
 type Accessor interface {
 	SetMemSpace(space MemSpace)
-	// Getters required for Mapper overlap checks
-	GetStartAddr() uint64
-	GetEndAddr() uint64
-	GetMemSpace() MemSpace
+	StartAddr() uint64
+	EndAddr() uint64
+	MemSpace() MemSpace
 	// Read performs a read on the specific accessor
 	Read(addr uint64, space MemSpace, trcID uint8, reqBytes uint32) ([]byte, error)
+	// String returns a description for logging
+	String() string
 }
 
-// BufferAccessor mimics TrcMemAccBufPtr.
-// It provides access to a specific buffer in memory.
-type BufferAccessor struct {
-	addr      uint64
-	data      []byte
-	memSpace  MemSpace
+// BaseAccessor provides common fields for accessors.
+// This mimics TrcMemAccessorBase to avoid code duplication.
+type BaseAccessor struct {
 	startAddr uint64
 	endAddr   uint64
+	memSpace  MemSpace
 }
 
-func (b *BufferAccessor) InitAccessor(addr uint64, data []byte) {
-	b.addr = addr
-	b.data = data
-	b.startAddr = addr
-	b.endAddr = addr + uint64(len(data)) - 1
+func (b *BaseAccessor) StartAddr() uint64          { return b.startAddr }
+func (b *BaseAccessor) EndAddr() uint64            { return b.endAddr }
+func (b *BaseAccessor) MemSpace() MemSpace         { return b.memSpace }
+func (b *BaseAccessor) SetMemSpace(space MemSpace) { b.memSpace = space }
+func (b *BaseAccessor) InRange(addr uint64) bool {
+	return addr >= b.startAddr && addr <= b.endAddr
+}
+func (b *BaseAccessor) BytesInRange(addr uint64, reqBytes uint32) uint32 {
+	if !b.InRange(addr) {
+		return 0
+	}
+	available := b.endAddr - addr + 1
+	if uint64(reqBytes) > available {
+		return uint32(available)
+	}
+	return reqBytes
 }
 
-func (b *BufferAccessor) SetMemSpace(space MemSpace) {
-	b.memSpace = space
+// -----------------------------------------------------------------------------
+// Buffer Accessor
+// -----------------------------------------------------------------------------
+
+// BufferAccessor mimics TrcMemAccBufPtr.
+type BufferAccessor struct {
+	BaseAccessor
+	data []byte
 }
 
-func (b *BufferAccessor) SetRange(start, end uint64) {
-	b.startAddr = start
-	b.endAddr = end
+// NewBufferAccessor creates a new accessor for a byte slice.
+func NewBufferAccessor(addr uint64, data []byte, space MemSpace) *BufferAccessor {
+	return &BufferAccessor{
+		BaseAccessor: BaseAccessor{
+			startAddr: addr,
+			endAddr:   addr + uint64(len(data)) - 1,
+			memSpace:  space,
+		},
+		data: data,
+	}
 }
-
-// Implement Accessor interface
-func (b *BufferAccessor) GetStartAddr() uint64  { return b.startAddr }
-func (b *BufferAccessor) GetEndAddr() uint64    { return b.endAddr }
-func (b *BufferAccessor) GetMemSpace() MemSpace { return b.memSpace }
 
 func (b *BufferAccessor) Read(addr uint64, space MemSpace, trcID uint8, reqBytes uint32) ([]byte, error) {
-	if addr < b.startAddr || addr > b.endAddr {
-		return nil, fmt.Errorf("address out of range")
+	// Base validation logic
+	if !b.InRange(addr) {
+		return nil, nil // Return nil, no error implies "address not managed by this accessor" in this context
+	}
+
+	count := b.BytesInRange(addr, reqBytes)
+	if count == 0 {
+		return nil, nil
 	}
 
 	offset := addr - b.startAddr
-	// Check if read extends beyond buffer
-	if offset+uint64(reqBytes) > uint64(len(b.data)) {
-		return nil, fmt.Errorf("read overflow")
-	}
-
-	return b.data[offset : offset+uint64(reqBytes)], nil
+	return b.data[offset : offset+uint64(count)], nil
 }
+
+func (b *BufferAccessor) String() string {
+	return fmt.Sprintf("BuffAcc; Range::0x%x:0x%x; Space::%s", b.startAddr, b.endAddr, b.memSpace)
+}
+
+// -----------------------------------------------------------------------------
+// Callback Accessor
+// -----------------------------------------------------------------------------
 
 // CallbackFn defines the signature for memory access callbacks.
 type CallbackFn func(context interface{}, addr uint64, space MemSpace, trcID uint8, reqBytes uint32) ([]byte, error)
 
 // CBAccessor mimics TrcMemAccCB.
 type CBAccessor struct {
-	startAddr uint64
-	endAddr   uint64
-	memSpace  MemSpace
-	cb        CallbackFn
-	ctx       interface{}
+	BaseAccessor
+	cb  CallbackFn
+	ctx interface{}
 }
 
-func (c *CBAccessor) InitAccessor(addr uint64, endAddr uint64, space MemSpace) {
-	c.startAddr = addr
-	c.endAddr = endAddr
-	c.memSpace = space
+func NewCBAccessor(startAddr, endAddr uint64, space MemSpace) *CBAccessor {
+	return &CBAccessor{
+		BaseAccessor: BaseAccessor{
+			startAddr: startAddr,
+			endAddr:   endAddr,
+			memSpace:  space,
+		},
+	}
 }
 
 func (c *CBAccessor) SetCB(fn CallbackFn, ctx interface{}) {
@@ -112,21 +178,169 @@ func (c *CBAccessor) SetCB(fn CallbackFn, ctx interface{}) {
 	c.ctx = ctx
 }
 
-func (c *CBAccessor) SetMemSpace(space MemSpace) {
-	c.memSpace = space
-}
-
-// Implement Accessor interface
-func (c *CBAccessor) GetStartAddr() uint64  { return c.startAddr }
-func (c *CBAccessor) GetEndAddr() uint64    { return c.endAddr }
-func (c *CBAccessor) GetMemSpace() MemSpace { return c.memSpace }
-
 func (c *CBAccessor) Read(addr uint64, space MemSpace, trcID uint8, reqBytes uint32) ([]byte, error) {
 	if c.cb != nil {
 		return c.cb(c.ctx, addr, space, trcID, reqBytes)
 	}
 	return nil, fmt.Errorf("callback not set")
 }
+
+func (c *CBAccessor) String() string {
+	return fmt.Sprintf("CBAcc; Range::0x%x:0x%x; Space::%s", c.startAddr, c.endAddr, c.memSpace)
+}
+
+// -----------------------------------------------------------------------------
+// File Accessor (Added to match C++ TrcMemAccFile)
+// -----------------------------------------------------------------------------
+
+// FileRegion represents an offset region within a file accessor.
+type FileRegion struct {
+	BaseAccessor
+	fileOffset int64
+}
+
+// FileAccessor mimics TrcMemAccFile.
+// It handles reading binary data from a file, supporting multiple regions.
+type FileAccessor struct {
+	BaseAccessor
+	filePath   string
+	file       *os.File
+	fileSize   int64
+	regions    []FileRegion
+	hasRegions bool
+	mu         sync.Mutex // Files are stateful (seek position), need mutex for safety
+}
+
+// NewFileAccessor creates a new file accessor.
+func NewFileAccessor(path string, startAddr uint64, offset int64, size int64) (*FileAccessor, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrFileAccess, err)
+	}
+
+	info, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	fileSize := info.Size()
+
+	fa := &FileAccessor{
+		filePath: path,
+		file:     f,
+		fileSize: fileSize,
+	}
+
+	// Logic from C++ initAccessor
+	if offset == 0 && size == 0 {
+		// Use whole file
+		fa.AddOffsetRange(startAddr, uint64(fileSize), 0)
+	} else {
+		if offset+size > fileSize {
+			f.Close()
+			return nil, fmt.Errorf("range exceeds file size")
+		}
+		fa.AddOffsetRange(startAddr, uint64(size), offset)
+	}
+
+	return fa, nil
+}
+
+// AddOffsetRange mimics TrcMemAccessorFile::AddOffsetRange.
+// It allows mapping a discontinuous system address to a specific offset in the file.
+func (f *FileAccessor) AddOffsetRange(startAddr, size uint64, offset int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if size == 0 {
+		return nil
+	}
+
+	endAddr := startAddr + size - 1
+
+	// If it's the first primary range (offset 0), set the base range
+	if offset == 0 && len(f.regions) == 0 {
+		f.startAddr = startAddr
+		f.endAddr = endAddr
+		return nil
+	}
+
+	// Add to regions list
+	region := FileRegion{
+		BaseAccessor: BaseAccessor{
+			startAddr: startAddr,
+			endAddr:   endAddr,
+			memSpace:  MemSpaceAny, // Regions usually inherit general space, specific space checked at top level
+		},
+		fileOffset: offset,
+	}
+
+	f.regions = append(f.regions, region)
+	f.hasRegions = true
+
+	// Sort regions by address (mimics C++ sort)
+	sort.Slice(f.regions, func(i, j int) bool {
+		return f.regions[i].startAddr < f.regions[j].startAddr
+	})
+
+	// Adjust base range to encompass all regions if necessary (simplified relative to C++)
+	// In C++, the base range often acts as a fallback or the "Main" range.
+	// For faithfulness: if the base range was set, we keep it. Regions override.
+
+	return nil
+}
+
+func (f *FileAccessor) Read(addr uint64, space MemSpace, trcID uint8, reqBytes uint32) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var readOffset int64 = -1
+	var available uint32 = 0
+
+	// Check Base Range
+	if f.BaseAccessor.InRange(addr) {
+		available = f.BaseAccessor.BytesInRange(addr, reqBytes)
+		// Map address to file offset (assuming linear mapping from base)
+		readOffset = int64(addr - f.startAddr)
+	}
+
+	// Check Regions (Overrides base if found)
+	if f.hasRegions {
+		for _, reg := range f.regions {
+			if reg.InRange(addr) {
+				available = reg.BytesInRange(addr, reqBytes)
+				// Calculate offset: (Addr - RegionStart) + RegionFileOffset
+				readOffset = int64(addr-reg.startAddr) + reg.fileOffset
+				break
+			}
+		}
+	}
+
+	if readOffset == -1 || available == 0 {
+		return nil, nil // Not in range
+	}
+
+	// Perform File Read
+	data := make([]byte, available)
+	_, err := f.file.ReadAt(data, readOffset)
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func (f *FileAccessor) Close() error {
+	return f.file.Close()
+}
+
+func (f *FileAccessor) String() string {
+	return fmt.Sprintf("FileAcc; Path::%s; BaseRange::0x%x:0x%x", f.filePath, f.startAddr, f.endAddr)
+}
+
+// -----------------------------------------------------------------------------
+// Cache
+// -----------------------------------------------------------------------------
 
 type cachePage struct {
 	start    uint64
@@ -178,6 +392,7 @@ func (c *memCache) invalidateAll() {
 	for i := range c.pages {
 		c.pages[i].validLen = 0
 		c.pages[i].useSeq = 0
+		c.pages[i].trcID = 0
 	}
 	c.mruIdx = 0
 }
@@ -198,6 +413,7 @@ func (c *memCache) findPage(addr uint64, reqBytes uint32, trcID uint8) (int, boo
 		if p.validLen == 0 || p.trcID != trcID {
 			continue
 		}
+		// Check if block is entirely within the page
 		if p.start <= addr && p.start+uint64(p.validLen) >= end {
 			return i, true
 		}
@@ -205,17 +421,27 @@ func (c *memCache) findPage(addr uint64, reqBytes uint32, trcID uint8) (int, boo
 	return -1, false
 }
 
+// nextPageIndex implements the LRU-like sequence logic from C++
 func (c *memCache) nextPageIndex() int {
+	// First pass: look for empty page
 	for i := range c.pages {
-		if c.pages[i].validLen == 0 {
+		if c.pages[i].useSeq == 0 {
 			return i
 		}
 	}
-	c.mruIdx++
-	if c.mruIdx >= len(c.pages) {
-		c.mruIdx = 0
+
+	// Second pass: find oldest sequence
+	oldestIdx := c.mruIdx
+	oldestSeq := c.pages[c.mruIdx].useSeq
+
+	// Check all pages to find minimum sequence
+	for i := range c.pages {
+		if c.pages[i].useSeq < oldestSeq {
+			oldestSeq = c.pages[i].useSeq
+			oldestIdx = i
+		}
 	}
-	return c.mruIdx
+	return oldestIdx
 }
 
 func (c *memCache) readBytes(acc Accessor, addr uint64, memSpace MemSpace, trcID uint8, reqBytes uint32) ([]byte, error) {
@@ -223,6 +449,7 @@ func (c *memCache) readBytes(acc Accessor, addr uint64, memSpace MemSpace, trcID
 		return acc.Read(addr, memSpace, trcID, reqBytes)
 	}
 
+	// Check Cache Hit
 	if idx, ok := c.findPage(addr, reqBytes, trcID); ok {
 		p := &c.pages[idx]
 		offset := addr - p.start
@@ -231,34 +458,52 @@ func (c *memCache) readBytes(acc Accessor, addr uint64, memSpace MemSpace, trcID
 		return p.data[offset : offset+uint64(reqBytes)], nil
 	}
 
+	// Cache Miss - Load new page
 	idx := c.nextPageIndex()
+
+	// Read a full page from underlying accessor
 	data, err := acc.Read(addr, memSpace, trcID, c.pageSize)
+	// C++ handles "bad length" checks here. In Go, we trust the slice len.
 	if err != nil {
+		// Only fail if it's a hard error. If it's just partial data, we use what we got.
 		return nil, err
 	}
-	if len(data) == 0 {
-		return nil, fmt.Errorf("memory not accessible")
-	}
-	if len(data) > int(c.pageSize) {
-		return nil, fmt.Errorf("cache read overflow")
+
+	bytesRead := uint32(len(data))
+	if bytesRead == 0 {
+		return nil, nil // No data
 	}
 
 	p := &c.pages[idx]
+	// Reset page info
+	p.validLen = 0
+
+	// Copy data into cache page
 	copy(p.data, data)
 	p.start = addr
-	p.validLen = uint32(len(data))
+	p.validLen = bytesRead
 	p.trcID = trcID
 	p.useSeq = c.seq
 	c.seq++
 
+	// Check if we actually got enough to satisfy the specific request
 	if addr+uint64(reqBytes) > p.start+uint64(p.validLen) {
-		return nil, fmt.Errorf("insufficient data read")
+		// We loaded the page, but the specific bytes requested fell off the end of what was actually returned.
+		// (e.g. End of memory region). Return available, or error?
+		// C++ returns what is available.
+		available := p.start + uint64(p.validLen) - addr
+		return p.data[0:available], nil
 	}
+
 	offset := addr - p.start
 	return p.data[offset : offset+uint64(reqBytes)], nil
 }
 
-// Mapper mimics TrcMemAccMapGlobalSpace.
+// -----------------------------------------------------------------------------
+// Mapper
+// -----------------------------------------------------------------------------
+
+// Mapper mimics TrcMemAccMapper.
 type Mapper struct {
 	accessors []Accessor
 	cache     memCache
@@ -274,21 +519,19 @@ func NewMapper() *Mapper {
 }
 
 func (m *Mapper) AddAccessor(acc Accessor, csID uint8) error {
-	newStart := acc.GetStartAddr()
-	newEnd := acc.GetEndAddr()
-	newSpace := acc.GetMemSpace()
+	newStart := acc.StartAddr()
+	newEnd := acc.EndAddr()
+	newSpace := acc.MemSpace()
 
 	for _, existing := range m.accessors {
-		exStart := existing.GetStartAddr()
-		exEnd := existing.GetEndAddr()
-		exSpace := existing.GetMemSpace()
+		exStart := existing.StartAddr()
+		exEnd := existing.EndAddr()
+		exSpace := existing.MemSpace()
 
-		// Check for Overlap
-		// 1. Check Address Range Overlap
-		// Two ranges overlap if: start1 <= end2 && start2 <= end1
+		// Check Address Range Overlap: start1 <= end2 && start2 <= end1
 		rangeOverlap := (exStart <= newEnd) && (newStart <= exEnd)
 
-		// 2. Check Memory Space Overlap
+		// Check Memory Space Overlap
 		spaceOverlap := (uint32(exSpace) & uint32(newSpace)) != 0
 
 		if rangeOverlap && spaceOverlap {
@@ -301,27 +544,32 @@ func (m *Mapper) AddAccessor(acc Accessor, csID uint8) error {
 }
 
 func (m *Mapper) RemoveAllAccessors() {
+	// Close file accessors if any
+	for _, acc := range m.accessors {
+		if fa, ok := acc.(*FileAccessor); ok {
+			fa.Close()
+		}
+	}
 	m.accessors = nil
 	m.accCurr = nil
 	m.InvalidateCache()
 }
 
-func (m *Mapper) readFromCurrent(addr uint64, space MemSpace) bool {
-	if m.accCurr == nil {
-		return false
-	}
-	if addr < m.accCurr.GetStartAddr() || addr > m.accCurr.GetEndAddr() {
-		return false
-	}
-	return (uint32(m.accCurr.GetMemSpace()) & uint32(space)) != 0
-}
-
 func (m *Mapper) findAccessor(addr uint64, space MemSpace) bool {
+	// Optimization: Check current first (C++ logic)
+	if m.accCurr != nil {
+		if m.accCurr.StartAddr() <= addr && m.accCurr.EndAddr() >= addr {
+			if (uint32(m.accCurr.MemSpace()) & uint32(space)) != 0 {
+				return true
+			}
+		}
+	}
+
 	for _, acc := range m.accessors {
-		if addr < acc.GetStartAddr() || addr > acc.GetEndAddr() {
+		if addr < acc.StartAddr() || addr > acc.EndAddr() {
 			continue
 		}
-		if (uint32(acc.GetMemSpace()) & uint32(space)) == 0 {
+		if (uint32(acc.MemSpace()) & uint32(space)) == 0 {
 			continue
 		}
 		m.accCurr = acc
@@ -330,22 +578,30 @@ func (m *Mapper) findAccessor(addr uint64, space MemSpace) bool {
 	return false
 }
 
+// ReadTargetMemory reads a 32-bit word (4 bytes) from the target memory.
+// Returns a uint32 in Little Endian.
 func (m *Mapper) ReadTargetMemory(addr uint64, trcID uint8, space MemSpace, reqBytes uint32) (uint32, error) {
-	readFromCurr := m.readFromCurrent(addr, space)
-	if !readFromCurr {
-		if !m.findAccessor(addr, space) {
-			return 0, fmt.Errorf("memory not accessible")
-		}
-		if m.cache.enabled {
-			m.cache.invalidateByTraceID(trcID)
-		}
+	// Locate Accessor
+	if !m.findAccessor(addr, space) {
+		return 0, fmt.Errorf("%w: 0x%x (%s)", ErrAccessInvalid, addr, space)
 	}
 
+	// Invalidate cache if trace ID changed (handled in C++ by invalidating on context switch,
+	// but here we just ensure consistency)
+	// Note: The C++ code only invalidates if the *accessor* changes or explicitly requested.
+	// We will follow the C++ readBytes logic which checks cache hits by TraceID.
+
+	// Perform Read (via Cache)
 	data, err := m.cache.readBytes(m.accCurr, addr, space, trcID, reqBytes)
 	if err != nil {
 		return 0, err
 	}
+
+	// Convert to uint32
 	if len(data) < 4 {
+		// Not enough data read (e.g. near end of memory)
+		// We can return what we have padded, or error.
+		// Typically instruction decode requires full words.
 		return 0, fmt.Errorf("insufficient data read")
 	}
 
@@ -359,4 +615,8 @@ func (m *Mapper) EnableCaching(enable bool) {
 
 func (m *Mapper) InvalidateCache() {
 	m.cache.invalidateAll()
+}
+
+func (m *Mapper) InvalidateCacheID(trcID uint8) {
+	m.cache.invalidateByTraceID(trcID)
 }
