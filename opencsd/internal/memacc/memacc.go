@@ -230,6 +230,7 @@ func NewFileAccessor(path string, startAddr uint64, offset int64, size int64) (*
 		file:     f,
 		fileSize: fileSize,
 	}
+	fa.memSpace = MemSpaceAny
 
 	// Logic from C++ initAccessor
 	if offset == 0 && size == 0 {
@@ -284,8 +285,17 @@ func (f *FileAccessor) AddOffsetRange(startAddr, size uint64, offset int64) erro
 	})
 
 	// Adjust base range to encompass all regions if necessary (simplified relative to C++)
-	// In C++, the base range often acts as a fallback or the "Main" range.
-	// For faithfulness: if the base range was set, we keep it. Regions override.
+	if f.startAddr == 0 && f.endAddr == 0 {
+		f.startAddr = startAddr
+		f.endAddr = endAddr
+	} else {
+		if startAddr < f.startAddr {
+			f.startAddr = startAddr
+		}
+		if endAddr > f.endAddr {
+			f.endAddr = endAddr
+		}
+	}
 
 	return nil
 }
