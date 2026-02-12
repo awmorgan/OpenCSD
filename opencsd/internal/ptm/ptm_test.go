@@ -2,6 +2,7 @@ package ptm
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -24,9 +25,10 @@ func TestPtmParity(t *testing.T) {
 	if len(logLines) != len(goOutput) {
 		t.Fatalf("Mismatched number of lines: expected %d, got %d", len(logLines), len(goOutput))
 	}
-	for i := range logLines {
-		if logLines[i] != goOutput[i] {
-			t.Errorf("Mismatch at line %d: expected %q, got %q", i, logLines[i], goOutput[i])
+	for i, pkt := range goOutput {
+		line := fmt.Sprintf("Idx:%d; ID:0; [%s];\t%s", pkt.Index, formatRawBytes(pkt.RawBytes), pkt.ToString())
+		if logLines[i] != line {
+			t.Errorf("Mismatch at line %d: expected %q, got %q", i, logLines[i], line)
 		}
 	}
 
