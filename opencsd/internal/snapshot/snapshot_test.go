@@ -675,7 +675,7 @@ func parseGoldenSnapshot(path string) (*SnapshotConfig, error) {
 			if currentDevice == nil {
 				return nil, fmt.Errorf("reg outside device: %s", line)
 			}
-			regName := strings.TrimPrefix(key, "reg.")
+			regName := strings.ToUpper(strings.TrimPrefix(key, "reg."))
 			val, id, size, rawKey := parseRegValue(value)
 			currentDevice.Registers[regName] = append(currentDevice.Registers[regName], RegisterValue{
 				Value:  val,

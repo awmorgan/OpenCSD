@@ -464,7 +464,7 @@ func parseRegKey(key string) (string, string, string, string) {
 		}
 	}
 
-	return regName, id, size, rawKey
+	return strings.ToUpper(regName), id, size, rawKey
 }
 
 func normalizeRegValue(value string, size string) (string, error) {
