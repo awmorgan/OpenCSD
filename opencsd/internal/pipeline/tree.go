@@ -17,10 +17,12 @@ import (
 )
 
 type DecodeTree struct {
-	Mapper      *memacc.Mapper
-	Deformatter *formatter.Deformatter
-	Printer     *printers.PktPrinter
-	Decoders    map[uint8]*ptm.PtmDecoder
+	Mapper         *memacc.Mapper
+	Deformatter    *formatter.Deformatter
+	Printer        *printers.PktPrinter
+	Decoders       map[uint8]*ptm.PtmDecoder
+	UseDeformatter bool
+	RawDecoder     common.TrcDataIn
 
 	out         io.Writer
 	decode      bool
@@ -29,11 +31,12 @@ type DecodeTree struct {
 
 func NewDecodeTree(snapConfig *snapshot.SnapshotConfig, baseDir string) (*DecodeTree, error) {
 	tree := &DecodeTree{
-		Mapper:      memacc.NewMapper(),
-		Deformatter: formatter.NewDeformatter(),
-		Printer:     printers.NewPktPrinter(),
-		Decoders:    make(map[uint8]*ptm.PtmDecoder),
-		out:         os.Stdout,
+		Mapper:         memacc.NewMapper(),
+		Deformatter:    formatter.NewDeformatter(),
+		Printer:        printers.NewPktPrinter(),
+		Decoders:       make(map[uint8]*ptm.PtmDecoder),
+		out:            os.Stdout,
+		UseDeformatter: true, // default to using deformatter
 	}
 
 	// 1. Setup Memory
@@ -117,18 +120,44 @@ func (t *DecodeTree) setupDecoders(cfg *snapshot.SnapshotConfig) error {
 		return fmt.Errorf("no trace metadata in snapshot")
 	}
 
+	// Create a map from trace source name to decoder trace ID
+	sourceNameToTraceID := make(map[string]uint8)
+
 	for _, dev := range cfg.Devices {
-		if strings.Contains(dev.Type, "PTM") || strings.Contains(dev.Type, "ETM") {
+		if strings.Contains(dev.Type, "PTM") || strings.Contains(dev.Type, "ETM") || strings.Contains(dev.Type, "PFT") {
 			trcID := t.getTraceIDFromRegs(dev.Registers)
 			if trcID > 0 {
-
 				decoder := ptm.NewPtmDecoder(t.Printer, t.Mapper)
-
 				t.Deformatter.Attach(trcID, decoder)
 				t.Decoders[trcID] = decoder
+
+				// Map device name to trace ID
+				sourceNameToTraceID[dev.Name] = trcID
 			}
 		}
 	}
+
+	// Detect buffer format and configure routing
+	for _, buf := range cfg.Trace.Buffers {
+		// If format is "source_data" or empty (raw), bypass deformatter
+		if buf.Format == "source_data" || buf.Format == "" {
+			t.UseDeformatter = false
+
+			// Find the trace source(s) for this buffer using the buffer's Name field
+			if sourceSources, ok := cfg.Trace.SourceBuffers[buf.Name]; ok && len(sourceSources) > 0 {
+				sourceName := sourceSources[0]
+
+				// Find the device with this source name
+				if traceID, ok := sourceNameToTraceID[sourceName]; ok {
+					if decoder, ok := t.Decoders[traceID]; ok {
+						t.RawDecoder = decoder
+					}
+				}
+			}
+		}
+		break // Process only first buffer for now
+	}
+
 	return nil
 }
 
@@ -156,7 +185,16 @@ func (t *DecodeTree) ProcessBuffer(path string) error {
 		return err
 	}
 
-	_, _, err = t.Deformatter.TraceDataIn(common.OpData, 0, data)
+	if t.UseDeformatter {
+		_, _, err = t.Deformatter.TraceDataIn(common.OpData, 0, data)
+	} else {
+		// Raw bypass: feed directly to the decoder
+		if t.RawDecoder != nil {
+			_, _, err = t.RawDecoder.TraceDataIn(common.OpData, 0, data)
+		} else {
+			return fmt.Errorf("raw format detected but no decoder attached")
+		}
+	}
 	return err
 }
 
