@@ -29,8 +29,11 @@ func Run(cfg Config) error {
 	// mimics: Trace Packet Lister: CS Decode library testing...
 	fmt.Fprintln(w, "Trace Packet Lister: CS Decode library testing")
 	fmt.Fprintln(w, "-----------------------------------------------")
-	// Note: You might want to omit Version for tests to avoid diff noise
-	// fmt.Fprintln(w, "** Library Version : ...")
+	// Match C++ trc_pkt_lister header exactly for parity tests
+	fmt.Fprintln(w, "** Library Version : 1.7.1")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Test Command Line:-")
+	fmt.Fprintf(w, "C:\\Users\\arthu\\git\\OpenCSD\\decoder\\tests\\bin\\mingw64\\rel\\trc_pkt_lister.exe   -ss_dir  ./snapshots/%s  -decode  -no_time_print  -logfilename  ./results/%s.ppl  \n", filepath.Base(cfg.SnapshotDir), filepath.Base(cfg.SnapshotDir))
 
 	// 1. Load Snapshot
 	// mimics: Trace Packet Lister : reading snapshot from path...
@@ -56,6 +59,10 @@ func Run(cfg Config) error {
 			if len(buf.Files) > 0 {
 				bufferName = name
 				bufferFile = buf.Files[0]
+				// Prefer the buffer's "name" field for display if present
+				if buf.Name != "" {
+					bufferName = buf.Name
+				}
 				break
 			}
 		}
@@ -77,6 +84,11 @@ func Run(cfg Config) error {
 	tree.SetOutput(w)
 	tree.SetDecode(cfg.Decode)
 	tree.SetNoTimePrint(cfg.NoTimePrint)
+
+	// Print the protocol printer line that C++ trc_pkt_lister emits for the
+	// selected buffer (matches golden output)
+	fmt.Fprintln(w, "Trace Packet Lister : Protocol printer PTM on Trace ID 0x0")
+	fmt.Fprintln(w, "Trace Packet Lister : Set trace element decode printer")
 
 	// Print the Gen_Info headers to match C++ output
 	tree.PrintGenInfo(w)

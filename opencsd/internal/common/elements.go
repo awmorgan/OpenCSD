@@ -40,12 +40,20 @@ type TraceElement struct {
 	EnAddr uint64 // End Address
 	ISA    Isa    // Instruction Set Architecture
 
+	// Instruction-range specific fields (last instruction info)
+	NumInstr      int       // num_i in C++ output
+	LastInstr     InstrInfo // detailed info for last instruction in range
+	LastInstrExec bool      // was the last instruction executed (E/N)
+
 	// Flags
 	HasTS bool
 	HasCC bool
 
 	// Exception / Event Info
 	ExcepID uint32
+
+	// TraceOn reason (used for ElemTraceOn formatting)
+	TraceOnReason int
 }
 
 // PeContext represents ocsd_pe_context
@@ -117,31 +125,122 @@ type InstrInfo struct {
 // ToString mimics the C++ OcsdTraceElement::toString() method.
 // This is CRITICAL for parity testing against trc_pkt_lister output.
 func (e *TraceElement) ToString() string {
+	// Helper arrays to match C++ formatting exactly
+	isaStr := func(isa Isa) string {
+		switch isa {
+		case IsaArm32:
+			return "A32"
+		case IsaThumb:
+			return "T32"
+		case IsaA64:
+			return "A64"
+		default:
+			return "Unk"
+		}
+	}
+
+	instrType := []string{"--- ", "BR  ", "iBR ", "ISB ", "DSB.DMB", "WFI.WFE", "TSTART"}
+	instrSub := []string{"--- ", "b+link ", "A64:ret ", "A64:eret ", "V7:impl ret"}
+	traceOnReason := []string{"begin or filter", "overflow", "debug restart"}
+
 	var sb strings.Builder
 
-	// Helper to mimic C++ format: "Idx:<N>; <Description>"
-	// Note: The index is usually printed by the lister loop, not the element itself.
-	// We focus on the element content here.
-
 	switch e.ElemType {
-	case ElemTraceOn:
-		sb.WriteString("Trace On")
 	case ElemNoSync:
-		sb.WriteString("No Sync")
+		// Default to init-decoder for now (matches C++ initial state)
+		sb.WriteString("OCSD_GEN_TRC_ELEM_NO_SYNC( [init-decoder])")
+
+	case ElemTraceOn:
+		reason := "begin or filter"
+		if e.TraceOnReason >= 0 && e.TraceOnReason < len(traceOnReason) {
+			reason = traceOnReason[e.TraceOnReason]
+		}
+		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_TRACE_ON( [%s])", reason)
+
 	case ElemPeContext:
-		fmt.Fprintf(&sb, "PE Context: %s", e.Context.String())
+		isaS := isaStr(e.ISA)
+		// Security
+		sec := "S"
+		if e.Context.SecurityLevel == SecNonSecure {
+			sec = "NS"
+		}
+		bits := "32-bit; "
+		if e.ISA == IsaA64 {
+			bits = "64-bit; "
+		}
+		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=%s) %s; %s", isaS, sec, bits)
+		// VMID / ContextID if present
+		if e.Context.VMID != 0 {
+			fmt.Fprintf(&sb, "VMID=0x%X; ", e.Context.VMID)
+		}
+		if e.Context.ContextID != 0 {
+			fmt.Fprintf(&sb, "CTXTID=0x%X; ", e.Context.ContextID)
+		}
+		sb.WriteString(")")
+
 	case ElemInstrRange:
-		fmt.Fprintf(&sb, "I_Range: 0x%X - 0x%X; %s", e.StAddr, e.EnAddr, e.ISA.String())
-	case ElemTimestamp:
-		fmt.Fprintf(&sb, "Timestamp: %d", e.Timestamp)
-	case ElemCycleCount:
-		fmt.Fprintf(&sb, "Cycle Count: %d", e.CycleCount)
+		// exec range, num_i, last_sz, ISA
+		num := e.NumInstr
+		if num == 0 {
+			num = 1
+		}
+		lastSz := int(e.LastInstr.InstrSize)
+		if lastSz == 0 {
+			lastSz = int(e.LastInstr.InstrSize)
+		}
+		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x%X:[0x%X] num_i(%d) last_sz(%d) (ISA=%s) ", e.StAddr, e.EnAddr, num, lastSz, isaStr(e.ISA))
+
+		// last instruction executed flag
+		if e.LastInstrExec {
+			sb.WriteString("E ")
+		} else {
+			sb.WriteString("N ")
+		}
+
+		// instr type
+		typeIdx := int(e.LastInstr.Type)
+		if typeIdx >= 0 && typeIdx < len(instrType) {
+			sb.WriteString(instrType[typeIdx])
+		}
+
+		// instr subtype
+		subIdx := int(e.LastInstr.SubType)
+		if subIdx > 0 && subIdx < len(instrSub) {
+			sb.WriteString(instrSub[subIdx])
+		}
+
+		// conditional flag
+		if e.LastInstr.IsConditional {
+			sb.WriteString(" <cond>")
+		}
+
+		// cycle count if present
+		if e.HasCC {
+			fmt.Fprintf(&sb, " [CC=%d]; ", e.CycleCount)
+		}
+
+		sb.WriteString(")")
+
 	case ElemException:
-		fmt.Fprintf(&sb, "Exception: ID 0x%X", e.ExcepID)
+		// Preferred return address if set (we use EnAddr as a hint)
+		if e.EnAddr != 0 {
+			fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_EXCEPTION(pref ret addr:0x%X; ", e.EnAddr)
+		} else {
+			sb.WriteString("OCSD_GEN_TRC_ELEM_EXCEPTION(")
+		}
+		fmt.Fprintf(&sb, "excep num (0x%02X) )", e.ExcepID)
+
+	case ElemTimestamp:
+		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_TIMESTAMP( [ TS=0x%X]; )", e.Timestamp)
+
+	case ElemCycleCount:
+		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_CYCLE_COUNT( [CC=%d]; )", e.CycleCount)
+
 	case ElemExceptionRet:
-		sb.WriteString("Exception Return")
+		sb.WriteString("OCSD_GEN_TRC_ELEM_EXCEPTION_RET()")
+
 	default:
-		fmt.Fprintf(&sb, "Unknown Element: %d", e.ElemType)
+		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_UNKNOWN(%d)", e.ElemType)
 	}
 
 	return sb.String()

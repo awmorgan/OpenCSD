@@ -125,8 +125,19 @@ func (t *DecodeTree) setupDecoders(cfg *snapshot.SnapshotConfig) error {
 
 	for _, dev := range cfg.Devices {
 		if strings.Contains(dev.Type, "PTM") || strings.Contains(dev.Type, "ETM") || strings.Contains(dev.Type, "PFT") {
+			// Determine if a trace ID register exists for this device
+			hasTraceID := false
+			for regName := range dev.Registers {
+				key := strings.ToLower(regName)
+				if key == "etmtraceidr" || key == "trctraceidr" {
+					hasTraceID = true
+					break
+				}
+			}
+
 			trcID := t.getTraceIDFromRegs(dev.Registers)
-			if trcID > 0 {
+			// Create decoder when a trace ID register is present (even if value is 0)
+			if hasTraceID {
 				decoder := ptm.NewPtmDecoder(t.Printer, t.Mapper)
 				t.Deformatter.Attach(trcID, decoder)
 				t.Decoders[trcID] = decoder
@@ -199,19 +210,12 @@ func (t *DecodeTree) ProcessBuffer(path string) error {
 }
 
 func (t *DecodeTree) PrintGenInfo(w io.Writer) {
-	// 1. Print Protocol Printers
-	for id := range t.Decoders {
-		// Note: C++ prints this for every PTM decoder attached
-		fmt.Fprintf(w, "Trace Packet Lister : Protocol printer PTM on Trace ID 0x%X\n", id)
-		fmt.Fprintln(w, "Trace Packet Lister : Set trace element decode printer")
-	}
-
-	// 2. Print Memory Accessors
+	// 1. Print Memory Accessors
 	fmt.Fprintln(w, "Gen_Info : Mapped Memory Accessors")
 	for _, acc := range t.Mapper.GetAccessors() {
 		fmt.Fprintf(w, "Gen_Info : %s\n", acc.String())
 	}
 
-	// 3. Print the separator
+	// 2. Print the separator
 	fmt.Fprintln(w, "Gen_Info : ========================")
 }

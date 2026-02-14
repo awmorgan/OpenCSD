@@ -4,6 +4,7 @@ import (
 	"opencsd/internal/codefollower"
 	"opencsd/internal/common"
 	"opencsd/internal/memacc"
+	"opencsd/internal/printers"
 )
 
 // PtmDecoder converts PTM Packets into Generic Trace Elements.
@@ -23,6 +24,9 @@ type PtmDecoder struct {
 	instrAddr uint64
 	isa       common.Isa
 	addrValid bool
+
+	// current packet index (used when emitting elements)
+	currentPktIndex int64
 }
 
 const (
@@ -64,8 +68,19 @@ func (d *PtmDecoder) TraceDataIn(op common.DataPathOp, index int64, data []byte)
 		return common.RespFatal, 0, err
 	}
 
-	// 3. Decode generated packets
+	// 3. Emit packet-level dump lines (raw bytes) then decode generated packets
+	//    This reproduces the C++ trc_pkt_lister output where each packet's
+	//    raw bytes + textual packet description are printed before the
+	//    generic trace elements that follow.
+	if printer, ok := d.sink.(*printers.PktPrinter); ok {
+		for _, pkt := range pkts {
+			printer.PrintPacketRaw(pkt.Index, 0, pkt.RawBytes, pkt.ToString())
+		}
+	}
+
 	for _, pkt := range pkts {
+		// record current packet index so pushed elements use the same index
+		d.currentPktIndex = int64(pkt.Index)
 		if err := d.DecodePacket(&pkt); err != nil {
 			return common.RespFatal, 0, err
 		}
@@ -141,9 +156,19 @@ func (d *PtmDecoder) processIsync(pkt *PtmPacket) error {
 	d.updateContext(pkt)
 	d.pushContext()
 
-	// Emit Trace On
+	// Emit Trace On (carry reason from packet iSync)
+	traceOnReason := 0
+	switch pkt.iSync {
+	case iSyncRestartOverflow:
+		traceOnReason = 1
+	case iSyncDebugExit:
+		traceOnReason = 2
+	default:
+		traceOnReason = 0
+	}
 	d.push(&common.TraceElement{
-		ElemType: common.ElemTraceOn,
+		ElemType:      common.ElemTraceOn,
+		TraceOnReason: traceOnReason,
 	})
 
 	// Flush Return Stack on Sync
@@ -165,6 +190,7 @@ func (d *PtmDecoder) processAtom(pkt *PtmPacket) error {
 
 	// Iterate bits from LSB to MSB (as per PTM spec)
 	// enBits: 1 = E, 0 = N
+	var merged *common.TraceElement
 	for i := 0; i < count; i++ {
 		atomBit := bits & 1
 		bits >>= 1
@@ -182,6 +208,11 @@ func (d *PtmDecoder) processAtom(pkt *PtmPacket) error {
 
 		// Handle Memory Access Failures
 		if d.follower.NaccPending {
+			// Flush any pending merged range before reporting NACC
+			if merged != nil {
+				d.push(merged)
+				merged = nil
+			}
 			d.push(&common.TraceElement{
 				ElemType: common.ElemAddrNacc,
 				StAddr:   d.follower.NaccAddr,
@@ -190,29 +221,71 @@ func (d *PtmDecoder) processAtom(pkt *PtmPacket) error {
 			return nil
 		}
 
-		// Emit Range Element
-		elem := &common.TraceElement{
-			ElemType: common.ElemInstrRange,
-			StAddr:   d.follower.StRangeAddr,
-			EnAddr:   d.follower.EnRangeAddr,
-			ISA:      d.follower.Info.ISA,
+		// Build a candidate range for this atom
+		candStart := d.follower.StRangeAddr
+		candEnd := d.follower.EnRangeAddr
+		candISA := d.follower.Info.ISA
+		candLast := d.follower.Info
+		candExec := (atomVal == common.AtomE)
+
+		if merged == nil {
+			merged = &common.TraceElement{
+				ElemType:      common.ElemInstrRange,
+				StAddr:        candStart,
+				EnAddr:        candEnd,
+				ISA:           candISA,
+				NumInstr:      1,
+				LastInstr:     candLast,
+				LastInstrExec: candExec,
+			}
+		} else {
+			// Merge only if contiguous, same ISA and same exec status for last instr
+			if merged.EnAddr == candStart && merged.ISA == candISA && merged.LastInstrExec == candExec {
+				merged.EnAddr = candEnd
+				merged.NumInstr++
+				merged.LastInstr = candLast
+				merged.LastInstrExec = candExec
+			} else {
+				// flush previous merged and start a new one
+				d.push(merged)
+				merged = &common.TraceElement{
+					ElemType:      common.ElemInstrRange,
+					StAddr:        candStart,
+					EnAddr:        candEnd,
+					ISA:           candISA,
+					NumInstr:      1,
+					LastInstr:     candLast,
+					LastInstrExec: candExec,
+				}
+			}
 		}
-		// Last atom in packet gets the cycle count if present
+
+		// If this is the last atom in the packet, attach cycle count to the merged range
 		if i == count-1 && pkt.ccValid {
-			elem.CycleCount = pkt.cycleCount
-			elem.HasCC = true
+			merged.CycleCount = pkt.cycleCount
+			merged.HasCC = true
 		}
-		d.push(elem)
 
 		// Prepare for next atom
 		if d.follower.NextValid {
 			d.instrAddr = d.follower.NextAddr
 			d.isa = d.follower.Info.NextISA
 		} else {
+			// push any pending merged range
+			if merged != nil {
+				d.push(merged)
+				merged = nil
+			}
 			d.addrValid = false
 			// If indirect branch executed, we wait for next BranchAddress packet
 			return nil
 		}
+	}
+
+	// push any remaining merged range
+	if merged != nil {
+		d.push(merged)
+		merged = nil
 	}
 	return nil
 }
@@ -263,10 +336,13 @@ func (d *PtmDecoder) processBranch(pkt *PtmPacket) error {
 		} else {
 			// Emit the instruction range for this branch instruction
 			elem := &common.TraceElement{
-				ElemType: common.ElemInstrRange,
-				StAddr:   d.follower.StRangeAddr,
-				EnAddr:   d.follower.EnRangeAddr,
-				ISA:      d.follower.Info.ISA,
+				ElemType:      common.ElemInstrRange,
+				StAddr:        d.follower.StRangeAddr,
+				EnAddr:        d.follower.EnRangeAddr,
+				ISA:           d.follower.Info.ISA,
+				NumInstr:      1,
+				LastInstr:     d.follower.Info,
+				LastInstrExec: true,
 			}
 
 			// If the packet has a cycle count, it applies to this executed branch
@@ -318,9 +394,12 @@ func (d *PtmDecoder) pushContext() {
 	d.push(&common.TraceElement{
 		ElemType: common.ElemPeContext,
 		Context:  d.peContext,
+		ISA:      d.isa,
 	})
 }
 
 func (d *PtmDecoder) push(elem *common.TraceElement) {
-	d.sink.TraceElemIn(0, 0, elem)
+	// Use the packet index recorded when processing the packet and the
+	// canonical channel ID 2 for generic trace elements (matches C++ lister)
+	d.sink.TraceElemIn(d.currentPktIndex, 2, elem)
 }
