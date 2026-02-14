@@ -73,7 +73,8 @@ func (p *PktProcessor) AddData(data []byte, index int64) {
 func (p *PktProcessor) ProcessPackets() ([]PtmPacket, error) {
 	var out []PtmPacket
 
-	for len(p.data) > 0 {
+	// Keep looping if we have data OR if we have a finished packet waiting to be sent
+	for len(p.data) > 0 || p.processState == stateSendPkt {
 		if p.processState == stateWaitSync {
 			if !p.findAsyncInStream() {
 				// Not enough data or no async found yet
@@ -83,6 +84,10 @@ func (p *PktProcessor) ProcessPackets() ([]PtmPacket, error) {
 
 		switch p.processState {
 		case stateProcHdr:
+			// Safety check: needed because we expanded the loop condition
+			if len(p.data) == 0 {
+				break
+			}
 			p.currPktIndex = p.totalProcessed
 			p.currPacketData = p.currPacketData[:0]
 			p.packet.clear()
@@ -111,7 +116,7 @@ func (p *PktProcessor) ProcessPackets() ([]PtmPacket, error) {
 				err = p.pktExceptionRet()
 			case ptmPktContextID:
 				p.pktCtxtID()
-				err = nil // pktCtxtID returns void in C++, no error
+				err = nil
 			case ptmPktVMID:
 				p.pktVMID()
 				err = nil
@@ -139,7 +144,7 @@ func (p *PktProcessor) ProcessPackets() ([]PtmPacket, error) {
 
 		case stateSendPkt:
 			pkt := p.packet
-			pkt.Index = int(p.currPktIndex) // Mapping int64 to int for legacy struct compatibility
+			pkt.Index = int(p.currPktIndex)
 			pkt.RawBytes = append([]byte(nil), p.currPacketData...)
 			out = append(out, pkt)
 
@@ -150,6 +155,7 @@ func (p *PktProcessor) ProcessPackets() ([]PtmPacket, error) {
 			p.processState = stateProcHdr
 		}
 
+		// Double break check for safety if we ran out of data while expecting a header
 		if len(p.data) == 0 && p.processState == stateProcHdr {
 			break
 		}
