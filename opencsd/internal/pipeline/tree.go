@@ -46,6 +46,10 @@ func NewDecodeTree(snapConfig *snapshot.SnapshotConfig, baseDir string) (*Decode
 func (t *DecodeTree) setupMemory(cfg *snapshot.SnapshotConfig, baseDir string) error {
 	t.Mapper.EnableCaching(true)
 
+	// Deduplication map to prevent adding the same memory dump multiple times
+	// (e.g. multi-core snapshots often define the same RAM for every core)
+	seen := make(map[string]bool)
+
 	for _, dev := range cfg.Devices {
 		for _, dump := range dev.Dumps {
 			fullPath := filepath.Join(baseDir, dump.FilePath)
@@ -58,7 +62,13 @@ func (t *DecodeTree) setupMemory(cfg *snapshot.SnapshotConfig, baseDir string) e
 				space = memacc.MemSpaceN
 			}
 
-			// Pass space to NewFileAccessor
+			// Deduplicate
+			key := fmt.Sprintf("%s|%d|%d", fullPath, dump.Address, space)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+
 			acc, err := memacc.NewFileAccessor(fullPath, dump.Address, 0, 0, space)
 			if err != nil {
 				fmt.Printf("Warning: Could not load dump %s: %v\n", fullPath, err)
