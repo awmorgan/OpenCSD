@@ -11,6 +11,7 @@ type CodeFollower struct {
 	memSpace memacc.MemSpace
 	trcID    uint8
 
+	RetStack *common.ReturnStack // Added Return Stack
 	// Current State
 	StRangeAddr uint64
 	EnRangeAddr uint64
@@ -31,9 +32,10 @@ func NewCodeFollower(mapper *memacc.Mapper) *CodeFollower {
 	}
 }
 
-func (c *CodeFollower) Setup(trcID uint8, memSpace memacc.MemSpace) {
+func (c *CodeFollower) Setup(trcID uint8, memSpace memacc.MemSpace, retStack *common.ReturnStack) {
 	c.trcID = trcID
 	c.memSpace = memSpace
+	c.RetStack = retStack
 }
 
 // FollowSingleAtom follows one instruction for an atom (E or N).
@@ -58,7 +60,9 @@ func (c *CodeFollower) FollowSingleAtom(addrStart uint64, atomVal common.AtomVal
 
 	// 3. Calculate Next Address
 	// Default: Next instruction sequential
-	c.NextAddr = c.EnRangeAddr
+	// Note: We calculate this before handling branch logic so we can push it to stack if needed.
+	seqAddr := c.EnRangeAddr
+	c.NextAddr = seqAddr
 	c.NextValid = true
 
 	// Handle Branching
@@ -68,14 +72,39 @@ func (c *CodeFollower) FollowSingleAtom(addrStart uint64, atomVal common.AtomVal
 			// Executed direct branch - go to branch destination
 			c.NextAddr = c.Info.BranchAddr
 			c.Info.NextISA = c.decodeISAFromAddr(c.Info.BranchAddr)
+
+			// PTM: Push to stack if it's a Link instruction (BL, BLX)
+			if c.Info.IsLink && c.RetStack != nil {
+				c.RetStack.Push(seqAddr, isa)
+			}
 		}
-		// If AtomN (Not Executed), we fall through to NextAddr (sequential), which is already set.
+		// If AtomN (Not Executed), fall through to sequential.
 
 	case common.InstrTypeIndirect:
 		if atomVal == common.AtomE {
-			// Executed indirect branch - We do not know the destination statically.
-			// The next address is invalid; the trace decoder must wait for a broadcast address packet.
-			c.NextValid = false
+			// Executed indirect branch.
+			// Check Return Stack first.
+			popped := false
+			if c.RetStack != nil {
+				addr, retISA, ok := c.RetStack.Pop()
+				if ok {
+					c.NextAddr = addr
+					c.Info.NextISA = retISA
+					c.NextValid = true
+					popped = true
+				}
+			}
+
+			if !popped {
+				// We do not know the destination statically and Stack failed.
+				// The decoder must wait for a broadcast address packet.
+				c.NextValid = false
+			}
+
+			// Even indirect branches can be links (e.g. BLX <reg>)
+			if c.Info.IsLink && c.RetStack != nil {
+				c.RetStack.Push(seqAddr, isa)
+			}
 		}
 		// If AtomN, fall through sequential.
 	}
@@ -101,7 +130,7 @@ func (c *CodeFollower) decodeSingleOpCode() error {
 
 func (c *CodeFollower) decodeISAFromAddr(addr uint64) common.Isa {
 	// For ARM/Thumb, LSB indicates Thumb state
-	// If we are currently A64, we likely stay A64 unless specific interworking (not handled here)
+	// If we are currently A64, we likely stay A64 unless specific interworking
 	if c.Info.ISA == common.IsaA64 {
 		return common.IsaA64
 	}

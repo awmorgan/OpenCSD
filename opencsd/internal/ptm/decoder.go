@@ -11,7 +11,8 @@ type PtmDecoder struct {
 	sink     common.GenElemIn
 	mapper   *memacc.Mapper
 	follower *codefollower.CodeFollower
-	pktProc  *PktProcessor // Internal Packet Processor
+	retStack *common.ReturnStack // Added Return Stack instance
+	pktProc  *PktProcessor
 
 	// Internal State tracking
 	peContext common.PeContext
@@ -36,6 +37,7 @@ func NewPtmDecoder(sink common.GenElemIn, mapper *memacc.Mapper) *PtmDecoder {
 		sink:      sink,
 		mapper:    mapper,
 		follower:  codefollower.NewCodeFollower(mapper),
+		retStack:  common.NewReturnStack(), // Init Stack
 		pktProc:   NewPktProcessor(),
 		state:     dcdStateNoSync,
 		needIsync: true,
@@ -143,6 +145,10 @@ func (d *PtmDecoder) processIsync(pkt *PtmPacket) error {
 	d.push(&common.TraceElement{
 		ElemType: common.ElemTraceOn,
 	})
+
+	// Flush Return Stack on Sync
+	d.retStack.Flush()
+
 	return nil
 }
 
@@ -212,32 +218,74 @@ func (d *PtmDecoder) processAtom(pkt *PtmPacket) error {
 }
 
 func (d *PtmDecoder) processBranch(pkt *PtmPacket) error {
-	// Branch packets often imply an "E" atom for the branch that led here
-	// if we are sitting at a valid address.
-	// (Simplified logic: Assumes PTM 1.1 branch behavior)
-
+	// 1. Handle Exception vs Normal Branch
 	if pkt.exception.present {
+		// === Exception Packet ===
 		elem := &common.TraceElement{
 			ElemType: common.ElemException,
 			ExcepID:  uint32(pkt.exception.number),
 		}
+		// If we were executing, capture the preferred return address
 		if d.addrValid {
-			elem.StAddr = d.instrAddr // Exception return address
+			elem.StAddr = d.instrAddr
 			elem.EnAddr = d.instrAddr
 		}
+		// Exceptions can carry Cycle Counts
+		if pkt.ccValid {
+			elem.CycleCount = pkt.cycleCount
+			elem.HasCC = true
+		}
 		d.push(elem)
+
 	} else if d.addrValid {
-		// If we have a valid address and hit a branch packet, it usually means
-		// we took a branch that wasn't fully resolved by atoms (e.g. indirect)
-		// OR we just assume the previous block finished.
-		// For strictly correct PTM, we should try to connect the dots if possible,
-		// but often BranchAddr just resets the PC.
+		// === Normal Branch Address Packet ===
+		// This implies an "E" atom for the instruction that caused the branch.
+		// We must "follow" this instruction to generate the proper instruction range packet
+		// BEFORE we switch to the new address.
+
+		d.setupFollower() // Ensure follower has current context/stack
+
+		// "Execute" the branch instruction (Atom E)
+		err := d.follower.FollowSingleAtom(d.instrAddr, common.AtomE, d.isa)
+		if err != nil {
+			return err
+		}
+
+		// Check for Memory Access Faults during decode
+		if d.follower.NaccPending {
+			d.push(&common.TraceElement{
+				ElemType: common.ElemAddrNacc,
+				StAddr:   d.follower.NaccAddr,
+			})
+			d.addrValid = false
+			// We fall through because the Branch Packet provides a new valid address,
+			// allowing us to recover immediately.
+		} else {
+			// Emit the instruction range for this branch instruction
+			elem := &common.TraceElement{
+				ElemType: common.ElemInstrRange,
+				StAddr:   d.follower.StRangeAddr,
+				EnAddr:   d.follower.EnRangeAddr,
+				ISA:      d.follower.Info.ISA,
+			}
+
+			// If the packet has a cycle count, it applies to this executed branch
+			if pkt.ccValid {
+				elem.CycleCount = pkt.cycleCount
+				elem.HasCC = true
+			}
+			d.push(elem)
+		}
 	}
 
-	// Update State
+	// 2. Update Decoder State to the new address provided by the packet
+	// This overrides whatever the follower calculated as "NextAddr" because
+	// the packet is the authoritative source of truth.
 	d.instrAddr = uint64(pkt.addr.val)
 	d.isa = pkt.currISA
 	d.addrValid = true
+
+	// Update context (Security, VMID, etc.) if the packet contains changes
 	d.updateContext(pkt)
 
 	return nil
@@ -248,7 +296,8 @@ func (d *PtmDecoder) setupFollower() {
 	if d.peContext.SecurityLevel == common.SecNonSecure {
 		memSpace = memacc.MemSpaceEL1N // Simplified mapping
 	}
-	d.follower.Setup(0, memSpace) // TraceID 0 for now
+	// Pass the return stack to the follower
+	d.follower.Setup(0, memSpace, d.retStack)
 }
 
 func (d *PtmDecoder) updateContext(pkt *PtmPacket) {
