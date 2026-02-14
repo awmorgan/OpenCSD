@@ -57,6 +57,8 @@ func TestIntegrationComparison(t *testing.T) {
 			// 3. Compare
 			// Normalize line endings to handle Windows/Linux differences
 			actualStr := strings.ReplaceAll(actualBuf.String(), "\r\n", "\n")
+			actualStr = strings.ReplaceAll(actualStr, "internal/snapshot/testdata", "./snapshots")
+
 			expectedStr := strings.ReplaceAll(expected, "\r\n", "\n")
 
 			// Simple check (you might want a diff library like go-cmp later)

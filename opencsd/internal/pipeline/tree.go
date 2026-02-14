@@ -144,3 +144,21 @@ func (t *DecodeTree) ProcessBuffer(path string) error {
 	_, _, err = t.Deformatter.TraceDataIn(common.OpData, 0, data)
 	return err
 }
+
+func (t *DecodeTree) PrintGenInfo(w io.Writer) {
+	// 1. Print Protocol Printers
+	for id := range t.Decoders {
+		// Note: C++ prints this for every PTM decoder attached
+		fmt.Fprintf(w, "Trace Packet Lister : Protocol printer PTM on Trace ID 0x%X\n", id)
+		fmt.Fprintln(w, "Trace Packet Lister : Set trace element decode printer")
+	}
+
+	// 2. Print Memory Accessors
+	fmt.Fprintln(w, "Gen_Info : Mapped Memory Accessors")
+	for _, acc := range t.Mapper.GetAccessors() {
+		fmt.Fprintf(w, "Gen_Info : %s\n", acc.String())
+	}
+
+	// 3. Print the separator
+	fmt.Fprintln(w, "Gen_Info : ========================")
+}

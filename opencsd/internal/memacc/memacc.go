@@ -29,6 +29,13 @@ const (
 )
 
 func (m MemSpace) String() string {
+	if m == MemSpaceS {
+		return "Any S"
+	}
+	if m == MemSpaceN {
+		return "Any NS"
+	}
+
 	var s string
 	if m&MemSpaceEL1N != 0 {
 		s += "EL1N,"
@@ -319,7 +326,7 @@ func (f *FileAccessor) Close() error {
 }
 
 func (f *FileAccessor) String() string {
-	return fmt.Sprintf("FileAcc; Path::%s; BaseRange::0x%x:0x%x", f.filePath, f.startAddr, f.endAddr)
+	return fmt.Sprintf("FileAcc; Range::0x%x:%x; Mem Space::%s\nFilename=%s", f.startAddr, f.endAddr, f.memSpace, f.filePath)
 }
 
 // -----------------------------------------------------------------------------
@@ -603,4 +610,8 @@ func (m *Mapper) InvalidateCache() {
 
 func (m *Mapper) InvalidateCacheID(trcID uint8) {
 	m.cache.invalidateByTraceID(trcID)
+}
+
+func (m *Mapper) GetAccessors() []Accessor {
+	return m.accessors
 }

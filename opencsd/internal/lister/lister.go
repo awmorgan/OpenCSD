@@ -76,7 +76,10 @@ func Run(cfg Config) error {
 	// Configure the tree based on flags (mimics AttachPacketPrinters / ConfigureFrameDeMux)
 	tree.SetOutput(w)
 	tree.SetDecode(cfg.Decode)
-	tree.SetNoTimePrint(cfg.NoTimePrint) // You need to implement this in pipeline/tree.go
+	tree.SetNoTimePrint(cfg.NoTimePrint)
+
+	// Print the Gen_Info headers to match C++ output
+	tree.PrintGenInfo(w)
 
 	// 4. Run Process
 	fullPath := filepath.Join(cfg.SnapshotDir, bufferFile)
