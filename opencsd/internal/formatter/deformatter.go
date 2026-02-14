@@ -23,7 +23,7 @@ func NewDeformatter() *Deformatter {
 		receivers: make(map[uint8]common.TrcDataIn),
 		currID:    0,
 		buffer:    make([]byte, 0, FrameSize*2),
-		synced:    false,
+		synced:    true,
 	}
 }
 
