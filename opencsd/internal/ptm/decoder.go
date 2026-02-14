@@ -11,6 +11,7 @@ type PtmDecoder struct {
 	sink     common.GenElemIn
 	mapper   *memacc.Mapper
 	follower *codefollower.CodeFollower
+	pktProc  *PktProcessor // Internal Packet Processor
 
 	// Internal State tracking
 	peContext common.PeContext
@@ -35,6 +36,7 @@ func NewPtmDecoder(sink common.GenElemIn, mapper *memacc.Mapper) *PtmDecoder {
 		sink:      sink,
 		mapper:    mapper,
 		follower:  codefollower.NewCodeFollower(mapper),
+		pktProc:   NewPktProcessor(),
 		state:     dcdStateNoSync,
 		needIsync: true,
 		peContext: common.PeContext{
@@ -42,6 +44,32 @@ func NewPtmDecoder(sink common.GenElemIn, mapper *memacc.Mapper) *PtmDecoder {
 			ExceptionLevel: common.EL0,
 		},
 	}
+}
+
+// TraceDataIn implements common.TrcDataIn
+func (d *PtmDecoder) TraceDataIn(op common.DataPathOp, index int64, data []byte) (common.DataPathResp, int, error) {
+	if op == common.OpEOT {
+		// Flush or reset if needed
+		return common.RespCont, 0, nil
+	}
+
+	// 1. Push data into Packet Processor
+	d.pktProc.AddData(data, index)
+
+	// 2. Pump the processor
+	pkts, err := d.pktProc.ProcessPackets()
+	if err != nil {
+		return common.RespFatal, 0, err
+	}
+
+	// 3. Decode generated packets
+	for _, pkt := range pkts {
+		if err := d.DecodePacket(&pkt); err != nil {
+			return common.RespFatal, 0, err
+		}
+	}
+
+	return common.RespCont, len(data), nil
 }
 
 // DecodePacket takes a raw PTM packet and generates generic elements.

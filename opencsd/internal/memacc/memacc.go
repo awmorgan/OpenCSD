@@ -70,20 +70,16 @@ var (
 )
 
 // Accessor is the interface for memory access objects.
-// Idiomatic Note: Getters renamed to remove "Get" prefix where appropriate.
 type Accessor interface {
 	SetMemSpace(space MemSpace)
 	StartAddr() uint64
 	EndAddr() uint64
 	MemSpace() MemSpace
-	// Read performs a read on the specific accessor
 	Read(addr uint64, space MemSpace, trcID uint8, reqBytes uint32) ([]byte, error)
-	// String returns a description for logging
 	String() string
 }
 
 // BaseAccessor provides common fields for accessors.
-// This mimics TrcMemAccessorBase to avoid code duplication.
 type BaseAccessor struct {
 	startAddr uint64
 	endAddr   uint64
@@ -112,13 +108,11 @@ func (b *BaseAccessor) BytesInRange(addr uint64, reqBytes uint32) uint32 {
 // Buffer Accessor
 // -----------------------------------------------------------------------------
 
-// BufferAccessor mimics TrcMemAccBufPtr.
 type BufferAccessor struct {
 	BaseAccessor
 	data []byte
 }
 
-// NewBufferAccessor creates a new accessor for a byte slice.
 func NewBufferAccessor(addr uint64, data []byte, space MemSpace) *BufferAccessor {
 	return &BufferAccessor{
 		BaseAccessor: BaseAccessor{
@@ -131,16 +125,13 @@ func NewBufferAccessor(addr uint64, data []byte, space MemSpace) *BufferAccessor
 }
 
 func (b *BufferAccessor) Read(addr uint64, space MemSpace, trcID uint8, reqBytes uint32) ([]byte, error) {
-	// Base validation logic
 	if !b.InRange(addr) {
-		return nil, nil // Return nil, no error implies "address not managed by this accessor" in this context
+		return nil, nil
 	}
-
 	count := b.BytesInRange(addr, reqBytes)
 	if count == 0 {
 		return nil, nil
 	}
-
 	offset := addr - b.startAddr
 	return b.data[offset : offset+uint64(count)], nil
 }
@@ -153,10 +144,8 @@ func (b *BufferAccessor) String() string {
 // Callback Accessor
 // -----------------------------------------------------------------------------
 
-// CallbackFn defines the signature for memory access callbacks.
 type CallbackFn func(context interface{}, addr uint64, space MemSpace, trcID uint8, reqBytes uint32) ([]byte, error)
 
-// CBAccessor mimics TrcMemAccCB.
 type CBAccessor struct {
 	BaseAccessor
 	cb  CallbackFn
@@ -190,17 +179,14 @@ func (c *CBAccessor) String() string {
 }
 
 // -----------------------------------------------------------------------------
-// File Accessor (Added to match C++ TrcMemAccFile)
+// File Accessor
 // -----------------------------------------------------------------------------
 
-// FileRegion represents an offset region within a file accessor.
 type FileRegion struct {
 	BaseAccessor
 	fileOffset int64
 }
 
-// FileAccessor mimics TrcMemAccFile.
-// It handles reading binary data from a file, supporting multiple regions.
 type FileAccessor struct {
 	BaseAccessor
 	filePath   string
@@ -208,11 +194,11 @@ type FileAccessor struct {
 	fileSize   int64
 	regions    []FileRegion
 	hasRegions bool
-	mu         sync.Mutex // Files are stateful (seek position), need mutex for safety
+	mu         sync.Mutex
 }
 
-// NewFileAccessor creates a new file accessor.
-func NewFileAccessor(path string, startAddr uint64, offset int64, size int64) (*FileAccessor, error) {
+// NewFileAccessor creates a new file accessor with a specific memory space.
+func NewFileAccessor(path string, startAddr uint64, offset int64, size int64, space MemSpace) (*FileAccessor, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrFileAccess, err)
@@ -230,11 +216,9 @@ func NewFileAccessor(path string, startAddr uint64, offset int64, size int64) (*
 		file:     f,
 		fileSize: fileSize,
 	}
-	fa.memSpace = MemSpaceAny
+	fa.memSpace = space
 
-	// Logic from C++ initAccessor
 	if offset == 0 && size == 0 {
-		// Use whole file
 		fa.AddOffsetRange(startAddr, uint64(fileSize), 0)
 	} else {
 		if offset+size > fileSize {
@@ -247,8 +231,6 @@ func NewFileAccessor(path string, startAddr uint64, offset int64, size int64) (*
 	return fa, nil
 }
 
-// AddOffsetRange mimics TrcMemAccessorFile::AddOffsetRange.
-// It allows mapping a discontinuous system address to a specific offset in the file.
 func (f *FileAccessor) AddOffsetRange(startAddr, size uint64, offset int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -259,19 +241,17 @@ func (f *FileAccessor) AddOffsetRange(startAddr, size uint64, offset int64) erro
 
 	endAddr := startAddr + size - 1
 
-	// If it's the first primary range (offset 0), set the base range
 	if offset == 0 && len(f.regions) == 0 {
 		f.startAddr = startAddr
 		f.endAddr = endAddr
 		return nil
 	}
 
-	// Add to regions list
 	region := FileRegion{
 		BaseAccessor: BaseAccessor{
 			startAddr: startAddr,
 			endAddr:   endAddr,
-			memSpace:  MemSpaceAny, // Regions usually inherit general space, specific space checked at top level
+			memSpace:  f.memSpace, // Inherit space from parent
 		},
 		fileOffset: offset,
 	}
@@ -279,12 +259,11 @@ func (f *FileAccessor) AddOffsetRange(startAddr, size uint64, offset int64) erro
 	f.regions = append(f.regions, region)
 	f.hasRegions = true
 
-	// Sort regions by address (mimics C++ sort)
 	sort.Slice(f.regions, func(i, j int) bool {
 		return f.regions[i].startAddr < f.regions[j].startAddr
 	})
 
-	// Adjust base range to encompass all regions if necessary (simplified relative to C++)
+	// Adjust base range
 	if f.startAddr == 0 && f.endAddr == 0 {
 		f.startAddr = startAddr
 		f.endAddr = endAddr
@@ -307,19 +286,15 @@ func (f *FileAccessor) Read(addr uint64, space MemSpace, trcID uint8, reqBytes u
 	var readOffset int64 = -1
 	var available uint32 = 0
 
-	// Check Base Range
 	if f.BaseAccessor.InRange(addr) {
 		available = f.BaseAccessor.BytesInRange(addr, reqBytes)
-		// Map address to file offset (assuming linear mapping from base)
 		readOffset = int64(addr - f.startAddr)
 	}
 
-	// Check Regions (Overrides base if found)
 	if f.hasRegions {
 		for _, reg := range f.regions {
 			if reg.InRange(addr) {
 				available = reg.BytesInRange(addr, reqBytes)
-				// Calculate offset: (Addr - RegionStart) + RegionFileOffset
 				readOffset = int64(addr-reg.startAddr) + reg.fileOffset
 				break
 			}
@@ -327,10 +302,9 @@ func (f *FileAccessor) Read(addr uint64, space MemSpace, trcID uint8, reqBytes u
 	}
 
 	if readOffset == -1 || available == 0 {
-		return nil, nil // Not in range
+		return nil, nil
 	}
 
-	// Perform File Read
 	data := make([]byte, available)
 	_, err := f.file.ReadAt(data, readOffset)
 	if err != nil && err != io.EOF {
