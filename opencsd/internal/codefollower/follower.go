@@ -6,25 +6,6 @@ import (
 	"opencsd/internal/memacc"
 )
 
-type InstrInfo struct {
-	InstrAddr     uint64
-	Opcode        uint32
-	InstrSize     uint8
-	ISA           common.Isa
-	NextISA       common.Isa
-	Type          int // 0: Other, 1: Branch, 2: Indirect Branch
-	SubType       int
-	IsConditional bool
-	IsLink        bool
-	BranchAddr    uint64
-}
-
-const (
-	InstrTypeOther    = 0
-	InstrTypeBranch   = 1
-	InstrTypeIndirect = 2
-)
-
 type CodeFollower struct {
 	mapper   *memacc.Mapper
 	memSpace memacc.MemSpace
@@ -37,7 +18,7 @@ type CodeFollower struct {
 	NextValid   bool
 
 	// Last Instruction Info
-	Info InstrInfo
+	Info common.InstrInfo
 
 	// Errors
 	NaccPending bool
@@ -56,8 +37,6 @@ func (c *CodeFollower) Setup(trcID uint8, memSpace memacc.MemSpace) {
 }
 
 // FollowSingleAtom follows one instruction for an atom (E or N).
-// addrStart: The address to start decoding from.
-// atom: 'E' (executed) or 'N' (not executed).
 func (c *CodeFollower) FollowSingleAtom(addrStart uint64, atomVal common.AtomVal, isa common.Isa) error {
 	c.StRangeAddr = addrStart
 	c.EnRangeAddr = addrStart
@@ -78,126 +57,51 @@ func (c *CodeFollower) FollowSingleAtom(addrStart uint64, atomVal common.AtomVal
 	c.EnRangeAddr = c.Info.InstrAddr + uint64(c.Info.InstrSize)
 
 	// 3. Calculate Next Address
-	// Default: Next instruction
+	// Default: Next instruction sequential
 	c.NextAddr = c.EnRangeAddr
 	c.NextValid = true
 
 	// Handle Branching
 	switch c.Info.Type {
-	case InstrTypeBranch:
+	case common.InstrTypeBranch:
 		if atomVal == common.AtomE {
+			// Executed direct branch - go to branch destination
 			c.NextAddr = c.Info.BranchAddr
-			c.Info.NextISA = c.decodeISAFromAddr(c.Info.BranchAddr) // helper for Thumb bit
+			c.Info.NextISA = c.decodeISAFromAddr(c.Info.BranchAddr)
 		}
-	case InstrTypeIndirect:
+		// If AtomN (Not Executed), we fall through to NextAddr (sequential), which is already set.
+
+	case common.InstrTypeIndirect:
 		if atomVal == common.AtomE {
-			c.NextValid = false // We don't know where an indirect branch goes without more trace info
+			// Executed indirect branch - We do not know the destination statically.
+			// The next address is invalid; the trace decoder must wait for a broadcast address packet.
+			c.NextValid = false
 		}
+		// If AtomN, fall through sequential.
 	}
 
 	return nil
 }
 
 func (c *CodeFollower) decodeSingleOpCode() error {
-	// Read 4 bytes (even for Thumb, simpler)
-	// Note: We use ReadTargetMemory which returns LE uint32
+	// Read 4 bytes
 	opcode, err := c.mapper.ReadTargetMemory(c.Info.InstrAddr, c.trcID, c.memSpace, 4)
 	if err != nil {
 		c.NaccPending = true
 		c.NaccAddr = c.Info.InstrAddr
-		return nil // Return nil, let upper layer handle NACC via NaccPending flag
+		return nil // Soft error handled by caller checking NaccPending
 	}
 
 	c.Info.Opcode = opcode
 
-	// Decode based on ISA
-	dInfo := &idec.DecodeInfo{}
-	c.Info.Type = InstrTypeOther
-	c.Info.IsConditional = false
-	c.Info.IsLink = false
-	c.Info.SubType = idec.SubTypeNone
-
-	switch c.Info.ISA {
-	case common.IsaA64:
-		c.Info.InstrSize = 4
-		if idec.InstA64IsBranch(opcode, dInfo) {
-			if idec.InstA64IsDirectBranch(opcode, dInfo) {
-				c.Info.Type = InstrTypeBranch
-				dest, ok := idec.InstA64BranchDestination(c.Info.InstrAddr, opcode)
-				if ok {
-					c.Info.BranchAddr = dest
-				}
-			} else {
-				c.Info.Type = InstrTypeIndirect
-			}
-			c.Info.IsConditional = idec.InstA64IsConditional(opcode)
-		}
-	case common.IsaArm32:
-		c.Info.InstrSize = 4
-		if idec.InstArmIsBranch(opcode, dInfo) {
-			if idec.InstArmIsDirectBranch(opcode) {
-				c.Info.Type = InstrTypeBranch
-				dest, ok := idec.InstArmBranchDestination(uint32(c.Info.InstrAddr), opcode)
-				if ok {
-					c.Info.BranchAddr = uint64(dest)
-				}
-			} else {
-				c.Info.Type = InstrTypeIndirect
-			}
-			c.Info.IsConditional = idec.InstArmIsConditional(opcode)
-		}
-	case common.IsaThumb:
-		// Check for 32-bit Thumb
-		is32 := (opcode & 0xF800) >= 0xE800
-		if is32 {
-			c.Info.InstrSize = 4
-			// Swap halves for decoding if read as Little Endian 32-bit int
-			// T32 instruction: HW1 HW2. Memory: HW1_L, HW1_H, HW2_L, HW2_H
-			// ReadTargetMemory gives: 0xHW2HW1.
-			// idec expects: 0xHW1HW2 for 32-bit checks
-			hw1 := opcode & 0xFFFF
-			hw2 := opcode >> 16
-			opcode32 := (hw1 << 16) | hw2
-
-			if idec.InstThumbIsBranch(opcode32, dInfo) {
-				if idec.InstThumbIsDirectBranch(opcode32, dInfo) {
-					c.Info.Type = InstrTypeBranch
-					dest, ok := idec.InstThumbBranchDestination(uint32(c.Info.InstrAddr), opcode32)
-					if ok {
-						c.Info.BranchAddr = uint64(dest)
-					}
-				} else {
-					c.Info.Type = InstrTypeIndirect
-				}
-				c.Info.IsConditional = idec.InstThumbIsConditional(opcode32)
-			}
-		} else {
-			c.Info.InstrSize = 2
-			// Use low half word, put in high half for decoder
-			opcode16 := (opcode & 0xFFFF) << 16
-			if idec.InstThumbIsBranch(opcode16, dInfo) {
-				if idec.InstThumbIsDirectBranch(opcode16, dInfo) {
-					c.Info.Type = InstrTypeBranch
-					dest, ok := idec.InstThumbBranchDestination(uint32(c.Info.InstrAddr), opcode16)
-					if ok {
-						c.Info.BranchAddr = uint64(dest)
-					}
-				} else {
-					c.Info.Type = InstrTypeIndirect
-				}
-				c.Info.IsConditional = idec.InstThumbIsConditional(opcode16)
-			}
-		}
-	}
-
-	c.Info.SubType = dInfo.InstrSubType
-	c.Info.IsLink = (dInfo.InstrSubType == idec.SubTypeBrLink)
-
-	return nil
+	// Use the enhanced IDEC logic
+	err = idec.DecodeInstruction(&c.Info, c.Info.ISA)
+	return err
 }
 
 func (c *CodeFollower) decodeISAFromAddr(addr uint64) common.Isa {
 	// For ARM/Thumb, LSB indicates Thumb state
+	// If we are currently A64, we likely stay A64 unless specific interworking (not handled here)
 	if c.Info.ISA == common.IsaA64 {
 		return common.IsaA64
 	}

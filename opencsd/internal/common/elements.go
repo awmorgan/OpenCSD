@@ -90,6 +90,30 @@ const (
 	AtomE AtomVal = 1
 )
 
+// Instruction Types
+const (
+	InstrTypeOther    = 0
+	InstrTypeBranch   = 1
+	InstrTypeIndirect = 2
+	InstrTypeISB      = 3 // Barrier
+	InstrTypeDSB_DMB  = 4 // Barrier
+	InstrTypeWFI_WFE  = 5 // Wait
+)
+
+// InstrInfo mimics ocsd_instr_info
+type InstrInfo struct {
+	InstrAddr     uint64
+	Opcode        uint32
+	InstrSize     uint8
+	ISA           Isa
+	NextISA       Isa
+	Type          int
+	SubType       int
+	IsConditional bool
+	IsLink        bool
+	BranchAddr    uint64
+}
+
 // ToString mimics the C++ OcsdTraceElement::toString() method.
 // This is CRITICAL for parity testing against trc_pkt_lister output.
 func (e *TraceElement) ToString() string {
