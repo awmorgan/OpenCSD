@@ -371,7 +371,7 @@ func TestFileAccessor(t *testing.T) {
 	defer mapper.RemoveAllAccessors()
 
 	// Basic File Access
-	acc1, err := NewFileAccessor(tmpFile, 0x1000, 0, 0)
+	acc1, err := NewFileAccessor(tmpFile, 0x1000, 0, 0, MemSpaceAny)
 	if err != nil {
 		t.Fatalf("NewFileAccessor failed: %v", err)
 	}
@@ -389,7 +389,7 @@ func TestFileAccessor(t *testing.T) {
 	}
 
 	// Offset Region Test
-	acc2, err := NewFileAccessor(tmpFile, 0x5000, 0, 10)
+	acc2, err := NewFileAccessor(tmpFile, 0x5000, 0, 10, MemSpaceAny)
 	if err != nil {
 		t.Fatalf("NewFileAccessor 2 failed: %v", err)
 	}

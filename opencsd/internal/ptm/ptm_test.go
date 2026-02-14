@@ -54,3 +54,14 @@ func loadLogLines(t *testing.T, path string) []string {
 	}
 	return lines
 }
+
+func formatRawBytes(data []byte) string {
+	var sb strings.Builder
+	for i, b := range data {
+		if i > 0 {
+			sb.WriteString(" ")
+		}
+		fmt.Fprintf(&sb, "%02X", b)
+	}
+	return sb.String()
+}

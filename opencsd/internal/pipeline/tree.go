@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,6 +21,10 @@ type DecodeTree struct {
 	Deformatter *formatter.Deformatter
 	Printer     *printers.PktPrinter
 	Decoders    map[uint8]*ptm.PtmDecoder
+
+	out         io.Writer
+	decode      bool
+	noTimePrint bool
 }
 
 func NewDecodeTree(snapConfig *snapshot.SnapshotConfig, baseDir string) (*DecodeTree, error) {
@@ -28,6 +33,7 @@ func NewDecodeTree(snapConfig *snapshot.SnapshotConfig, baseDir string) (*Decode
 		Deformatter: formatter.NewDeformatter(),
 		Printer:     printers.NewPktPrinter(),
 		Decoders:    make(map[uint8]*ptm.PtmDecoder),
+		out:         os.Stdout,
 	}
 
 	// 1. Setup Memory
@@ -43,11 +49,25 @@ func NewDecodeTree(snapConfig *snapshot.SnapshotConfig, baseDir string) (*Decode
 	return tree, nil
 }
 
+func (t *DecodeTree) SetOutput(w io.Writer) {
+	t.out = w
+	t.Printer.SetOutput(w)
+}
+
+func (t *DecodeTree) SetDecode(decode bool) {
+	t.decode = decode
+	// Note: In a full implementation, this would switch between
+	// packet printing and generic element printing.
+	// For now, our pipeline defaults to decoded elements.
+}
+
+func (t *DecodeTree) SetNoTimePrint(noTime bool) {
+	t.noTimePrint = noTime
+}
+
 func (t *DecodeTree) setupMemory(cfg *snapshot.SnapshotConfig, baseDir string) error {
 	t.Mapper.EnableCaching(true)
 
-	// Deduplication map to prevent adding the same memory dump multiple times
-	// (e.g. multi-core snapshots often define the same RAM for every core)
 	seen := make(map[string]bool)
 
 	for _, dev := range cfg.Devices {
@@ -62,7 +82,6 @@ func (t *DecodeTree) setupMemory(cfg *snapshot.SnapshotConfig, baseDir string) e
 				space = memacc.MemSpaceN
 			}
 
-			// Deduplicate
 			key := fmt.Sprintf("%s|%d|%d", fullPath, dump.Address, space)
 			if seen[key] {
 				continue
@@ -78,7 +97,6 @@ func (t *DecodeTree) setupMemory(cfg *snapshot.SnapshotConfig, baseDir string) e
 			if err := t.Mapper.AddAccessor(acc, 0); err != nil {
 				return err
 			}
-			fmt.Printf("Loaded Memory: %s @ 0x%X (%s)\n", dump.FilePath, dump.Address, space)
 		}
 	}
 	return nil
@@ -93,11 +111,9 @@ func (t *DecodeTree) setupDecoders(cfg *snapshot.SnapshotConfig) error {
 		if strings.Contains(dev.Type, "PTM") || strings.Contains(dev.Type, "ETM") {
 			trcID := t.getTraceIDFromRegs(dev.Registers)
 			if trcID > 0 {
-				fmt.Printf("Creating PTM Decoder for %s (ID: 0x%X)\n", dev.Name, trcID)
 
 				decoder := ptm.NewPtmDecoder(t.Printer, t.Mapper)
 
-				// Attach to Deformatter
 				t.Deformatter.Attach(trcID, decoder)
 				t.Decoders[trcID] = decoder
 			}
@@ -124,8 +140,6 @@ func (t *DecodeTree) ProcessBuffer(path string) error {
 	if err != nil {
 		return err
 	}
-
-	fmt.Printf("Processing Trace Buffer: %s (%d bytes)\n", path, len(data))
 
 	_, _, err = t.Deformatter.TraceDataIn(common.OpData, 0, data)
 	return err
