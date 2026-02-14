@@ -1,4 +1,3 @@
-===== opencsd/internal/formatter/deformatter.go =====
 package formatter
 
 import (
