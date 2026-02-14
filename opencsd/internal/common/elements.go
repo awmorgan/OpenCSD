@@ -83,6 +83,13 @@ const (
 	IsaJazelle Isa = 4
 )
 
+type AtomVal int
+
+const (
+	AtomN AtomVal = 0
+	AtomE AtomVal = 1
+)
+
 // ToString mimics the C++ OcsdTraceElement::toString() method.
 // This is CRITICAL for parity testing against trc_pkt_lister output.
 func (e *TraceElement) ToString() string {
