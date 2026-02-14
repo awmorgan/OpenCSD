@@ -82,13 +82,23 @@ func (t *DecodeTree) setupMemory(cfg *snapshot.SnapshotConfig, baseDir string) e
 				space = memacc.MemSpaceN
 			}
 
-			key := fmt.Sprintf("%s|%d|%d", fullPath, dump.Address, space)
+			// Handle Offset and Length from snapshot
+			var offset int64
+			if dump.Offset != nil {
+				offset = int64(*dump.Offset)
+			}
+			var length int64
+			if dump.Length != nil {
+				length = int64(*dump.Length)
+			}
+
+			key := fmt.Sprintf("%s|%d|%d|%d|%d", fullPath, dump.Address, offset, length, space)
 			if seen[key] {
 				continue
 			}
 			seen[key] = true
 
-			acc, err := memacc.NewFileAccessor(fullPath, dump.Address, 0, 0, space)
+			acc, err := memacc.NewFileAccessor(fullPath, dump.Address, offset, length, space)
 			if err != nil {
 				fmt.Printf("Warning: Could not load dump %s: %v\n", fullPath, err)
 				continue

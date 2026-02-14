@@ -28,7 +28,7 @@ func TestPtmParity(t *testing.T) {
 	for i, pkt := range goOutput {
 		line := fmt.Sprintf("Idx:%d; ID:0; [%s];\t%s", pkt.Index, formatRawBytes(pkt.RawBytes), pkt.ToString())
 		if logLines[i] != line {
-			t.Errorf("Mismatch at line %d: expected %q, got %q", i, logLines[i], line)
+			t.Errorf("Mismatch at line %d:\nexpected %q\ngot      %q", i, logLines[i], line)
 		}
 	}
 
@@ -57,11 +57,10 @@ func loadLogLines(t *testing.T, path string) []string {
 
 func formatRawBytes(data []byte) string {
 	var sb strings.Builder
-	for i, b := range data {
-		if i > 0 {
-			sb.WriteString(" ")
-		}
-		fmt.Fprintf(&sb, "0x%02X", b)
+	for _, b := range data {
+		// Matches C++ format: lowercase hex, space after every byte (including last)
+		// e.g., "0x01 0x02 " -> "[0x01 0x02 ]"
+		fmt.Fprintf(&sb, "0x%02x ", b)
 	}
 	return sb.String()
 }
