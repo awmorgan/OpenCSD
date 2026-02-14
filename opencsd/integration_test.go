@@ -22,15 +22,9 @@ func TestIntegrationComparison(t *testing.T) {
 		pplFile string // The C++ output file to compare against
 	}{
 		{
-			name:    "Juno R1.1",
-			dirName: "juno_r1_1",
-			// You need to copy results/juno_r1_1.ppl to the testdata dir
-			pplFile: "juno_r1_1.ppl",
-		},
-		{
-			name:    "Bugfix Exact Match",
-			dirName: "bugfix-exact-match",
-			pplFile: "bugfix-exact-match.ppl",
+			name:    "TC2 PTM RSTK T32",
+			dirName: "tc2-ptm-rstk-t32",
+			pplFile: "tc2-ptm-rstk-t32.ppl",
 		},
 	}
 
