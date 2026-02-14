@@ -61,7 +61,7 @@ func formatRawBytes(data []byte) string {
 		if i > 0 {
 			sb.WriteString(" ")
 		}
-		fmt.Fprintf(&sb, "%02X", b)
+		fmt.Fprintf(&sb, "0x%02X", b)
 	}
 	return sb.String()
 }

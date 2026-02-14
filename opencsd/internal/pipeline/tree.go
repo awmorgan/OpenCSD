@@ -124,7 +124,7 @@ func (t *DecodeTree) setupDecoders(cfg *snapshot.SnapshotConfig) error {
 
 func (t *DecodeTree) getTraceIDFromRegs(regs map[string][]snapshot.RegisterValue) uint8 {
 	for name, vals := range regs {
-		if strings.Contains(name, "TRACEID") && len(vals) > 0 {
+		if strings.Contains(strings.ToLower(name), "trcid") && len(vals) > 0 {
 			valStr := vals[0].Value
 			val, err := strconv.ParseUint(valStr, 0, 8)
 			if err == nil {
