@@ -333,9 +333,18 @@ func (d *PtmDecoder) processBranch(pkt *PtmPacket) error {
 	}
 
 	// Update Decoder State to new address
-	d.instrAddr = uint64(pkt.addr.val)
-	d.isa = pkt.currISA
-	d.addrValid = true
+	newAddr := uint64(pkt.addr.val)
+
+	// Validate the address: 0x0 is always invalid (external memory)
+	// A valid address should be non-zero and ideally in mapped memory ranges
+	if newAddr == 0 {
+		// Cannot follow execution to address 0x0 - it's outside mapped memory
+		d.addrValid = false
+	} else {
+		d.instrAddr = newAddr
+		d.isa = pkt.currISA
+		d.addrValid = true
+	}
 	d.updateContext(pkt)
 
 	return nil
