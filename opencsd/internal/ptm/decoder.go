@@ -122,6 +122,8 @@ func (d *PtmDecoder) decodePacketBody(pkt *PtmPacket) error {
 		return d.processAtom(pkt)
 	case ptmPktBranchAddress:
 		return d.processBranch(pkt)
+	case ptmPktWPUpdate: // Fixed: Name matches pkt_types.go
+		return d.processWPUpdate(pkt)
 	case ptmPktTimestamp:
 		d.push(&common.TraceElement{
 			ElemType:   common.ElemTimestamp,
@@ -198,7 +200,8 @@ func (d *PtmDecoder) processAtom(pkt *PtmPacket) error {
 			atomVal = common.AtomE
 		}
 
-		err := d.processAtomRange(atomVal)
+		// Standard Atom processing uses Waypoint matching
+		err := d.processAtomRange(atomVal, codefollower.TraceMatchWaypoint, 0)
 		if err != nil {
 			return err
 		}
@@ -206,9 +209,20 @@ func (d *PtmDecoder) processAtom(pkt *PtmPacket) error {
 	return nil
 }
 
-func (d *PtmDecoder) processAtomRange(atomVal common.AtomVal) error {
-	// 1. Walk code until Waypoint
-	err := d.follower.TraceToWaypoint(d.instrAddr, d.isa)
+func (d *PtmDecoder) processWPUpdate(pkt *PtmPacket) error {
+	if !d.addrValid {
+		return nil
+	}
+	d.setupFollower()
+
+	// WP Update implies Atom E (Execute) up to the address in the packet
+	// We use TraceMatchAddrIncl because the address in the packet IS executed.
+	return d.processAtomRange(common.AtomE, codefollower.TraceMatchAddrIncl, uint64(pkt.addr.val))
+}
+
+func (d *PtmDecoder) processAtomRange(atomVal common.AtomVal, mode codefollower.TraceMatchMode, matchAddr uint64) error {
+	// 1. Walk code until Waypoint or Match
+	err := d.follower.TraceToWaypoint(d.instrAddr, d.isa, mode, matchAddr)
 	if err != nil {
 		return err
 	}
@@ -240,34 +254,37 @@ func (d *PtmDecoder) processAtomRange(atomVal common.AtomVal) error {
 	nextAddr := d.follower.EnRangeAddr
 	d.addrValid = true
 
-	// Handle Waypoint Logic (Branching)
-	switch d.follower.Info.Type {
-	case common.InstrTypeBranch:
-		if atomVal == common.AtomE {
-			nextAddr = d.follower.Info.BranchAddr
-			// Handle Link
-			if d.follower.Info.IsLink {
-				d.retStack.Push(d.follower.EnRangeAddr, d.follower.Info.ISA)
-			}
-		}
-
-	case common.InstrTypeIndirect:
-		if atomVal == common.AtomE {
-			// Executed Indirect Branch -> We need a target address.
-			d.addrValid = false // Assume invalid unless stack saves us
-
-			// Try Return Stack
-			if d.retStack != nil {
-				if addr, isa, ok := d.retStack.Pop(); ok {
-					nextAddr = addr
-					d.follower.Info.NextISA = isa
-					d.addrValid = true
+	// Handle Waypoint Logic (Branching) if in Standard Mode
+	// If in Address Match mode, the next address is implicit (instruction after match)
+	if mode == codefollower.TraceMatchWaypoint {
+		switch d.follower.Info.Type {
+		case common.InstrTypeBranch:
+			if atomVal == common.AtomE {
+				nextAddr = d.follower.Info.BranchAddr
+				// Handle Link
+				if d.follower.Info.IsLink {
+					d.retStack.Push(d.follower.EnRangeAddr, d.follower.Info.ISA)
 				}
 			}
 
-			// Handle Link (e.g. BLX <reg>)
-			if d.follower.Info.IsLink {
-				d.retStack.Push(d.follower.EnRangeAddr, d.follower.Info.ISA)
+		case common.InstrTypeIndirect:
+			if atomVal == common.AtomE {
+				// Executed Indirect Branch -> We need a target address.
+				d.addrValid = false // Assume invalid unless stack saves us
+
+				// Try Return Stack
+				if d.retStack != nil {
+					if addr, isa, ok := d.retStack.Pop(); ok {
+						nextAddr = addr
+						d.follower.Info.NextISA = isa
+						d.addrValid = true
+					}
+				}
+
+				// Handle Link (e.g. BLX <reg>)
+				if d.follower.Info.IsLink {
+					d.retStack.Push(d.follower.EnRangeAddr, d.follower.Info.ISA)
+				}
 			}
 		}
 	}
@@ -305,7 +322,7 @@ func (d *PtmDecoder) processBranch(pkt *PtmPacket) error {
 		// This implies the current instruction is a branch that was executed.
 		// We must "consume" it as an Atom E before switching address.
 		d.setupFollower()
-		err := d.processAtomRange(common.AtomE)
+		err := d.processAtomRange(common.AtomE, codefollower.TraceMatchWaypoint, 0)
 		if err != nil {
 			return err
 		}
