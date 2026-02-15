@@ -454,3 +454,81 @@ func TestPtmTimestamp64WithCycleCount(t *testing.T) {
 		t.Errorf("TRIGGER Index: expected 13, got %d", pkts[2].Index)
 	}
 }
+
+func TestPtmBranchAddrSingleByteNoCycleCount(t *testing.T) {
+	proc := NewPktProcessor()
+	proc.cycleAcc = false
+
+	data := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC @ 0
+		0x01, // BRANCH ADDR: 1-byte addr, no exception
+		0x0C, // TRIGGER @ 7
+	}
+
+	proc.AddData(data, 0)
+	pkts, err := proc.ProcessPackets()
+	if err != nil {
+		t.Fatalf("ProcessPackets failed: %v", err)
+	}
+
+	if len(pkts) != 3 {
+		t.Fatalf("Expected 3 packets, got %d", len(pkts))
+	}
+
+	if pkts[1].typeID != ptmPktBranchAddress {
+		t.Fatalf("Expected BRANCH ADDRESS packet, got %v", pkts[1].typeID)
+	}
+	if pkts[1].Index != 6 {
+		t.Errorf("BRANCH Index: expected 6, got %d", pkts[1].Index)
+	}
+	if len(pkts[1].RawBytes) != 1 {
+		t.Errorf("BRANCH length: expected 1, got %d", len(pkts[1].RawBytes))
+	}
+	if pkts[2].Index != 7 {
+		t.Errorf("TRIGGER Index: expected 7, got %d", pkts[2].Index)
+	}
+}
+
+func TestPtmBranchAddrMultiByteExcepCycleCount(t *testing.T) {
+	proc := NewPktProcessor()
+	proc.cycleAcc = true
+
+	data := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC @ 0
+		0x81, // BRANCH ADDR byte 0: cont
+		0x80, // BRANCH ADDR byte 1: cont
+		0x41, // BRANCH ADDR byte 2: stop, exception present (bit6)
+		0x80, // EXC byte 0: cont (bit7)
+		0x01, // EXC byte 1: stop
+		0x44, // CC byte 0: cont (bit6)
+		0x81, // CC byte 1: cont (bit7)
+		0x02, // CC byte 2: stop
+		0x0C, // TRIGGER @ 14
+	}
+
+	proc.AddData(data, 0)
+	pkts, err := proc.ProcessPackets()
+	if err != nil {
+		t.Fatalf("ProcessPackets failed: %v", err)
+	}
+
+	if len(pkts) != 3 {
+		t.Fatalf("Expected 3 packets, got %d", len(pkts))
+	}
+
+	if pkts[1].typeID != ptmPktBranchAddress {
+		t.Fatalf("Expected BRANCH ADDRESS packet, got %v", pkts[1].typeID)
+	}
+	if pkts[1].Index != 6 {
+		t.Errorf("BRANCH Index: expected 6, got %d", pkts[1].Index)
+	}
+	if len(pkts[1].RawBytes) != 8 {
+		t.Errorf("BRANCH length: expected 8 (3 addr + 2 exc + 3 cc), got %d", len(pkts[1].RawBytes))
+	}
+	if !pkts[1].ccValid {
+		t.Errorf("BRANCH should have valid cycle count")
+	}
+	if pkts[2].Index != 14 {
+		t.Errorf("TRIGGER Index: expected 14, got %d", pkts[2].Index)
+	}
+}
