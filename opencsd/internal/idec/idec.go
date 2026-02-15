@@ -320,6 +320,7 @@ func InstThumbIsIndirectBranchLink(inst uint32, isLink *bool, info *DecodeInfo) 
 func InstThumbBranchDestination(addr uint32, inst uint32) (uint32, bool) {
 	var npc uint32
 	valid := true
+	isaBit := uint32(1) // Default to Thumb
 
 	if (inst&0xf0000000) == 0xd0000000 && (inst&0x0e000000) != 0x0e000000 {
 		offset := SignExtend32((inst&0x00ff0000)>>16, 8) << 1
@@ -327,6 +328,15 @@ func InstThumbBranchDestination(addr uint32, inst uint32) (uint32, bool) {
 	} else if (inst & 0xf8000000) == 0xe0000000 {
 		offset := SignExtend32((inst&0x07ff0000)>>16, 11) << 1
 		npc = addr + 4 + uint32(offset)
+	} else if (inst&0xf800d000) == 0xf0008000 && (inst&0x03800000) != 0x03800000 {
+		// B T3
+		s := (inst & 0x04000000) >> 26
+		j1 := (inst & 0x2000) >> 13
+		j2 := (inst & 0x0800) >> 11
+		imm6 := (inst & 0x003f0000) >> 16
+		imm11 := inst & 0x000007ff
+		offset := (s << 20) | (j2 << 19) | (j1 << 18) | (imm6 << 12) | (imm11 << 1)
+		npc = addr + 4 + uint32(SignExtend32(offset, 21))
 	} else if (inst & 0xf8009000) == 0xf0009000 {
 		// B T4 / BL T1
 		s := (inst & 0x04000000) >> 26
@@ -338,6 +348,19 @@ func InstThumbBranchDestination(addr uint32, inst uint32) (uint32, bool) {
 		i2 := ^(j2 ^ s) & 1
 		offset := (s << 24) | (i1 << 23) | (i2 << 22) | (imm10 << 12) | (imm11 << 1)
 		npc = addr + 4 + uint32(SignExtend32(offset, 25))
+	} else if (inst & 0xf800d001) == 0xf000c000 {
+		// BLX (imm) T2
+		s := (inst & 0x04000000) >> 26
+		j1 := (inst & 0x2000) >> 13
+		j2 := (inst & 0x0800) >> 11
+		imm10 := (inst & 0x03ff0000) >> 16
+		imm11h := (inst & 0x000007fe) // bit 0 is 0
+		i1 := ^(j1 ^ s) & 1
+		i2 := ^(j2 ^ s) & 1
+		offset := (s << 24) | (i1 << 23) | (i2 << 22) | (imm10 << 12) | imm11h
+		npc = (addr + 4) & ^uint32(3) // Align PC to 4
+		npc += uint32(SignExtend32(offset, 25))
+		isaBit = 0 // Switch to ARM
 	} else if (inst & 0xf5000000) == 0xb1000000 {
 		i := (inst & 0x02000000) >> 25
 		imm5 := (inst & 0x00f80000) >> 19
@@ -347,7 +370,7 @@ func InstThumbBranchDestination(addr uint32, inst uint32) (uint32, bool) {
 		valid = false
 	}
 	if valid {
-		return npc | 1, true
+		return npc | isaBit, true
 	}
 	return 0, false
 }

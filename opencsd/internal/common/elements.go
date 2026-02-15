@@ -138,7 +138,7 @@ func (e *TraceElement) ToString() string {
 	}
 
 	instrType := []string{"--- ", "BR  ", "iBR ", "ISB ", "DSB.DMB", "WFI.WFE", "TSTART"}
-	instrSub := []string{"--- ", "b+link ", "A64:ret ", "A64:eret ", "V7:impl ret"}
+	instrSub := []string{"--- ", "b+link ", "V7:impl ret ", "A64:ret ", "A64:eret "}
 	traceOnReason := []string{"begin or filter", "overflow", "debug restart"}
 
 	var sb strings.Builder

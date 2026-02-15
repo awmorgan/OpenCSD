@@ -248,10 +248,24 @@ func (f *FileAccessor) AddOffsetRange(startAddr, size uint64, offset int64) erro
 
 	endAddr := startAddr + size - 1
 
-	if offset == 0 && len(f.regions) == 0 {
+	// Optimization: if this is the first range and offset is 0, just use the base range.
+	if offset == 0 && len(f.regions) == 0 && !f.hasRegions && f.startAddr == 0 && f.endAddr == 0 {
 		f.startAddr = startAddr
 		f.endAddr = endAddr
 		return nil
+	}
+
+	// If we were using the optimized base range, move it to a region first.
+	if !f.hasRegions && (f.startAddr != 0 || f.endAddr != 0) {
+		f.regions = append(f.regions, FileRegion{
+			BaseAccessor: BaseAccessor{
+				startAddr: f.startAddr,
+				endAddr:   f.endAddr,
+				memSpace:  f.memSpace,
+			},
+			fileOffset: 0,
+		})
+		f.hasRegions = true
 	}
 
 	region := FileRegion{
@@ -270,7 +284,7 @@ func (f *FileAccessor) AddOffsetRange(startAddr, size uint64, offset int64) erro
 		return f.regions[i].startAddr < f.regions[j].startAddr
 	})
 
-	// Adjust base range
+	// Adjust base range to cover the union of all regions
 	if f.startAddr == 0 && f.endAddr == 0 {
 		f.startAddr = startAddr
 		f.endAddr = endAddr
@@ -293,11 +307,6 @@ func (f *FileAccessor) Read(addr uint64, space MemSpace, trcID uint8, reqBytes u
 	var readOffset int64 = -1
 	var available uint32 = 0
 
-	if f.BaseAccessor.InRange(addr) {
-		available = f.BaseAccessor.BytesInRange(addr, reqBytes)
-		readOffset = int64(addr - f.startAddr)
-	}
-
 	if f.hasRegions {
 		for _, reg := range f.regions {
 			if reg.InRange(addr) {
@@ -306,6 +315,9 @@ func (f *FileAccessor) Read(addr uint64, space MemSpace, trcID uint8, reqBytes u
 				break
 			}
 		}
+	} else if f.BaseAccessor.InRange(addr) {
+		available = f.BaseAccessor.BytesInRange(addr, reqBytes)
+		readOffset = int64(addr - f.startAddr)
 	}
 
 	if readOffset == -1 || available == 0 {
@@ -569,34 +581,42 @@ func (m *Mapper) findAccessor(addr uint64, space MemSpace) bool {
 	return false
 }
 
-// ReadTargetMemory reads a 32-bit word (4 bytes) from the target memory.
+// ReadTargetMemory reads requested bytes from the target memory.
+// It can handle reads that span across multiple adjacent memory accessors.
 // Returns a uint32 in Little Endian.
 func (m *Mapper) ReadTargetMemory(addr uint64, trcID uint8, space MemSpace, reqBytes uint32) (uint32, error) {
-	// Locate Accessor
-	if !m.findAccessor(addr, space) {
-		return 0, fmt.Errorf("%w: 0x%x (%s)", ErrAccessInvalid, addr, space)
-	}
+	fullData := make([]byte, 0, reqBytes)
+	currAddr := addr
+	bytesRemaining := reqBytes
 
-	// Invalidate cache if trace ID changed (handled in C++ by invalidating on context switch,
-	// but here we just ensure consistency)
-	// Note: The C++ code only invalidates if the *accessor* changes or explicitly requested.
-	// We will follow the C++ readBytes logic which checks cache hits by TraceID.
+	for bytesRemaining > 0 {
+		// Locate Accessor for the current address
+		if !m.findAccessor(currAddr, space) {
+			break
+		}
 
-	// Perform Read (via Cache)
-	data, err := m.cache.readBytes(m.accCurr, addr, space, trcID, reqBytes)
-	if err != nil {
-		return 0, err
+		// Perform Read (via Cache)
+		// Request whatever is remaining, cache will handle page-sized reads from accessor
+		data, err := m.cache.readBytes(m.accCurr, currAddr, space, trcID, bytesRemaining)
+		if err != nil {
+			return 0, err
+		}
+		if len(data) == 0 {
+			break
+		}
+
+		fullData = append(fullData, data...)
+		currAddr += uint64(len(data))
+		bytesRemaining -= uint32(len(data))
 	}
 
 	// Convert to uint32
-	if len(data) < 4 {
-		// Not enough data read (e.g. near end of memory)
-		// We can return what we have padded, or error.
-		// Typically instruction decode requires full words.
-		return 0, fmt.Errorf("insufficient data read")
+	if uint32(len(fullData)) < reqBytes {
+		// Not enough data read (e.g. near end of memory or gap in mapping)
+		return 0, fmt.Errorf("%w: at 0x%x (requested %d, got %d)", ErrAccessInvalid, addr, reqBytes, len(fullData))
 	}
 
-	return binary.LittleEndian.Uint32(data), nil
+	return binary.LittleEndian.Uint32(fullData), nil
 }
 
 // EnableCaching turns caching on or off.
