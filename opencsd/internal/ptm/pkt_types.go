@@ -300,11 +300,11 @@ func (p *PtmPacket) branchAddressString() string {
 	addrStr := getValStr(32, int(p.addr.validBits), uint64(p.addr.val), true, int(p.addr.pktBits))
 	b.WriteString("Addr=")
 	b.WriteString(addrStr)
-	b.WriteString(";")
+	b.WriteString("; ")
 
 	if p.currISA != p.prevISA {
-		b.WriteString(" ")
 		b.WriteString(p.isaString())
+		b.WriteString(" ")
 	}
 
 	if p.context.updated {
