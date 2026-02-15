@@ -228,3 +228,149 @@ func TestPtmLongZeroRunAsync(t *testing.T) {
 		t.Errorf("TRIGGER length: expected 1, got %d", len(pkts[2].RawBytes))
 	}
 }
+
+// TestPtmISyncWithCycleCount verifies ISYNC parsing with cycle count (cycleAcc=true, reason!=0)
+func TestPtmISyncWithCycleCount(t *testing.T) {
+	// Construct processor with cycleAcc enabled
+	proc := NewPktProcessor()
+	proc.cycleAcc = true // Enable cycle accurate mode
+
+	// ASYNC + ISYNC with reason=1 (Trace Enable) and cycle count
+	// ISYNC: 0x08 (hdr) + 4 addr bytes + info byte (reason=1) + cycle count bytes
+	// Info byte: reason=1 (bits 5-6), NS=0, AltISA=0, Hyp=0
+	// reason bits: 0x20 (001 << 5)
+	data := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC @ 0
+		0x08,       // ISYNC header @ 6
+		0x00,       // addr[7:1] (bit 0 = ISA)
+		0x00, 0x00, // addr[15:8], addr[23:16]
+		0x00, // addr[31:24]
+		0x20, // info byte: reason=1, NS=0, AltISA=0, Hyp=0
+		0x05, // cycle count: single byte, no continuation (bit 6 = 0), value = 1
+		0x0C, // TRIGGER @ 13
+	}
+
+	proc.AddData(data, 0)
+	pkts, err := proc.ProcessPackets()
+	if err != nil {
+		t.Fatalf("ProcessPackets failed: %v", err)
+	}
+
+	if len(pkts) != 3 {
+		t.Fatalf("Expected 3 packets, got %d", len(pkts))
+	}
+
+	// ISYNC with cycle count should be 7 bytes (6 base + 1 cycle count)
+	if pkts[1].typeID != ptmPktISync {
+		t.Fatalf("Expected ISYNC packet, got %v", pkts[1].typeID)
+	}
+	if pkts[1].Index != 6 {
+		t.Errorf("ISYNC Index: expected 6, got %d", pkts[1].Index)
+	}
+	if len(pkts[1].RawBytes) != 7 {
+		t.Errorf("ISYNC length: expected 7 (6 base + 1 CC), got %d", len(pkts[1].RawBytes))
+	}
+	if !pkts[1].ccValid {
+		t.Errorf("ISYNC should have valid cycle count")
+	}
+	if pkts[1].cycleCount != 1 {
+		t.Errorf("ISYNC cycle count: expected 1, got %d", pkts[1].cycleCount)
+	}
+
+	// TRIGGER should start at index 13 (6 + 7)
+	if pkts[2].Index != 13 {
+		t.Errorf("TRIGGER Index: expected 13, got %d", pkts[2].Index)
+	}
+}
+
+// TestPtmISyncWithContextID verifies ISYNC parsing with context ID
+func TestPtmISyncWithContextID(t *testing.T) {
+	// Construct processor with ctxtIDBytes=4
+	proc := NewPktProcessor()
+	proc.ctxtIDBytes = 4 // 4 bytes of context ID
+
+	// ASYNC + ISYNC with context ID (reason=0, no cycle count)
+	data := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC @ 0
+		0x08,       // ISYNC header @ 6
+		0x00,       // addr[7:1] (bit 0 = ISA)
+		0x00, 0x00, // addr[15:8], addr[23:16]
+		0x00,                   // addr[31:24]
+		0x00,                   // info byte: reason=0, NS=0, AltISA=0, Hyp=0
+		0x12, 0x34, 0x56, 0x78, // context ID (4 bytes)
+		0x0C, // TRIGGER @ 16
+	}
+
+	proc.AddData(data, 0)
+	pkts, err := proc.ProcessPackets()
+	if err != nil {
+		t.Fatalf("ProcessPackets failed: %v", err)
+	}
+
+	if len(pkts) != 3 {
+		t.Fatalf("Expected 3 packets, got %d", len(pkts))
+	}
+
+	// ISYNC with context ID should be 10 bytes (6 base + 4 context ID)
+	if pkts[1].typeID != ptmPktISync {
+		t.Fatalf("Expected ISYNC packet, got %v", pkts[1].typeID)
+	}
+	if pkts[1].Index != 6 {
+		t.Errorf("ISYNC Index: expected 6, got %d", pkts[1].Index)
+	}
+	if len(pkts[1].RawBytes) != 10 {
+		t.Errorf("ISYNC length: expected 10 (6 base + 4 ctxtID), got %d", len(pkts[1].RawBytes))
+	}
+	if !pkts[1].context.updatedC {
+		t.Errorf("ISYNC should have updated context ID")
+	}
+	expectedCtxtID := uint32(0x78563412) // Little endian
+	if pkts[1].context.ctxtID != expectedCtxtID {
+		t.Errorf("ISYNC context ID: expected 0x%08X, got 0x%08X", expectedCtxtID, pkts[1].context.ctxtID)
+	}
+
+	// TRIGGER should start at index 16 (6 + 10)
+	if pkts[2].Index != 16 {
+		t.Errorf("TRIGGER Index: expected 16, got %d", pkts[2].Index)
+	}
+}
+
+// TestPtmISyncMultiByteCycleCount verifies multi-byte cycle count handling
+func TestPtmISyncMultiByteCycleCount(t *testing.T) {
+	proc := NewPktProcessor()
+	proc.cycleAcc = true
+
+	// ISYNC with 3-byte cycle count
+	data := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC @ 0
+		0x08,       // ISYNC header @ 6
+		0x00,       // addr[7:1]
+		0x00, 0x00, // addr bytes
+		0x00, // addr byte
+		0x20, // info byte: reason=1
+		0x45, // CC byte 0: bit 6=1 (continue), bits[5:2]=0001, value bits=0001
+		0x82, // CC byte 1: bit 7=1 (continue), bits[6:0]=0x02
+		0x03, // CC byte 2: bit 7=0 (stop), bits[6:0]=0x03
+		0x0C, // TRIGGER @ 15
+	}
+
+	proc.AddData(data, 0)
+	pkts, err := proc.ProcessPackets()
+	if err != nil {
+		t.Fatalf("ProcessPackets failed: %v", err)
+	}
+
+	if len(pkts) != 3 {
+		t.Fatalf("Expected 3 packets, got %d", len(pkts))
+	}
+
+	// ISYNC with 3-byte cycle count should be 9 bytes (6 base + 3 CC)
+	if len(pkts[1].RawBytes) != 9 {
+		t.Errorf("ISYNC length: expected 9 (6 base + 3 CC), got %d", len(pkts[1].RawBytes))
+	}
+
+	// TRIGGER should start at index 15 (6 + 9)
+	if pkts[2].Index != 15 {
+		t.Errorf("TRIGGER Index: expected 15, got %d", pkts[2].Index)
+	}
+}
