@@ -2,6 +2,7 @@ package formatter
 
 import (
 	"encoding/binary"
+
 	"opencsd/internal/common"
 )
 
@@ -16,6 +17,7 @@ type Deformatter struct {
 	currID    uint8
 	buffer    []byte
 	synced    bool
+	outBuffer map[uint8][]byte // Buffer bytes by ID before sending
 }
 
 func NewDeformatter() *Deformatter {
@@ -24,6 +26,7 @@ func NewDeformatter() *Deformatter {
 		currID:    0,
 		buffer:    make([]byte, 0, FrameSize*2),
 		synced:    true,
+		outBuffer: make(map[uint8][]byte),
 	}
 }
 
@@ -33,6 +36,7 @@ func (d *Deformatter) Attach(id uint8, receiver common.TrcDataIn) {
 
 func (d *Deformatter) TraceDataIn(op common.DataPathOp, index int64, data []byte) (common.DataPathResp, int, error) {
 	if op == common.OpEOT {
+		d.flushOutput()
 		for _, r := range d.receivers {
 			r.TraceDataIn(common.OpEOT, index, nil)
 		}
@@ -82,6 +86,9 @@ func (d *Deformatter) TraceDataIn(op common.DataPathOp, index int64, data []byte
 		d.buffer = d.buffer[FrameSize:]
 		totalProcessed += FrameSize
 	}
+
+	// Flush accumulated output bytes before returning
+	d.flushOutput()
 
 	return common.RespCont, len(data), nil
 }
@@ -135,7 +142,19 @@ func (d *Deformatter) unpackFrame(frame []byte, index int64) error {
 }
 
 func (d *Deformatter) outputByte(b byte, index int64) {
-	if receiver, ok := d.receivers[d.currID]; ok {
-		receiver.TraceDataIn(common.OpData, index, []byte{b})
+	if _, ok := d.receivers[d.currID]; ok {
+		// Buffer the byte for this ID instead of sending immediately
+		d.outBuffer[d.currID] = append(d.outBuffer[d.currID], b)
 	}
+}
+
+// flushOutput sends all buffered bytes to their respective receivers
+func (d *Deformatter) flushOutput() {
+	for id, bytes := range d.outBuffer {
+		if receiver, ok := d.receivers[id]; ok && len(bytes) > 0 {
+			receiver.TraceDataIn(common.OpData, 0, bytes)
+		}
+	}
+	// Clear the buffers for the next iteration
+	d.outBuffer = make(map[uint8][]byte)
 }

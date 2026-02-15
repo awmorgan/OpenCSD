@@ -154,6 +154,9 @@ func (e *TraceElement) ToString() string {
 		}
 		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_TRACE_ON( [%s])", reason)
 
+	case ElemEOTrace:
+		sb.WriteString("OCSD_GEN_TRC_ELEM_EO_TRACE( [end-of-trace])")
+
 	case ElemPeContext:
 		isaS := isaStr(e.ISA)
 		sec := "S"
@@ -206,6 +209,9 @@ func (e *TraceElement) ToString() string {
 		}
 
 		sb.WriteString(")")
+
+	case ElemAddrNacc:
+		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_ADDR_NACC(addr=0x%X)", e.StAddr)
 
 	case ElemException:
 		if e.ExcepRetAddr {

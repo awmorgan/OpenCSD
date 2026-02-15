@@ -198,10 +198,20 @@ func (t *DecodeTree) ProcessBuffer(path string) error {
 
 	if t.UseDeformatter {
 		_, _, err = t.Deformatter.TraceDataIn(common.OpData, 0, data)
+		if err != nil {
+			return err
+		}
+		// Signal end of trace to flush any remaining data
+		_, _, err = t.Deformatter.TraceDataIn(common.OpEOT, int64(len(data)), nil)
 	} else {
 		// Raw bypass: feed directly to the decoder
 		if t.RawDecoder != nil {
 			_, _, err = t.RawDecoder.TraceDataIn(common.OpData, 0, data)
+			if err != nil {
+				return err
+			}
+			// Signal end of trace to flush any remaining data
+			_, _, err = t.RawDecoder.TraceDataIn(common.OpEOT, int64(len(data)), nil)
 		} else {
 			return fmt.Errorf("raw format detected but no decoder attached")
 		}
