@@ -28,7 +28,6 @@ const (
 )
 
 // TraceElement represents the OcsdTraceElement C++ class.
-// It normalizes protocol-specific packets (PTM, ETM) into a standard format.
 type TraceElement struct {
 	ElemType   GenTrcElemType
 	Context    PeContext
@@ -40,7 +39,7 @@ type TraceElement struct {
 	EnAddr uint64 // End Address
 	ISA    Isa    // Instruction Set Architecture
 
-	// Instruction-range specific fields (last instruction info)
+	// Instruction-range specific fields
 	NumInstr      int       // num_i in C++ output
 	LastInstr     InstrInfo // detailed info for last instruction in range
 	LastInstrExec bool      // was the last instruction executed (E/N)
@@ -50,9 +49,10 @@ type TraceElement struct {
 	HasCC bool
 
 	// Exception / Event Info
-	ExcepID uint32
+	ExcepID      uint32
+	ExcepRetAddr bool // Flag: is the EnAddr a valid preferred return address?
 
-	// TraceOn reason (used for ElemTraceOn formatting)
+	// TraceOn reason
 	TraceOnReason int
 }
 
@@ -123,9 +123,7 @@ type InstrInfo struct {
 }
 
 // ToString mimics the C++ OcsdTraceElement::toString() method.
-// This is CRITICAL for parity testing against trc_pkt_lister output.
 func (e *TraceElement) ToString() string {
-	// Helper arrays to match C++ formatting exactly
 	isaStr := func(isa Isa) string {
 		switch isa {
 		case IsaArm32:
@@ -147,7 +145,6 @@ func (e *TraceElement) ToString() string {
 
 	switch e.ElemType {
 	case ElemNoSync:
-		// Default to init-decoder for now (matches C++ initial state)
 		sb.WriteString("OCSD_GEN_TRC_ELEM_NO_SYNC( [init-decoder])")
 
 	case ElemTraceOn:
@@ -159,7 +156,6 @@ func (e *TraceElement) ToString() string {
 
 	case ElemPeContext:
 		isaS := isaStr(e.ISA)
-		// Security
 		sec := "S"
 		if e.Context.SecurityLevel == SecNonSecure {
 			sec = "NS"
@@ -169,7 +165,6 @@ func (e *TraceElement) ToString() string {
 			bits = "64-bit; "
 		}
 		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=%s) %s; %s", isaS, sec, bits)
-		// VMID / ContextID if present
 		if e.Context.VMID != 0 {
 			fmt.Fprintf(&sb, "VMID=0x%X; ", e.Context.VMID)
 		}
@@ -179,42 +174,33 @@ func (e *TraceElement) ToString() string {
 		sb.WriteString(")")
 
 	case ElemInstrRange:
-		// exec range, num_i, last_sz, ISA
 		num := e.NumInstr
 		if num == 0 {
 			num = 1
 		}
 		lastSz := int(e.LastInstr.InstrSize)
-		if lastSz == 0 {
-			lastSz = int(e.LastInstr.InstrSize)
-		}
 		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x%X:[0x%X] num_i(%d) last_sz(%d) (ISA=%s) ", e.StAddr, e.EnAddr, num, lastSz, isaStr(e.ISA))
 
-		// last instruction executed flag
 		if e.LastInstrExec {
 			sb.WriteString("E ")
 		} else {
 			sb.WriteString("N ")
 		}
 
-		// instr type
 		typeIdx := int(e.LastInstr.Type)
 		if typeIdx >= 0 && typeIdx < len(instrType) {
 			sb.WriteString(instrType[typeIdx])
 		}
 
-		// instr subtype
 		subIdx := int(e.LastInstr.SubType)
 		if subIdx > 0 && subIdx < len(instrSub) {
 			sb.WriteString(instrSub[subIdx])
 		}
 
-		// conditional flag
 		if e.LastInstr.IsConditional {
 			sb.WriteString(" <cond>")
 		}
 
-		// cycle count if present
 		if e.HasCC {
 			fmt.Fprintf(&sb, " [CC=%d]; ", e.CycleCount)
 		}
@@ -222,8 +208,7 @@ func (e *TraceElement) ToString() string {
 		sb.WriteString(")")
 
 	case ElemException:
-		// Preferred return address if set (we use EnAddr as a hint)
-		if e.EnAddr != 0 {
+		if e.ExcepRetAddr {
 			fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_EXCEPTION(pref ret addr:0x%X; ", e.EnAddr)
 		} else {
 			sb.WriteString("OCSD_GEN_TRC_ELEM_EXCEPTION(")
@@ -247,8 +232,6 @@ func (e *TraceElement) ToString() string {
 }
 
 func (c PeContext) String() string {
-	// Matches C++ ocsd_pe_context::toString
-	// Example: "EL2; NS; VMID:0x0; CID:0x0"
 	secStr := "S"
 	if c.SecurityLevel == SecNonSecure {
 		secStr = "NS"

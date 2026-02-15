@@ -55,6 +55,7 @@ func NewPtmDecoder(sink common.GenElemIn, mapper *memacc.Mapper) *PtmDecoder {
 // TraceDataIn implements common.TrcDataIn
 func (d *PtmDecoder) TraceDataIn(op common.DataPathOp, index int64, data []byte) (common.DataPathResp, int, error) {
 	if op == common.OpEOT {
+		// Output End of Trace element
 		d.push(&common.TraceElement{ElemType: common.ElemEOTrace})
 		return common.RespCont, 0, nil
 	}
@@ -153,6 +154,7 @@ func (d *PtmDecoder) processIsync(pkt *PtmPacket) error {
 	d.updateContext(pkt)
 	d.pushContext()
 
+	// Emit Trace On
 	traceOnReason := 0
 	switch pkt.iSync {
 	case iSyncRestartOverflow:
@@ -172,7 +174,6 @@ func (d *PtmDecoder) processIsync(pkt *PtmPacket) error {
 }
 
 func (d *PtmDecoder) processAtom(pkt *PtmPacket) error {
-	// If we don't have a valid address, we can't process atoms.
 	if !d.addrValid {
 		return nil
 	}
@@ -184,9 +185,7 @@ func (d *PtmDecoder) processAtom(pkt *PtmPacket) error {
 
 	// Iterate bits from LSB to MSB
 	for i := 0; i < count; i++ {
-		// IMPORTANT: If we lost the address (e.g. indirect branch failed),
-		// we MUST stop processing the remaining atoms in this packet.
-		// This matches C++ m_atoms.clearAll() behavior.
+		// If address became invalid (e.g., empty return stack), stop processing atoms
 		if !d.addrValid {
 			break
 		}
@@ -203,9 +202,6 @@ func (d *PtmDecoder) processAtom(pkt *PtmPacket) error {
 		if err != nil {
 			return err
 		}
-
-		// Note: Cycle count handling for atoms is omitted for brevity,
-		// but typically attaches to the last atom's range.
 	}
 	return nil
 }
@@ -234,14 +230,13 @@ func (d *PtmDecoder) processAtomRange(atomVal common.AtomVal) error {
 		StAddr:        d.follower.StRangeAddr,
 		EnAddr:        d.follower.EnRangeAddr,
 		ISA:           d.follower.Info.ISA,
-		NumInstr:      int(d.follower.InstrCount), // Correct instruction count
+		NumInstr:      int(d.follower.InstrCount), // Use exact count from follower
 		LastInstr:     d.follower.Info,
 		LastInstrExec: (atomVal == common.AtomE),
 	}
 	d.push(elem)
 
 	// 4. Calculate Next Address
-	// Default is sequential execution (falling through to EnRangeAddr)
 	nextAddr := d.follower.EnRangeAddr
 	d.addrValid = true
 
@@ -250,7 +245,7 @@ func (d *PtmDecoder) processAtomRange(atomVal common.AtomVal) error {
 	case common.InstrTypeBranch:
 		if atomVal == common.AtomE {
 			nextAddr = d.follower.Info.BranchAddr
-			// Handle Link (Push to stack)
+			// Handle Link
 			if d.follower.Info.IsLink {
 				d.retStack.Push(d.follower.EnRangeAddr, d.follower.Info.ISA)
 			}
@@ -259,9 +254,9 @@ func (d *PtmDecoder) processAtomRange(atomVal common.AtomVal) error {
 	case common.InstrTypeIndirect:
 		if atomVal == common.AtomE {
 			// Executed Indirect Branch -> We need a target address.
-			// Try Return Stack first.
 			d.addrValid = false // Assume invalid unless stack saves us
 
+			// Try Return Stack
 			if d.retStack != nil {
 				if addr, isa, ok := d.retStack.Pop(); ok {
 					nextAddr = addr
@@ -270,18 +265,16 @@ func (d *PtmDecoder) processAtomRange(atomVal common.AtomVal) error {
 				}
 			}
 
-			// Handle Link (Push to stack) even if indirect (e.g. BLX <reg>)
+			// Handle Link (e.g. BLX <reg>)
 			if d.follower.Info.IsLink {
 				d.retStack.Push(d.follower.EnRangeAddr, d.follower.Info.ISA)
 			}
 		}
-		// If AtomN (Not Executed), we just fall through to sequential (nextAddr), which is valid.
 	}
 
 	// 5. Update Decoder State
 	if d.addrValid {
 		d.instrAddr = nextAddr
-		// Update ISA if transition occurred
 		if d.follower.Info.NextISA != d.follower.Info.ISA {
 			d.isa = d.follower.Info.NextISA
 		}
@@ -300,7 +293,7 @@ func (d *PtmDecoder) processBranch(pkt *PtmPacket) error {
 		if d.addrValid {
 			elem.StAddr = d.instrAddr
 			elem.EnAddr = d.instrAddr
-			elem.ExcepRetAddr = 1 // Flag that we have a valid return address
+			elem.ExcepRetAddr = true // Set the flag now supported in struct
 		}
 		if pkt.ccValid {
 			elem.CycleCount = pkt.cycleCount
