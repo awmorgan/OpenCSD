@@ -113,9 +113,6 @@ func (d *PtmDecoder) DecodePacket(pkt *PtmPacket) error {
 
 func (d *PtmDecoder) decodePacketBody(pkt *PtmPacket) error {
 	switch pkt.typeID {
-	case ptmPktAsync:
-		d.state = dcdStateWaitIsync
-		d.contextPushed = false
 	case ptmPktISync:
 		return d.processIsync(pkt)
 	case ptmPktAtom:
@@ -158,26 +155,30 @@ func (d *PtmDecoder) processIsync(pkt *PtmPacket) error {
 	d.isa = pkt.currISA
 	d.addrValid = true
 
-	// Emit Trace On if not periodic, or if we are just starting/re-syncing
-	if pkt.iSync != iSyncPeriodic || !d.contextPushed {
-		traceOnReason := 0
-		switch pkt.iSync {
-		case iSyncRestartOverflow:
-			traceOnReason = 1
-		case iSyncDebugExit:
-			traceOnReason = 2
-		default:
-			traceOnReason = 0
-		}
+	// Capture if this is the start/re-sync BEFORE pushContext updates it
+	firstSync := !d.contextPushed
 
+	d.updateContext(pkt)
+
+	// Determine Trace On reason
+	traceOnReason := 0
+	switch pkt.iSync {
+	case iSyncRestartOverflow:
+		traceOnReason = 1
+	case iSyncDebugExit:
+		traceOnReason = 2
+	default:
+		traceOnReason = 0
+	}
+
+	// Emit PeContext and Trace On if not periodic, or if we are just starting/re-syncing
+	if firstSync || pkt.iSync != iSyncPeriodic {
+		d.pushContext() // Output ElemPeContext first (as requested by user)
 		d.push(&common.TraceElement{
 			ElemType:      common.ElemTraceOn,
 			TraceOnReason: traceOnReason,
 		})
 	}
-
-	d.updateContext(pkt)
-	d.pushContext()
 
 	d.retStack.Flush()
 	return nil
