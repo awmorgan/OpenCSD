@@ -95,10 +95,19 @@ func Run(cfg Config) error {
 
 	// 4. Run Process
 	fullPath := filepath.Join(cfg.SnapshotDir, bufferFile)
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		return fmt.Errorf("error reading buffer: %v", err)
+	}
+
 	err = tree.ProcessBuffer(fullPath)
 	if err != nil {
 		return fmt.Errorf("error processing buffer: %v", err)
 	}
+
+	// mimics: Trace Packet Lister : Trace buffer done...
+	fmt.Fprintf(w, "ID:0    END OF TRACE DATA\n")
+	fmt.Fprintf(w, "Trace Packet Lister : Trace buffer done, processed %d bytes.\n", len(data))
 
 	return nil
 }

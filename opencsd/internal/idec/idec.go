@@ -9,27 +9,19 @@ type DecodeInfo struct {
 	InstrSubType int
 }
 
-const (
-	SubTypeNone         = 0
-	SubTypeBrLink       = 1
-	SubTypeV7ImpliedRet = 2
-	SubTypeV8Ret        = 3
-	SubTypeV8Eret       = 4
-)
-
 func SignExtend32(val uint32, bits int) int32 {
 	shift := 32 - bits
 	return int32(val<<uint(shift)) >> uint(shift)
 }
 
 func DecodeInstruction(instrInfo *common.InstrInfo, currentISA common.Isa) error {
-	info := &DecodeInfo{InstrSubType: SubTypeNone}
+	info := &DecodeInfo{InstrSubType: common.InstrSubTypeNone}
 
 	instrInfo.Type = common.InstrTypeOther
 	instrInfo.IsLink = false
 	instrInfo.IsConditional = false
 	instrInfo.BranchAddr = 0
-	instrInfo.SubType = SubTypeNone
+	instrInfo.SubType = common.InstrSubTypeNone
 
 	switch currentISA {
 	case common.IsaA64:
@@ -67,14 +59,14 @@ func InstA64IsIndirectBranchLink(inst uint32, isLink *bool, info *DecodeInfo) bo
 	if (inst & 0xffdffc1f) == 0xd61f0000 { // BR, BLR
 		if (inst & 0x00200000) != 0 {
 			*isLink = true
-			info.InstrSubType = SubTypeBrLink
+			info.InstrSubType = common.InstrSubTypeBrLink
 		}
 		return true
 	} else if (inst & 0xfffffc1f) == 0xd65f0000 { // RET
-		info.InstrSubType = SubTypeV8Ret
+		info.InstrSubType = common.InstrSubTypeV8Ret
 		return true
 	} else if (inst & 0xffffffff) == 0xd69f03e0 { // ERET
-		info.InstrSubType = SubTypeV8Eret
+		info.InstrSubType = common.InstrSubTypeV8Eret
 		return true
 	}
 	return false
@@ -88,7 +80,7 @@ func InstA64IsDirectBranchLink(inst uint32, isLink *bool, info *DecodeInfo) bool
 	} else if (inst & 0x7c000000) == 0x14000000 { // B, BL imm
 		if (inst & 0x80000000) != 0 {
 			*isLink = true
-			info.InstrSubType = SubTypeBrLink
+			info.InstrSubType = common.InstrSubTypeBrLink
 		}
 		return true
 	}
@@ -126,7 +118,7 @@ func decodeA32(instrInfo *common.InstrInfo, info *DecodeInfo) error {
 		instrInfo.Type = common.InstrTypeIndirect
 		if InstArmIsBranchAndLink(inst) {
 			instrInfo.IsLink = true
-			info.InstrSubType = SubTypeBrLink
+			info.InstrSubType = common.InstrSubTypeBrLink
 		}
 	} else if InstArmIsDirectBranch(inst) {
 		instrInfo.Type = common.InstrTypeBranch
@@ -141,7 +133,7 @@ func decodeA32(instrInfo *common.InstrInfo, info *DecodeInfo) error {
 		}
 		if InstArmIsBranchAndLink(inst) {
 			instrInfo.IsLink = true
-			info.InstrSubType = SubTypeBrLink
+			info.InstrSubType = common.InstrSubTypeBrLink
 		}
 	}
 
@@ -155,24 +147,24 @@ func InstArmIsIndirectBranch(inst uint32, info *DecodeInfo) bool {
 		return (inst & 0xfe500000) == 0xf8100000 // RFE
 	} else if (inst & 0x0ff000d0) == 0x01200010 { // BX, BLX (reg)
 		if (inst & 0xFF) == 0x1E {
-			info.InstrSubType = SubTypeV7ImpliedRet
+			info.InstrSubType = common.InstrSubTypeV7ImpliedRet
 		}
 		return true
 	} else if (inst & 0x0e108000) == 0x08108000 { // POP {pc}
 		if (inst & 0x0FFFA000) == 0x08BD8000 {
-			info.InstrSubType = SubTypeV7ImpliedRet
+			info.InstrSubType = common.InstrSubTypeV7ImpliedRet
 		}
 		return true
 	} else if (inst & 0x0e50f000) == 0x0410f000 { // LDR PC, imm
 		if (inst & 0x01ff0000) == 0x009D0000 {
-			info.InstrSubType = SubTypeV7ImpliedRet
+			info.InstrSubType = common.InstrSubTypeV7ImpliedRet
 		}
 		return true
 	} else if (inst & 0x0e50f010) == 0x0610f000 { // LDR PC, reg
 		return true
 	} else if (inst & 0x0fe0f000) == 0x01a0f000 { // MOV PC, rx
 		if (inst & 0x00100FFF) == 0x00E {
-			info.InstrSubType = SubTypeV7ImpliedRet
+			info.InstrSubType = common.InstrSubTypeV7ImpliedRet
 		}
 		return true
 	} else if (inst & 0x0e00f000) == 0x0000f000 { // DP PC, reg
@@ -277,12 +269,12 @@ func InstThumbIsDirectBranchLink(inst uint32, isLink *bool, isCond *bool, info *
 	} else if (inst & 0xf8009000) == 0xf0009000 {
 		if (inst & 0x00004000) != 0 {
 			*isLink = true
-			info.InstrSubType = SubTypeBrLink
+			info.InstrSubType = common.InstrSubTypeBrLink
 		}
 		return true // B T4, BL T1
 	} else if (inst & 0xf800d001) == 0xf000c000 {
 		*isLink = true
-		info.InstrSubType = SubTypeBrLink
+		info.InstrSubType = common.InstrSubTypeBrLink
 		return true // BLX (imm)
 	} else if (inst & 0xf5000000) == 0xb1000000 {
 		*isCond = true
@@ -295,28 +287,28 @@ func InstThumbIsIndirectBranchLink(inst uint32, isLink *bool, info *DecodeInfo) 
 	if (inst & 0xff000000) == 0x47000000 { // BX, BLX
 		if (inst & 0x00800000) != 0 {
 			*isLink = true
-			info.InstrSubType = SubTypeBrLink
+			info.InstrSubType = common.InstrSubTypeBrLink
 		} else if (inst & 0x00780000) == 0x00700000 {
-			info.InstrSubType = SubTypeV7ImpliedRet
+			info.InstrSubType = common.InstrSubTypeV7ImpliedRet
 		}
 		return true
 	} else if (inst & 0xff000000) == 0xbd000000 { // POP {pc}
-		info.InstrSubType = SubTypeV7ImpliedRet
+		info.InstrSubType = common.InstrSubTypeV7ImpliedRet
 		return true
 	} else if (inst & 0xfd870000) == 0x44870000 { // MOV/ADD PC
 		if (inst & 0xffff0000) == 0x46f70000 {
-			info.InstrSubType = SubTypeV7ImpliedRet
+			info.InstrSubType = common.InstrSubTypeV7ImpliedRet
 		}
 		return true
 	} else if (inst&0xfff0f800) == 0xf850f800 || (inst&0xfff0f000) == 0xf8d0f000 || (inst&0xff7ff000) == 0xf85ff000 {
 		// LDR PC
 		if (inst&0xfff0f800) == 0xf850f800 && (inst&0x000f0f00) == 0x000d0b00 {
-			info.InstrSubType = SubTypeV7ImpliedRet
+			info.InstrSubType = common.InstrSubTypeV7ImpliedRet
 		}
 		return true
 	} else if (inst & 0xfe508000) == 0xe8108000 { // LDM PC
 		if (inst & 0x0FFF0000) == 0x08BD0000 {
-			info.InstrSubType = SubTypeV7ImpliedRet
+			info.InstrSubType = common.InstrSubTypeV7ImpliedRet
 		}
 		return true
 	}

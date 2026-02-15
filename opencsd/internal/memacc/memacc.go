@@ -69,11 +69,12 @@ func (m MemSpace) String() string {
 
 // Common errors
 var (
-	ErrMemAccOverlap  = fmt.Errorf("memory accessor overlap")
-	ErrOutOfRange     = fmt.Errorf("address out of range")
-	ErrAccessInvalid  = fmt.Errorf("memory access invalid")
-	ErrNotInitialized = fmt.Errorf("accessor not initialized")
-	ErrFileAccess     = fmt.Errorf("file access error")
+	ErrMemAccOverlap    = fmt.Errorf("memory accessor overlap")
+	ErrOutOfRange       = fmt.Errorf("address out of range")
+	ErrAccessInvalid    = fmt.Errorf("memory access invalid")
+	ErrNotInitialized   = fmt.Errorf("accessor not initialized")
+	ErrFileAccess       = fmt.Errorf("file access error")
+	ErrInsufficientData = fmt.Errorf("insufficient data read")
 )
 
 // Accessor is the interface for memory access objects.
@@ -582,41 +583,28 @@ func (m *Mapper) findAccessor(addr uint64, space MemSpace) bool {
 }
 
 // ReadTargetMemory reads requested bytes from the target memory.
-// It can handle reads that span across multiple adjacent memory accessors.
+// It finds the first accessor that covers the start address and reads from it.
+// It does NOT automatically stitch reads across multiple accessors.
 // Returns a uint32 in Little Endian.
 func (m *Mapper) ReadTargetMemory(addr uint64, trcID uint8, space MemSpace, reqBytes uint32) (uint32, error) {
-	fullData := make([]byte, 0, reqBytes)
-	currAddr := addr
-	bytesRemaining := reqBytes
+	// Locate Accessor for the current address
+	if !m.findAccessor(addr, space) {
+		return 0, fmt.Errorf("%w: at 0x%x (requested %d)", ErrAccessInvalid, addr, reqBytes)
+	}
 
-	for bytesRemaining > 0 {
-		// Locate Accessor for the current address
-		if !m.findAccessor(currAddr, space) {
-			break
-		}
-
-		// Perform Read (via Cache)
-		// Request whatever is remaining, cache will handle page-sized reads from accessor
-		data, err := m.cache.readBytes(m.accCurr, currAddr, space, trcID, bytesRemaining)
-		if err != nil {
-			return 0, err
-		}
-		if len(data) == 0 {
-			break
-		}
-
-		fullData = append(fullData, data...)
-		currAddr += uint64(len(data))
-		bytesRemaining -= uint32(len(data))
+	// Perform Read (via Cache)
+	data, err := m.cache.readBytes(m.accCurr, addr, space, trcID, reqBytes)
+	if err != nil {
+		return 0, err
 	}
 
 	// Convert to uint32
-	if uint32(len(fullData)) < reqBytes {
+	if uint32(len(data)) < reqBytes {
 		// Not enough data read (e.g. near end of memory or gap in mapping)
-		return 0, fmt.Errorf("%w: at 0x%x (requested %d, got %d)", ErrAccessInvalid, addr, reqBytes, len(fullData))
+		return 0, ErrInsufficientData
 	}
 
-	return binary.LittleEndian.Uint32(fullData), nil
+	return binary.LittleEndian.Uint32(data), nil
 }
 
 // EnableCaching turns caching on or off.

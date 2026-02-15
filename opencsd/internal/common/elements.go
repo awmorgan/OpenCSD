@@ -108,6 +108,15 @@ const (
 	InstrTypeWFI_WFE  = 5 // Wait
 )
 
+// Instruction SubTypes
+const (
+	InstrSubTypeNone         = 0
+	InstrSubTypeBrLink       = 1
+	InstrSubTypeV7ImpliedRet = 2
+	InstrSubTypeV8Ret        = 3
+	InstrSubTypeV8Eret       = 4
+)
+
 // InstrInfo mimics ocsd_instr_info
 type InstrInfo struct {
 	InstrAddr     uint64

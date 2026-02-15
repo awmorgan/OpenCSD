@@ -115,6 +115,7 @@ func (d *PtmDecoder) decodePacketBody(pkt *PtmPacket) error {
 	switch pkt.typeID {
 	case ptmPktAsync:
 		d.state = dcdStateWaitIsync
+		d.contextPushed = false
 	case ptmPktISync:
 		return d.processIsync(pkt)
 	case ptmPktAtom:
@@ -157,24 +158,26 @@ func (d *PtmDecoder) processIsync(pkt *PtmPacket) error {
 	d.isa = pkt.currISA
 	d.addrValid = true
 
-	// Emit Trace On
-	traceOnReason := 0
-	switch pkt.iSync {
-	case iSyncRestartOverflow:
-		traceOnReason = 1
-	case iSyncDebugExit:
-		traceOnReason = 2
-	default:
-		traceOnReason = 0
+	// Emit Trace On if not periodic, or if we are just starting/re-syncing
+	if pkt.iSync != iSyncPeriodic || !d.contextPushed {
+		traceOnReason := 0
+		switch pkt.iSync {
+		case iSyncRestartOverflow:
+			traceOnReason = 1
+		case iSyncDebugExit:
+			traceOnReason = 2
+		default:
+			traceOnReason = 0
+		}
+
+		d.push(&common.TraceElement{
+			ElemType:      common.ElemTraceOn,
+			TraceOnReason: traceOnReason,
+		})
 	}
 
 	d.updateContext(pkt)
 	d.pushContext()
-
-	d.push(&common.TraceElement{
-		ElemType:      common.ElemTraceOn,
-		TraceOnReason: traceOnReason,
-	})
 
 	d.retStack.Flush()
 	return nil
@@ -277,8 +280,8 @@ func (d *PtmDecoder) processAtomRange(atomVal common.AtomVal, mode codefollower.
 				// Executed Indirect Branch -> We need a target address.
 				d.addrValid = false // Assume invalid unless stack saves us
 
-				// Try Return Stack
-				if d.retStack != nil {
+				// Try Return Stack - only for return-subtypes
+				if d.retStack != nil && d.follower.Info.SubType >= common.InstrSubTypeV7ImpliedRet {
 					if addr, isa, ok := d.retStack.Pop(); ok {
 						nextAddr = addr
 						d.follower.Info.NextISA = isa
