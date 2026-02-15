@@ -124,7 +124,10 @@ func decodeA32(instrInfo *common.InstrInfo, info *DecodeInfo) error {
 
 	if InstArmIsIndirectBranch(inst, info) {
 		instrInfo.Type = common.InstrTypeIndirect
-		instrInfo.IsLink = InstArmIsBranchAndLink(inst)
+		if InstArmIsBranchAndLink(inst) {
+			instrInfo.IsLink = true
+			info.InstrSubType = SubTypeBrLink
+		}
 	} else if InstArmIsDirectBranch(inst) {
 		instrInfo.Type = common.InstrTypeBranch
 		dest, ok := InstArmBranchDestination(uint32(instrInfo.InstrAddr), inst)
@@ -136,7 +139,10 @@ func decodeA32(instrInfo *common.InstrInfo, info *DecodeInfo) error {
 				instrInfo.BranchAddr = uint64(dest &^ 1)
 			}
 		}
-		instrInfo.IsLink = InstArmIsBranchAndLink(inst)
+		if InstArmIsBranchAndLink(inst) {
+			instrInfo.IsLink = true
+			info.InstrSubType = SubTypeBrLink
+		}
 	}
 
 	instrInfo.IsConditional = InstArmIsConditional(inst)

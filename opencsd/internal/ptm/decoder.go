@@ -16,9 +16,12 @@ type PtmDecoder struct {
 	pktProc  *PktProcessor
 
 	// Internal State tracking
-	peContext common.PeContext
-	state     int
-	needIsync bool
+	peContext     common.PeContext
+	prevContext   common.PeContext
+	contextPushed bool
+	prevIsa       common.Isa
+	state         int
+	needIsync     bool
 
 	// Current Execution State
 	instrAddr uint64
@@ -157,9 +160,6 @@ func (d *PtmDecoder) processIsync(pkt *PtmPacket) error {
 	d.isa = pkt.currISA
 	d.addrValid = true
 
-	d.updateContext(pkt)
-	d.pushContext()
-
 	// Emit Trace On
 	traceOnReason := 0
 	switch pkt.iSync {
@@ -174,6 +174,9 @@ func (d *PtmDecoder) processIsync(pkt *PtmPacket) error {
 		ElemType:      common.ElemTraceOn,
 		TraceOnReason: traceOnReason,
 	})
+
+	d.updateContext(pkt)
+	d.pushContext()
 
 	d.retStack.Flush()
 	return nil
@@ -373,11 +376,16 @@ func (d *PtmDecoder) updateContext(pkt *PtmPacket) {
 }
 
 func (d *PtmDecoder) pushContext() {
-	d.push(&common.TraceElement{
-		ElemType: common.ElemPeContext,
-		Context:  d.peContext,
-		ISA:      d.isa,
-	})
+	if !d.contextPushed || d.peContext != d.prevContext || d.isa != d.prevIsa {
+		d.push(&common.TraceElement{
+			ElemType: common.ElemPeContext,
+			Context:  d.peContext,
+			ISA:      d.isa,
+		})
+		d.prevContext = d.peContext
+		d.prevIsa = d.isa
+		d.contextPushed = true
+	}
 }
 
 func (d *PtmDecoder) push(elem *common.TraceElement) {

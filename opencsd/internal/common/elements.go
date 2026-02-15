@@ -138,7 +138,7 @@ func (e *TraceElement) ToString() string {
 	}
 
 	instrType := []string{"--- ", "BR  ", "iBR ", "ISB ", "DSB.DMB", "WFI.WFE", "TSTART"}
-	instrSub := []string{"--- ", "b+link ", "V7:impl ret ", "A64:ret ", "A64:eret "}
+	instrSub := []string{"--- ", "b+link ", "V7:impl ret", "A64:ret", "A64:eret"}
 	traceOnReason := []string{"begin or filter", "overflow", "debug restart"}
 
 	var sb strings.Builder
@@ -169,10 +169,10 @@ func (e *TraceElement) ToString() string {
 		}
 		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=%s) %s; %s", isaS, sec, bits)
 		if e.Context.VMID != 0 {
-			fmt.Fprintf(&sb, "VMID=0x%X; ", e.Context.VMID)
+			fmt.Fprintf(&sb, "VMID=0x%x; ", e.Context.VMID)
 		}
 		if e.Context.ContextID != 0 {
-			fmt.Fprintf(&sb, "CTXTID=0x%X; ", e.Context.ContextID)
+			fmt.Fprintf(&sb, "CTXTID=0x%x; ", e.Context.ContextID)
 		}
 		sb.WriteString(")")
 
@@ -182,7 +182,7 @@ func (e *TraceElement) ToString() string {
 			num = 1
 		}
 		lastSz := int(e.LastInstr.InstrSize)
-		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x%X:[0x%X] num_i(%d) last_sz(%d) (ISA=%s) ", e.StAddr, e.EnAddr, num, lastSz, isaStr(e.ISA))
+		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x%x:[0x%x] num_i(%d) last_sz(%d) (ISA=%s) ", e.StAddr, e.EnAddr, num, lastSz, isaStr(e.ISA))
 
 		if e.LastInstrExec {
 			sb.WriteString("E ")
@@ -211,18 +211,18 @@ func (e *TraceElement) ToString() string {
 		sb.WriteString(")")
 
 	case ElemAddrNacc:
-		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_ADDR_NACC(addr=0x%X)", e.StAddr)
+		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_ADDR_NACC(addr=0x%x)", e.StAddr)
 
 	case ElemException:
 		if e.ExcepRetAddr {
-			fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_EXCEPTION(pref ret addr:0x%X; ", e.EnAddr)
+			fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_EXCEPTION(pref ret addr:0x%x; ", e.EnAddr)
 		} else {
 			sb.WriteString("OCSD_GEN_TRC_ELEM_EXCEPTION(")
 		}
-		fmt.Fprintf(&sb, "excep num (0x%02X) )", e.ExcepID)
+		fmt.Fprintf(&sb, "excep num (0x%02x) )", e.ExcepID)
 
 	case ElemTimestamp:
-		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_TIMESTAMP( [ TS=0x%X]; )", e.Timestamp)
+		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_TIMESTAMP( [ TS=0x%x]; )", e.Timestamp)
 
 	case ElemCycleCount:
 		fmt.Fprintf(&sb, "OCSD_GEN_TRC_ELEM_CYCLE_COUNT( [CC=%d]; )", e.CycleCount)
