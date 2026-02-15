@@ -304,7 +304,6 @@ func (p *PtmPacket) branchAddressString() string {
 
 	if p.currISA != p.prevISA {
 		b.WriteString(p.isaString())
-		b.WriteString(" ")
 	}
 
 	if p.context.updated {
@@ -360,7 +359,7 @@ func (p *PtmPacket) isaString() string {
 	default:
 		isaStr = "Unknown"
 	}
-	return fmt.Sprintf("ISA=%s;", isaStr)
+	return fmt.Sprintf("ISA=%s; ", isaStr)
 }
 
 func (p *PtmPacket) iSyncString() string {
@@ -385,7 +384,6 @@ func (p *PtmPacket) iSyncString() string {
 	}
 	b.WriteString(p.isaString())
 	if p.ccValid {
-		b.WriteString(" ")
 		b.WriteString(p.cycleCountString())
 	}
 	return b.String()

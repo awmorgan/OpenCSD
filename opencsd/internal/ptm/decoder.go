@@ -146,6 +146,7 @@ func (d *PtmDecoder) decodePacketBody(pkt *PtmPacket) error {
 	case ptmPktReserved, ptmPktBadSequence:
 		// Transition to unsynced on invalid packets. Emit NoSync once here.
 		d.state = dcdStateWaitSync
+		d.contextPushed = false
 		d.push(&common.TraceElement{ElemType: common.ElemNoSync})
 	}
 	return nil
@@ -166,13 +167,14 @@ func (d *PtmDecoder) processIsync(pkt *PtmPacket) error {
 	default:
 		traceOnReason = 0
 	}
+
+	d.updateContext(pkt)
+	d.pushContext()
+
 	d.push(&common.TraceElement{
 		ElemType:      common.ElemTraceOn,
 		TraceOnReason: traceOnReason,
 	})
-
-	d.updateContext(pkt)
-	d.pushContext()
 
 	d.retStack.Flush()
 	return nil
