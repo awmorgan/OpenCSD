@@ -73,8 +73,8 @@ func (p *PktProcessor) AddData(data []byte, index int64) {
 func (p *PktProcessor) ProcessPackets() ([]PtmPacket, error) {
 	var out []PtmPacket
 
-	// Keep looping if we have data OR if we have a finished packet waiting to be sent
-	for len(p.data) > 0 || p.processState == stateSendPkt {
+	// Keep looping if we have data OR if we have a packet in progress (stateSendPkt or stateProcData)
+	for len(p.data) > 0 || p.processState == stateSendPkt || p.processState == stateProcData {
 		if p.processState == stateWaitSync {
 			if !p.findAsyncInStream() {
 				// Not enough data or no async found yet
@@ -193,6 +193,17 @@ func (p *PktProcessor) findAsyncInStream() bool {
 				start = i
 			}
 			zeroCount++
+			// Check for excessive zeros (ASYNC_PAD_0_LIMIT rule)
+			if zeroCount >= (asyncPad0Limit + asyncReqZeros) {
+				// Discard first asyncPad0Limit zeros and continue scanning
+				discarded := start + asyncPad0Limit
+				p.totalProcessed += int64(discarded)
+				p.data = p.data[discarded:]
+				// Keep remaining zeros in count
+				zeroCount = zeroCount - asyncPad0Limit
+				start = 0
+				i = zeroCount - 1 // Account for remaining zeros we're keeping
+			}
 			continue
 		}
 		if b == 0x80 && zeroCount >= asyncReqZeros {

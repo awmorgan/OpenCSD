@@ -151,3 +151,80 @@ func TestPtmDecoderBadSequenceRecoveryGate(t *testing.T) {
 	}
 	assertElemSeq(t, got, want)
 }
+
+func TestPtmSimpleTrigger(t *testing.T) {
+	// Simple ASYNC + ISYNC + TRIGGER to verify TRIGGER works
+	data := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
+		0x08, 0x00, 0x00, 0x00, 0x00, 0x00, // ISYNC
+		0x0C, // TRIGGER
+	}
+
+	pkts, err := ParsePtmPackets(data)
+	if err != nil {
+		t.Fatalf("ParsePtmPackets failed: %v", err)
+	}
+
+	if len(pkts) != 3 {
+		t.Fatalf("Expected 3 packets, got %d", len(pkts))
+	}
+
+	if pkts[2].typeID != ptmPktTrigger {
+		t.Errorf("Expected third packet to be TRIGGER, got %v", pkts[2].typeID)
+	}
+}
+
+func TestPtmLongZeroRunAsync(t *testing.T) {
+	// 20 zeros + 0x80 should trigger ASYNC_PAD_0_LIMIT discard
+	data := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 10 zeros
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 20 zeros total
+		0x80,                   // ASYNC terminator
+		0x08, 0x00, 0x00, 0x00, 0x00, 0x00, // ISYNC
+		0x0C, // TRIGGER
+	}
+
+	pkts, err := ParsePtmPackets(data)
+	if err != nil {
+		t.Fatalf("ParsePtmPackets failed: %v", err)
+	}
+
+	// Verify packet indices and lengths
+	if len(pkts) != 3 {
+		t.Fatalf("Expected 3 packets, got %d", len(pkts))
+	}
+
+	// ASYNC: after discarding first 11 zeros, starts at index 11
+	// Contains 9 remaining zeros + 0x80 = length 10
+	if pkts[0].typeID != ptmPktAsync {
+		t.Fatalf("Expected first packet to be ASYNC, got %v", pkts[0].typeID)
+	}
+	if pkts[0].Index != 11 {
+		t.Errorf("ASYNC Index: expected 11, got %d", pkts[0].Index)
+	}
+	if len(pkts[0].RawBytes) != 10 {
+		t.Errorf("ASYNC length: expected 10, got %d", len(pkts[0].RawBytes))
+	}
+
+	// ISYNC: starts at 21 (11 + 10), length 6
+	if pkts[1].typeID != ptmPktISync {
+		t.Fatalf("Expected second packet to be ISYNC, got %v", pkts[1].typeID)
+	}
+	if pkts[1].Index != 21 {
+		t.Errorf("ISYNC Index: expected 21, got %d", pkts[1].Index)
+	}
+	if len(pkts[1].RawBytes) != 6 {
+		t.Errorf("ISYNC length: expected 6, got %d", len(pkts[1].RawBytes))
+	}
+
+	// TRIGGER: starts at 27 (21 + 6), length 1
+	if pkts[2].typeID != ptmPktTrigger {
+		t.Fatalf("Expected third packet to be TRIGGER, got %v", pkts[2].typeID)
+	}
+	if pkts[2].Index != 27 {
+		t.Errorf("TRIGGER Index: expected 27, got %d", pkts[2].Index)
+	}
+	if len(pkts[2].RawBytes) != 1 {
+		t.Errorf("TRIGGER length: expected 1, got %d", len(pkts[2].RawBytes))
+	}
+}
