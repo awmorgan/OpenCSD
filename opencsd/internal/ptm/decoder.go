@@ -171,13 +171,13 @@ func (d *PtmDecoder) processIsync(pkt *PtmPacket) error {
 		traceOnReason = 0
 	}
 
-	// Emit PeContext and Trace On if not periodic, or if we are just starting/re-syncing
+	// Emit Trace On and PeContext if not periodic, or if we are just starting/re-syncing
 	if firstSync || pkt.iSync != iSyncPeriodic {
-		d.pushContext() // Output ElemPeContext first (as requested by user)
 		d.push(&common.TraceElement{
 			ElemType:      common.ElemTraceOn,
 			TraceOnReason: traceOnReason,
 		})
+		d.pushContext()
 	}
 
 	d.retStack.Flush()

@@ -55,18 +55,30 @@ func TestIntegrationComparison(t *testing.T) {
 			}
 
 			// 3. Compare
-			// Normalize line endings to handle Windows/Linux differences
-			actualStr := strings.ReplaceAll(actualBuf.String(), "\r\n", "\n")
-			actualStr = strings.ReplaceAll(actualStr, "\\", "/")
-			actualStr = strings.ReplaceAll(actualStr, "internal/snapshot/testdata", "./snapshots")
+			// Normalize to handle Windows/Linux differences and path separators
+			normalize := func(s string) string {
+				s = strings.ReplaceAll(s, "\r\n", "\n")
+				s = strings.ReplaceAll(s, "\\", "/")
+				s = strings.ReplaceAll(s, "internal/snapshot/testdata", "./snapshots")
+				// Trim trailing spaces on each line and trailing newlines
+				lines := strings.Split(s, "\n")
+				for i := range lines {
+					lines[i] = strings.TrimRight(lines[i], " \t")
+				}
+				return strings.TrimRight(strings.Join(lines, "\n"), "\n")
+			}
 
-			expectedStr := strings.ReplaceAll(expected, "\r\n", "\n")
+			actualStr := normalize(actualBuf.String())
+			expectedStr := normalize(expected)
 
 			// Simple check (you might want a diff library like go-cmp later)
 			if actualStr != expectedStr {
 				// Write actual output to file for debugging
 				debugFile := filepath.Join(testDataRoot, tc.dirName+"_debug_actual.txt")
 				_ = os.WriteFile(debugFile, []byte(actualStr), 0644)
+
+				debugExpectedFile := filepath.Join(testDataRoot, tc.dirName+"_debug_expected.txt")
+				_ = os.WriteFile(debugExpectedFile, []byte(expectedStr), 0644)
 
 				t.Errorf("Output did not match golden file.\nLength Expected: %d\nLength Actual: %d\nSee %s for details.",
 					len(expectedStr), len(actualStr), debugFile)

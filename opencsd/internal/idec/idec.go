@@ -352,10 +352,10 @@ func InstThumbBranchDestination(addr uint32, inst uint32) (uint32, bool) {
 		j1 := (inst & 0x2000) >> 13
 		j2 := (inst & 0x0800) >> 11
 		imm10 := (inst & 0x03ff0000) >> 16
-		imm11h := (inst & 0x000007fe) // bit 0 is 0
+		imm11 := inst & 0x000007fe // bit 0 is 0
 		i1 := ^(j1 ^ s) & 1
 		i2 := ^(j2 ^ s) & 1
-		offset := (s << 24) | (i1 << 23) | (i2 << 22) | (imm10 << 12) | imm11h
+		offset := (s << 24) | (i1 << 23) | (i2 << 22) | (imm10 << 12) | (imm11 << 1)
 		npc = (addr + 4) & ^uint32(3) // Align PC to 4
 		npc += uint32(SignExtend32(offset, 25))
 		isaBit = 0 // Switch to ARM

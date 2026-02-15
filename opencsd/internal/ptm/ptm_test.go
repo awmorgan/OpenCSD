@@ -121,11 +121,11 @@ func TestPtmDecoderReservedRecoveryGate(t *testing.T) {
 	got := decodeElems(t, data)
 	want := []elemRecord{
 		{index: 0, elemType: common.ElemNoSync},
-		{index: 6, elemType: common.ElemPeContext},
 		{index: 6, elemType: common.ElemTraceOn},
+		{index: 6, elemType: common.ElemPeContext},
 		{index: 12, elemType: common.ElemNoSync},
-		{index: 21, elemType: common.ElemPeContext},
 		{index: 21, elemType: common.ElemTraceOn},
+		{index: 21, elemType: common.ElemPeContext},
 	}
 	assertElemSeq(t, got, want)
 }
@@ -143,11 +143,11 @@ func TestPtmDecoderBadSequenceRecoveryGate(t *testing.T) {
 	got := decodeElems(t, data)
 	want := []elemRecord{
 		{index: 0, elemType: common.ElemNoSync},
-		{index: 6, elemType: common.ElemPeContext},
 		{index: 6, elemType: common.ElemTraceOn},
+		{index: 6, elemType: common.ElemPeContext},
 		{index: 12, elemType: common.ElemNoSync},
-		{index: 22, elemType: common.ElemPeContext},
 		{index: 22, elemType: common.ElemTraceOn},
+		{index: 22, elemType: common.ElemPeContext},
 	}
 	assertElemSeq(t, got, want)
 }

@@ -29,11 +29,13 @@ func Run(cfg Config) error {
 	// mimics: Trace Packet Lister: CS Decode library testing...
 	fmt.Fprintln(w, "Trace Packet Lister: CS Decode library testing")
 	fmt.Fprintln(w, "-----------------------------------------------")
+	fmt.Fprintln(w, "")
 	// Match C++ trc_pkt_lister header exactly for parity tests
 	fmt.Fprintln(w, "** Library Version : 1.7.1")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Test Command Line:-")
 	fmt.Fprintf(w, "C:\\Users\\arthu\\git\\OpenCSD\\decoder\\tests\\bin\\mingw64\\rel\\trc_pkt_lister.exe   -ss_dir  ./snapshots/%s  -decode  -no_time_print  -logfilename  ./results/%s.ppl  \n", filepath.Base(cfg.SnapshotDir), filepath.Base(cfg.SnapshotDir))
+	fmt.Fprintln(w, "")
 
 	// 1. Load Snapshot
 	// mimics: Trace Packet Lister : reading snapshot from path...
@@ -106,7 +108,7 @@ func Run(cfg Config) error {
 	}
 
 	// mimics: Trace Packet Lister : Trace buffer done...
-	fmt.Fprintf(w, "ID:0    END OF TRACE DATA\n")
+	fmt.Fprintf(w, "ID:0\tEND OF TRACE DATA\n")
 	fmt.Fprintf(w, "Trace Packet Lister : Trace buffer done, processed %d bytes.\n", len(data))
 
 	return nil
