@@ -144,6 +144,10 @@ func (d *PtmDecoder) decodePacketBody(pkt *PtmPacket) error {
 			d.peContext.VMID = uint32(pkt.context.vmid)
 			d.pushContext()
 		}
+	case ptmPktReserved, ptmPktBadSequence:
+		// Transition to unsynced on invalid packets. Emit NoSync once here.
+		d.state = dcdStateWaitSync
+		d.push(&common.TraceElement{ElemType: common.ElemNoSync})
 	}
 	return nil
 }

@@ -6,6 +6,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"opencsd/internal/common"
+	"opencsd/internal/memacc"
 )
 
 func TestPtmParity(t *testing.T) {
@@ -63,4 +66,88 @@ func formatRawBytes(data []byte) string {
 		fmt.Fprintf(&sb, "0x%02x ", b)
 	}
 	return sb.String()
+}
+
+type elemRecord struct {
+	index    int64
+	elemType common.GenTrcElemType
+}
+
+type elemSink struct {
+	elems []elemRecord
+}
+
+func (s *elemSink) TraceElemIn(index int64, chanID uint8, elem *common.TraceElement) common.DataPathResp {
+	s.elems = append(s.elems, elemRecord{index: index, elemType: elem.ElemType})
+	return common.RespCont
+}
+
+func decodeElems(t *testing.T, data []byte) []elemRecord {
+	t.Helper()
+	sink := &elemSink{}
+	decoder := NewPtmDecoder(sink, memacc.NewMapper())
+	resp, _, err := decoder.TraceDataIn(common.OpData, 0, data)
+	if err != nil {
+		t.Fatalf("TraceDataIn failed: %v", err)
+	}
+	if !resp.IsCont() {
+		t.Fatalf("TraceDataIn returned non-continue response: %v", resp)
+	}
+	return sink.elems
+}
+
+func assertElemSeq(t *testing.T, got []elemRecord, want []elemRecord) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("Expected %d elements, got %d", len(want), len(got))
+	}
+	for i := range want {
+		if got[i].elemType != want[i].elemType || got[i].index != want[i].index {
+			t.Fatalf("Element %d mismatch: got (%v @ %d), want (%v @ %d)", i, got[i].elemType, got[i].index, want[i].elemType, want[i].index)
+		}
+	}
+}
+
+func TestPtmDecoderReservedRecoveryGate(t *testing.T) {
+	data := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
+		0x08, 0x00, 0x00, 0x00, 0x00, 0x00, // ISYNC
+		0x02,       // RESERVED
+		0x42, 0x00, // TIMESTAMP (would emit if synced)
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
+		0x08, 0x00, 0x00, 0x00, 0x00, 0x00, // ISYNC
+	}
+
+	got := decodeElems(t, data)
+	want := []elemRecord{
+		{index: 0, elemType: common.ElemNoSync},
+		{index: 6, elemType: common.ElemPeContext},
+		{index: 6, elemType: common.ElemTraceOn},
+		{index: 12, elemType: common.ElemNoSync},
+		{index: 21, elemType: common.ElemPeContext},
+		{index: 21, elemType: common.ElemTraceOn},
+	}
+	assertElemSeq(t, got, want)
+}
+
+func TestPtmDecoderBadSequenceRecoveryGate(t *testing.T) {
+	data := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
+		0x08, 0x00, 0x00, 0x00, 0x00, 0x00, // ISYNC
+		0x00, 0x01, // BAD_SEQUENCE from malformed ASYNC
+		0x42, 0x00, // TIMESTAMP (would emit if synced)
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
+		0x08, 0x00, 0x00, 0x00, 0x00, 0x00, // ISYNC
+	}
+
+	got := decodeElems(t, data)
+	want := []elemRecord{
+		{index: 0, elemType: common.ElemNoSync},
+		{index: 6, elemType: common.ElemPeContext},
+		{index: 6, elemType: common.ElemTraceOn},
+		{index: 12, elemType: common.ElemNoSync},
+		{index: 22, elemType: common.ElemPeContext},
+		{index: 22, elemType: common.ElemTraceOn},
+	}
+	assertElemSeq(t, got, want)
 }
