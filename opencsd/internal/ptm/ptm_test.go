@@ -374,3 +374,83 @@ func TestPtmISyncMultiByteCycleCount(t *testing.T) {
 		t.Errorf("TRIGGER Index: expected 15, got %d", pkts[2].Index)
 	}
 }
+
+func TestPtmTimestamp32OneByteNoCycleCount(t *testing.T) {
+	proc := NewPktProcessor()
+	proc.cycleAcc = false
+	proc.tsPkt64 = false
+
+	data := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC @ 0
+		0x42, // TIMESTAMP header (32-bit) @ 6
+		0x01, // TS payload: 1 byte, stop bit clear
+		0x0C, // TRIGGER @ 8
+	}
+
+	proc.AddData(data, 0)
+	pkts, err := proc.ProcessPackets()
+	if err != nil {
+		t.Fatalf("ProcessPackets failed: %v", err)
+	}
+
+	if len(pkts) != 3 {
+		t.Fatalf("Expected 3 packets, got %d", len(pkts))
+	}
+
+	if pkts[1].typeID != ptmPktTimestamp {
+		t.Fatalf("Expected TIMESTAMP packet, got %v", pkts[1].typeID)
+	}
+	if pkts[1].Index != 6 {
+		t.Errorf("TIMESTAMP Index: expected 6, got %d", pkts[1].Index)
+	}
+	if len(pkts[1].RawBytes) != 2 {
+		t.Errorf("TIMESTAMP length: expected 2 (hdr + 1), got %d", len(pkts[1].RawBytes))
+	}
+	if pkts[2].Index != 8 {
+		t.Errorf("TRIGGER Index: expected 8, got %d", pkts[2].Index)
+	}
+}
+
+func TestPtmTimestamp64WithCycleCount(t *testing.T) {
+	proc := NewPktProcessor()
+	proc.cycleAcc = true
+	proc.tsPkt64 = true
+
+	data := []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC @ 0
+		0x46, // TIMESTAMP header (64-bit) @ 6
+		0x81, // TS payload: cont
+		0x80, // TS payload: cont
+		0x01, // TS payload: stop
+		0x45, // CC byte 0: cont (bit6)
+		0x82, // CC byte 1: cont (bit7)
+		0x03, // CC byte 2: stop (bit7=0)
+		0x0C, // TRIGGER @ 13
+	}
+
+	proc.AddData(data, 0)
+	pkts, err := proc.ProcessPackets()
+	if err != nil {
+		t.Fatalf("ProcessPackets failed: %v", err)
+	}
+
+	if len(pkts) != 3 {
+		t.Fatalf("Expected 3 packets, got %d", len(pkts))
+	}
+
+	if pkts[1].typeID != ptmPktTimestamp {
+		t.Fatalf("Expected TIMESTAMP packet, got %v", pkts[1].typeID)
+	}
+	if pkts[1].Index != 6 {
+		t.Errorf("TIMESTAMP Index: expected 6, got %d", pkts[1].Index)
+	}
+	if len(pkts[1].RawBytes) != 7 {
+		t.Errorf("TIMESTAMP length: expected 7 (hdr + 3 TS + 3 CC), got %d", len(pkts[1].RawBytes))
+	}
+	if !pkts[1].ccValid {
+		t.Errorf("TIMESTAMP should have valid cycle count")
+	}
+	if pkts[2].Index != 13 {
+		t.Errorf("TRIGGER Index: expected 13, got %d", pkts[2].Index)
+	}
+}
