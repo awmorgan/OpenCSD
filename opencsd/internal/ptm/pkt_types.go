@@ -300,9 +300,10 @@ func (p *PtmPacket) branchAddressString() string {
 	addrStr := getValStr(32, int(p.addr.validBits), uint64(p.addr.val), true, int(p.addr.pktBits))
 	b.WriteString("Addr=")
 	b.WriteString(addrStr)
-	b.WriteString("; ")
+	b.WriteString(";")
 
 	if p.currISA != p.prevISA {
+		b.WriteString(" ")
 		b.WriteString(p.isaString())
 	}
 
@@ -359,7 +360,7 @@ func (p *PtmPacket) isaString() string {
 	default:
 		isaStr = "Unknown"
 	}
-	return fmt.Sprintf("ISA=%s; ", isaStr)
+	return fmt.Sprintf("ISA=%s;", isaStr)
 }
 
 func (p *PtmPacket) iSyncString() string {
@@ -384,6 +385,7 @@ func (p *PtmPacket) iSyncString() string {
 	}
 	b.WriteString(p.isaString())
 	if p.ccValid {
+		b.WriteString(" ")
 		b.WriteString(p.cycleCountString())
 	}
 	return b.String()

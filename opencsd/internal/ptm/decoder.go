@@ -72,15 +72,11 @@ func (d *PtmDecoder) TraceDataIn(op common.DataPathOp, index int64, data []byte)
 		return common.RespFatal, 0, err
 	}
 
-	// 3. Emit packet-level dump lines (raw bytes) first
-	if printer, ok := d.sink.(*printers.PktPrinter); ok {
-		for _, pkt := range pkts {
+	// 3. Decode generated packets (interleaved with raw printing)
+	for _, pkt := range pkts {
+		if printer, ok := d.sink.(*printers.PktPrinter); ok {
 			printer.PrintPacketRaw(pkt.Index, 0, pkt.RawBytes, pkt.ToString())
 		}
-	}
-
-	// 4. Decode generated packets
-	for _, pkt := range pkts {
 		d.currentPktIndex = int64(pkt.Index)
 		if err := d.DecodePacket(&pkt); err != nil {
 			return common.RespFatal, 0, err
