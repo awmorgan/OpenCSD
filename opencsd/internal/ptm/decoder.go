@@ -55,7 +55,6 @@ func NewPtmDecoder(sink common.GenElemIn, mapper *memacc.Mapper) *PtmDecoder {
 // TraceDataIn implements common.TrcDataIn
 func (d *PtmDecoder) TraceDataIn(op common.DataPathOp, index int64, data []byte) (common.DataPathResp, int, error) {
 	if op == common.OpEOT {
-		// Output End of Trace element
 		d.push(&common.TraceElement{ElemType: common.ElemEOTrace})
 		return common.RespCont, 0, nil
 	}
@@ -69,13 +68,14 @@ func (d *PtmDecoder) TraceDataIn(op common.DataPathOp, index int64, data []byte)
 		return common.RespFatal, 0, err
 	}
 
-	// 3. Emit packet-level dump lines (raw bytes) then decode
+	// 3. Emit packet-level dump lines (raw bytes) first
 	if printer, ok := d.sink.(*printers.PktPrinter); ok {
 		for _, pkt := range pkts {
 			printer.PrintPacketRaw(pkt.Index, 0, pkt.RawBytes, pkt.ToString())
 		}
 	}
 
+	// 4. Decode generated packets
 	for _, pkt := range pkts {
 		d.currentPktIndex = int64(pkt.Index)
 		if err := d.DecodePacket(&pkt); err != nil {
@@ -114,7 +114,6 @@ func (d *PtmDecoder) DecodePacket(pkt *PtmPacket) error {
 func (d *PtmDecoder) decodePacketBody(pkt *PtmPacket) error {
 	switch pkt.typeID {
 	case ptmPktAsync:
-		// Async in stream usually means alignment or sync loss recovery
 		d.state = dcdStateWaitIsync
 	case ptmPktISync:
 		return d.processIsync(pkt)
@@ -154,7 +153,6 @@ func (d *PtmDecoder) processIsync(pkt *PtmPacket) error {
 	d.updateContext(pkt)
 	d.pushContext()
 
-	// Emit Trace On
 	traceOnReason := 0
 	switch pkt.iSync {
 	case iSyncRestartOverflow:
@@ -174,6 +172,7 @@ func (d *PtmDecoder) processIsync(pkt *PtmPacket) error {
 }
 
 func (d *PtmDecoder) processAtom(pkt *PtmPacket) error {
+	// If we don't have a valid address, we can't process atoms.
 	if !d.addrValid {
 		return nil
 	}
@@ -185,6 +184,13 @@ func (d *PtmDecoder) processAtom(pkt *PtmPacket) error {
 
 	// Iterate bits from LSB to MSB
 	for i := 0; i < count; i++ {
+		// IMPORTANT: If we lost the address (e.g. indirect branch failed),
+		// we MUST stop processing the remaining atoms in this packet.
+		// This matches C++ m_atoms.clearAll() behavior.
+		if !d.addrValid {
+			break
+		}
+
 		atomBit := bits & 1
 		bits >>= 1
 
@@ -193,25 +199,17 @@ func (d *PtmDecoder) processAtom(pkt *PtmPacket) error {
 			atomVal = common.AtomE
 		}
 
-		// Process single atom range
 		err := d.processAtomRange(atomVal)
 		if err != nil {
 			return err
 		}
 
-		// If this is the last atom and packet has CC, attach to the last element emitted
-		// Note: In a real streaming architecture we might need to buffer, but here we
-		// assume immediate emit. For exact C++ parity, CC is often attached to the
-		// range element corresponding to the atom.
-		// Since we pushed inside processAtomRange, we can't easily attach backwards
-		// without buffering. However, PTM decoder typically emits CC with the range.
-		// For simplicity/parity with provided C++ snippets, we are emitting inside range.
-		// (Advanced Cycle Count handling omitted for brevity)
+		// Note: Cycle count handling for atoms is omitted for brevity,
+		// but typically attaches to the last atom's range.
 	}
 	return nil
 }
 
-// processAtomRange logic matches C++ TrcPktDecodePtm::processAtomRange
 func (d *PtmDecoder) processAtomRange(atomVal common.AtomVal) error {
 	// 1. Walk code until Waypoint
 	err := d.follower.TraceToWaypoint(d.instrAddr, d.isa)
@@ -221,40 +219,38 @@ func (d *PtmDecoder) processAtomRange(atomVal common.AtomVal) error {
 
 	// 2. Check for NACC (Memory Access Error)
 	if d.follower.NaccPending {
-		// Emit NACC element
 		d.push(&common.TraceElement{
 			ElemType: common.ElemAddrNacc,
 			StAddr:   d.follower.NaccAddr,
-			Context:  d.peContext, // Used for exception_number mapping in C++
+			Context:  d.peContext,
 		})
 		d.addrValid = false
 		return nil
 	}
 
-	// 3. Prepare InstrRange Element
+	// 3. Emit Range Element
 	elem := &common.TraceElement{
 		ElemType:      common.ElemInstrRange,
 		StAddr:        d.follower.StRangeAddr,
 		EnAddr:        d.follower.EnRangeAddr,
 		ISA:           d.follower.Info.ISA,
-		NumInstr:      0, // Calcluated by TraceToWaypoint logic implicitly via EnAddr-StAddr/Size? C++ counts them.
+		NumInstr:      int(d.follower.InstrCount), // Correct instruction count
 		LastInstr:     d.follower.Info,
 		LastInstrExec: (atomVal == common.AtomE),
 	}
-	// Note: Accurate NumInstr calculation requires the follower to count.
-	// We approximate or rely on C++ "num_instr_range" equivalent.
-	// For basic parity, St/En/ISA/LastInstr are critical.
+	d.push(elem)
 
-	// 4. Calculate Next Address & Handle Return Stack
-	nextAddr := d.follower.EnRangeAddr // Default: Sequential
+	// 4. Calculate Next Address
+	// Default is sequential execution (falling through to EnRangeAddr)
+	nextAddr := d.follower.EnRangeAddr
 	d.addrValid = true
 
-	// Handle Waypoint Logic
+	// Handle Waypoint Logic (Branching)
 	switch d.follower.Info.Type {
 	case common.InstrTypeBranch:
 		if atomVal == common.AtomE {
 			nextAddr = d.follower.Info.BranchAddr
-			// Handle Link
+			// Handle Link (Push to stack)
 			if d.follower.Info.IsLink {
 				d.retStack.Push(d.follower.EnRangeAddr, d.follower.Info.ISA)
 			}
@@ -262,39 +258,30 @@ func (d *PtmDecoder) processAtomRange(atomVal common.AtomVal) error {
 
 	case common.InstrTypeIndirect:
 		if atomVal == common.AtomE {
-			// Indirect Branch Executed
-			d.addrValid = false // Default to invalid, waiting for address packet
+			// Executed Indirect Branch -> We need a target address.
+			// Try Return Stack first.
+			d.addrValid = false // Assume invalid unless stack saves us
 
-			// Check Return Stack
 			if d.retStack != nil {
 				if addr, isa, ok := d.retStack.Pop(); ok {
 					nextAddr = addr
 					d.follower.Info.NextISA = isa
 					d.addrValid = true
-				} else {
-					// Stack failed or empty, fatal error if we don't get an address packet next.
-					// C++ logs "Return stack error" here if overflow, else waits.
 				}
 			}
 
-			// Handle Link (BLX <reg>)
+			// Handle Link (Push to stack) even if indirect (e.g. BLX <reg>)
 			if d.follower.Info.IsLink {
 				d.retStack.Push(d.follower.EnRangeAddr, d.follower.Info.ISA)
 			}
 		}
+		// If AtomN (Not Executed), we just fall through to sequential (nextAddr), which is valid.
 	}
 
-	// 5. Emit Element
-	d.push(elem)
-
-	// 6. Update Decoder State
+	// 5. Update Decoder State
 	if d.addrValid {
 		d.instrAddr = nextAddr
-		if d.follower.Info.Type == common.InstrTypeBranch && atomVal == common.AtomE {
-			// Update ISA for direct branches (Thumb bit logic often handled in decode, but good to be safe)
-			// d.isa is usually updated by follower.Info.NextISA if transition occurs
-		}
-		// In C++, processAtomRange updates m_curr_pe_state.isa = m_instr_info.next_isa;
+		// Update ISA if transition occurred
 		if d.follower.Info.NextISA != d.follower.Info.ISA {
 			d.isa = d.follower.Info.NextISA
 		}
@@ -313,8 +300,7 @@ func (d *PtmDecoder) processBranch(pkt *PtmPacket) error {
 		if d.addrValid {
 			elem.StAddr = d.instrAddr
 			elem.EnAddr = d.instrAddr
-			// Valid address implies we executed up to here (Exception return address)
-			// C++ sets excep_ret_addr=1
+			elem.ExcepRetAddr = 1 // Flag that we have a valid return address
 		}
 		if pkt.ccValid {
 			elem.CycleCount = pkt.cycleCount
@@ -323,10 +309,9 @@ func (d *PtmDecoder) processBranch(pkt *PtmPacket) error {
 		d.push(elem)
 	} else if d.addrValid {
 		// === Normal Branch Address Packet ===
-		// This implies an "E" atom for the implied branch instruction we are currently at.
+		// This implies the current instruction is a branch that was executed.
+		// We must "consume" it as an Atom E before switching address.
 		d.setupFollower()
-
-		// Execute the implicit branch (Atom E)
 		err := d.processAtomRange(common.AtomE)
 		if err != nil {
 			return err

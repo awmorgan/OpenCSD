@@ -17,6 +17,9 @@ type CodeFollower struct {
 	NextAddr    uint64
 	NextValid   bool
 
+	// Range Information
+	InstrCount uint32 // Number of instructions in the current range
+
 	// Last Instruction Info
 	Info common.InstrInfo
 
@@ -36,8 +39,8 @@ func (c *CodeFollower) Setup(trcID uint8, memSpace memacc.MemSpace) {
 	c.memSpace = memSpace
 }
 
-// TraceToWaypoint follows instructions starting at addrStart until a Waypoint (Branch)
-// is found or memory access fails. This mimics C++ TrcPktDecodePtm::traceInstrToWP.
+// TraceToWaypoint walks the code from addrStart until a Waypoint (Branch) is found
+// or a memory error occurs. It populates c.Info with the last instruction.
 func (c *CodeFollower) TraceToWaypoint(addrStart uint64, isa common.Isa) error {
 	c.StRangeAddr = addrStart
 	c.EnRangeAddr = addrStart
@@ -45,12 +48,13 @@ func (c *CodeFollower) TraceToWaypoint(addrStart uint64, isa common.Isa) error {
 	c.Info.ISA = isa
 	c.Info.NextISA = isa
 
+	c.InstrCount = 0
 	c.NaccPending = false
 	c.NextValid = false
 
 	bWPFound := false
 
-	// Loop until we find a waypoint (Branch) or hit a memory error
+	// Loop until Waypoint found or Error
 	for !bWPFound && !c.NaccPending {
 		// 1. Decode one opcode
 		err := c.decodeSingleOpCode()
@@ -58,21 +62,25 @@ func (c *CodeFollower) TraceToWaypoint(addrStart uint64, isa common.Isa) error {
 			return err
 		}
 
+		// If memory access failed, stop.
 		if c.NaccPending {
 			break
 		}
 
+		c.InstrCount++
+
 		// 2. Update Range End (Exclusive)
+		// Point to the instruction *after* the one we just decoded
 		c.EnRangeAddr = c.Info.InstrAddr + uint64(c.Info.InstrSize)
 
 		// 3. Check if this instruction is a Waypoint
-		// In PTM, any instruction that isn't "Other" (linear flow) is a waypoint.
+		// In PTM, any instruction that disrupts linear flow (Branch/Indirect) is a Waypoint.
 		if c.Info.Type != common.InstrTypeOther {
 			bWPFound = true
 		} else {
-			// Not a waypoint, advance to next instruction and continue loop
+			// Linear flow: Advance to next instruction
 			c.Info.InstrAddr = c.EnRangeAddr
-			// Linear flow assumes ISA doesn't change implicitly here
+			// Note: We assume ISA doesn't change during linear flow without a special instruction
 		}
 	}
 
@@ -80,12 +88,12 @@ func (c *CodeFollower) TraceToWaypoint(addrStart uint64, isa common.Isa) error {
 }
 
 func (c *CodeFollower) decodeSingleOpCode() error {
-	// Read 4 bytes
+	// Read 4 bytes (Standard fetch size for decode)
 	opcode, err := c.mapper.ReadTargetMemory(c.Info.InstrAddr, c.trcID, c.memSpace, 4)
 	if err != nil {
 		c.NaccPending = true
 		c.NaccAddr = c.Info.InstrAddr
-		return nil // Soft error handled by caller checking NaccPending
+		return nil
 	}
 
 	c.Info.Opcode = opcode
