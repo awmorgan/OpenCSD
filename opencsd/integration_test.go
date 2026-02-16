@@ -90,11 +90,12 @@ func TestIntegrationComparison(t *testing.T) {
 
 			// Simple check (you might want a diff library like go-cmp later)
 			if actualStr != expectedStr {
-				// Write actual output to file for debugging
-				debugFile := filepath.Join(testDataRoot, tc.dirName+"_debug_actual.txt")
+				// Write actual output to the system temp directory for debugging.
+				// This avoids creating untracked files in the repository.
+				debugFile := filepath.Join(os.TempDir(), "opencsd-test-"+tc.dirName+"-actual.txt")
 				_ = os.WriteFile(debugFile, []byte(actualStr), 0644)
 
-				debugExpectedFile := filepath.Join(testDataRoot, tc.dirName+"_debug_expected.txt")
+				debugExpectedFile := filepath.Join(os.TempDir(), "opencsd-test-"+tc.dirName+"-expected.txt")
 				_ = os.WriteFile(debugExpectedFile, []byte(expectedStr), 0644)
 
 				t.Errorf("Output did not match golden file.\nLength Expected: %d\nLength Actual: %d\nSee %s for details.",
