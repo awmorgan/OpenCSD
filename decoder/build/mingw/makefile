@@ -15,6 +15,8 @@ export SHARED_LIB_SUFFIX := so
 # Disable shared library builds for MinGW
 export DISABLE_SHARED_LIBS := 1
 
+export ARFLAGS := rcs
+
 # For applications using the C API static library
 export CPPFLAGS := -DOCSD_USE_STATIC_C_API
 
