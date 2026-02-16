@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -25,6 +26,16 @@ func TestIntegrationComparison(t *testing.T) {
 			name:    "TC2 PTM RSTK T32",
 			dirName: "tc2-ptm-rstk-t32",
 			pplFile: "tc2-ptm-rstk-t32.ppl",
+		},
+		{
+			name:    "Snowball PTM",
+			dirName: "Snowball",
+			pplFile: "Snowball.ppl",
+		},
+		{
+			name:    "Trace Cov A15 PTM",
+			dirName: "trace_cov_a15",
+			pplFile: "trace_cov_a15.ppl",
 		},
 	}
 
@@ -59,7 +70,13 @@ func TestIntegrationComparison(t *testing.T) {
 			normalize := func(s string) string {
 				s = strings.ReplaceAll(s, "\r\n", "\n")
 				s = strings.ReplaceAll(s, "\\", "/")
+
+				// Replace absolute paths containing internal/snapshot/testdata with ./snapshots
+				re := regexp.MustCompile(`[A-Za-z]:/[^ \t\n\r]*internal/snapshot/testdata`)
+				s = re.ReplaceAllString(s, "./snapshots")
+				// Also handle relative ones
 				s = strings.ReplaceAll(s, "internal/snapshot/testdata", "./snapshots")
+
 				// Trim trailing spaces on each line and trailing newlines
 				lines := strings.Split(s, "\n")
 				for i := range lines {

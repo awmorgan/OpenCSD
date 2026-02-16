@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -139,6 +140,7 @@ func (t *DecodeTree) setupDecoders(cfg *snapshot.SnapshotConfig) error {
 			// Create decoder when a trace ID register is present (even if value is 0)
 			if hasTraceID {
 				decoder := ptm.NewPtmDecoder(t.Printer, t.Mapper)
+				decoder.SetTraceID(trcID)
 				t.Deformatter.Attach(trcID, decoder)
 				t.Decoders[trcID] = decoder
 
@@ -222,10 +224,35 @@ func (t *DecodeTree) ProcessBuffer(path string) error {
 func (t *DecodeTree) PrintGenInfo(w io.Writer) {
 	// 1. Print Memory Accessors
 	fmt.Fprintln(w, "Gen_Info : Mapped Memory Accessors")
-	for _, acc := range t.Mapper.GetAccessors() {
+	accessors := t.Mapper.GetAccessors()
+	// Sort accessors by start address for consistent output
+	sort.Slice(accessors, func(i, j int) bool {
+		return accessors[i].StartAddr() < accessors[j].StartAddr()
+	})
+	for _, acc := range accessors {
 		fmt.Fprintf(w, "Gen_Info : %s\n", acc.String())
 	}
 
 	// 2. Print the separator
 	fmt.Fprintln(w, "Gen_Info : ========================")
+}
+
+func (t *DecodeTree) PrintListerInfo(w io.Writer) {
+	if !t.UseDeformatter {
+		// In raw/source_data mode, trc_pkt_lister typically defaults to ID 0
+		// for the single source it's processing.
+		fmt.Fprintln(w, "Trace Packet Lister : Protocol printer PTM on Trace ID 0x0")
+	} else {
+		// Sort IDs for consistent output
+		ids := make([]int, 0, len(t.Decoders))
+		for id := range t.Decoders {
+			ids = append(ids, int(id))
+		}
+		sort.Ints(ids)
+
+		for _, id := range ids {
+			fmt.Fprintf(w, "Trace Packet Lister : Protocol printer PTM on Trace ID 0x%x\n", id)
+		}
+	}
+	fmt.Fprintln(w, "Trace Packet Lister : Set trace element decode printer")
 }

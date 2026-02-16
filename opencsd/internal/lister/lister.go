@@ -87,10 +87,8 @@ func Run(cfg Config) error {
 	tree.SetDecode(cfg.Decode)
 	tree.SetNoTimePrint(cfg.NoTimePrint)
 
-	// Print the protocol printer line that C++ trc_pkt_lister emits for the
-	// selected buffer (matches golden output)
-	fmt.Fprintln(w, "Trace Packet Lister : Protocol printer PTM on Trace ID 0x0")
-	fmt.Fprintln(w, "Trace Packet Lister : Set trace element decode printer")
+	// Print the protocol printer lines that C++ trc_pkt_lister emits (matches golden output)
+	tree.PrintListerInfo(w)
 
 	// Print the Gen_Info headers to match C++ output
 	tree.PrintGenInfo(w)

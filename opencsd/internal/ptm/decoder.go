@@ -15,6 +15,8 @@ type PtmDecoder struct {
 	retStack *common.ReturnStack
 	pktProc  *PktProcessor
 
+	trcID uint8
+
 	// Internal State tracking
 	peContext     common.PeContext
 	prevContext   common.PeContext
@@ -55,6 +57,10 @@ func NewPtmDecoder(sink common.GenElemIn, mapper *memacc.Mapper) *PtmDecoder {
 	}
 }
 
+func (d *PtmDecoder) SetTraceID(id uint8) {
+	d.trcID = id
+}
+
 // TraceDataIn implements common.TrcDataIn
 func (d *PtmDecoder) TraceDataIn(op common.DataPathOp, index int64, data []byte) (common.DataPathResp, int, error) {
 	if op == common.OpEOT {
@@ -75,7 +81,7 @@ func (d *PtmDecoder) TraceDataIn(op common.DataPathOp, index int64, data []byte)
 	// 3. Decode generated packets (interleaved with raw printing)
 	for _, pkt := range pkts {
 		if printer, ok := d.sink.(*printers.PktPrinter); ok {
-			printer.PrintPacketRaw(pkt.Index, 0, pkt.RawBytes, pkt.ToString())
+			printer.PrintPacketRaw(pkt.Index, d.trcID, pkt.RawBytes, pkt.ToString())
 		}
 		d.currentPktIndex = int64(pkt.Index)
 		if err := d.DecodePacket(&pkt); err != nil {
@@ -391,5 +397,5 @@ func (d *PtmDecoder) pushContext() {
 }
 
 func (d *PtmDecoder) push(elem *common.TraceElement) {
-	d.sink.TraceElemIn(d.currentPktIndex, 2, elem)
+	d.sink.TraceElemIn(d.currentPktIndex, d.trcID, elem)
 }
