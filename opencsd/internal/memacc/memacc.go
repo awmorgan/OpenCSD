@@ -29,6 +29,9 @@ const (
 )
 
 func (m MemSpace) String() string {
+	if m == MemSpaceAny {
+		return "Any"
+	}
 	if m == MemSpaceS {
 		return "Any S"
 	}
