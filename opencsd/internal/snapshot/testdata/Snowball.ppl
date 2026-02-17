@@ -1,19 +1,19 @@
 Trace Packet Lister: CS Decode library testing
 -----------------------------------------------
 
-** Library Version : 1.7.1
+** Library Version : 1.8.0
 
 Test Command Line:-
-C:\Users\arthu\git\OpenCSD\decoder\tests\bin\mingw64\rel\trc_pkt_lister.exe   -ss_dir  C:/Users/arthu/git/OpenCSD/opencsd/internal/snapshot/testdata/Snowball  -decode  -no_time_print  -logfilename  C:/Users/arthu/git/OpenCSD/opencsd/internal/snapshot/testdata/Snowball.ppl  
+C:\Users\arthu\git\OpenCSD\decoder\tests\bin\mingw64\rel\trc_pkt_lister.exe   -ss_dir  ./snapshots/Snowball  -decode  -no_time_print  -logfilename  ./results/Snowball.ppl  
 
-Trace Packet Lister : reading snapshot from path C:/Users/arthu/git/OpenCSD/opencsd/internal/snapshot/testdata/Snowball
+Trace Packet Lister : reading snapshot from path ./snapshots/Snowball
 Using ETB_0 as trace source
 Trace Packet Lister : Protocol printer PTM on Trace ID 0x10
 Trace Packet Lister : Protocol printer PTM on Trace ID 0x11
 Trace Packet Lister : Set trace element decode printer
 Gen_Info : Mapped Memory Accessors
 Gen_Info : FileAcc; Range::0xc0008000:c0057fff; Mem Space::Any
-Filename=C:/Users/arthu/git/OpenCSD/opencsd/internal/snapshot/testdata/Snowball/kernel_dump.bin
+Filename=./snapshots/Snowball/kernel_dump.bin
 Gen_Info : ========================
 Idx:112; ID:10; [0x05 0x86 0x91 0xac 0x0a 0x20 0xce 0x02 0x86 0xca 0x02 0x86 0xff ];	NOTSYNC : PTM Not Synchronised; 
 Idx:112; ID:10; OCSD_GEN_TRC_ELEM_NO_SYNC( [init-decoder])
