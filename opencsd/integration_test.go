@@ -67,19 +67,17 @@ func TestIntegrationComparison(t *testing.T) {
 			snapshotPath := filepath.Join(testDataRoot, tc.dirName)
 			goldenPath := filepath.Join(testDataRoot, tc.pplFile)
 
-			// 1. Read Expected C++ Output
 			expectedBytes, err := os.ReadFile(goldenPath)
 			if err != nil {
 				t.Fatalf("Could not read golden file %s: %v", goldenPath, err)
 			}
 			expectedStr := normalizeOutput(string(expectedBytes))
 
-			// 2. Run Go Implementation
 			var actualBuf bytes.Buffer
 			cfg := lister.Config{
 				SnapshotDir:  snapshotPath,
-				Decode:       true, // Usually true for these tests
-				NoTimePrint:  true, // Crucial for diff stability!
+				Decode:       true,
+				NoTimePrint:  true,
 				OutputWriter: &actualBuf,
 			}
 
@@ -88,20 +86,10 @@ func TestIntegrationComparison(t *testing.T) {
 				t.Fatalf("Lister.Run failed: %v", err)
 			}
 
-			// 3. Compare using normalized output
 			actualStr := normalizeOutput(actualBuf.String())
 
-			// Use cmp.Diff for clean, readable diffs
 			if diff := cmp.Diff(expectedStr, actualStr); diff != "" {
-				// Optional: Write actual output for debugging large failures
-				debugFile := filepath.Join(os.TempDir(), "opencsd-test-"+tc.dirName+"-actual.txt")
-				_ = os.WriteFile(debugFile, []byte(actualStr), 0644)
-
-				debugExpectedFile := filepath.Join(os.TempDir(), "opencsd-test-"+tc.dirName+"-expected.txt")
-				_ = os.WriteFile(debugExpectedFile, []byte(expectedStr), 0644)
-
-				t.Errorf("Output mismatch (-want +got):\n%s\nDebug files: %s (actual), %s (expected)",
-					diff, debugFile, debugExpectedFile)
+				t.Errorf("Output mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
