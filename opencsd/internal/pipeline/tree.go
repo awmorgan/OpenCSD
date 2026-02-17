@@ -140,8 +140,9 @@ func (t *DecodeTree) setupDecoders(cfg *snapshot.SnapshotConfig) error {
 			// Create decoder when a trace ID register is present (even if value is 0)
 			if hasTraceID {
 				decoder := ptm.NewPtmDecoder(t.Printer, t.Mapper)
-				decoder.SetTraceID(trcID)
-				t.Deformatter.Attach(trcID, decoder)
+			decoder.SetTraceID(trcID)
+			decoder.SetChannelID(trcID) // In framed mode, channel ID = trace ID
+			t.Deformatter.Attach(trcID, decoder)
 				t.Decoders[trcID] = decoder
 
 				// Map device name to trace ID
@@ -164,6 +165,8 @@ func (t *DecodeTree) setupDecoders(cfg *snapshot.SnapshotConfig) error {
 				if traceID, ok := sourceNameToTraceID[sourceName]; ok {
 					if decoder, ok := t.Decoders[traceID]; ok {
 						t.RawDecoder = decoder
+						// In raw mode, channel ID is always 0
+						decoder.SetChannelID(0)
 					}
 				}
 			}
