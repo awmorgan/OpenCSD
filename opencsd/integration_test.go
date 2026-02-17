@@ -9,7 +9,30 @@ import (
 	"testing"
 
 	"opencsd/internal/lister"
+
+	"github.com/google/go-cmp/cmp"
 )
+
+// normalizeOutput prepares test output for comparison by removing environment-specific artifacts
+func normalizeOutput(output string) string {
+	// 1. Unify line endings (just in case)
+	output = strings.ReplaceAll(output, "\r\n", "\n")
+
+	// 2. Standardize paths: Convert Windows backslashes to forward slashes
+	output = strings.ReplaceAll(output, "\\", "/")
+
+	// 3. Strip the header (everything before the first "real" logic line)
+	// Based on the output, "Trace Packet Lister : reading snapshot" is the first stable line
+	if idx := strings.Index(output, "Trace Packet Lister : reading snapshot"); idx != -1 {
+		output = output[idx:]
+	}
+
+	// 4. Relativize paths: normalize internal/snapshot/testdata to ./snapshots/
+	re := regexp.MustCompile(`internal/snapshot/testdata/`)
+	output = re.ReplaceAllString(output, "./snapshots/")
+
+	return output
+}
 
 // This test ensures Go output matches the C++ "Golden" output (.ppl files)
 func TestIntegrationComparison(t *testing.T) {
@@ -49,7 +72,7 @@ func TestIntegrationComparison(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Could not read golden file %s: %v", goldenPath, err)
 			}
-			expected := string(expectedBytes)
+			expectedStr := normalizeOutput(string(expectedBytes))
 
 			// 2. Run Go Implementation
 			var actualBuf bytes.Buffer
@@ -65,41 +88,20 @@ func TestIntegrationComparison(t *testing.T) {
 				t.Fatalf("Lister.Run failed: %v", err)
 			}
 
-			// 3. Compare
-			// Normalize to handle Windows/Linux differences and path separators
-			normalize := func(s string) string {
-				s = strings.ReplaceAll(s, "\r\n", "\n")
-				s = strings.ReplaceAll(s, "\\", "/")
+			// 3. Compare using normalized output
+			actualStr := normalizeOutput(actualBuf.String())
 
-				// Replace absolute paths containing internal/snapshot/testdata with ./snapshots
-				re := regexp.MustCompile(`[A-Za-z]:/[^ \t\n\r]*internal/snapshot/testdata`)
-				s = re.ReplaceAllString(s, "./snapshots")
-				// Also handle relative ones
-				s = strings.ReplaceAll(s, "internal/snapshot/testdata", "./snapshots")
-
-				// Trim trailing spaces on each line and trailing newlines
-				lines := strings.Split(s, "\n")
-				for i := range lines {
-					lines[i] = strings.TrimRight(lines[i], " \t")
-				}
-				return strings.TrimRight(strings.Join(lines, "\n"), "\n")
-			}
-
-			actualStr := normalize(actualBuf.String())
-			expectedStr := normalize(expected)
-
-			// Simple check (you might want a diff library like go-cmp later)
-			if actualStr != expectedStr {
-				// Write actual output to the system temp directory for debugging.
-				// This avoids creating untracked files in the repository.
+			// Use cmp.Diff for clean, readable diffs
+			if diff := cmp.Diff(expectedStr, actualStr); diff != "" {
+				// Optional: Write actual output for debugging large failures
 				debugFile := filepath.Join(os.TempDir(), "opencsd-test-"+tc.dirName+"-actual.txt")
 				_ = os.WriteFile(debugFile, []byte(actualStr), 0644)
 
 				debugExpectedFile := filepath.Join(os.TempDir(), "opencsd-test-"+tc.dirName+"-expected.txt")
 				_ = os.WriteFile(debugExpectedFile, []byte(expectedStr), 0644)
 
-				t.Errorf("Output did not match golden file.\nLength Expected: %d\nLength Actual: %d\nSee %s for details.",
-					len(expectedStr), len(actualStr), debugFile)
+				t.Errorf("Output mismatch (-want +got):\n%s\nDebug files: %s (actual), %s (expected)",
+					diff, debugFile, debugExpectedFile)
 			}
 		})
 	}
