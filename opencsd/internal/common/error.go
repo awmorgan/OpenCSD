@@ -17,6 +17,12 @@ type Error struct {
 	Message string
 }
 
+// ErrorLogger represents the ITraceErrorLog interface.
+type ErrorLogger interface {
+	LogError(err *Error)
+	LogMessage(sev ocsd.ErrSeverity, msg string)
+}
+
 func NewError(sev ocsd.ErrSeverity, code ocsd.Err) *Error {
 	return &Error{
 		Code:   code,

@@ -31,3 +31,9 @@ type PktDataIn[P any] interface {
 type PktRawDataMon[P any] interface {
 	RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *P, rawData []byte)
 }
+
+// TrcRawFrameIn represents ITrcRawFrameIn.
+// Interface for the input of raw frame data bytes.
+type TrcRawFrameIn interface {
+	TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, frameElem ocsd.RawframeElem, data []byte, traceID uint8) ocsd.DatapathResp
+}
