@@ -2,6 +2,7 @@ package memacc
 
 import (
 	"encoding/binary"
+	"fmt"
 	"opencsd/internal/ocsd"
 	"testing"
 )
@@ -308,4 +309,295 @@ func TestPrioritization(t *testing.T) {
 	if buf[0] != 0xAA {
 		t.Errorf("Expected fallback to Any: 0xAA, got 0x%X", buf[0])
 	}
+}
+
+func TestAccessorRemoval(t *testing.T) {
+	mapper := NewGlobalMapper()
+	acc1 := NewBufferAccessor(0x1000, make([]byte, 100))
+	acc2 := NewBufferAccessor(0x2000, make([]byte, 100))
+
+	mapper.AddAccessor(acc1, 0)
+	mapper.AddAccessor(acc2, 0)
+
+	if len(mapper.accessors) != 2 {
+		t.Errorf("Expected 2 accessors, got %d", len(mapper.accessors))
+	}
+
+	err := mapper.RemoveAccessor(acc1)
+	if err != ocsd.OK {
+		t.Errorf("Expected OK, got %v", err)
+	}
+	if len(mapper.accessors) != 1 {
+		t.Errorf("Expected 1 accessor, got %d", len(mapper.accessors))
+	}
+
+	// Remove non-existent
+	accFake := NewBufferAccessor(0x3000, make([]byte, 100))
+	err = mapper.RemoveAccessor(accFake)
+	if err != ocsd.ErrInvalidParamVal {
+		t.Errorf("Expected ErrInvalidParamVal, got %v", err)
+	}
+
+	mapper.RemoveAllAccessors()
+	if len(mapper.accessors) != 0 {
+		t.Errorf("Expected 0 accessors after RemoveAllAccessors")
+	}
+}
+
+func TestCacheInvalidation(t *testing.T) {
+	mapper := NewGlobalMapper()
+	mapper.EnableCaching(true)
+
+	acc := NewBufferAccessor(0, []byte{1, 2, 3, 4})
+	mapper.AddAccessor(acc, 0)
+
+	numBytes := uint32(4)
+	buf := make([]byte, 4)
+
+	// Populate cache for TrcID 0x10
+	mapper.ReadTargetMemory(0, 0x10, ocsd.MemSpaceAny, &numBytes, buf)
+	if mapper.cache.blocks[mapper.cache.mruIdx].ValidLen == 0 || mapper.cache.blocks[mapper.cache.mruIdx].TrcID != 0x10 {
+		t.Errorf("Cache not populated for 0x10")
+	}
+
+	// Populate cache for TrcID 0x20
+	acc2 := NewBufferAccessor(0x1000, []byte{5, 6, 7, 8})
+	mapper.AddAccessor(acc2, 0)
+	numBytes = 4
+	mapper.ReadTargetMemory(0x1000, 0x20, ocsd.MemSpaceAny, &numBytes, buf)
+
+	// Invalidate by Trace ID
+	mapper.InvalidateMemAccCache(0x10)
+	for _, block := range mapper.cache.blocks {
+		if block.TrcID == 0x10 && block.ValidLen > 0 {
+			t.Errorf("Cache for 0x10 not invalidated")
+		}
+	}
+
+	// Invalidate All
+	mapper.cache.InvalidateAll()
+	for _, block := range mapper.cache.blocks {
+		if block.ValidLen > 0 {
+			t.Errorf("Cache not fully invalidated")
+		}
+	}
+
+	// Test InvalidateAll when cache is disabled
+	mapper.EnableCaching(false)
+	mapper.cache.InvalidateAll()
+	mapper.cache.InvalidateByTraceID(0x20)
+}
+
+func TestEdgeCasesAndUtilities(t *testing.T) {
+	// SetCacheSizes
+	mapper := NewGlobalMapper()
+	mapper.EnableCaching(true)
+
+	err := mapper.cache.SetCacheSizes(10, 1, true)
+	if err != ocsd.ErrInvalidParamVal {
+		t.Errorf("Expected ErrInvalidParamVal for SetCacheSizes limits, got: %v", err)
+	}
+	err = mapper.cache.SetCacheSizes(10, 1, false)
+	if err != ocsd.OK {
+		t.Errorf("Expected OK for SetCacheSizes auto-limit")
+	}
+	if mapper.cache.pageSize != MinPageSize || mapper.cache.numPages != MinPages {
+		t.Errorf("Cache sizes not clamped to min")
+	}
+
+	mapper.cache.SetCacheSizes(MaxPageSize+1000, MaxPages+10, false)
+	if mapper.cache.pageSize != MaxPageSize || mapper.cache.numPages != MaxPages {
+		t.Errorf("Cache sizes not clamped to max")
+	}
+
+	// ValidateRange & Range limits
+	acc1 := NewBufferAccessor(0x1000, make([]byte, 10))
+	acc1.StartAddress = 0x2000
+	acc1.EndAddress = 0x1000
+	if acc1.ValidateRange() {
+		t.Errorf("ValidateRange should fail for start >= end")
+	}
+
+	acc1.StartAddress = 0x1001
+	acc1.EndAddress = 0x1005
+	if acc1.ValidateRange() {
+		t.Errorf("ValidateRange should fail for unaligned start")
+	}
+
+	acc1.StartAddress = 0x1000
+	acc1.EndAddress = 0x1004
+	if acc1.ValidateRange() {
+		t.Errorf("ValidateRange should fail for unaligned end")
+	}
+
+	// Range Getters
+	acc2 := NewBufferAccessor(0x1000, make([]byte, 100))
+	st, en := acc2.GetRange()
+	if st != 0x1000 || en != 0x1000+100-1 {
+		t.Errorf("GetRange incorrect")
+	}
+
+	if acc2.GetType() != TypeBufPtr {
+		t.Errorf("GetType incorrect")
+	}
+	if acc2.AddrStartOfRange(0x1001) {
+		t.Errorf("AddrStartOfRange false positive")
+	}
+	if !acc2.AddrStartOfRange(0x1000) {
+		t.Errorf("AddrStartOfRange false negative")
+	}
+
+	// GetMemSpaceString & String
+	if GetMemSpaceString(ocsd.MemSpaceEL1N) != "EL1N" {
+		t.Errorf("GetMemSpaceString mismatch")
+	}
+	if GetMemSpaceString(ocsd.MemSpaceNone) != "None" {
+		t.Errorf("GetMemSpaceString mismatch")
+	}
+	str := acc2.String()
+	if str == "" {
+		t.Errorf("String() returned empty")
+	}
+
+	// Test other GetMemSpaceString values
+	spaces := []ocsd.MemSpaceAcc{
+		ocsd.MemSpaceEL1S, ocsd.MemSpaceEL2, ocsd.MemSpaceEL3, ocsd.MemSpaceEL2S,
+		ocsd.MemSpaceEL1R, ocsd.MemSpaceEL2R, ocsd.MemSpaceRoot, ocsd.MemSpaceS,
+		ocsd.MemSpaceN, ocsd.MemSpaceR, ocsd.MemSpaceAny, ocsd.MemSpaceAcc(0xABC),
+	}
+	for _, s := range spaces {
+		GetMemSpaceString(s)
+	}
+
+	// Test base accessor unknown type inside String()
+	acc2.AccType = TypeUnknown
+	if acc2.String() == "" {
+		t.Errorf("String() error")
+	}
+	acc2.AccType = TypeCBIf
+	if acc2.String() == "" {
+		t.Errorf("String() error")
+	}
+	acc2.AccType = TypeFile
+	if acc2.String() == "" {
+		t.Errorf("String() error")
+	}
+
+	acc2.AccType = TypeBufPtr // restore
+	acc2.SetMemSpace(ocsd.MemSpaceEL1N)
+	if acc2.GetMemSpace() != ocsd.MemSpaceEL1N {
+		t.Errorf("GetMemSpace error")
+	}
+}
+
+func testMemAccSimpleCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, byteBuffer []byte) uint32 {
+	buf := ctx.([]byte)
+	if address == 0 {
+		read := reqBytes
+		if reqBytes > uint32(len(buf)) {
+			read = uint32(len(buf))
+		}
+		copy(byteBuffer, buf[:read])
+		return read
+	}
+	return 0
+}
+
+func TestAlternativeCallback(t *testing.T) {
+	cbAcc := NewCallbackAccessor(0, 0xFFFFFFFF, ocsd.MemSpaceAny)
+	buf := []byte{0xDE, 0xAD, 0xBE, 0xEF}
+	cbAcc.SetCBIfFn(testMemAccSimpleCB, buf)
+
+	readBuf := make([]byte, 4)
+	read := cbAcc.ReadBytes(0, ocsd.MemSpaceEL1N, 0, 4, readBuf)
+	if read != 4 {
+		t.Errorf("Alternative callback read fail")
+	}
+	if readBuf[0] != 0xDE {
+		t.Errorf("Alternative callback data fail")
+	}
+
+	// test when not in range or space
+	if cbAcc.ReadBytes(0, ocsd.MemSpaceNone, 0, 4, readBuf) != 0 {
+		t.Errorf("Should not read bytes")
+	}
+
+	// test InitAccessor
+	cbAcc.InitAccessor(0x100, 0x200, ocsd.MemSpaceEL1N)
+	st, en := cbAcc.GetRange()
+	if st != 0x100 || en != 0x200 {
+		t.Errorf("InitAccessor mismatch")
+	}
+}
+
+func testMemAccBadLenCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, byteBuffer []byte) uint32 {
+	fmt.Printf("testMemAccBadLenCB called! reqBytes=%d\n", reqBytes)
+	return reqBytes + 1 // deliberately bad
+}
+
+func TestMissingCoverage(t *testing.T) {
+	// 1. Cache invalidations with nil blocks
+	mapper := NewGlobalMapper()
+	mapper.cache.InvalidateAll()
+	mapper.cache.InvalidateByTraceID(0x10)
+
+	// 2. BytesInRange where avail <= reqBytes
+	accBuf := NewBufferAccessor(0, []byte{1, 2, 3, 4})
+	avail := accBuf.BytesInRange(0, 10)
+	if avail != 4 {
+		t.Errorf("Expected 4 avail bytes")
+	}
+
+	// 3. RemoveAccessor hitting m.accCurr
+	mapper.EnableCaching(true)
+	mapper.AddAccessor(accBuf, 0)
+	mapper.accCurr = accBuf // manually set
+	mapper.RemoveAccessor(accBuf)
+	if mapper.accCurr != nil {
+		t.Errorf("accCurr should be nil")
+	}
+
+	// 4. RemoveAccessor and RemoveAllAccessors with cache disabled
+	mapper.EnableCaching(false)
+	mapper.AddAccessor(accBuf, 0)
+	mapper.RemoveAccessor(accBuf)
+
+	// Add invalid accessor
+	accBuf.EndAddress = 0 // invalid range
+	err := mapper.AddAccessor(accBuf, 0)
+	if err != ocsd.ErrMemAccRangeInvalid {
+		t.Errorf("Expected invalid range error")
+	}
+
+	mapper.RemoveAllAccessors()
+
+	// 5. Buffer ReadBytes out of bounds / memspace
+	accBuf.InitAccessor(0, []byte{1, 2, 3, 4})
+	accBuf.SetMemSpace(ocsd.MemSpaceEL1N)
+	readBuf := make([]byte, 4)
+	if accBuf.ReadBytes(0x10, ocsd.MemSpaceEL1N, 0, 4, readBuf) != 0 {
+		t.Errorf("Should not read")
+	}
+	if accBuf.ReadBytes(0, ocsd.MemSpaceEL2, 0, 4, readBuf) != 0 {
+		t.Errorf("Should not read")
+	}
+
+	// 6. Test ReadTargetMemory over-read error
+	mapper = NewGlobalMapper()
+	mapper.EnableCaching(false) // hit the cache.Enabled() == false branch after findAccessor
+	badAcc := NewCallbackAccessor(0, 0xFF, ocsd.MemSpaceAny)
+	badAcc.SetCBIfFn(testMemAccBadLenCB, nil)
+	mapper.AddAccessor(badAcc, 0)
+
+	numBytes := uint32(4)
+	err = mapper.ReadTargetMemory(0, 0, ocsd.MemSpaceAny, &numBytes, readBuf)
+	if err != ocsd.ErrMemAccBadLen {
+		t.Errorf("Expected ErrMemAccBadLen, got %v", err)
+	}
+
+	// 7. Hit ReadBytesFromCache cache miss / edge cases
+	mapper.EnableCaching(true)
+	mapper.accCurr = accBuf // set back to valid buffer
+	numBytes = 4
+	mapper.cache.ReadBytesFromCache(accBuf, 0x1000, ocsd.MemSpaceEL1N, 0x10, &numBytes, readBuf) // out of bounds
 }
