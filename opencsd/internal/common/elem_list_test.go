@@ -1,0 +1,108 @@
+package common
+
+import (
+	"testing"
+
+	"opencsd/internal/ocsd"
+)
+
+type dummySendIf struct {
+	sentCount int
+}
+
+func (d *dummySendIf) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *TraceElement) ocsd.DatapathResp {
+	d.sentCount++
+	return ocsd.RespCont
+}
+
+func TestGenElemList(t *testing.T) {
+	list := NewGenElemList()
+	sendAttached := NewAttachPt[TrcGenElemIn]()
+	dummy := &dummySendIf{}
+	sendAttached.Attach(dummy)
+
+	list.InitSendIf(sendAttached)
+	list.InitCSID(10)
+
+	// Test array growth and insertion
+	for i := 0; i < 20; i++ {
+		elem := list.GetNextElem(ocsd.TrcIndex(i))
+		elem.SetType(GenElemInstrRange)
+	}
+
+	if list.GetNumElem() != 20 {
+		t.Errorf("Expected 20 elements, got %d", list.GetNumElem())
+	}
+	if list.GetElemType(0) != GenElemInstrRange {
+		t.Errorf("Expected GenElemInstrRange, got %v", list.GetElemType(0))
+	}
+
+	// Test pending
+	list.PendLastNElem(5)
+	if !list.ElemToSend() || list.NumPendElem() != 5 {
+		t.Errorf("Pending logic failed")
+	}
+
+	// Send elements (should send 15, leave 5 pending)
+	list.SendElements()
+	if dummy.sentCount != 15 {
+		t.Errorf("Expected 15 sent elements, got %d", dummy.sentCount)
+	}
+
+	// Pending logic
+	// Cancel pending
+	list.CancelPendElem()
+	if list.GetNumElem() != 0 || list.NumPendElem() != 0 {
+		t.Errorf("Expected 0 elements after cancellation, got %d", list.GetNumElem())
+	}
+
+	list.Reset()
+	if list.firstIdx != 0 || list.numUsed != 0 {
+		t.Errorf("Reset failed")
+	}
+
+	list.GetNextElem(0)
+	list.PendLastNElem(1)
+	list.CommitAllPendElem()
+	if list.NumPendElem() != 0 {
+		t.Errorf("Commit failed")
+	}
+}
+
+func TestGenElemStack(t *testing.T) {
+	stack := NewGenElemStack()
+	sendAttached := NewAttachPt[TrcGenElemIn]()
+	dummy := &dummySendIf{}
+	sendAttached.Attach(dummy)
+
+	stack.InitSendIf(sendAttached)
+	stack.InitCSID(11)
+
+	// Add elems to grow array
+	for i := 0; i < 6; i++ {
+		stack.AddElem(ocsd.TrcIndex(i))
+	}
+
+	if stack.NumElemToSend() != 7 { // 1 initial + 6 added
+		t.Errorf("Expected 7 elements, got %d", stack.NumElemToSend())
+	}
+
+	stack.SetCurrElemIdx(10)
+	curr := stack.GetCurrElem()
+	curr.SetType(GenElemEvent)
+
+	stack.AddElemType(11, GenElemTimestamp)
+
+	if stack.NumElemToSend() != 8 {
+		t.Errorf("Expected 8 elements after AddElemType")
+	}
+
+	stack.SendElements()
+	if dummy.sentCount != 8 {
+		t.Errorf("Expected 8 sent elements, got %d", dummy.sentCount)
+	}
+
+	if stack.NumElemToSend() != 1 {
+		t.Errorf("Expected reset after send, got %d", stack.NumElemToSend())
+	}
+}
