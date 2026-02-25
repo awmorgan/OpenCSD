@@ -37,17 +37,13 @@ func (d *FrameDeformatter) findfirstFSync(dataBlockSize uint32) uint32 {
 	var processed uint32
 	const FSYNC_PATTERN uint32 = 0x7FFFFFFF
 
-	if dataBlockSize >= 4 {
-		for processed <= (dataBlockSize - 4) {
-			val := binary.LittleEndian.Uint32(d.inBlockBase[processed:])
-			if val == FSYNC_PATTERN {
-				d.frameSynced = true
-				break
-			}
-			processed++
+	for processed+3 < dataBlockSize {
+		val := binary.LittleEndian.Uint32(d.inBlockBase[processed:])
+		if val == FSYNC_PATTERN {
+			d.frameSynced = true
+			break
 		}
-	} else {
-		processed = dataBlockSize
+		processed++
 	}
 	return processed
 }
