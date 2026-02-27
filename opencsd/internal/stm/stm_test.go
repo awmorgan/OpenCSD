@@ -287,3 +287,23 @@ func TestSTMConfig(t *testing.T) {
 	_ = cfg.MaxChannelIdx()
 	_ = cfg.HWTraceMasterIdx()
 }
+
+func TestSTMOtherCoverage(t *testing.T) {
+	config := NewConfig()
+	manager := NewDecoderManager()
+	proc := manager.CreatePktProc(0, config)
+	dec := manager.CreatePktDecode(0, config)
+
+	proc.TraceDataIn(ocsd.OpFlush, 0, nil)
+	proc.TraceDataIn(ocsd.OpReset, 0, nil)
+
+	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
+	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+
+	pkt := &Packet{}
+	pkt.InitNextPacket()
+	pkt.SetPacketType(PktBadSequence, false)
+	if !pkt.IsBadPacket() {
+		t.Errorf("Expected IsBadPacket to be true")
+	}
+}
