@@ -3,6 +3,7 @@ package dcdtree
 import (
 	"opencsd/internal/common"
 	"opencsd/internal/demux"
+	"opencsd/internal/idec"
 	"opencsd/internal/interfaces"
 	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
@@ -30,6 +31,7 @@ func CreateDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) *Decode
 	dt := &DecodeTree{
 		treeType:       srcType,
 		decodeElements: make(map[uint8]*DecodeTreeElement),
+		iInstrDecode:   idec.NewDecoder(),
 	}
 
 	if srcType == ocsd.TrcSrcFrameFormatted {

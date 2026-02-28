@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"opencsd/internal/common"
+	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
 
@@ -19,8 +20,11 @@ func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, ele
 // --- Mocks ---
 
 type mockMemAcc struct {
-	failAfter int // if > 0, return short read after this many calls
-	calls     int
+	failAfter  int
+	calls      int
+	hitAfter   int
+	isLink     bool
+	isIndirect bool
 }
 
 func (m *mockMemAcc) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
@@ -28,55 +32,27 @@ func (m *mockMemAcc) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSp
 	if m.failAfter > 0 && m.calls > m.failAfter {
 		return 0, nil, ocsd.OK // short read triggers memNaccPending
 	}
-	return reqBytes, []byte{0, 0, 0, 0}, ocsd.OK
+
+	isHit := m.hitAfter >= 0 && m.calls > m.hitAfter
+
+	// Decide based on state what sequence of bytes to return.
+	// We assume ARM (A32) state since most PTM tests use ISAArm.
+	if isHit {
+		if m.isIndirect && m.isLink {
+			return reqBytes, []byte{0x30, 0x00, 0x20, 0x01}, ocsd.OK // BLX R0 (0x01200030)
+		} else if m.isIndirect {
+			return reqBytes, []byte{0x1E, 0xFF, 0x2F, 0x01}, ocsd.OK // BX LR (0x012FFF1E)
+		} else if m.isLink {
+			return reqBytes, []byte{0x00, 0x00, 0x00, 0xEB}, ocsd.OK // BL (0xEB000000)
+		}
+		return reqBytes, []byte{0x00, 0x00, 0x00, 0xEA}, ocsd.OK // B (0xEA000000)
+	}
+
+	// Not a hit -> InstrOther
+	return reqBytes, []byte{0x00, 0x00, 0x80, 0xE0}, ocsd.OK // ADD R0, R0, R0
 }
 
 func (m *mockMemAcc) InvalidateMemAccCache(csTraceID uint8) {}
-
-// mockInstrDecode is a configurable instruction decoder for tests.
-// hitAfter: return InstrOther for this many calls, then return a branch (waypoint).
-//
-//	 0  → waypoint on the very first instruction (original wpHit=true behaviour).
-//	-1  → never hit a waypoint (rely on memNacc to stop).
-//
-// instrType: when hitAfter is reached, use this type (default InstrBr).
-// isLink: set IsLink flag on the waypoint instruction.
-type mockInstrDecode struct {
-	hitAfter  int // calls before waypoint; 0=immediate, -1=never
-	calls     int
-	instrType ocsd.InstrType // type to emit at waypoint; zero-value → InstrBr
-	isLink    int
-}
-
-func (m *mockInstrDecode) DecodeInstruction(instrInfo *ocsd.InstrInfo) ocsd.Err {
-	instrInfo.InstrSize = 4
-	instrInfo.NextIsa = instrInfo.Isa
-	instrInfo.SubType = ocsd.SInstrNone
-
-	if m.hitAfter < 0 {
-		// Never a waypoint – return InstrOther so the loop keeps going
-		// until memNacc kicks in.
-		instrInfo.Type = ocsd.InstrOther
-		m.calls++
-		return ocsd.OK
-	}
-
-	m.calls++
-	if m.calls > m.hitAfter {
-		// Waypoint instruction
-		wpt := m.instrType
-		if wpt == ocsd.InstrOther {
-			wpt = ocsd.InstrBr
-		}
-		instrInfo.Type = wpt
-		instrInfo.BranchAddr = instrInfo.InstrAddr + 0x100
-		instrInfo.IsLink = uint8(m.isLink)
-	} else {
-		// Non-waypoint – just advance
-		instrInfo.Type = ocsd.InstrOther
-	}
-	return ocsd.OK
-}
 
 // --- Helpers ---
 
@@ -91,7 +67,7 @@ func setupProcDec(config *Config) (*PktProc, *PktDecode, *testTrcElemIn) {
 	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	proc.PktOutI.Attach(dec)
 	dec.MemAccess.Attach(&mockMemAcc{})
-	dec.InstrDecode.Attach(&mockInstrDecode{})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 	return proc, dec, out
@@ -472,8 +448,7 @@ func TestDecoderAtomProcessing(t *testing.T) {
 
 	mem := &mockMemAcc{}
 	dec.MemAccess.Attach(mem)
-	instr := &mockInstrDecode{}
-	dec.InstrDecode.Attach(instr)
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -529,8 +504,7 @@ func TestDecoderWPUpdate(t *testing.T) {
 
 	mem := &mockMemAcc{}
 	dec.MemAccess.Attach(mem)
-	instr := &mockInstrDecode{}
-	dec.InstrDecode.Attach(instr)
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -564,8 +538,7 @@ func TestDecoderBranchWithAtomRange(t *testing.T) {
 
 	mem := &mockMemAcc{}
 	dec.MemAccess.Attach(mem)
-	instr := &mockInstrDecode{}
-	dec.InstrDecode.Attach(instr)
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -612,10 +585,9 @@ func TestDecoderMemNacc(t *testing.T) {
 	dec := NewPktDecode(0)
 	dec.SetProtocolConfig(config)
 
-	mem := &mockMemAcc{failAfter: 1} // fail on 2nd read
+	mem := &mockMemAcc{failAfter: 1, hitAfter: -1} // fail on 2nd read, never branch
 	dec.MemAccess.Attach(mem)
-	instr := &mockInstrDecode{hitAfter: -1} // never find WP, keep reading until memNacc
-	dec.InstrDecode.Attach(instr)
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -657,10 +629,9 @@ func TestDecoderMemNaccSecure(t *testing.T) {
 	dec := NewPktDecode(0)
 	dec.SetProtocolConfig(config)
 
-	mem := &mockMemAcc{failAfter: 1}
+	mem := &mockMemAcc{failAfter: 1, hitAfter: -1}
 	dec.MemAccess.Attach(mem)
-	instr := &mockInstrDecode{hitAfter: -1}
-	dec.InstrDecode.Attach(instr)
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -692,16 +663,11 @@ func TestDecoderIndirectBranch(t *testing.T) {
 	dec := NewPktDecode(0)
 	dec.SetProtocolConfig(config)
 
-	mem := &mockMemAcc{}
+	mem := &mockMemAcc{hitAfter: 0, isIndirect: true}
 	dec.MemAccess.Attach(mem)
-	// Return InstrBrIndirect
-	instr := &mockInstrDecode{}
-	dec.InstrDecode.Attach(instr)
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
-
-	// Override instruction decode to return indirect branch
-	dec.InstrDecode.Attach(&indirectBranchInstrDecode{})
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -722,18 +688,6 @@ func TestDecoderIndirectBranch(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpData, 1, pkt2)
 }
 
-type indirectBranchInstrDecode struct{}
-
-func (m *indirectBranchInstrDecode) DecodeInstruction(instrInfo *ocsd.InstrInfo) ocsd.Err {
-	instrInfo.InstrSize = 4
-	instrInfo.Type = ocsd.InstrBrIndirect
-	instrInfo.SubType = ocsd.SInstrNone
-	instrInfo.BranchAddr = instrInfo.InstrAddr + 0x200
-	instrInfo.NextIsa = instrInfo.Isa
-	instrInfo.IsLink = 1
-	return ocsd.OK
-}
-
 func TestDecoderLinkBranch(t *testing.T) {
 	config := NewConfig()
 	config.RegCCER = ccerRestackImpl
@@ -741,9 +695,9 @@ func TestDecoderLinkBranch(t *testing.T) {
 	dec := NewPktDecode(0)
 	dec.SetProtocolConfig(config)
 
-	mem := &mockMemAcc{}
+	mem := &mockMemAcc{hitAfter: 0, isLink: true}
 	dec.MemAccess.Attach(mem)
-	dec.InstrDecode.Attach(&linkBranchInstrDecode{})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -764,18 +718,6 @@ func TestDecoderLinkBranch(t *testing.T) {
 	pkt2.AddrVal = 0x5000
 	pkt2.CurrISA = ocsd.ISAArm
 	dec.PacketDataIn(ocsd.OpData, 1, pkt2)
-}
-
-type linkBranchInstrDecode struct{}
-
-func (m *linkBranchInstrDecode) DecodeInstruction(instrInfo *ocsd.InstrInfo) ocsd.Err {
-	instrInfo.InstrSize = 4
-	instrInfo.Type = ocsd.InstrBr
-	instrInfo.SubType = ocsd.SInstrBrLink
-	instrInfo.BranchAddr = instrInfo.InstrAddr + 0x100
-	instrInfo.NextIsa = instrInfo.Isa
-	instrInfo.IsLink = 1
-	return ocsd.OK
 }
 
 func TestDecoderContProcess(t *testing.T) {
@@ -1039,13 +981,13 @@ func syncDec(dec *PktDecode, addr ocsd.VAddr) {
 	dec.PacketDataIn(ocsd.OpData, 1, isync)
 }
 
-// newTestDec creates a PktDecode with mockMemAcc and mockInstrDecode attached.
+// newTestDec creates a PktDecode with mockMemAcc and real InstrDecode attached.
 func newTestDec(hitAfter int) (*PktDecode, *testTrcElemIn) {
 	config := NewConfig()
 	dec := NewPktDecode(0)
 	dec.SetProtocolConfig(config)
-	dec.MemAccess.Attach(&mockMemAcc{})
-	dec.InstrDecode.Attach(&mockInstrDecode{hitAfter: hitAfter})
+	dec.MemAccess.Attach(&mockMemAcc{hitAfter: hitAfter})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 	return dec, out
@@ -1113,8 +1055,8 @@ func TestDecoderAtomRange_NoWPFound(t *testing.T) {
 	config := NewConfig()
 	dec := NewPktDecode(0)
 	dec.SetProtocolConfig(config)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: 2}) // fail after 2 reads
-	dec.InstrDecode.Attach(&mockInstrDecode{hitAfter: -1})
+	dec.MemAccess.Attach(&mockMemAcc{failAfter: 2, hitAfter: -1}) // fail after 2 reads, never branch
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -1196,8 +1138,8 @@ func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	config := NewConfig()
 	dec := NewPktDecode(0)
 	dec.SetProtocolConfig(config)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: 1})
-	dec.InstrDecode.Attach(&mockInstrDecode{hitAfter: -1})
+	dec.MemAccess.Attach(&mockMemAcc{failAfter: 1, hitAfter: -1})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -1358,8 +1300,8 @@ func TestDecoderIndirectBranch_ActiveRetStack(t *testing.T) {
 	config.RegCtrl = ctrlRetStackEna
 	dec := NewPktDecode(0)
 	dec.SetProtocolConfig(config)
-	dec.MemAccess.Attach(&mockMemAcc{})
-	dec.InstrDecode.Attach(&indirectBranchIsLinkDecode{})
+	dec.MemAccess.Attach(&mockMemAcc{hitAfter: 0, isIndirect: true, isLink: true})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -1384,19 +1326,6 @@ func TestDecoderIndirectBranch_ActiveRetStack(t *testing.T) {
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
 	dec.PacketDataIn(ocsd.OpData, 5, pkt2)
-}
-
-// indirectBranchIsLinkDecode: BrIndirect with IsLink=1.
-type indirectBranchIsLinkDecode struct{}
-
-func (m *indirectBranchIsLinkDecode) DecodeInstruction(instrInfo *ocsd.InstrInfo) ocsd.Err {
-	instrInfo.InstrSize = 4
-	instrInfo.Type = ocsd.InstrBrIndirect
-	instrInfo.SubType = ocsd.SInstrNone
-	instrInfo.BranchAddr = instrInfo.InstrAddr + 0x200
-	instrInfo.NextIsa = instrInfo.Isa
-	instrInfo.IsLink = 1
-	return ocsd.OK
 }
 
 // TestDecoderISyncPeriodic_WithVMIDUpdate exercises ISyncPeriodic with UpdatedV=true.

@@ -1,6 +1,7 @@
 package common
 
 import (
+	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 	"testing"
 )
@@ -23,21 +24,6 @@ func (m *mockMemAccess) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, me
 
 func (m *mockMemAccess) InvalidateMemAccCache(csTraceID uint8) {}
 
-type mockInstrDecode struct {
-	called     bool
-	instrSize  uint8
-	branchAddr ocsd.VAddr
-	instrType  ocsd.InstrType
-}
-
-func (m *mockInstrDecode) DecodeInstruction(instrInfo *ocsd.InstrInfo) ocsd.Err {
-	m.called = true
-	instrInfo.InstrSize = m.instrSize
-	instrInfo.BranchAddr = m.branchAddr
-	instrInfo.Type = m.instrType
-	return ocsd.OK
-}
-
 func TestCodeFollower(t *testing.T) {
 	cf := NewCodeFollower()
 
@@ -49,11 +35,8 @@ func TestCodeFollower(t *testing.T) {
 	memAtt.Attach(mockMem)
 
 	idAtt := NewAttachPt[InstrDecode]()
-	mockID := &mockInstrDecode{
-		instrSize: 4,
-		instrType: ocsd.InstrOther,
-	}
-	idAtt.Attach(mockID)
+	realID := idec.NewDecoder()
+	idAtt.Attach(realID)
 
 	// Test without valid
 	err := cf.FollowSingleAtom(0x1000, ocsd.AtomN)
@@ -81,8 +64,7 @@ func TestCodeFollower(t *testing.T) {
 	}
 
 	// Test branch
-	mockID.instrType = ocsd.InstrBr
-	mockID.branchAddr = 0x2000
+	mockMem.dataToReturn = []byte{0xFF, 0x03, 0x00, 0x14} // A64 B 0x2000 from 0x1004 (offset 0xFFC)
 	err = cf.FollowSingleAtom(0x1004, ocsd.AtomE)
 	if err != ocsd.OK || cf.GetNextAddr() != 0x2000 {
 		t.Errorf("Branch target not followed")
@@ -91,10 +73,8 @@ func TestCodeFollower(t *testing.T) {
 	// Test Thumb 32-bit decode requirement
 	cf.SetISA(ocsd.ISAThumb2)
 	mockMem.dataToReturn = []byte{0x00, 0xF0, 0x01, 0x02} // Provide full 4 bytes so DecodeSingleOpCode succeeds
-	mockID.instrSize = 4
-	mockID.instrType = ocsd.InstrOther
 	err = cf.FollowSingleAtom(0x1008, ocsd.AtomN)
-	if err != ocsd.OK || !mockID.called {
+	if err != ocsd.OK {
 		t.Errorf("Thumb 32-bit fetch failed")
 	}
 

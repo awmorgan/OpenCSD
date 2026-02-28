@@ -1,6 +1,7 @@
 package etmv3
 
 import (
+	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 	"testing"
 )
@@ -106,10 +107,9 @@ func TestDecoderBranchWithException(t *testing.T) {
 func TestDecoderMemNacc(t *testing.T) {
 	config := &Config{}
 	dec, out := setupDecFast(config)
-	mem := &mockMemAcc{failAfter: 1} // fail on 2nd read
-	dec.MemAccess.Attach(mem)
-	instr := &mockInstrDecode{hitAfter: -1} // never find branch
-	dec.InstrDecode.Attach(instr)
+	mem := &mockMemAcc{failAfter: 1, hitAfter: -1} // fail on 2nd read, never find branch
+	dec.MemAccess.ReplaceFirst(mem)
+	dec.InstrDecode.Attach(idec.NewDecoder())
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -250,10 +250,9 @@ func TestDecoderPHeaderVariations(t *testing.T) {
 func TestDecoderAtomUsage(t *testing.T) {
 	config := &Config{}
 	dec, out := setupDecFast(config)
-	mem := &mockMemAcc{failAfter: 10}
-	dec.MemAccess.Attach(mem)
-	instr := &mockInstrDecode{hitAfter: 0, instrType: ocsd.InstrBr} // conditional branch consumes atoms!
-	dec.InstrDecode.Attach(instr)
+	mem := &mockMemAcc{failAfter: 10, hitAfter: 0, instrType: ocsd.InstrBr}
+	dec.MemAccess.ReplaceFirst(mem)
+	dec.InstrDecode.Attach(idec.NewDecoder()) // conditional branch consumes atoms!
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -338,7 +337,7 @@ func setupDecFast(config *Config) (*PktDecode, *testTrcElemIn) {
 	manager := NewDecoderManager()
 	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(&mockInstrDecode{})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 	return dec, out

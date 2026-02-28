@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"opencsd/internal/common"
+	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
 
@@ -26,7 +27,7 @@ func buildDecInDecodePkts(config *Config) (*PktDecode, *testTrcElemIn) {
 	manager := NewDecoderManager()
 	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(&mockInstrDecode{})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -76,7 +77,7 @@ func TestSendUnsyncPacket_EmitsNoSync(t *testing.T) {
 	manager := NewDecoderManager()
 	dec := manager.CreatePktDecode(0, &Config{}).(*PktDecode)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(&mockInstrDecode{})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 	// Do NOT call OpReset - decoder starts in noSync
@@ -100,7 +101,7 @@ func TestSendUnsyncPacket_UnsyncInfoPreserved(t *testing.T) {
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(&mockInstrDecode{})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 
 	// NoSync state → any packet triggers sendUnsyncPacket → GenElemNoSync
 	pkt := &Packet{}
@@ -162,8 +163,10 @@ func TestProcessBranchAddr_CancelPendElem(t *testing.T) {
 	dec, out := buildDecInDecodePkts(config)
 
 	// First send an atom to create a pending InstrRange element
-	mockI := &mockInstrDecodeWaypoint{returnType: ocsd.InstrBr}
-	dec.InstrDecode.Attach(mockI)
+	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBr}
+	dec.MemAccess.ReplaceFirst(mem)
+	dec.InstrDecode.Attach(idec.NewDecoder())
+
 	phdrPkt := &Packet{}
 	phdrPkt.ResetState()
 	phdrPkt.Type = PktPHdr
@@ -300,8 +303,10 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 	manager := NewDecoderManager()
 	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	mockI := &mockInstrDecodeWaypoint{returnType: ocsd.InstrBr}
-	dec.InstrDecode.Attach(mockI)
+	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBr}
+	dec.MemAccess.ReplaceFirst(mem)
+	dec.InstrDecode.Attach(idec.NewDecoder())
+
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -336,6 +341,8 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
 	if len(out.elements) == n0 {
+		t.Logf("InstrType from follower: %v", dec.codeFollower.GetInstrInfo().Type)
+		t.Logf("InstrOpcode from follower: %x", dec.codeFollower.GetInstrInfo().Opcode)
 		t.Error("expected InstrRange element from E-atom processing")
 	}
 	for _, e := range out.elements[n0:] {
@@ -360,8 +367,9 @@ func TestProcessPHdr_NAtom_InstrOther(t *testing.T) {
 	manager := NewDecoderManager()
 	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	// Use mockInstrDecode with hitAfter to avoid infinite loop
-	dec.InstrDecode.Attach(&mockInstrDecode{hitAfter: 5, instrType: ocsd.InstrBr})
+	// Setup memory mock with hitAfter to avoid infinite loop
+	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1, hitAfter: 5, instrType: ocsd.InstrBr})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -396,8 +404,10 @@ func TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr(t *testing.T) {
 	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
 	// Attach IndirectBr mock directly (before any other InstrDecode is attached)
-	mockI := &mockInstrDecodeWaypoint{returnType: ocsd.InstrBrIndirect}
-	dec.InstrDecode.Attach(mockI)
+	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBrIndirect}
+	dec.MemAccess.ReplaceFirst(mem)
+	dec.InstrDecode.Attach(idec.NewDecoder())
+
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -430,6 +440,9 @@ func TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
 	if !dec.bNeedAddr {
+		t.Logf("InstrType from follower: %v", dec.codeFollower.GetInstrInfo().Type)
+		t.Logf("InstrOpcode from follower: %x", dec.codeFollower.GetInstrInfo().Opcode)
+		t.Logf("HasNextAddr: %v", dec.codeFollower.HasNextAddr())
 		t.Error("expected bNeedAddr=true after IndirectBr E-atom")
 	}
 	_ = out
@@ -443,8 +456,10 @@ func TestProcessPHdr_CCFmt3_WithAtoms(t *testing.T) {
 	manager := NewDecoderManager()
 	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	mockI := &mockInstrDecodeWaypoint{returnType: ocsd.InstrBr}
-	dec.InstrDecode.Attach(mockI)
+	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBr}
+	dec.MemAccess.ReplaceFirst(mem)
+	dec.InstrDecode.Attach(idec.NewDecoder())
+
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -563,8 +578,9 @@ func TestProcessPHdr_NeedAddr_SentUnknown_Skips(t *testing.T) {
 	config := &Config{} // non-CC
 
 	dec, out := buildDecInDecodePkts(config)
-	mockI := &mockInstrDecodeWaypoint{returnType: ocsd.InstrBrIndirect}
-	dec.InstrDecode.Attach(mockI)
+	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBrIndirect}
+	dec.MemAccess.ReplaceFirst(mem)
+	dec.InstrDecode.Attach(idec.NewDecoder())
 
 	// First PHdr: bNeedAddr=true, bSentUnknown=false → emits AddrUnknown, bSentUnknown=true
 	phdrPkt := &Packet{}
@@ -576,14 +592,16 @@ func TestProcessPHdr_NeedAddr_SentUnknown_Skips(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpData, 2, phdrPkt)
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
-	n0 := len(out.elements)
-
-	// Second PHdr: bNeedAddr=true, bSentUnknown=true, !isCycleAcc → exits loop immediately (skips)
-	dec.PacketDataIn(ocsd.OpData, 3, phdrPkt)
-	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
 	// No new AddrUnknown element should appear (skip path)
-	for _, e := range out.elements[n0:] {
+	// Actually, the previous PHdr call set bNeedAddr=true and reset bSentUnknown=false.
+	// So we need to call it ONCE to set bSentUnknown=true, then AGAIN to skip.
+	dec.PacketDataIn(ocsd.OpData, 3, phdrPkt) // This one emits AddrUnknown and sets bSentUnknown=true
+	n1 := len(out.elements)
+	dec.PacketDataIn(ocsd.OpData, 4, phdrPkt) // This one SHOULD skip
+	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
+
+	for _, e := range out.elements[n1:] {
 		if e.ElemType == ocsd.GenElemAddrUnknown {
 			t.Error("should NOT emit AddrUnknown when bSentUnknown=true and !isCycleAcc")
 		}
@@ -599,7 +617,8 @@ func TestProcessPHdr_Nacc_ZeroInstructions(t *testing.T) {
 	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	// failAfter:0 → fail on first call (after 0 successes)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: 0})
-	dec.InstrDecode.Attach(&mockInstrDecodeWaypoint{returnType: ocsd.InstrOther})
+	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrOther})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -645,8 +664,10 @@ func TestProcessPHdr_MemSpaceSecure(t *testing.T) {
 	manager := NewDecoderManager()
 	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	mockI := &mockInstrDecodeWaypoint{returnType: ocsd.InstrBr}
-	dec.InstrDecode.Attach(mockI)
+	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBr}
+	dec.MemAccess.ReplaceFirst(mem)
+	dec.InstrDecode.Attach(idec.NewDecoder())
+
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -724,7 +745,7 @@ func TestProcessISync_WithCC_LSipAddr(t *testing.T) {
 	manager := NewDecoderManager()
 	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(&mockInstrDecode{})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -803,7 +824,7 @@ func TestOnFlush_SendPktsState(t *testing.T) {
 	manager := NewDecoderManager()
 	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(&mockInstrDecode{})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -851,7 +872,7 @@ func TestOnFlush_SendPkts_WaitISync(t *testing.T) {
 	config := &Config{}
 	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(&mockInstrDecode{})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
@@ -919,7 +940,7 @@ func TestPreISyncValid_CycleCount_Emitted(t *testing.T) {
 	manager := NewDecoderManager()
 	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(&mockInstrDecode{})
+	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 
