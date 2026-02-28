@@ -88,8 +88,8 @@ func (s *noopPktSinkV3) PacketDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, pk
 
 func setupProcDec(config *Config) (*PktProc, *PktDecode, *testTrcElemIn) {
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
-	dec := manager.CreatePktDecode(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
+	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	proc.PktOutI.Attach(dec)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
 	dec.InstrDecode.Attach(&mockInstrDecode{hitAfter: -1})

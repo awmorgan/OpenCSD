@@ -65,6 +65,10 @@ type PktDecodeI struct {
 	FnOnFirstInitOK    func()
 }
 
+func (p *PktDecodeI) GetTraceElemOutAttachPt() *AttachPt[TrcGenElemIn] { return &p.TraceElemOut }
+func (p *PktDecodeI) GetInstrDecodeAttachPt() *AttachPt[InstrDecode]   { return &p.InstrDecode }
+func (p *PktDecodeI) GetMemAccAttachPt() *AttachPt[TargetMemAccess]    { return &p.MemAccess }
+
 func (p *PktDecodeI) InitPktDecodeI(name string) {
 	p.InitTraceComponent(name)
 	p.TraceElemOut = *NewAttachPt[TrcGenElemIn]()

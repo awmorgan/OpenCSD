@@ -99,8 +99,8 @@ func TestITMPrehensive(t *testing.T) {
 	cfg.SetTraceID(0x11)
 
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, cfg)
-	dec := manager.CreatePktDecode(0, cfg)
+	proc := manager.CreatePktProc(0, cfg).(*PktProc)
+	dec := manager.CreatePktDecode(0, cfg).(*PktDecode)
 
 	proc.PktOutI.Attach(dec)
 	outReceiver := &testTrcElemIn{}

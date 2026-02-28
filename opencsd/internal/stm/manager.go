@@ -1,5 +1,10 @@
 package stm
 
+import (
+	"opencsd/internal/interfaces"
+	"opencsd/internal/ocsd"
+)
+
 // DecoderManager is the registry factory for STM decoders
 type DecoderManager struct {
 }
@@ -14,7 +19,7 @@ func NewDecoderManager() *DecoderManager {
 // Normally we'd register this in lib_dcd_register, but since the port uses Go idiomatic registries,
 // we just provide the factory methods.
 
-func (m *DecoderManager) CreatePktProc(instID int, config any) *PktProc {
+func (m *DecoderManager) CreatePktProc(instID int, config any) any {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil
@@ -24,7 +29,7 @@ func (m *DecoderManager) CreatePktProc(instID int, config any) *PktProc {
 	return proc
 }
 
-func (m *DecoderManager) CreatePktDecode(instID int, config any) *PktDecode {
+func (m *DecoderManager) CreatePktDecode(instID int, config any) any {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil
@@ -32,4 +37,23 @@ func (m *DecoderManager) CreatePktDecode(instID int, config any) *PktDecode {
 	dec := NewPktDecode(instID)
 	dec.SetProtocolConfig(cfg)
 	return dec
+}
+
+func (m *DecoderManager) CreateDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
+	procAny := m.CreatePktProc(instID, config)
+	if procAny == nil {
+		return nil, nil, ocsd.ErrInvalidParamType
+	}
+	decAny := m.CreatePktDecode(instID, config)
+	if decAny == nil {
+		return nil, nil, ocsd.ErrInvalidParamType
+	}
+	proc := procAny.(*PktProc)
+	dec := decAny.(*PktDecode)
+	proc.PktOutI.ReplaceFirst(dec)
+	return proc, dec, ocsd.OK
+}
+
+func (m *DecoderManager) ProtocolType() ocsd.TraceProtocol {
+	return ocsd.ProtocolSTM
 }

@@ -11,7 +11,7 @@ func TestProcStreamComplete(t *testing.T) {
 	config.RegCCER = ccerHasTs
 
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
 	proc.PktOutI.Attach(&noopPktSink{})
 	proc.PktOutI.Attach(&noopPktSink{})
 
@@ -61,7 +61,7 @@ func TestProcStreamBadTraceMode(t *testing.T) {
 	config := &Config{}
 	// No data trace flags set
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
 	proc.PktOutI.Attach(&noopPktSink{})
 
 	data := []byte{
@@ -79,7 +79,7 @@ func TestProcStreamBadTraceMode(t *testing.T) {
 func TestProcStreamMalformed(t *testing.T) {
 	config := &Config{}
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
 	proc.PktOutI.Attach(&noopPktSink{})
 
 	// Inject malformed packets (wrong size / early EOT)
@@ -95,7 +95,7 @@ func TestProcStreamComplexPackets(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlCycleAcc | (2 << 14) // ctxtid=2
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
 	proc.PktOutI.Attach(&noopPktSink{})
 
 	data := []byte{
@@ -114,7 +114,7 @@ func TestProcStreamComplexPackets(t *testing.T) {
 func TestProcStreamPartPacket(t *testing.T) {
 	config := &Config{}
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
 	proc.PktOutI.Attach(&noopPktSink{})
 
 	// ASYNC
@@ -131,7 +131,7 @@ func TestProcStreamPartPacket(t *testing.T) {
 func TestProcStreamExceptionData(t *testing.T) {
 	config := &Config{}
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
 	proc.PktOutI.Attach(&noopPktSink{})
 
 	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
@@ -160,7 +160,7 @@ func TestProcStreamExceptionData(t *testing.T) {
 func TestProcessorUnusedInternals(t *testing.T) {
 	config := &Config{}
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
 
 	proc.currPacketData = []byte{1, 2, 3}
 	proc.setBytesPartPkt(1, waitSync, PktASync)
@@ -176,7 +176,7 @@ func TestProcStreamDataValues(t *testing.T) {
 	config.RegCtrl = ctrlDataAddr | ctrlDataVal | ctrlDataOnly
 
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
 	proc.PktOutI.Attach(&noopPktSink{})
 
 	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
@@ -193,7 +193,7 @@ func TestProcStreamDataValues(t *testing.T) {
 func TestProcStreamPartPacket2(t *testing.T) {
 	config := &Config{}
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
 	proc.PktOutI.Attach(&noopPktSink{})
 
 	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x81})
@@ -204,7 +204,7 @@ func TestProcStreamPartPacket2(t *testing.T) {
 func TestProcStreamMalformedHeaders(t *testing.T) {
 	config := &Config{}
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
 	proc.PktOutI.Attach(&noopPktSink{})
 	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
 

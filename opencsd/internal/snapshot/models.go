@@ -40,8 +40,17 @@ func NewParsedDevice() *ParsedDevice {
 
 // GetRegValue is a helper to get register value case-insensitively
 func (p *ParsedDevice) GetRegValue(key string) (string, bool) {
-	val, ok := p.RegDefs[strings.ToLower(key)]
-	return val, ok
+	keyLower := strings.ToLower(key)
+	if val, ok := p.RegDefs[keyLower]; ok {
+		return val, true
+	}
+	prefix := keyLower + "("
+	for k, v := range p.RegDefs {
+		if strings.HasPrefix(k, prefix) {
+			return v, true
+		}
+	}
+	return "", false
 }
 
 // ParsedDevices stores the entire device list and snapshot info

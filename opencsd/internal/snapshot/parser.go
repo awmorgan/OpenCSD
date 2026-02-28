@@ -152,12 +152,19 @@ func ExtractSourceTree(bufferName string, metadata *ParsedTrace, bufferData *Tra
 	for sourceName, bName := range metadata.SourceBufferAssoc {
 		if bName == bufferName {
 			// associate core device with source device
-			if coreName, ok := metadata.CPUSourceAssoc[sourceName]; ok {
-				bufferData.SourceCoreAssoc[sourceName] = coreName
+			coreName := "<none>"
+			if cName, ok := metadata.CPUSourceAssoc[sourceName]; ok {
+				coreName = cName
 			} else {
-				// some sources might not be attached to cores (e.g. STM)
-				bufferData.SourceCoreAssoc[sourceName] = "<none>"
+				// Search values instead of keys
+				for k, v := range metadata.CPUSourceAssoc {
+					if v == sourceName {
+						coreName = k
+						break
+					}
+				}
 			}
+			bufferData.SourceCoreAssoc[sourceName] = coreName
 		}
 	}
 

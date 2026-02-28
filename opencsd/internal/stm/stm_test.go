@@ -50,8 +50,8 @@ func TestSTMPrehensive(t *testing.T) {
 	config.SetTraceID(0x10)
 
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
-	dec := manager.CreatePktDecode(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
+	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 
 	// Op mode test
 	proc.SetComponentOpMode(ocsd.OpflgPktprocUnsyncOnBadPkts)
@@ -291,8 +291,8 @@ func TestSTMConfig(t *testing.T) {
 func TestSTMOtherCoverage(t *testing.T) {
 	config := NewConfig()
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
-	dec := manager.CreatePktDecode(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
+	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 
 	proc.TraceDataIn(ocsd.OpFlush, 0, nil)
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)

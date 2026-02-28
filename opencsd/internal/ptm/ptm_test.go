@@ -87,8 +87,8 @@ func makeAsyncBlock() []byte {
 
 func setupProcDec(config *Config) (*PktProc, *PktDecode, *testTrcElemIn) {
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
-	dec := manager.CreatePktDecode(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
+	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	proc.PktOutI.Attach(dec)
 	dec.MemAccess.Attach(&mockMemAcc{})
 	dec.InstrDecode.Attach(&mockInstrDecode{})
@@ -107,15 +107,15 @@ func (n *noopPktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, p
 // setupProcOnly creates a processor with a no-op sink (doesn't decode packets)
 func setupProcOnly(config *Config) *PktProc {
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
 	proc.PktOutI.Attach(&noopPktSink{})
 	return proc
 }
 
 func setupProcDecFull(config *Config, memAcc common.TargetMemAccess, instrDec common.InstrDecode) (*PktProc, *PktDecode, *testTrcElemIn) {
 	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config)
-	dec := manager.CreatePktDecode(0, config)
+	proc := manager.CreatePktProc(0, config).(*PktProc)
+	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 	proc.PktOutI.Attach(dec)
 	dec.MemAccess.Attach(memAcc)
 	dec.InstrDecode.Attach(instrDec)

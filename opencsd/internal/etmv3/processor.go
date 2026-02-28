@@ -534,7 +534,7 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 	dpResp := ocsd.RespFatalNotInit
 	if true { // assuming p.isInit=true conceptually
 		if !p.bSendPartPkt {
-			dpResp = p.PktOutI.First().PacketDataIn(ocsd.OpData, p.packetIndex, &p.currPacket)
+			dpResp = p.OutputDecodedPacket(p.packetIndex, &p.currPacket)
 			if p.bStreamSync {
 				p.processState = procHdr
 			} else {
@@ -542,7 +542,7 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 			}
 			p.currPacketData = p.currPacketData[:0]
 		} else {
-			dpResp = p.PktOutI.First().PacketDataIn(ocsd.OpData, p.packetIndex, &p.currPacket)
+			dpResp = p.OutputDecodedPacket(p.packetIndex, &p.currPacket)
 			p.processState = p.postPartPktState
 			p.packetIndex += ocsd.TrcIndex(len(p.partPktData))
 			p.bSendPartPkt = false
