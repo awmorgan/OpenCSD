@@ -144,6 +144,10 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, oc
 		}
 	}
 
+	if p.processState == procErr && !ocsd.DataRespIsFatal(resp) {
+		resp = ocsd.RespFatalSysErr
+	}
+
 	return uint32(p.bytesProcessed), resp
 }
 
@@ -170,6 +174,7 @@ func (p *PktProc) waitForSync(dataBlock []byte) int {
 			} else if currByte != 0x00 {
 				p.bStartOfSync = false
 			} else if len(p.currPacketData) >= 13 {
+				p.currPacket.Type = PktNotSync
 				p.setBytesPartPkt(8, waitSync, PktNotSync)
 				bSendBlock = true
 			}
@@ -628,15 +633,18 @@ func (p *PktProc) extractExceptionData() {
 		b := p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
 
-		if (b & 0xC0) == 0x40 {
-			// exception byte
-			exNum := uint16(b & 0x1F)
-			if (b & 0x20) == 0x20 {
-				p.currPacket.SetException(ocsd.ExcpNoException, exNum, true, false, 0, 0)
-			} else {
-				p.currPacket.SetException(ocsd.ExcpNoException, exNum, false, false, 0, 0)
-			}
+		if (b & 0x40) == 0x40 {
+			// Exception Byte (bit 6 = 1)
+			exNum := uint16((b >> 1) & 0x0F)
+			cancel := (b & 0x20) != 0
+			// AltISA is on bit 6, handled by extractExceptionData caller or here?
+			// C++ UpdateAltISA((dataByte & 0x40) != 0)
+			p.currPacket.Context.CurrAltIsa = true // bit 6 is 1
+			ns := (b & 0x01) != 0
+			p.currPacket.Context.CurrNS = ns
+			p.currPacket.SetException(ocsd.ExcpNoException, exNum, cancel, false, 0, 0)
 		} else {
+			// Context Information Byte (bit 6 = 0)
 			p.currPacket.Context.CurrNS = (b & 0x20) != 0
 			p.currPacket.Context.CurrHyp = (b & 0x10) != 0
 			p.currPacket.Context.CurrAltIsa = (b & 0x08) != 0
@@ -696,9 +704,9 @@ func (p *PktProc) onISyncPacket() {
 		p.currPacket.CurrISA = ocsd.ISACustom
 	}
 
-	p.currPacket.Context.CurrAltIsa = (infoByte & 0x08) != 0
-	p.currPacket.Context.CurrNS = (infoByte & 0x10) != 0
-	p.currPacket.Context.CurrHyp = (infoByte & 0x10) != 0 // ?? in spec?
+	p.currPacket.Context.CurrAltIsa = (infoByte & 0x04) != 0
+	p.currPacket.Context.CurrNS = (infoByte & 0x08) != 0
+	p.currPacket.Context.CurrHyp = (infoByte & 0x02) != 0
 	p.currPacket.Context.Updated = true
 
 	if p.Config.CtxtIDBytes() > 0 {

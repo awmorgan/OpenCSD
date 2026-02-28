@@ -4,10 +4,12 @@ import "opencsd/internal/ocsd"
 
 // CodeFollower follows the execution path by decoding instructions.
 // It interfaces with memory access and instruction decode.
+// memAccess and idDecode are pointers to the decoder's live attachment points,
+// so subsequent Attach calls on the decoder are immediately visible here.
 type CodeFollower struct {
 	instrInfo ocsd.InstrInfo
-	memAccess AttachPt[TargetMemAccess]
-	idDecode  AttachPt[InstrDecode]
+	memAccess *AttachPt[TargetMemAccess]
+	idDecode  *AttachPt[InstrDecode]
 	stAddr    ocsd.VAddr
 	enAddr    ocsd.VAddr
 	nextAddr  ocsd.VAddr
@@ -32,18 +34,13 @@ func NewCodeFollower() *CodeFollower {
 		instructs: 0,
 		valid:     false,
 	}
-	cf.memAccess.SetEnabled(true)
-	cf.idDecode.SetEnabled(true)
 	return cf
 }
 
 func (cf *CodeFollower) InitInterfaces(memAccess *AttachPt[TargetMemAccess], idDecode *AttachPt[InstrDecode]) {
-	cf.memAccess = *memAccess
-	cf.idDecode = *idDecode
-	cf.valid = false
-	if cf.memAccess.HasAttachedAndEnabled() && cf.idDecode.HasAttachedAndEnabled() {
-		cf.valid = true
-	}
+	cf.memAccess = memAccess
+	cf.idDecode = idDecode
+	// valid is computed lazily in FollowSingleInstr so newly-attached mocks are seen
 }
 
 func (cf *CodeFollower) SetArchProfile(arch ocsd.ArchProfile) {
@@ -65,6 +62,10 @@ func (cf *CodeFollower) SetISA(isa ocsd.ISA) {
 }
 
 func (cf *CodeFollower) HasNextInstr() bool {
+	return cf.bHasNxt
+}
+
+func (cf *CodeFollower) HasNextAddr() bool {
 	return cf.bHasNxt
 }
 
@@ -92,6 +93,14 @@ func (cf *CodeFollower) GetInstrInfo() *ocsd.InstrInfo {
 	return &cf.instrInfo
 }
 
+func (cf *CodeFollower) RangeSt() ocsd.VAddr {
+	return cf.stAddr
+}
+
+func (cf *CodeFollower) RangeEn() ocsd.VAddr {
+	return cf.enAddr
+}
+
 // FollowSingleInstr follows execution from the address for one instruction.
 func (cf *CodeFollower) FollowSingleInstr(addr ocsd.VAddr) ocsd.Err {
 	cf.stAddr = addr
@@ -101,6 +110,9 @@ func (cf *CodeFollower) FollowSingleInstr(addr ocsd.VAddr) ocsd.Err {
 	cf.naccErr = false
 	cf.instructs = 0
 
+	// Recompute valid every call so late-attached mocks are picked up
+	cf.valid = cf.memAccess != nil && cf.idDecode != nil &&
+		cf.memAccess.HasAttachedAndEnabled() && cf.idDecode.HasAttachedAndEnabled()
 	if !cf.valid {
 		return ocsd.ErrNotInit
 	}
@@ -116,6 +128,7 @@ func (cf *CodeFollower) FollowSingleInstr(addr ocsd.VAddr) ocsd.Err {
 		cf.naccErr = true
 		return ocsd.ErrMemNacc
 	}
+	_ = err
 
 	cf.instrInfo.Opcode = 0
 	for i := 0; i < int(bytesReq); i++ {
@@ -132,12 +145,14 @@ func (cf *CodeFollower) FollowSingleInstr(addr ocsd.VAddr) ocsd.Err {
 		}
 		cf.instrInfo.Opcode |= uint32(pData2[0]) << 16
 		cf.instrInfo.Opcode |= uint32(pData2[1]) << 24
+		_ = err2
 	}
 
 	err = cf.idDecode.First().DecodeInstruction(&cf.instrInfo)
 	if err != ocsd.OK {
 		return err
 	}
+	_ = err
 
 	cf.instructs = 1
 	cf.enAddr = addr + ocsd.VAddr(cf.instrInfo.InstrSize)
@@ -150,4 +165,55 @@ func (cf *CodeFollower) FollowSingleInstr(addr ocsd.VAddr) ocsd.Err {
 
 	cf.bHasNxt = true
 	return ocsd.OK
+}
+
+// FollowSingleAtom follows instructions in a loop until a waypoint is found, then applies the atom.
+func (cf *CodeFollower) FollowSingleAtom(addr ocsd.VAddr, atom ocsd.AtmVal) ocsd.Err {
+	saveStAddr := addr
+	currAddr := addr
+	cf.stAddr = addr
+	cf.enAddr = addr
+	cf.nextAddr = addr
+	cf.bHasNxt = false
+	cf.naccErr = false
+	cf.instructs = 0
+
+	totalInstructs := uint32(0)
+
+	for {
+		err := cf.FollowSingleInstr(currAddr)
+		if err != ocsd.OK {
+			// cf.instructs will have the number of instructions BEFORE the nacc
+			cf.instructs = totalInstructs
+			cf.stAddr = saveStAddr
+			return err
+		}
+		totalInstructs++
+
+		if cf.instrInfo.Type != ocsd.InstrOther {
+			// Waypoint found, apply atom
+			cf.instructs = totalInstructs
+			if atom == ocsd.AtomE {
+				// branch taken, cf.nextAddr is already set by FollowSingleInstr for direct branches
+				if cf.instrInfo.Type == ocsd.InstrBrIndirect {
+					cf.bHasNxt = false
+				}
+			} else {
+				// branch NOT taken
+				cf.nextAddr = cf.enAddr
+				cf.bHasNxt = true
+			}
+			cf.stAddr = saveStAddr
+			return ocsd.OK
+		}
+
+		if totalInstructs >= 1200 { // Matches typical OpenCSD limits
+			cf.instructs = totalInstructs
+			cf.stAddr = saveStAddr
+			cf.nextAddr = cf.enAddr
+			cf.bHasNxt = true
+			return ocsd.ErrIRangeLimitOverrun
+		}
+		currAddr = cf.nextAddr
+	}
 }

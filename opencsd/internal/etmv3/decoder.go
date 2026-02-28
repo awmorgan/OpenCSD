@@ -401,6 +401,7 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 		pElem.ElemType = common.GenElemPeContext
 		pElem.Context = *d.peContext
 		pElem.ISA = packetIn.CurrISA
+		d.codeFollower.SetISA(packetIn.CurrISA)
 
 		if packetIn.ISyncInfo.HasCycleCount {
 			pElem.CycleCount = packetIn.CycleCount
@@ -440,25 +441,39 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 
 	if packetIn.Exception.Present {
 		if packetIn.Context.UpdatedC || packetIn.Context.UpdatedV || packetIn.Context.Updated {
-			sec := ocsd.SecSecure
-			if packetIn.Context.CurrNS {
-				sec = ocsd.SecNonsecure
-			}
-			if sec != d.peContext.SecurityLevel {
-				d.peContext.SecurityLevel = sec
+			if packetIn.Context.UpdatedC && d.peContext.ContextID != packetIn.Context.CtxtID {
+				d.peContext.ContextID = packetIn.Context.CtxtID
+				d.peContext.SetCtxtIDValid(true)
 				bUpdatePEContext = true
 			}
+			if packetIn.Context.UpdatedV && d.peContext.VMID != uint32(packetIn.Context.VMID) {
+				d.peContext.VMID = uint32(packetIn.Context.VMID)
+				d.peContext.SetVMIDValid(true)
+				bUpdatePEContext = true
+			}
+			if packetIn.Context.Updated {
+				sec := ocsd.SecSecure
+				if packetIn.Context.CurrNS {
+					sec = ocsd.SecNonsecure
+				}
+				if sec != d.peContext.SecurityLevel {
+					d.peContext.SecurityLevel = sec
+					bUpdatePEContext = true
+				}
 
-			el := ocsd.ELUnknown
-			if packetIn.Context.CurrHyp {
-				el = ocsd.EL2
-			}
-			if el != d.peContext.ExceptionLevel {
-				d.peContext.ExceptionLevel = el
-				d.peContext.SetELValid(true)
-				bUpdatePEContext = true
+				el := ocsd.ELUnknown
+				if packetIn.Context.CurrHyp {
+					el = ocsd.EL2
+				}
+				if el != d.peContext.ExceptionLevel {
+					d.peContext.ExceptionLevel = el
+					d.peContext.SetELValid(true)
+					bUpdatePEContext = true
+				}
 			}
 		}
+
+		d.codeFollower.SetISA(packetIn.CurrISA)
 
 		if bUpdatePEContext {
 			pElem, err := d.getNextOpElem()
@@ -510,7 +525,7 @@ func (d *PktDecode) pendExceptionReturn() {
 // processPHdr uses the etmv3Atoms struct pattern natively in Go inline since it doesn't need external exposure.
 func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 	packetIn := d.CurrPacketIn
-	isa := packetIn.CurrISA
+	isa := d.codeFollower.GetInstrInfo().Isa
 
 	// Mimicking etmv3Atoms behaviors
 	atomsNum := packetIn.Atom.Num
@@ -574,9 +589,12 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 	if d.peContext.SecurityLevel == ocsd.SecSecure {
 		memSpace = ocsd.MemSpaceS
 	}
+	var pElem *common.TraceElement
+	var err error
+
 	d.codeFollower.SetMemSpace(memSpace)
 
-	for atomsNum >= 0 { // process atoms until all are handled (also handles 0-atom CC-only packet)
+	for {
 		if d.bNeedAddr {
 			if !d.bSentUnknown || d.Config.IsCycleAcc() {
 				pElem, err := d.getNextOpElem()
@@ -598,108 +616,78 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 			}
 			atomsNum = 0 // clear all
 		} else {
-			pElem, err := d.getNextOpElem()
-			if err != nil {
-				d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
-				d.unsyncInfo = common.UnsyncBadPacket
-				d.resetDecoder()
-				return ocsd.RespFatalSysErr
-			}
-			pElem.ElemType = common.GenElemInstrRange
-
-			if d.Config.IsCycleAcc() {
-				if atomsNum == 0 {
-					pElem.ElemType = common.GenElemCycleCount
-				}
-				if hasAtomCC() {
-					pElem.CycleCount = getAtomCC()
-				}
-			}
-
 			if atomsNum > 0 {
-				d.codeFollower.SetISA(isa)
-
 				val := ocsd.AtomN
 				if (enBits & 0x1) == 1 {
 					val = ocsd.AtomE
 				}
 
-				// Inline FollowSingleAtom logic
-				var errCF ocsd.Err = ocsd.OK
-				stAddr := d.iAddr
-				var lastInstr *ocsd.InstrInfo
-				hasRange := false
-
-				for !d.codeFollower.IsNaccErr() && !d.bNeedAddr {
-					errCF = d.codeFollower.FollowSingleInstr(ocsd.VAddr(d.iAddr))
-					if errCF != ocsd.OK {
-						break
-					}
-					hasRange = true
-					lastInstr = d.codeFollower.GetInstrInfo()
-
-					if lastInstr.Type == ocsd.InstrOther {
-						d.iAddr = uint64(d.codeFollower.GetNextAddr())
-						continue
-					}
-					break
+				// Follow instructions for this atom
+				errCF := d.codeFollower.FollowSingleAtom(ocsd.VAddr(d.iAddr), val)
+				if errCF != ocsd.OK && errCF != ocsd.ErrMemNacc {
+					d.LogError(common.NewErrorMsg(ocsd.ErrSevError, errCF, "Error following atom"))
+					return ocsd.RespFatalSysErr
 				}
 
-				if hasRange && lastInstr != nil {
-					pElem.StAddr = ocsd.VAddr(stAddr)
-					pElem.EnAddr = ocsd.VAddr(d.iAddr) + ocsd.VAddr(lastInstr.InstrSize)
+				if d.codeFollower.GetNumInstructs() > 0 {
+					pElem, err = d.getNextOpElem()
+					if err != nil {
+						d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
+						return ocsd.RespFatalSysErr
+					}
+					pElem.ElemType = common.GenElemInstrRange
+					pElem.StAddr = d.codeFollower.RangeSt()
+					pElem.EnAddr = d.codeFollower.RangeEn()
 
+					instrInfo := d.codeFollower.GetInstrInfo()
 					pElem.SetLastInstrExec(val == ocsd.AtomE)
-					pElem.LastIType = lastInstr.Type
-					pElem.LastISubtype = lastInstr.SubType
-					pElem.SetLastInstrSz(lastInstr.InstrSize)
-					pElem.SetLastInstrCond(lastInstr.IsConditional != 0)
+					pElem.LastIType = instrInfo.Type
+					pElem.LastISubtype = instrInfo.SubType
+					pElem.SetLastInstrSz(instrInfo.InstrSize)
+					pElem.SetLastInstrCond(instrInfo.IsConditional != 0)
 					pElem.ISA = isa
 
-					if lastInstr.Type != ocsd.InstrOther {
-						if val == ocsd.AtomE {
-							if lastInstr.Type == ocsd.InstrBr {
-								d.iAddr = uint64(lastInstr.BranchAddr)
-							} else {
-								d.setNeedAddr(true)
-							}
-						} else {
-							d.iAddr = uint64(d.codeFollower.GetNextAddr())
-						}
-					} else {
-						d.iAddr = uint64(d.codeFollower.GetNextAddr())
+					if d.Config.IsCycleAcc() && hasAtomCC() {
+						pElem.SetCycleCount(getAtomCC())
 					}
 
-					isa = lastInstr.NextIsa
+					d.iAddr = uint64(d.codeFollower.GetNextAddr())
+					isa = instrInfo.NextIsa
+
+					if !d.codeFollower.HasNextAddr() {
+						d.setNeedAddr(true)
+					}
 				}
 
-				if d.codeFollower.IsNaccErr() {
-					if d.codeFollower.GetNumInstructs() > 0 {
-						pElem, err = d.getNextOpElem()
-						if err != nil {
-							d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
-							d.unsyncInfo = common.UnsyncBadPacket
-							d.resetDecoder()
-							return ocsd.RespFatalSysErr
-						}
-						pElem.ElemType = common.GenElemAddrNacc
-					} else {
-						pElem.ElemType = common.GenElemAddrNacc
+				if errCF == ocsd.ErrMemNacc {
+					pElem, err = d.getNextOpElem()
+					if err != nil {
+						d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
+						return ocsd.RespFatalSysErr
 					}
-					pElem.StAddr = ocsd.VAddr(d.codeFollower.GetNextAddr())
+					pElem.ElemType = common.GenElemAddrNacc
+					pElem.StAddr = d.codeFollower.GetNextAddr()
 					pElem.Payload.ExceptionNum = uint32(memSpace)
 					d.setNeedAddr(true)
 					d.codeFollower.ClearError()
 				}
-			}
-
-			// clearAtom
-			enBits >>= 1
-			if atomsNum > 0 {
-				atomsNum--
+			} else if d.Config.IsCycleAcc() {
+				// CC only packet (atomsNum == 0)
+				pElem, err := d.getNextOpElem()
+				if err != nil {
+					d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
+					return ocsd.RespFatalSysErr
+				}
+				pElem.ElemType = common.GenElemCycleCount
+				pElem.CycleCount = getRemainCC()
 			}
 		}
 
+		// clearAtom
+		enBits >>= 1
+		if atomsNum > 0 {
+			atomsNum--
+		}
 		if atomsNum == 0 {
 			break
 		}

@@ -337,7 +337,7 @@ func TestDecoderAllPackets(t *testing.T) {
 func setupDecFast(config *Config) (*PktDecode, *testTrcElemIn) {
 	manager := NewDecoderManager()
 	dec := manager.CreatePktDecode(0, config)
-	dec.MemAccess.Attach(&mockMemAcc{})
+	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
 	dec.InstrDecode.Attach(&mockInstrDecode{})
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)

@@ -1,0 +1,2110 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>etmv3: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">opencsd/internal/etmv3/config.go (100.0%)</option>
+				
+				<option value="file1">opencsd/internal/etmv3/decoder.go (76.4%)</option>
+				
+				<option value="file2">opencsd/internal/etmv3/packet.go (73.3%)</option>
+				
+				<option value="file3">opencsd/internal/etmv3/processor.go (88.6%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package etmv3
+
+import (
+        "fmt"
+        "opencsd/internal/ocsd"
+)
+
+// Config represents the hardware configuration for an ETMv3 trace macrocell.
+// This interprets the standard ETMv3 configuration registers.
+type Config struct {
+        RegIDR   uint32
+        RegCtrl  uint32
+        RegCCER  uint32
+        RegTrcID uint32
+        ArchVer  ocsd.ArchVersion
+        CoreProf ocsd.CoreProfile
+}
+
+// Register bit constants
+const (
+        ctrlDataVal  uint32 = 0x4
+        ctrlDataAddr uint32 = 0x8
+        ctrlCycleAcc uint32 = 0x1000
+        ctrlDataOnly uint32 = 0x100000
+        ctrlTsEna    uint32 = 0x1 &lt;&lt; 28
+        ctrlVmidEna  uint32 = 0x1 &lt;&lt; 30
+
+        ccerHasTs   uint32 = 0x1 &lt;&lt; 22
+        ccerVirtExt uint32 = 0x1 &lt;&lt; 26
+        ccerTs64Bit uint32 = 0x1 &lt;&lt; 29
+
+        idrAltBranch uint32 = 0x100000
+)
+
+// TraceMode defines the combination of trace data enabled
+type TraceMode int
+
+const (
+        TMInstrOnly TraceMode = iota
+        TMIDataVal
+        TMIDataAddr
+        TMIDataValAddr
+        TMDataOnlyVal
+        TMDataOnlyAddr
+        TMDataOnlyValAddr
+)
+
+// TraceMode returns the effective trace mode based on the control register
+func (c *Config) TraceMode() TraceMode <span class="cov8" title="1">{
+        if c.IsInstrTrace() </span><span class="cov8" title="1">{
+                if c.IsDataAddrTrace() &amp;&amp; c.IsDataValTrace() </span><span class="cov8" title="1">{
+                        return TMIDataValAddr
+                }</span>
+                <span class="cov8" title="1">if c.IsDataAddrTrace() </span><span class="cov8" title="1">{
+                        return TMIDataAddr
+                }</span>
+                <span class="cov8" title="1">if c.IsDataValTrace() </span><span class="cov8" title="1">{
+                        return TMIDataVal
+                }</span>
+                <span class="cov8" title="1">return TMInstrOnly</span>
+        }
+        <span class="cov8" title="1">if c.IsDataAddrTrace() &amp;&amp; c.IsDataValTrace() </span><span class="cov8" title="1">{
+                return TMDataOnlyValAddr
+        }</span>
+        <span class="cov8" title="1">if c.IsDataAddrTrace() </span><span class="cov8" title="1">{
+                return TMDataOnlyAddr
+        }</span>
+        <span class="cov8" title="1">return TMDataOnlyVal</span>
+}
+
+func (c *Config) IsInstrTrace() bool    <span class="cov8" title="1">{ return (c.RegCtrl &amp; ctrlDataOnly) == 0 }</span>
+func (c *Config) IsDataValTrace() bool  <span class="cov8" title="1">{ return (c.RegCtrl &amp; ctrlDataVal) != 0 }</span>
+func (c *Config) IsDataAddrTrace() bool <span class="cov8" title="1">{ return (c.RegCtrl &amp; ctrlDataAddr) != 0 }</span>
+func (c *Config) IsDataTrace() bool     <span class="cov8" title="1">{ return (c.RegCtrl &amp; (ctrlDataAddr | ctrlDataVal)) != 0 }</span>
+
+func (c *Config) IsCycleAcc() bool <span class="cov8" title="1">{ return (c.RegCtrl &amp; ctrlCycleAcc) != 0 }</span>
+
+func (c *Config) MinorRev() int <span class="cov8" title="1">{ return int((c.RegIDR &amp; 0xF0) &gt;&gt; 4) }</span>
+
+func (c *Config) IsV7MArch() bool <span class="cov8" title="1">{
+        return c.ArchVer == ocsd.ArchV7 &amp;&amp; c.CoreProf == ocsd.ProfileCortexM
+}</span>
+
+func (c *Config) IsAltBranch() bool <span class="cov8" title="1">{
+        return (c.RegIDR&amp;idrAltBranch) != 0 &amp;&amp; c.MinorRev() &gt;= 4
+}</span>
+
+func (c *Config) CtxtIDBytes() int <span class="cov8" title="1">{
+        switch (c.RegCtrl &gt;&gt; 14) &amp; 0x3 </span>{
+        case 1:<span class="cov8" title="1">
+                return 1</span>
+        case 2:<span class="cov8" title="1">
+                return 2</span>
+        case 3:<span class="cov8" title="1">
+                return 4</span>
+        default:<span class="cov8" title="1">
+                return 0</span>
+        }
+}
+
+func (c *Config) HasVirtExt() bool  <span class="cov8" title="1">{ return (c.RegCCER &amp; ccerVirtExt) != 0 }</span>
+func (c *Config) IsVMIDTrace() bool <span class="cov8" title="1">{ return (c.RegCtrl &amp; ctrlVmidEna) != 0 }</span>
+
+func (c *Config) HasTS() bool       <span class="cov8" title="1">{ return (c.RegCCER &amp; ccerHasTs) != 0 }</span>
+func (c *Config) IsTSEnabled() bool <span class="cov8" title="1">{ return (c.RegCtrl &amp; ctrlTsEna) != 0 }</span>
+func (c *Config) TSPkt64() bool     <span class="cov8" title="1">{ return (c.RegCCER &amp; ccerTs64Bit) != 0 }</span>
+
+func (c *Config) TraceID() uint8 <span class="cov8" title="1">{ return uint8(c.RegTrcID &amp; 0x7F) }</span>
+
+// String returns a brief description of the config.
+func (c *Config) String() string <span class="cov8" title="1">{
+        return fmt.Sprintf("ETMv3 Config [ID=0x%02x, IDR=0x%08x, CTRL=0x%08x]", c.TraceID(), c.RegIDR, c.RegCtrl)
+}</span>
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package etmv3
+
+import (
+        "fmt"
+        "opencsd/internal/common"
+        "opencsd/internal/ocsd"
+)
+
+type decoderState int
+
+const (
+        noSync decoderState = iota
+        waitAsync
+        waitISync
+        decodePkts
+        sendPkts
+)
+
+// PktDecode implements the ETMv3 packet decoder converting packets to generic TraceElements
+// Ported from trc_pkt_decode_etmv3.cpp
+type PktDecode struct {
+        *common.PktDecodeBase[Packet, Config]
+
+        currState  decoderState
+        unsyncInfo common.UnsyncInfo
+
+        codeFollower *common.CodeFollower
+
+        iAddr        uint64
+        bNeedAddr    bool
+        bSentUnknown bool
+        bWaitISync   bool
+
+        peContext      *ocsd.PEContext
+        outputElemList *common.GenElemList
+
+        csID uint8
+}
+
+// NewPktDecode creates a new ETMv3 trace decoder
+func NewPktDecode(instID int) *PktDecode <span class="cov8" title="1">{
+        d := &amp;PktDecode{
+                peContext:      &amp;ocsd.PEContext{},
+                outputElemList: common.NewGenElemList(),
+                codeFollower:   common.NewCodeFollower(),
+        }
+        d.PktDecodeBase = &amp;common.PktDecodeBase[Packet, Config]{}
+        d.InitPktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV3", instID))
+
+        d.FnProcessPacket = d.ProcessPacket
+        d.FnOnEOT = d.OnEOT
+        d.FnOnReset = d.OnReset
+        d.FnOnFlush = d.OnFlush
+        d.FnOnProtocolConfig = d.OnProtocolConfig
+
+        d.initDecoder()
+        return d
+}</span>
+
+func (d *PktDecode) initDecoder() <span class="cov8" title="1">{
+        d.csID = 0
+        d.resetDecoder()
+        d.unsyncInfo = common.UnsyncInitDecoder
+
+        // Need a cast / function property attachment in Go compared to C++ base classes
+        d.codeFollower.InitInterfaces(&amp;d.MemAccess, &amp;d.InstrDecode)
+        d.outputElemList.InitSendIf(&amp;d.TraceElemOut)
+}</span>
+
+func (d *PktDecode) resetDecoder() <span class="cov8" title="1">{
+        d.currState = noSync
+        d.bNeedAddr = true
+        d.bSentUnknown = false
+        d.bWaitISync = false
+        d.outputElemList.Reset()
+}</span>
+
+func (d *PktDecode) OnProtocolConfig() ocsd.Err <span class="cov8" title="1">{
+        if d.Config == nil </span><span class="cov0" title="0">{
+                return ocsd.ErrNotInit
+        }</span>
+
+        <span class="cov8" title="1">d.csID = d.Config.TraceID()
+
+        if d.Config.TraceMode() != TMInstrOnly </span><span class="cov0" title="0">{
+                err := ocsd.ErrHWCfgUnsupp
+                d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err, "ETMv3 trace decoder : data trace decode not yet supported"))
+                return err
+        }</span>
+
+        <span class="cov8" title="1">archProfile := ocsd.ArchProfile{
+                Arch:    d.Config.ArchVer,
+                Profile: d.Config.CoreProf,
+        }
+
+        d.codeFollower.SetArchProfile(archProfile)
+        d.codeFollower.SetTraceID(d.csID)
+        d.outputElemList.InitCSID(d.csID)
+
+        return ocsd.OK</span>
+}
+
+func (d *PktDecode) OnReset() ocsd.DatapathResp <span class="cov8" title="1">{
+        d.unsyncInfo = common.UnsyncResetDecoder
+        d.resetDecoder()
+        return ocsd.RespCont
+}</span>
+
+func (d *PktDecode) OnFlush() ocsd.DatapathResp <span class="cov8" title="1">{
+        resp := ocsd.RespCont
+        if d.currState == sendPkts </span><span class="cov8" title="1">{
+                resp = d.outputElemList.SendElements()
+                if ocsd.DataRespIsCont(resp) </span><span class="cov8" title="1">{
+                        if d.bWaitISync </span><span class="cov8" title="1">{
+                                d.currState = waitISync
+                        }</span> else<span class="cov8" title="1"> {
+                                d.currState = decodePkts
+                        }</span>
+                }
+        }
+        <span class="cov8" title="1">return resp</span>
+}
+
+func (d *PktDecode) OnEOT() ocsd.DatapathResp <span class="cov8" title="1">{
+        resp := ocsd.RespCont
+
+        pElem, err := d.getNextOpElem()
+        if err != nil </span><span class="cov0" title="0">{
+                d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
+                d.resetDecoder()
+                return ocsd.RespFatalSysErr
+        }</span>
+        <span class="cov8" title="1">pElem.ElemType = common.GenElemEOTrace
+        pElem.Payload.UnsyncEOTInfo = common.UnsyncEOT
+        d.outputElemList.CommitAllPendElem()
+
+        d.currState = sendPkts
+        resp = d.outputElemList.SendElements()
+        if ocsd.DataRespIsCont(resp) </span><span class="cov8" title="1">{
+                d.currState = decodePkts
+        }</span>
+
+        <span class="cov8" title="1">return resp</span>
+}
+
+func (d *PktDecode) ProcessPacket() ocsd.DatapathResp <span class="cov8" title="1">{
+        resp := ocsd.RespCont
+        pktDone := false
+
+        if d.Config == nil </span><span class="cov0" title="0">{
+                return ocsd.RespFatalNotInit
+        }</span>
+
+        <span class="cov8" title="1">for !pktDone </span><span class="cov8" title="1">{
+                switch d.currState </span>{
+                case noSync:<span class="cov8" title="1">
+                        resp = d.sendUnsyncPacket()
+                        d.currState = waitAsync</span>
+                case waitAsync:<span class="cov8" title="1">
+                        packetIn := d.CurrPacketIn
+                        if packetIn.Type == PktASync </span><span class="cov8" title="1">{
+                                d.currState = waitISync
+                        }</span>
+                        <span class="cov8" title="1">pktDone = true</span>
+                case waitISync:<span class="cov8" title="1">
+                        d.bWaitISync = true
+                        packetIn := d.CurrPacketIn
+                        if packetIn.Type == PktISync || packetIn.Type == PktISyncCycle </span><span class="cov8" title="1">{
+                                resp = d.processISync(packetIn.Type == PktISyncCycle, true)
+                                d.currState = sendPkts
+                                d.bWaitISync = false
+                        }</span> else<span class="cov8" title="1"> if d.preISyncValid(packetIn.Type) </span><span class="cov8" title="1">{
+                                resp = d.decodePacket(&amp;pktDone)
+                        }</span> else<span class="cov8" title="1"> {
+                                pktDone = true
+                        }</span>
+                case decodePkts:<span class="cov8" title="1">
+                        resp = d.decodePacket(&amp;pktDone)</span>
+                case sendPkts:<span class="cov8" title="1">
+                        resp = d.outputElemList.SendElements()
+                        if ocsd.DataRespIsCont(resp) </span><span class="cov8" title="1">{
+                                if d.bWaitISync </span><span class="cov8" title="1">{
+                                        d.currState = waitISync
+                                }</span> else<span class="cov8" title="1"> {
+                                        d.currState = decodePkts
+                                }</span>
+                        }
+                        <span class="cov8" title="1">pktDone = true</span>
+                default:<span class="cov0" title="0">
+                        pktDone = true
+                        d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrFail, "Unknown Decoder State"))
+                        d.resetDecoder()
+                        resp = ocsd.RespFatalSysErr</span>
+                }
+        }
+        <span class="cov8" title="1">return resp</span>
+}
+
+func (d *PktDecode) getNextOpElem() (*common.TraceElement, error) <span class="cov8" title="1">{
+        pElem := d.outputElemList.GetNextElem(d.IndexCurrPkt)
+        if pElem == nil </span><span class="cov0" title="0">{
+                return nil, &amp;common.Error{Code: ocsd.ErrMem, Idx: d.IndexCurrPkt, ChanID: d.csID, Message: "Memory Allocation Error - fatal"}
+        }</span>
+        <span class="cov8" title="1">return pElem, nil</span>
+}
+
+func (d *PktDecode) preISyncValid(pktType PktType) bool <span class="cov8" title="1">{
+        if pktType == PktTimestamp || (d.Config.IsCycleAcc() &amp;&amp; (pktType == PktCycleCount || pktType == PktPHdr)) </span><span class="cov8" title="1">{
+                return true
+        }</span>
+        <span class="cov8" title="1">return false</span>
+}
+
+func (d *PktDecode) sendUnsyncPacket() ocsd.DatapathResp <span class="cov8" title="1">{
+        pElem, err := d.getNextOpElem()
+        if err != nil </span><span class="cov0" title="0">{
+                d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
+                d.unsyncInfo = common.UnsyncBadPacket
+                d.resetDecoder()
+                return ocsd.RespFatalSysErr
+        }</span>
+
+        <span class="cov8" title="1">pElem.ElemType = common.GenElemNoSync
+        pElem.Payload.UnsyncEOTInfo = d.unsyncInfo
+        return d.outputElemList.SendElements()</span>
+}
+
+func (d *PktDecode) decodePacket(pktDone *bool) ocsd.DatapathResp <span class="cov8" title="1">{
+        resp := ocsd.RespCont
+        *pktDone = false
+
+        packetIn := d.CurrPacketIn
+
+        if packetIn.Type != PktBranchAddress </span><span class="cov8" title="1">{
+                d.outputElemList.CommitAllPendElem()
+        }</span>
+
+        <span class="cov8" title="1">var pElem *common.TraceElement
+        var err error
+
+        switch packetIn.Type </span>{
+        case PktNotSync:<span class="cov0" title="0">
+                d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "Trace Packet Synchronisation Lost"))
+                d.unsyncInfo = common.UnsyncBadPacket
+                d.resetDecoder()
+                *pktDone = true
+                return ocsd.RespFatalSysErr</span>
+
+        case PktIncompleteEOT, PktASync, PktIgnore:<span class="cov0" title="0"></span>
+                // ignore
+        case PktCycleCount:<span class="cov8" title="1">
+                pElem, err = d.getNextOpElem()
+                if err == nil </span><span class="cov8" title="1">{
+                        pElem.ElemType = common.GenElemCycleCount
+                        pElem.CycleCount = packetIn.CycleCount
+                }</span>
+        case PktTrigger:<span class="cov8" title="1">
+                pElem, err = d.getNextOpElem()
+                if err == nil </span><span class="cov8" title="1">{
+                        pElem.ElemType = common.GenElemEvent
+                        pElem.Payload.TraceEvent.EvType = common.EventTrigger
+                }</span>
+        case PktBranchAddress:<span class="cov8" title="1">
+                resp = d.processBranchAddr()</span>
+        case PktISyncCycle, PktISync:<span class="cov8" title="1">
+                resp = d.processISync(packetIn.Type == PktISyncCycle, false)</span>
+        case PktPHdr:<span class="cov8" title="1">
+                resp = d.processPHdr()</span>
+        case PktContextID:<span class="cov8" title="1">
+                pElem, err = d.getNextOpElem()
+                if err == nil </span><span class="cov8" title="1">{
+                        pElem.ElemType = common.GenElemPeContext
+                        d.peContext.ContextID = packetIn.Context.CtxtID
+                        d.peContext.SetCtxtIDValid(true)
+                        pElem.Context = *d.peContext
+                }</span>
+        case PktVMID:<span class="cov8" title="1">
+                pElem, err = d.getNextOpElem()
+                if err == nil </span><span class="cov8" title="1">{
+                        pElem.ElemType = common.GenElemPeContext
+                        d.peContext.VMID = uint32(packetIn.Context.VMID)
+                        d.peContext.SetVMIDValid(true)
+                        pElem.Context = *d.peContext
+                }</span>
+        case PktExceptionEntry:<span class="cov0" title="0">
+                pElem, err = d.getNextOpElem()
+                if err == nil </span><span class="cov0" title="0">{
+                        pElem.ElemType = common.GenElemException
+                        pElem.SetExcepDataMarker(true)
+                }</span>
+        case PktExceptionExit:<span class="cov8" title="1">
+                pElem, err = d.getNextOpElem()
+                if err == nil </span><span class="cov8" title="1">{
+                        pElem.ElemType = common.GenElemExceptionRet
+                        d.pendExceptionReturn()
+                }</span>
+        case PktTimestamp:<span class="cov8" title="1">
+                pElem, err = d.getNextOpElem()
+                if err == nil </span><span class="cov8" title="1">{
+                        pElem.ElemType = common.GenElemTimestamp
+                        pElem.Timestamp = packetIn.Timestamp
+                }</span>
+        case PktStoreFail, PktOOOData, PktOOOAddrPlc, PktNormData, PktDataSuppressed, PktValNotTraced, PktBadTraceMode:<span class="cov0" title="0">
+                d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrHWCfgUnsupp, "Invalid packet type : Data Tracing decode not supported."))
+                resp = ocsd.RespFatalInvalidData</span>
+        case PktBadSequence:<span class="cov0" title="0">
+                d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "Bad Packet sequence."))
+                resp = ocsd.RespFatalInvalidData</span>
+        case PktReserved:<span class="cov0" title="0">
+                fallthrough</span>
+        default:<span class="cov0" title="0">
+                d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "Reserved or unknown packet ID."))
+                resp = ocsd.RespFatalInvalidData</span>
+        }
+
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
+                d.unsyncInfo = common.UnsyncBadPacket
+                d.resetDecoder()
+                *pktDone = true
+                return ocsd.RespFatalSysErr
+        }</span>
+
+        <span class="cov8" title="1">if resp == ocsd.RespFatalInvalidData </span><span class="cov0" title="0">{
+                d.unsyncInfo = common.UnsyncBadPacket
+                d.resetDecoder()
+                *pktDone = true
+                return resp
+        }</span>
+
+        <span class="cov8" title="1">if d.outputElemList.ElemToSend() </span><span class="cov8" title="1">{
+                d.currState = sendPkts
+        }</span> else<span class="cov8" title="1"> {
+                d.currState = decodePkts
+        }</span>
+        <span class="cov8" title="1">*pktDone = !d.outputElemList.ElemToSend()
+
+        return resp</span>
+}
+
+func (d *PktDecode) setNeedAddr(bNeedAddr bool) <span class="cov8" title="1">{
+        d.bNeedAddr = bNeedAddr
+        d.bSentUnknown = false
+}</span>
+
+func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp <span class="cov8" title="1">{
+        onMap := []common.TraceOnReason{common.TraceOnNormal, common.TraceOnNormal, common.TraceOnOverflow, common.TraceOnExDebug}
+
+        packetIn := d.CurrPacketIn
+        ctxtUpdate := packetIn.Context.UpdatedC || packetIn.Context.UpdatedV || packetIn.Context.Updated
+
+        pElem, err := d.getNextOpElem()
+        if err != nil </span><span class="cov0" title="0">{
+                d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
+                d.unsyncInfo = common.UnsyncBadPacket
+                d.resetDecoder()
+                return ocsd.RespFatalSysErr
+        }</span>
+
+        <span class="cov8" title="1">if firstSync || packetIn.ISyncInfo.Reason != ocsd.ISyncPeriodic </span><span class="cov8" title="1">{
+                pElem.ElemType = common.GenElemTraceOn
+                if int(packetIn.ISyncInfo.Reason) &lt; len(onMap) </span><span class="cov8" title="1">{
+                        pElem.Payload.TraceOnReason = onMap[packetIn.ISyncInfo.Reason]
+                }</span>
+                <span class="cov8" title="1">pElem, err = d.getNextOpElem()
+                if err != nil </span><span class="cov0" title="0">{
+                        d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
+                        d.unsyncInfo = common.UnsyncBadPacket
+                        d.resetDecoder()
+                        return ocsd.RespFatalSysErr
+                }</span>
+        }
+
+        <span class="cov8" title="1">if ctxtUpdate || firstSync </span><span class="cov8" title="1">{
+                if firstSync </span><span class="cov8" title="1">{
+                        d.peContext = &amp;ocsd.PEContext{}
+                }</span>
+
+                <span class="cov8" title="1">if packetIn.Context.UpdatedC </span><span class="cov8" title="1">{
+                        d.peContext.ContextID = packetIn.Context.CtxtID
+                        d.peContext.SetCtxtIDValid(true)
+                }</span>
+                <span class="cov8" title="1">if packetIn.Context.UpdatedV </span><span class="cov8" title="1">{
+                        d.peContext.VMID = uint32(packetIn.Context.VMID)
+                        d.peContext.SetVMIDValid(true)
+                }</span>
+                <span class="cov8" title="1">if packetIn.Context.Updated </span><span class="cov8" title="1">{
+                        el := ocsd.ELUnknown
+                        if packetIn.Context.CurrHyp </span><span class="cov0" title="0">{
+                                el = ocsd.EL2
+                        }</span>
+                        <span class="cov8" title="1">sec := ocsd.SecSecure
+                        if packetIn.Context.CurrNS </span><span class="cov8" title="1">{
+                                sec = ocsd.SecNonsecure
+                        }</span>
+                        <span class="cov8" title="1">d.peContext.ExceptionLevel = el
+                        d.peContext.SetELValid(true)
+                        d.peContext.SecurityLevel = sec</span>
+                }
+
+                <span class="cov8" title="1">pElem.ElemType = common.GenElemPeContext
+                pElem.Context = *d.peContext
+                pElem.ISA = packetIn.CurrISA
+                d.codeFollower.SetISA(packetIn.CurrISA)
+
+                if packetIn.ISyncInfo.HasCycleCount </span><span class="cov8" title="1">{
+                        pElem.CycleCount = packetIn.CycleCount
+                }</span>
+        }
+
+        <span class="cov8" title="1">if !packetIn.ISyncInfo.NoAddress </span><span class="cov8" title="1">{
+                if packetIn.ISyncInfo.HasLSipAddr </span><span class="cov8" title="1">{
+                        d.iAddr = packetIn.Data.Addr
+                }</span> else<span class="cov8" title="1"> {
+                        d.iAddr = packetIn.Addr
+                }</span>
+                <span class="cov8" title="1">d.setNeedAddr(false)</span>
+        }
+
+        <span class="cov8" title="1">if d.outputElemList.ElemToSend() </span><span class="cov8" title="1">{
+                d.currState = sendPkts
+        }</span> else<span class="cov0" title="0"> {
+                d.currState = decodePkts
+        }</span>
+
+        <span class="cov8" title="1">return ocsd.RespCont</span>
+}
+
+func (d *PktDecode) processBranchAddr() ocsd.DatapathResp <span class="cov8" title="1">{
+        packetIn := d.CurrPacketIn
+        bUpdatePEContext := false
+
+        if packetIn.Exception.Cancel </span><span class="cov8" title="1">{
+                d.outputElemList.CancelPendElem()
+        }</span> else<span class="cov8" title="1"> {
+                d.outputElemList.CommitAllPendElem()
+        }</span>
+
+        <span class="cov8" title="1">d.iAddr = packetIn.Addr
+        d.setNeedAddr(false)
+
+        if packetIn.Exception.Present </span><span class="cov8" title="1">{
+                if packetIn.Context.UpdatedC || packetIn.Context.UpdatedV || packetIn.Context.Updated </span><span class="cov8" title="1">{
+                        if packetIn.Context.UpdatedC &amp;&amp; d.peContext.ContextID != packetIn.Context.CtxtID </span><span class="cov0" title="0">{
+                                d.peContext.ContextID = packetIn.Context.CtxtID
+                                d.peContext.SetCtxtIDValid(true)
+                                bUpdatePEContext = true
+                        }</span>
+                        <span class="cov8" title="1">if packetIn.Context.UpdatedV &amp;&amp; d.peContext.VMID != uint32(packetIn.Context.VMID) </span><span class="cov0" title="0">{
+                                d.peContext.VMID = uint32(packetIn.Context.VMID)
+                                d.peContext.SetVMIDValid(true)
+                                bUpdatePEContext = true
+                        }</span>
+                        <span class="cov8" title="1">if packetIn.Context.Updated </span><span class="cov8" title="1">{
+                                sec := ocsd.SecSecure
+                                if packetIn.Context.CurrNS </span><span class="cov8" title="1">{
+                                        sec = ocsd.SecNonsecure
+                                }</span>
+                                <span class="cov8" title="1">if sec != d.peContext.SecurityLevel </span><span class="cov8" title="1">{
+                                        d.peContext.SecurityLevel = sec
+                                        bUpdatePEContext = true
+                                }</span>
+
+                                <span class="cov8" title="1">el := ocsd.ELUnknown
+                                if packetIn.Context.CurrHyp </span><span class="cov0" title="0">{
+                                        el = ocsd.EL2
+                                }</span>
+                                <span class="cov8" title="1">if el != d.peContext.ExceptionLevel </span><span class="cov8" title="1">{
+                                        d.peContext.ExceptionLevel = el
+                                        d.peContext.SetELValid(true)
+                                        bUpdatePEContext = true
+                                }</span>
+                        }
+                }
+
+                <span class="cov8" title="1">d.codeFollower.SetISA(packetIn.CurrISA)
+
+                if bUpdatePEContext </span><span class="cov8" title="1">{
+                        pElem, err := d.getNextOpElem()
+                        if err != nil </span><span class="cov0" title="0">{
+                                d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
+                                d.unsyncInfo = common.UnsyncBadPacket
+                                d.resetDecoder()
+                                return ocsd.RespFatalSysErr
+                        }</span>
+                        <span class="cov8" title="1">pElem.ElemType = common.GenElemPeContext
+                        pElem.Context = *d.peContext</span>
+                }
+
+                <span class="cov8" title="1">if packetIn.Exception.Number != 0 </span><span class="cov8" title="1">{
+                        pElem, err := d.getNextOpElem()
+                        if err != nil </span><span class="cov0" title="0">{
+                                d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
+                                d.unsyncInfo = common.UnsyncBadPacket
+                                d.resetDecoder()
+                                return ocsd.RespFatalSysErr
+                        }</span>
+                        <span class="cov8" title="1">pElem.ElemType = common.GenElemException
+                        pElem.Payload.ExceptionNum = uint32(packetIn.Exception.Number)</span>
+                }
+
+                <span class="cov8" title="1">if d.outputElemList.ElemToSend() </span><span class="cov8" title="1">{
+                        d.currState = sendPkts
+                }</span> else<span class="cov8" title="1"> {
+                        d.currState = decodePkts
+                }</span>
+        }
+
+        <span class="cov8" title="1">return ocsd.RespCont</span>
+}
+
+func (d *PktDecode) pendExceptionReturn() <span class="cov8" title="1">{
+        pendElem := 1
+        if d.Config.CoreProf != ocsd.ProfileCortexM </span><span class="cov8" title="1">{
+                nElem := d.outputElemList.GetNumElem()
+                if nElem &gt; 1 </span><span class="cov0" title="0">{
+                        if d.outputElemList.GetElemType(nElem-2) == common.GenElemInstrRange </span><span class="cov0" title="0">{
+                                pendElem = 2
+                        }</span>
+                }
+        }
+        <span class="cov8" title="1">d.outputElemList.PendLastNElem(pendElem)</span>
+}
+
+// processPHdr uses the etmv3Atoms struct pattern natively in Go inline since it doesn't need external exposure.
+func (d *PktDecode) processPHdr() ocsd.DatapathResp <span class="cov8" title="1">{
+        packetIn := d.CurrPacketIn
+        isa := d.codeFollower.GetInstrInfo().Isa
+
+        // Mimicking etmv3Atoms behaviors
+        atomsNum := packetIn.Atom.Num
+        enBits := packetIn.Atom.EnBits
+
+        isCCPacket := d.Config.IsCycleAcc()
+
+        hasAtomCC := func() bool </span><span class="cov8" title="1">{
+                if !isCCPacket </span><span class="cov0" title="0">{
+                        return false
+                }</span>
+                <span class="cov8" title="1">switch packetIn.PHdrFmt </span>{
+                case 3, 1:<span class="cov8" title="1">
+                        return true</span>
+                case 2:<span class="cov0" title="0">
+                        return atomsNum &gt; 1</span>
+                default:<span class="cov0" title="0">
+                        return false</span>
+                }
+        }
+
+        <span class="cov8" title="1">getAtomCC := func() uint32 </span><span class="cov8" title="1">{
+                if !isCCPacket </span><span class="cov0" title="0">{
+                        return 0
+                }</span>
+                <span class="cov8" title="1">switch packetIn.PHdrFmt </span>{
+                case 3:<span class="cov8" title="1">
+                        return packetIn.CycleCount</span>
+                case 2:<span class="cov0" title="0">
+                        if atomsNum &gt; 1 </span><span class="cov0" title="0">{
+                                return 1
+                        }</span>
+                        <span class="cov0" title="0">return 0</span>
+                case 1:<span class="cov0" title="0">
+                        return 1</span>
+                default:<span class="cov0" title="0">
+                        return 0</span>
+                }
+        }
+
+        <span class="cov8" title="1">getRemainCC := func() uint32 </span><span class="cov8" title="1">{
+                if !isCCPacket </span><span class="cov0" title="0">{
+                        return 0
+                }</span>
+                <span class="cov8" title="1">switch packetIn.PHdrFmt </span>{
+                case 3:<span class="cov8" title="1">
+                        return packetIn.CycleCount</span>
+                case 2:<span class="cov0" title="0">
+                        if atomsNum &gt; 1 </span><span class="cov0" title="0">{
+                                return 1
+                        }</span>
+                        <span class="cov0" title="0">return 0</span>
+                case 1:<span class="cov0" title="0">
+                        return uint32(atomsNum)</span>
+                default:<span class="cov8" title="1">
+                        return 0</span>
+                }
+        }
+
+        <span class="cov8" title="1">memSpace := ocsd.MemSpaceN
+        if d.peContext.SecurityLevel == ocsd.SecSecure </span><span class="cov8" title="1">{
+                memSpace = ocsd.MemSpaceS
+        }</span>
+        <span class="cov8" title="1">var pElem *common.TraceElement
+        var err error
+
+        d.codeFollower.SetMemSpace(memSpace)
+
+        for </span><span class="cov8" title="1">{
+                if d.bNeedAddr </span><span class="cov8" title="1">{
+                        if !d.bSentUnknown || d.Config.IsCycleAcc() </span><span class="cov8" title="1">{
+                                pElem, err := d.getNextOpElem()
+                                if err != nil </span><span class="cov0" title="0">{
+                                        d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
+                                        d.unsyncInfo = common.UnsyncBadPacket
+                                        d.resetDecoder()
+                                        return ocsd.RespFatalSysErr
+                                }</span>
+                                <span class="cov8" title="1">if d.bSentUnknown || atomsNum == 0 </span><span class="cov0" title="0">{
+                                        pElem.ElemType = common.GenElemCycleCount
+                                }</span> else<span class="cov8" title="1"> {
+                                        pElem.ElemType = common.GenElemAddrUnknown
+                                }</span>
+                                <span class="cov8" title="1">if d.Config.IsCycleAcc() </span><span class="cov0" title="0">{
+                                        pElem.CycleCount = getRemainCC()
+                                }</span>
+                                <span class="cov8" title="1">d.bSentUnknown = true</span>
+                        }
+                        <span class="cov8" title="1">atomsNum = 0</span> // clear all
+                } else<span class="cov8" title="1"> {
+                        if atomsNum &gt; 0 </span><span class="cov8" title="1">{
+                                val := ocsd.AtomN
+                                if (enBits &amp; 0x1) == 1 </span><span class="cov8" title="1">{
+                                        val = ocsd.AtomE
+                                }</span>
+
+                                // Follow instructions for this atom
+                                <span class="cov8" title="1">errCF := d.codeFollower.FollowSingleAtom(ocsd.VAddr(d.iAddr), val)
+                                if errCF != ocsd.OK &amp;&amp; errCF != ocsd.ErrMemNacc </span><span class="cov0" title="0">{
+                                        d.LogError(common.NewErrorMsg(ocsd.ErrSevError, errCF, "Error following atom"))
+                                        return ocsd.RespFatalSysErr
+                                }</span>
+
+                                <span class="cov8" title="1">if d.codeFollower.GetNumInstructs() &gt; 0 </span><span class="cov8" title="1">{
+                                        pElem, err = d.getNextOpElem()
+                                        if err != nil </span><span class="cov0" title="0">{
+                                                d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
+                                                return ocsd.RespFatalSysErr
+                                        }</span>
+                                        <span class="cov8" title="1">pElem.ElemType = common.GenElemInstrRange
+                                        pElem.StAddr = d.codeFollower.RangeSt()
+                                        pElem.EnAddr = d.codeFollower.RangeEn()
+
+                                        instrInfo := d.codeFollower.GetInstrInfo()
+                                        pElem.SetLastInstrExec(val == ocsd.AtomE)
+                                        pElem.LastIType = instrInfo.Type
+                                        pElem.LastISubtype = instrInfo.SubType
+                                        pElem.SetLastInstrSz(instrInfo.InstrSize)
+                                        pElem.SetLastInstrCond(instrInfo.IsConditional != 0)
+                                        pElem.ISA = isa
+
+                                        if d.Config.IsCycleAcc() &amp;&amp; hasAtomCC() </span><span class="cov8" title="1">{
+                                                pElem.SetCycleCount(getAtomCC())
+                                        }</span>
+
+                                        <span class="cov8" title="1">d.iAddr = uint64(d.codeFollower.GetNextAddr())
+                                        isa = instrInfo.NextIsa
+
+                                        if !d.codeFollower.HasNextAddr() </span><span class="cov8" title="1">{
+                                                d.setNeedAddr(true)
+                                        }</span>
+                                }
+
+                                <span class="cov8" title="1">if errCF == ocsd.ErrMemNacc </span><span class="cov8" title="1">{
+                                        pElem, err = d.getNextOpElem()
+                                        if err != nil </span><span class="cov0" title="0">{
+                                                d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
+                                                return ocsd.RespFatalSysErr
+                                        }</span>
+                                        <span class="cov8" title="1">pElem.ElemType = common.GenElemAddrNacc
+                                        pElem.StAddr = d.codeFollower.GetNextAddr()
+                                        pElem.Payload.ExceptionNum = uint32(memSpace)
+                                        d.setNeedAddr(true)
+                                        d.codeFollower.ClearError()</span>
+                                }
+                        } else<span class="cov8" title="1"> if d.Config.IsCycleAcc() </span><span class="cov8" title="1">{
+                                // CC only packet (atomsNum == 0)
+                                pElem, err := d.getNextOpElem()
+                                if err != nil </span><span class="cov0" title="0">{
+                                        d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
+                                        return ocsd.RespFatalSysErr
+                                }</span>
+                                <span class="cov8" title="1">pElem.ElemType = common.GenElemCycleCount
+                                pElem.CycleCount = getRemainCC()</span>
+                        }
+                }
+
+                // clearAtom
+                <span class="cov8" title="1">enBits &gt;&gt;= 1
+                if atomsNum &gt; 0 </span><span class="cov8" title="1">{
+                        atomsNum--
+                }</span>
+                <span class="cov8" title="1">if atomsNum == 0 </span><span class="cov8" title="1">{
+                        break</span>
+                }
+        }
+
+        <span class="cov8" title="1">numElem := d.outputElemList.GetNumElem()
+        if numElem &gt;= 1 </span><span class="cov8" title="1">{
+                if d.outputElemList.GetElemType(numElem-1) == common.GenElemInstrRange </span><span class="cov8" title="1">{
+                        d.outputElemList.PendLastNElem(1)
+                }</span>
+        }
+
+        <span class="cov8" title="1">if d.outputElemList.ElemToSend() </span><span class="cov8" title="1">{
+                d.currState = sendPkts
+        }</span> else<span class="cov8" title="1"> {
+                d.currState = decodePkts
+        }</span>
+
+        <span class="cov8" title="1">return ocsd.RespCont</span>
+}
+
+// DecoderManager is the registry factory for ETMv3 decoders
+type DecoderManager struct {
+}
+
+func NewDecoderManager() *DecoderManager <span class="cov8" title="1">{
+        return &amp;DecoderManager{}
+}</span>
+
+func (m *DecoderManager) CreatePktProc(instID int, config any) *PktProc <span class="cov8" title="1">{
+        cfg, ok := config.(*Config)
+        if !ok </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov8" title="1">proc := NewPktProc(instID)
+        proc.SetProtocolConfig(cfg)
+        return proc</span>
+}
+
+func (m *DecoderManager) CreatePktDecode(instID int, config any) *PktDecode <span class="cov8" title="1">{
+        cfg, ok := config.(*Config)
+        if !ok </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+        <span class="cov8" title="1">dec := NewPktDecode(instID)
+        dec.SetProtocolConfig(cfg)
+        return dec</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package etmv3
+
+import (
+        "fmt"
+
+        "opencsd/internal/ocsd"
+)
+
+// PktType defines the various types of ETMv3 packets
+type PktType int
+
+const (
+        // markers for unknown packets
+        PktNoError       PktType = iota //!&lt; no error in packet - supplimentary data.
+        PktNotSync                      //!&lt; no sync found yet
+        PktIncompleteEOT                //!&lt; flushing incomplete/empty packet at end of trace.
+
+        // markers for valid packets
+        PktBranchAddress
+        PktASync
+        PktCycleCount
+        PktISync
+        PktISyncCycle
+        PktTrigger
+        PktPHdr
+        PktStoreFail
+        PktOOOData
+        PktOOOAddrPlc
+        PktNormData
+        PktDataSuppressed
+        PktValNotTraced
+        PktIgnore
+        PktContextID
+        PktVMID
+        PktExceptionEntry
+        PktExceptionExit
+        PktTimestamp
+
+        // internal processing types
+        PktBranchOrBypassEOT
+
+        // packet errors
+        PktBadSequence  //!&lt; invalid sequence for packet type
+        PktBadTraceMode //!&lt; invalid packet type for this trace mode.
+        PktReserved     //!&lt; packet type reserved.
+)
+
+func (pt PktType) String() string <span class="cov8" title="1">{
+        switch pt </span>{
+        case PktNoError:<span class="cov0" title="0">
+                return "PktNoError"</span>
+        case PktNotSync:<span class="cov8" title="1">
+                return "I_NOT_SYNC"</span>
+        case PktIncompleteEOT:<span class="cov0" title="0">
+                return "PktIncompleteEOT"</span>
+        case PktBranchAddress:<span class="cov8" title="1">
+                return "Branch Address"</span>
+        case PktASync:<span class="cov0" title="0">
+                return "A-Sync"</span>
+        case PktCycleCount:<span class="cov0" title="0">
+                return "Cycle Count"</span>
+        case PktISync:<span class="cov8" title="1">
+                return "I-Sync"</span>
+        case PktISyncCycle:<span class="cov0" title="0">
+                return "I-Sync (CC)"</span>
+        case PktTrigger:<span class="cov0" title="0">
+                return "Trigger"</span>
+        case PktPHdr:<span class="cov8" title="1">
+                return "P-Header"</span>
+        case PktStoreFail:<span class="cov0" title="0">
+                return "Store Fail"</span>
+        case PktOOOData:<span class="cov0" title="0">
+                return "Out of Order Data"</span>
+        case PktOOOAddrPlc:<span class="cov0" title="0">
+                return "Out of Order Address Placeholder"</span>
+        case PktNormData:<span class="cov0" title="0">
+                return "Normal Data"</span>
+        case PktDataSuppressed:<span class="cov0" title="0">
+                return "Data Suppressed"</span>
+        case PktValNotTraced:<span class="cov0" title="0">
+                return "Value Not Traced"</span>
+        case PktIgnore:<span class="cov0" title="0">
+                return "Ignore"</span>
+        case PktContextID:<span class="cov0" title="0">
+                return "Context ID"</span>
+        case PktVMID:<span class="cov0" title="0">
+                return "VMID"</span>
+        case PktExceptionEntry:<span class="cov0" title="0">
+                return "Exception Entry"</span>
+        case PktExceptionExit:<span class="cov0" title="0">
+                return "Exception Exit"</span>
+        case PktTimestamp:<span class="cov0" title="0">
+                return "Timestamp"</span>
+        case PktBranchOrBypassEOT:<span class="cov0" title="0">
+                return "PktBranchOrBypassEOT"</span>
+        case PktBadSequence:<span class="cov8" title="1">
+                return "PktBadSequence"</span>
+        case PktBadTraceMode:<span class="cov0" title="0">
+                return "PktBadTraceMode"</span>
+        case PktReserved:<span class="cov0" title="0">
+                return "PktReserved"</span>
+        default:<span class="cov8" title="1">
+                return "Unknown PktType"</span>
+        }
+}
+
+type Excep struct {
+        Type     ocsd.ArmV7Exception
+        Number   uint16
+        Present  bool
+        Cancel   bool
+        CmType   bool
+        CmResume uint8
+        CmIrqN   uint16
+}
+
+type Context struct {
+        CurrAltIsa bool   //!&lt; current Alt ISA flag for Tee / T32 (used if not in present packet)
+        CurrNS     bool   //!&lt; current NS flag  (used if not in present packet)
+        CurrHyp    bool   //!&lt; current Hyp flag  (used if not in present packet)
+        Updated    bool   //!&lt; context flags updated
+        UpdatedC   bool   //!&lt; updated CtxtID
+        UpdatedV   bool   //!&lt; updated VMID
+        CtxtID     uint32 //!&lt; Context ID
+        VMID       uint8  //!&lt; VMID
+}
+
+type Data struct {
+        Value      uint32 //!&lt; Data value
+        Addr       uint64 //!&lt; current data address
+        OooTag     uint8  //!&lt; Out of order data tag.
+        BE         bool   //!&lt; data transfers big-endian
+        UpdateBE   bool   //!&lt; updated Be flag
+        UpdateAddr bool   //!&lt; updated address
+        UpdateDVal bool   //!&lt; updated data value
+}
+
+type ISyncInfo struct {
+        Reason        ocsd.ISyncReason
+        HasCycleCount bool //!&lt; updated cycle count
+        HasLSipAddr   bool //!&lt; main address is load-store instuction, data address is overlapping instruction @ start of trace
+        NoAddress     bool //!&lt; data only ISync
+}
+
+// Packet encapsulates an ETMv3 trace packet and intra-packet state
+type Packet struct {
+        Type PktType //!&lt; Primary packet type.
+
+        CurrISA ocsd.ISA //!&lt; current ISA
+        PrevISA ocsd.ISA //!&lt; ISA in previous packet
+
+        Context   Context   //!&lt; current context
+        Addr      uint64    //!&lt; current Addr
+        ISyncInfo ISyncInfo //!&lt; i-sync info
+        Exception Excep     //!&lt; exception info
+
+        Atom       ocsd.PktAtom //!&lt; atom elements - non zero number indicates valid atom count
+        PHdrFmt    uint8        //!&lt; if atom elements, associated phdr format
+        CycleCount uint32       //!&lt; cycle count associated with this packet
+
+        Timestamp    uint64 //!&lt; current timestamp value
+        TsUpdateBits uint8  //!&lt; bits of ts updated this packet (if TS packet)
+
+        Data Data //!&lt; data transfer values
+
+        ErrType PktType //!&lt; Basic packet type if primary type indicates error or incomplete
+}
+
+func (p *Packet) Clear() <span class="cov8" title="1">{
+        // Clears dynamic packet elements for a new packet but retains context like previous ISA
+        p.Type = PktNoError
+        p.ErrType = PktNoError
+        p.Context.Updated = false
+        p.Context.UpdatedC = false
+        p.Context.UpdatedV = false
+        p.Addr = 0
+        p.Exception = Excep{}
+        p.ISyncInfo = ISyncInfo{}
+        p.Atom = ocsd.PktAtom{}
+        p.PHdrFmt = 0
+        p.CycleCount = 0
+        p.Timestamp = 0
+        p.TsUpdateBits = 0
+        p.Data.UpdateBE = false
+        p.Data.UpdateAddr = false
+        p.Data.UpdateDVal = false
+}</span>
+
+func (p *Packet) ResetState() <span class="cov8" title="1">{
+        p.Clear()
+        p.CurrISA = ocsd.ISAArm
+        p.PrevISA = ocsd.ISAArm
+        p.Context = Context{}
+        p.Data = Data{}
+}</span>
+
+func (p *Packet) IsBadPacket() bool <span class="cov8" title="1">{
+        return p.Type &gt;= PktBadSequence
+}</span>
+
+func (p *Packet) UpdateAddress(partAddrVal uint64, updateBits int) <span class="cov8" title="1">{
+        mask := uint64((1 &lt;&lt; updateBits) - 1)
+        p.Addr = (p.Addr &amp; ^mask) | (partAddrVal &amp; mask)
+}</span>
+
+func (p *Packet) SetException(exType ocsd.ArmV7Exception, num uint16, cancel, cmType bool, irqN uint16, resume uint8) <span class="cov8" title="1">{
+        p.Exception.Type = exType
+        p.Exception.Number = num
+        p.Exception.Present = true
+        p.Exception.Cancel = cancel
+        p.Exception.CmType = cmType
+        p.Exception.CmIrqN = irqN
+        p.Exception.CmResume = resume
+}</span>
+
+func (p *Packet) UpdateAtomFromPHdr(pHdr uint8, cycleAccurate bool) bool <span class="cov8" title="1">{
+        // Ported from trc_pkt_elem_etmv3.cpp UpdateAtomFromPHdr
+        isValid := true
+        p.Atom.EnBits = 0
+        p.Atom.Num = 0
+
+        wBit1 := (pHdr &amp; 0x40) != 0
+        wBit0 := (pHdr &amp; 0x20) != 0
+
+        // Format 4
+        if (pHdr &amp; 0x1F) == 0 </span><span class="cov8" title="1">{
+                p.PHdrFmt = 4
+                if cycleAccurate </span><span class="cov8" title="1">{
+                        // format 4 not allowed for cycle accurate tracing!
+                        isValid = false
+                        return isValid
+                }</span>
+
+                // 6 atoms 0bxEEEEE00
+                <span class="cov8" title="1">p.Atom.EnBits = uint32(pHdr&gt;&gt;2) &amp; 0x1F
+
+                if wBit1 </span><span class="cov0" title="0">{
+                        p.Atom.EnBits |= 0x20
+                        p.Atom.Num = 6
+                }</span> else<span class="cov8" title="1"> {
+                        if wBit0 </span><span class="cov0" title="0">{
+                                p.Atom.Num = 5
+                                p.Atom.EnBits &amp;= 0x0F
+                        }</span> else<span class="cov8" title="1"> {
+                                p.Atom.Num = 4
+                                p.Atom.EnBits &amp;= 0x07
+                        }</span>
+                }
+
+        } else<span class="cov8" title="1"> if (pHdr &amp; 0x0F) == 0 </span><span class="cov8" title="1">{
+                // Format 3
+                p.PHdrFmt = 3
+                p.Atom.Num = 0
+
+                if wBit1 </span><span class="cov0" title="0">{
+                        p.Atom.Num = 1
+                        p.Atom.EnBits = 0x1 // E atom
+                }</span>
+                // cycle count will be added later by pkt processor if applicable
+        } else<span class="cov8" title="1"> if (pHdr &amp; 0x03) == 0 </span><span class="cov8" title="1">{
+                // Format 2
+                p.PHdrFmt = 2
+                p.Atom.EnBits = uint32(pHdr&gt;&gt;2) &amp; 0x7
+
+                if wBit1 </span><span class="cov0" title="0">{
+                        p.Atom.EnBits |= 0x08
+                        p.Atom.Num = 4
+                }</span> else<span class="cov8" title="1"> {
+                        if wBit0 </span><span class="cov0" title="0">{
+                                p.Atom.Num = 3
+                                p.Atom.EnBits &amp;= 0x03
+                        }</span> else<span class="cov8" title="1"> {
+                                p.Atom.Num = 2
+                                p.Atom.EnBits &amp;= 0x01
+                        }</span>
+                }
+                // will be w atom here if CA
+        } else<span class="cov8" title="1"> if (pHdr &amp; 0x01) == 0 </span><span class="cov8" title="1">{
+                // Format 1
+                p.PHdrFmt = 1
+                p.Atom.EnBits = uint32(pHdr&gt;&gt;1) &amp; 0x3
+
+                if wBit1 </span><span class="cov8" title="1">{
+                        p.Atom.EnBits |= 0x04
+                        p.Atom.Num = 3
+                }</span> else<span class="cov8" title="1"> {
+                        if wBit0 </span><span class="cov8" title="1">{
+                                p.Atom.Num = 2
+                                p.Atom.EnBits &amp;= 0x01
+                        }</span> else<span class="cov8" title="1"> {
+                                p.Atom.Num = 1
+                                p.Atom.EnBits &amp;= 0x0
+                        }</span>
+                }
+
+        } else<span class="cov8" title="1"> {
+                // not a p-header
+                isValid = false
+        }</span>
+
+        <span class="cov8" title="1">return isValid</span>
+}
+
+func (p *Packet) String() string <span class="cov8" title="1">{
+        s := fmt.Sprintf("ETMv3 Pkt [%s]", p.Type.String())
+        if p.Type == PktPHdr </span><span class="cov8" title="1">{
+                s += fmt.Sprintf(" Atoms: %d (%08b)", p.Atom.Num, p.Atom.EnBits)
+        }</span> else<span class="cov8" title="1"> if p.Type == PktISync </span><span class="cov8" title="1">{
+                s += fmt.Sprintf(" Addr: 0x%x", p.Addr)
+        }</span> else<span class="cov8" title="1"> if p.Type == PktBranchAddress </span><span class="cov8" title="1">{
+                s += fmt.Sprintf(" Addr: 0x%x", p.Addr)
+        }</span>
+        <span class="cov8" title="1">return s</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package etmv3
+
+import (
+        "fmt"
+        "opencsd/internal/common"
+        "opencsd/internal/ocsd"
+)
+
+type processState int
+
+const (
+        waitSync processState = iota
+        procHdr
+        procData
+        sendPkt
+        procErr
+)
+
+const maxPacketSize = 32
+const asyncSize = 6
+
+// PktProc implements the ETMv3 packet processor.
+// Ported from trc_pkt_proc_etmv3_impl.cpp
+type PktProc struct {
+        *common.PktProcBase[Packet, PktType, Config]
+
+        processState processState
+
+        bytesProcessed   int
+        currPacketData   []byte
+        currPktIdx       int
+        currPacket       Packet // expanded packet
+        partPktData      []byte
+        bSendPartPkt     bool
+        postPartPktState processState
+        postPartPktType  PktType
+
+        bStreamSync    bool
+        bStartOfSync   bool
+        bytesExpected  int
+        branchNeedsEx  bool
+        isyncGotCC     bool
+        isyncGetLSiP   bool
+        isyncInfoIdx   int
+        expectDataAddr bool
+        foundDataAddr  bool
+
+        packetIndex         ocsd.TrcIndex
+        packetCurrByteIndex ocsd.TrcIndex
+}
+
+// NewPktProc creates a new ETMv3 packet processor
+func NewPktProc(instID int) *PktProc <span class="cov8" title="1">{
+        p := &amp;PktProc{}
+        p.PktProcBase = &amp;common.PktProcBase[Packet, PktType, Config]{}
+        p.InitPktProcBase(fmt.Sprintf("%s_%d", "PKTP_ETMV3", instID))
+
+        p.FnProcessData = p.ProcessData
+        p.FnOnEOT = p.OnEOT
+        p.FnOnReset = p.OnReset
+        p.FnOnFlush = p.OnFlush
+        p.FnOnProtocolConfig = p.OnConfigure
+
+        // Initialise configuration
+        p.initProcessorState()
+        return p
+}</span>
+
+func (p *PktProc) initProcessorState() <span class="cov8" title="1">{
+        p.bStreamSync = false
+        p.processState = waitSync
+        p.bStartOfSync = false
+        p.currPacket.ResetState()
+        p.initPacketState()
+        p.bSendPartPkt = false
+}</span>
+
+func (p *PktProc) initPacketState() <span class="cov8" title="1">{
+        p.bytesExpected = 0
+        p.branchNeedsEx = false
+        p.isyncGotCC = false
+        p.isyncGetLSiP = false
+        p.isyncInfoIdx = 0
+        p.expectDataAddr = false
+        p.foundDataAddr = false
+
+        p.currPacketData = p.currPacketData[:0]
+        p.currPktIdx = 0
+        p.currPacket.Clear()
+}</span>
+
+// Internal processor method signatures (impl is next)
+
+func (p *PktProc) OnConfigure() ocsd.Err <span class="cov8" title="1">{
+        // Re-initialize state when config changes
+        p.initProcessorState()
+        return ocsd.OK // config structure handles validation properties directly
+}</span>
+
+func (p *PktProc) OnReset() ocsd.DatapathResp <span class="cov8" title="1">{
+        p.initProcessorState()
+        return ocsd.RespCont
+}</span>
+
+func (p *PktProc) OnFlush() ocsd.DatapathResp <span class="cov8" title="1">{
+        return ocsd.RespCont
+}</span>
+
+func (p *PktProc) OnEOT() ocsd.DatapathResp <span class="cov8" title="1">{
+        resp := ocsd.RespCont
+        if len(p.currPacketData) != 0 </span><span class="cov8" title="1">{
+                p.currPacket.ErrType = PktIncompleteEOT
+                resp = p.outputPacket()
+                p.initPacketState()
+        }</span>
+        <span class="cov8" title="1">return resp</span>
+}
+
+func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) <span class="cov8" title="1">{
+        resp := ocsd.RespCont
+        p.bytesProcessed = 0
+        dataBlockSize := len(dataBlock)
+
+        for ((p.bytesProcessed &lt; dataBlockSize) || (p.bytesProcessed == dataBlockSize &amp;&amp; p.processState == sendPkt)) &amp;&amp; ocsd.DataRespIsCont(resp) </span><span class="cov8" title="1">{
+                switch p.processState </span>{
+                case waitSync:<span class="cov8" title="1">
+                        if !p.bStartOfSync </span><span class="cov8" title="1">{
+                                p.packetIndex = index + ocsd.TrcIndex(p.bytesProcessed)
+                        }</span>
+                        <span class="cov8" title="1">p.bytesProcessed += p.waitForSync(dataBlock[p.bytesProcessed:])</span>
+                case procHdr:<span class="cov8" title="1">
+                        p.packetIndex = index + ocsd.TrcIndex(p.bytesProcessed)
+                        b := dataBlock[p.bytesProcessed]
+                        p.bytesProcessed++
+                        p.processHeaderByte(b)</span>
+                case procData:<span class="cov8" title="1">
+                        b := dataBlock[p.bytesProcessed]
+                        p.bytesProcessed++
+                        p.processPayloadByte(b)</span>
+                case sendPkt:<span class="cov8" title="1">
+                        resp = p.outputPacket()</span>
+                case procErr:<span class="cov8" title="1">
+                        resp = ocsd.RespFatalSysErr</span>
+                }
+        }
+
+        <span class="cov8" title="1">return uint32(p.bytesProcessed), resp</span>
+}
+
+func (p *PktProc) waitForSync(dataBlock []byte) int <span class="cov8" title="1">{
+        bytesProcessed := 0
+        bSendBlock := false
+
+        for !bSendBlock &amp;&amp; bytesProcessed &lt; len(dataBlock) </span><span class="cov8" title="1">{
+                currByte := dataBlock[bytesProcessed]
+                bytesProcessed++
+
+                if p.bStartOfSync </span><span class="cov8" title="1">{
+                        p.currPacketData = append(p.currPacketData, currByte)
+                        if currByte == 0x80 &amp;&amp; len(p.currPacketData) &gt;= 6 </span><span class="cov8" title="1">{
+                                bSendBlock = true
+                                if len(p.currPacketData) &gt; 6 </span><span class="cov0" title="0">{
+                                        p.currPacketData = p.currPacketData[:len(p.currPacketData)-1]
+                                        bytesProcessed--
+                                        p.setBytesPartPkt(len(p.currPacketData)-5, waitSync, PktNotSync)
+                                }</span> else<span class="cov8" title="1"> {
+                                        p.bStreamSync = true
+                                        p.currPacket.Type = PktASync
+                                }</span>
+                        } else<span class="cov8" title="1"> if currByte != 0x00 </span><span class="cov0" title="0">{
+                                p.bStartOfSync = false
+                        }</span> else<span class="cov8" title="1"> if len(p.currPacketData) &gt;= 13 </span><span class="cov8" title="1">{
+                                p.currPacket.Type = PktNotSync
+                                p.setBytesPartPkt(8, waitSync, PktNotSync)
+                                bSendBlock = true
+                        }</span>
+                } else<span class="cov8" title="1"> {
+                        if currByte == 0x00 </span><span class="cov8" title="1">{
+                                if len(p.currPacketData) == 0 </span><span class="cov8" title="1">{
+                                        p.currPacketData = append(p.currPacketData, currByte)
+                                        p.bStartOfSync = true
+                                }</span> else<span class="cov8" title="1"> {
+                                        bytesProcessed--
+                                        bSendBlock = true
+                                        p.currPacket.Type = PktNotSync
+                                }</span>
+                        } else<span class="cov8" title="1"> {
+                                p.currPacketData = append(p.currPacketData, currByte)
+                                if bytesProcessed == len(dataBlock) || len(p.currPacketData) == 16 </span><span class="cov0" title="0">{
+                                        bSendBlock = true
+                                        p.currPacket.Type = PktNotSync
+                                }</span>
+                        }
+                }
+        }
+        <span class="cov8" title="1">if bSendBlock </span><span class="cov8" title="1">{
+                p.processState = sendPkt
+        }</span>
+        <span class="cov8" title="1">return bytesProcessed</span>
+}
+
+func (p *PktProc) processHeaderByte(by uint8) <span class="cov8" title="1">{
+        p.initPacketState()
+        p.currPacketData = append(p.currPacketData, by)
+        p.processState = procData
+
+        if (by &amp; 0x01) == 0x01 </span><span class="cov8" title="1">{
+                p.currPacket.Type = PktBranchAddress
+                p.branchNeedsEx = (by &amp; 0x40) == 0x40
+                if (by &amp; 0x80) != 0x80 </span><span class="cov8" title="1">{
+                        if by == 0x01 &amp;&amp; false </span><span class="cov0" title="0">{ // skipping bypassed stream unformatted check for now
+                                p.currPacket.Type = PktBranchOrBypassEOT
+                        }</span> else<span class="cov8" title="1"> {
+                                p.onBranchAddress()
+                                p.processState = sendPkt
+                        }</span>
+                }
+        } else<span class="cov8" title="1"> if (by &amp; 0x81) == 0x80 </span><span class="cov8" title="1">{
+                p.currPacket.Type = PktPHdr
+                if p.currPacket.UpdateAtomFromPHdr(by, p.Config.IsCycleAcc()) </span><span class="cov8" title="1">{
+                        p.processState = sendPkt
+                }</span> else<span class="cov8" title="1"> {
+                        p.throwPacketHeaderErr("Invalid P-Header.")
+                }</span>
+        } else<span class="cov8" title="1"> if (by &amp; 0xF3) == 0x00 </span><span class="cov8" title="1">{
+                if by == 0x00 </span><span class="cov8" title="1">{
+                        p.currPacket.Type = PktASync
+                }</span> else<span class="cov8" title="1"> if by == 0x04 </span><span class="cov8" title="1">{
+                        p.currPacket.Type = PktCycleCount
+                }</span> else<span class="cov8" title="1"> if by == 0x08 </span><span class="cov8" title="1">{
+                        p.currPacket.Type = PktISync
+                        p.isyncGotCC = false
+                        p.isyncGetLSiP = false
+                }</span> else<span class="cov8" title="1"> if by == 0x0C </span><span class="cov8" title="1">{
+                        p.currPacket.Type = PktTrigger
+                        p.processState = sendPkt
+                }</span>
+        } else<span class="cov8" title="1"> if (by &amp; 0x03) == 0x00 </span><span class="cov8" title="1">{
+                if (by &amp; 0x93) == 0x00 </span><span class="cov8" title="1">{
+                        if !p.Config.IsDataValTrace() </span><span class="cov8" title="1">{
+                                p.currPacket.ErrType = PktBadTraceMode
+                                p.throwPacketHeaderErr("Invalid data trace header (out of order data) - not tracing data values.")
+                        }</span>
+                        <span class="cov8" title="1">p.currPacket.Type = PktOOOData
+                        size := (by &amp; 0x0C) &gt;&gt; 2
+                        if size == 0 </span><span class="cov8" title="1">{
+                                p.currPacket.Data.OooTag = (by &gt;&gt; 5) &amp; 0x3
+                                p.currPacket.Data.Value = 0
+                                p.currPacket.Data.UpdateDVal = true
+                                p.processState = sendPkt
+                        }</span> else<span class="cov8" title="1"> {
+                                p.bytesExpected = 1 + int(func() uint8 </span><span class="cov8" title="1">{
+                                        if size == 3 </span><span class="cov8" title="1">{
+                                                return 4
+                                        }</span>
+                                        <span class="cov8" title="1">return size</span>
+                                }())
+                        }
+                } else<span class="cov8" title="1"> if by == 0x70 </span><span class="cov8" title="1">{
+                        p.currPacket.Type = PktISyncCycle
+                        p.isyncGotCC = false
+                        p.isyncGetLSiP = false
+                }</span> else<span class="cov8" title="1"> if by == 0x50 </span><span class="cov8" title="1">{
+                        if !p.Config.IsDataValTrace() </span><span class="cov8" title="1">{
+                                p.currPacket.ErrType = PktBadTraceMode
+                                p.throwPacketHeaderErr("Invalid data trace header (store failed) - not tracing data values.")
+                        }</span>
+                        <span class="cov8" title="1">p.currPacket.Type = PktStoreFail
+                        p.processState = sendPkt</span>
+                } else<span class="cov8" title="1"> if (by &amp; 0xD3) == 0x50 </span><span class="cov8" title="1">{
+                        p.currPacket.Type = PktOOOAddrPlc
+                        if !p.Config.IsDataTrace() </span><span class="cov8" title="1">{
+                                p.currPacket.ErrType = PktBadTraceMode
+                                p.throwPacketHeaderErr("Invalid data trace header (out of order placeholder) - not tracing data.")
+                        }</span>
+                        <span class="cov8" title="1">p.expectDataAddr = ((by &amp; 0x20) == 0x20) &amp;&amp; p.Config.IsDataAddrTrace()
+                        p.foundDataAddr = false
+                        p.currPacket.Data.OooTag = (by &gt;&gt; 2) &amp; 0x3
+                        if !p.expectDataAddr </span><span class="cov8" title="1">{
+                                p.processState = sendPkt
+                        }</span>
+                } else<span class="cov8" title="1"> if by == 0x3C </span><span class="cov8" title="1">{
+                        p.currPacket.Type = PktVMID
+                }</span> else<span class="cov0" title="0"> {
+                        p.currPacket.ErrType = PktReserved
+                        p.throwPacketHeaderErr("Packet header reserved encoding")
+                }</span>
+        } else<span class="cov8" title="1"> if (by &amp; 0xD3) == 0x02 </span><span class="cov8" title="1">{
+                size := (by &amp; 0x0C) &gt;&gt; 2
+                if !p.Config.IsDataTrace() </span><span class="cov8" title="1">{
+                        p.currPacket.ErrType = PktBadTraceMode
+                        p.throwPacketHeaderErr("Invalid data trace header (normal data) - not tracing data.")
+                }</span>
+                <span class="cov8" title="1">p.currPacket.Type = PktNormData
+                p.expectDataAddr = ((by &amp; 0x20) == 0x20) &amp;&amp; p.Config.IsDataAddrTrace()
+                p.foundDataAddr = false
+                p.bytesExpected = 1 + int(func() uint8 </span><span class="cov8" title="1">{
+                        if size == 3 </span><span class="cov0" title="0">{
+                                return 4
+                        }</span>
+                        <span class="cov8" title="1">return size</span>
+                }())
+                <span class="cov8" title="1">if !p.expectDataAddr &amp;&amp; p.bytesExpected == 1 </span><span class="cov8" title="1">{
+                        p.currPacket.Data.Value = 0
+                        p.currPacket.Data.UpdateDVal = true
+                        p.processState = sendPkt
+                }</span>
+        } else<span class="cov8" title="1"> if by == 0x62 </span><span class="cov0" title="0">{
+                if !p.Config.IsDataTrace() </span><span class="cov0" title="0">{
+                        p.currPacket.ErrType = PktBadTraceMode
+                        p.throwPacketHeaderErr("Invalid data trace header (data suppressed) - not tracing data.")
+                }</span>
+                <span class="cov0" title="0">p.currPacket.Type = PktDataSuppressed
+                p.processState = sendPkt</span>
+        } else<span class="cov8" title="1"> if (by &amp; 0xEF) == 0x6A </span><span class="cov0" title="0">{
+                if !p.Config.IsDataTrace() </span><span class="cov0" title="0">{
+                        p.currPacket.ErrType = PktBadTraceMode
+                        p.throwPacketHeaderErr("Invalid data trace header (value not traced) - not tracing data.")
+                }</span>
+                <span class="cov0" title="0">p.currPacket.Type = PktValNotTraced
+                p.expectDataAddr = ((by &amp; 0x20) == 0x20) &amp;&amp; p.Config.IsDataAddrTrace()
+                p.foundDataAddr = false
+                if !p.expectDataAddr </span><span class="cov0" title="0">{
+                        p.processState = sendPkt
+                }</span>
+        } else<span class="cov8" title="1"> if by == 0x66 </span><span class="cov8" title="1">{
+                p.currPacket.Type = PktIgnore
+                p.processState = sendPkt
+        }</span> else<span class="cov8" title="1"> if by == 0x6E </span><span class="cov8" title="1">{
+                p.currPacket.Type = PktContextID
+                p.bytesExpected = 1 + p.Config.CtxtIDBytes()
+        }</span> else<span class="cov8" title="1"> if by == 0x76 </span><span class="cov8" title="1">{
+                p.currPacket.Type = PktExceptionExit
+                p.processState = sendPkt
+        }</span> else<span class="cov8" title="1"> if by == 0x7E </span><span class="cov0" title="0">{
+                p.currPacket.Type = PktExceptionEntry
+                p.processState = sendPkt
+        }</span> else<span class="cov8" title="1"> if (by &amp; 0xFB) == 0x42 </span><span class="cov8" title="1">{
+                p.currPacket.Type = PktTimestamp
+        }</span> else<span class="cov0" title="0"> {
+                p.currPacket.ErrType = PktReserved
+                p.throwPacketHeaderErr("Packet header reserved encoding.")
+        }</span>
+}
+
+func (p *PktProc) processPayloadByte(by uint8) <span class="cov8" title="1">{
+        bTopBitSet := false
+        packetDone := false
+
+        p.currPacketData = append(p.currPacketData, by)
+
+        switch p.currPacket.Type </span>{
+        case PktBranchAddress:<span class="cov8" title="1">
+                bTopBitSet = (by &amp; 0x80) == 0x80
+                if p.Config.IsAltBranch() </span><span class="cov8" title="1">{
+                        if !bTopBitSet </span><span class="cov8" title="1">{
+                                if !p.branchNeedsEx </span><span class="cov0" title="0">{
+                                        if (by &amp; 0xC0) == 0x40 </span><span class="cov0" title="0">{
+                                                p.branchNeedsEx = true
+                                        }</span> else<span class="cov0" title="0"> {
+                                                packetDone = true
+                                        }</span>
+                                } else<span class="cov8" title="1"> {
+                                        packetDone = true
+                                }</span>
+                        }
+                } else<span class="cov8" title="1"> {
+                        if len(p.currPacketData) == 5 </span><span class="cov8" title="1">{
+                                if (by &amp; 0xC0) == 0x40 </span><span class="cov8" title="1">{
+                                        p.branchNeedsEx = true
+                                }</span> else<span class="cov0" title="0"> {
+                                        packetDone = true
+                                }</span>
+                        } else<span class="cov8" title="1"> if p.branchNeedsEx </span><span class="cov8" title="1">{
+                                if !bTopBitSet </span><span class="cov8" title="1">{
+                                        packetDone = true
+                                }</span>
+                        } else<span class="cov8" title="1"> {
+                                if !bTopBitSet </span><span class="cov8" title="1">{
+                                        packetDone = true
+                                }</span>
+                        }
+                }
+                <span class="cov8" title="1">if packetDone </span><span class="cov8" title="1">{
+                        p.onBranchAddress()
+                        p.processState = sendPkt
+                }</span>
+        case PktASync:<span class="cov8" title="1">
+                if by == 0x00 </span><span class="cov8" title="1">{
+                        if len(p.currPacketData) &gt; 5 </span><span class="cov8" title="1">{
+                                p.currPacket.ErrType = PktBadSequence
+                                p.setBytesPartPkt(1, procData, PktASync)
+                                p.throwMalformedPacketErr("A-Sync ?: Extra 0x00 in sequence")
+                        }</span>
+                } else<span class="cov8" title="1"> if by == 0x80 &amp;&amp; len(p.currPacketData) == 6 </span><span class="cov8" title="1">{
+                        p.processState = sendPkt
+                        p.bStreamSync = true
+                }</span> else<span class="cov8" title="1"> {
+                        p.currPacket.ErrType = PktBadSequence
+                        p.bytesProcessed--
+                        p.currPacketData = p.currPacketData[:len(p.currPacketData)-1]
+                        p.throwMalformedPacketErr("A-Sync ? : Unexpected byte in sequence")
+                }</span>
+        case PktCycleCount:<span class="cov8" title="1">
+                bTopBitSet = (by &amp; 0x80) == 0x80
+                if !bTopBitSet || len(p.currPacketData) &gt;= 6 </span><span class="cov8" title="1">{
+                        p.currPktIdx = 1
+                        p.currPacket.CycleCount = p.extractCycleCount()
+                        p.processState = sendPkt
+                }</span>
+        case PktISyncCycle:<span class="cov8" title="1">
+                if !p.isyncGotCC </span><span class="cov8" title="1">{
+                        if (by&amp;0x80) != 0x80 || len(p.currPacketData) &gt;= 6 </span><span class="cov8" title="1">{
+                                p.isyncGotCC = true
+                        }</span>
+                        <span class="cov8" title="1">break</span>
+                }
+                <span class="cov8" title="1">fallthrough</span>
+        case PktISync:<span class="cov8" title="1">
+                if p.bytesExpected == 0 </span><span class="cov8" title="1">{
+                        cycCountBytes := len(p.currPacketData) - 2
+                        ctxtIDBytes := p.Config.CtxtIDBytes()
+                        if p.Config.IsInstrTrace() </span><span class="cov8" title="1">{
+                                p.bytesExpected = cycCountBytes + 6 + ctxtIDBytes
+                        }</span> else<span class="cov0" title="0"> {
+                                p.bytesExpected = 2 + ctxtIDBytes
+                        }</span>
+                        <span class="cov8" title="1">p.isyncInfoIdx = 1 + cycCountBytes + ctxtIDBytes</span>
+                }
+                <span class="cov8" title="1">if len(p.currPacketData)-1 == p.isyncInfoIdx </span><span class="cov8" title="1">{
+                        p.isyncGetLSiP = (p.currPacketData[p.isyncInfoIdx] &amp; 0x80) == 0x80
+                }</span>
+
+                <span class="cov8" title="1">if len(p.currPacketData) &gt;= p.bytesExpected </span><span class="cov8" title="1">{
+                        if p.isyncGetLSiP </span><span class="cov0" title="0">{
+                                if (by &amp; 0x80) != 0x80 </span><span class="cov0" title="0">{
+                                        p.onISyncPacket()
+                                }</span>
+                        } else<span class="cov8" title="1"> {
+                                p.onISyncPacket()
+                        }</span>
+                }
+        case PktNormData:<span class="cov8" title="1">
+                if p.expectDataAddr &amp;&amp; !p.foundDataAddr </span><span class="cov8" title="1">{
+                        if (by &amp; 0x80) != 0x80 </span><span class="cov8" title="1">{
+                                p.foundDataAddr = true
+                                p.bytesExpected += len(p.currPacketData) - 1
+                        }</span> else<span class="cov8" title="1"> {
+                                break</span>
+                        }
+                } else<span class="cov8" title="1"> if p.bytesExpected == len(p.currPacketData) </span><span class="cov8" title="1">{
+                        p.currPktIdx = 1
+                        if p.expectDataAddr </span><span class="cov8" title="1">{
+                                bits := uint8(0)
+                                beVal := uint8(0)
+                                updateBE := false
+                                dataAddr := p.extractDataAddress(&amp;bits, &amp;updateBE, &amp;beVal)
+                                p.currPacket.UpdateAddress(dataAddr, int(bits))
+                                p.currPacket.Data.UpdateAddr = true
+                                p.currPacket.Data.Addr = dataAddr
+                                if updateBE </span><span class="cov0" title="0">{
+                                        p.currPacket.Data.BE = (beVal == 1)
+                                        p.currPacket.Data.UpdateBE = true
+                                }</span>
+                        }
+                        <span class="cov8" title="1">p.currPacket.Data.Value = p.extractDataValue(int((p.currPacketData[0] &gt;&gt; 2) &amp; 0x3))
+                        p.currPacket.Data.UpdateDVal = true
+                        p.processState = sendPkt</span>
+                }
+        case PktOOOData:<span class="cov8" title="1">
+                if p.bytesExpected == len(p.currPacketData) </span><span class="cov8" title="1">{
+                        p.currPktIdx = 1
+                        p.currPacket.Data.Value = p.extractDataValue(int((p.currPacketData[0] &gt;&gt; 2) &amp; 0x3))
+                        p.currPacket.Data.UpdateDVal = true
+                        p.currPacket.Data.OooTag = (p.currPacketData[0] &gt;&gt; 5) &amp; 0x3
+                        p.processState = sendPkt
+                }</span>
+                <span class="cov8" title="1">if p.bytesExpected &lt; len(p.currPacketData) </span><span class="cov0" title="0">{
+                        p.throwMalformedPacketErr("Malformed out of order data packet.")
+                }</span>
+        case PktValNotTraced, PktOOOAddrPlc:<span class="cov8" title="1">
+                if p.expectDataAddr </span><span class="cov8" title="1">{
+                        if (by &amp; 0x80) != 0x80 </span><span class="cov8" title="1">{
+                                bits := uint8(0)
+                                beVal := uint8(0)
+                                updateBE := false
+                                p.currPktIdx = 1
+                                dataAddr := p.extractDataAddress(&amp;bits, &amp;updateBE, &amp;beVal)
+                                p.currPacket.UpdateAddress(dataAddr, int(bits))
+                                p.currPacket.Data.UpdateAddr = true
+                                p.currPacket.Data.Addr = dataAddr
+                                if updateBE </span><span class="cov8" title="1">{
+                                        p.currPacket.Data.BE = (beVal == 1)
+                                        p.currPacket.Data.UpdateBE = true
+                                }</span>
+                                <span class="cov8" title="1">p.processState = sendPkt</span>
+                        }
+                }
+        case PktContextID:<span class="cov8" title="1">
+                if p.bytesExpected == len(p.currPacketData) </span><span class="cov8" title="1">{
+                        p.currPktIdx = 1
+                        p.currPacket.Context.CtxtID = p.extractCtxtID()
+                        p.currPacket.Context.UpdatedC = true
+                        p.processState = sendPkt
+                }</span>
+                <span class="cov8" title="1">if p.bytesExpected &lt; len(p.currPacketData) </span><span class="cov0" title="0">{
+                        p.throwMalformedPacketErr("Malformed context id packet.")
+                }</span>
+        case PktTimestamp:<span class="cov8" title="1">
+                if (by &amp; 0x80) != 0x80 </span><span class="cov8" title="1">{
+                        tsBits := uint8(0)
+                        p.currPktIdx = 1
+                        tsVal := p.extractTimestamp(&amp;tsBits)
+                        // p.currPacket.UpdateTimestamp(tsVal, tsBits)
+                        p.currPacket.Timestamp = tsVal
+                        p.currPacket.TsUpdateBits = tsBits
+                        p.processState = sendPkt
+                }</span>
+        case PktVMID:<span class="cov8" title="1">
+                p.currPacket.Context.VMID = by
+                p.currPacket.Context.UpdatedV = true
+                p.processState = sendPkt</span>
+        default:<span class="cov0" title="0">
+                p.processState = procErr
+                p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrPktInterpFail, "Interpreter failed - cannot process payload for unexpected or unsupported packet."))</span>
+        }
+}
+
+func (p *PktProc) outputPacket() ocsd.DatapathResp <span class="cov8" title="1">{
+        dpResp := ocsd.RespFatalNotInit
+        if true </span><span class="cov8" title="1">{ // assuming p.isInit=true conceptually
+                if !p.bSendPartPkt </span><span class="cov8" title="1">{
+                        dpResp = p.PktOutI.First().PacketDataIn(ocsd.OpData, p.packetIndex, &amp;p.currPacket)
+                        if p.bStreamSync </span><span class="cov8" title="1">{
+                                p.processState = procHdr
+                        }</span> else<span class="cov8" title="1"> {
+                                p.processState = waitSync
+                        }</span>
+                        <span class="cov8" title="1">p.currPacketData = p.currPacketData[:0]</span>
+                } else<span class="cov8" title="1"> {
+                        dpResp = p.PktOutI.First().PacketDataIn(ocsd.OpData, p.packetIndex, &amp;p.currPacket)
+                        p.processState = p.postPartPktState
+                        p.packetIndex += ocsd.TrcIndex(len(p.partPktData))
+                        p.bSendPartPkt = false
+                        p.currPacket.Type = p.postPartPktType
+                }</span>
+        }
+        <span class="cov8" title="1">return dpResp</span>
+}
+
+func (p *PktProc) setBytesPartPkt(numBytes int, nextState processState, nextType PktType) <span class="cov8" title="1">{
+        p.partPktData = make([]byte, numBytes)
+        copy(p.partPktData, p.currPacketData[:numBytes])
+        p.currPacketData = p.currPacketData[numBytes:]
+        p.bSendPartPkt = true
+        p.postPartPktState = nextState
+        p.postPartPktType = nextType
+}</span>
+
+func (p *PktProc) onBranchAddress() <span class="cov8" title="1">{
+        validBits := 0
+        partAddr := p.extractBrAddrPkt(&amp;validBits)
+        p.currPacket.UpdateAddress(partAddr, validBits)
+}</span>
+
+func (p *PktProc) extractBrAddrPkt(nBitsOut *int) uint64 <span class="cov8" title="1">{
+        addrshift := []int{2, 1, 1, 0}
+        addrMask := []uint8{0x7, 0xF, 0xF, 0x1}
+
+        bByte := p.currPacketData[0]
+        idxB := 0
+        val := uint64(bByte &amp; 0x7E) // shift &gt;&gt; 1, up 1 ... &gt;&gt; 1 loses bit 0 which is 1
+        nBits := 6
+
+        for (bByte &amp; 0x80) != 0 </span><span class="cov8" title="1">{
+                idxB++
+                bByte = p.currPacketData[idxB]
+                if idxB == 4 </span><span class="cov8" title="1">{
+                        // bByte is the 5th byte - index [4]
+                        // extract ISA from bits 5:4 in header 0
+                        isa := ocsd.ISA((p.currPacketData[0] &gt;&gt; 4) &amp; 0x3)
+                        pByteValMask := bByte &amp; addrMask[isa]
+                        val |= uint64(pByteValMask) &lt;&lt; nBits
+                        pByteValMask &lt;&lt;= addrshift[isa]
+                        if pByteValMask != 0 </span><span class="cov8" title="1">{
+                                nBits += 4
+                        }</span> else<span class="cov0" title="0"> if bByte&amp;0x7F != 0 </span><span class="cov0" title="0">{
+                                nBits += 4 // still output 4 bits - even if these are cleared address bits
+                        }</span>
+                } else<span class="cov8" title="1"> {
+                        pByteValMask := bByte &amp; 0x7F
+                        val |= uint64(pByteValMask) &lt;&lt; nBits
+                        nBits += 7
+                }</span>
+        }
+
+        <span class="cov8" title="1">p.currPktIdx = idxB + 1
+
+        p.extractExceptionData()
+
+        if p.Config.IsAltBranch() &amp;&amp; (p.currPacketData[0]&amp;0x10) != 0 </span><span class="cov0" title="0">{
+                // handle alternative format
+                // shift val by address shifts (less bit 0). mask was handled.
+                isa := ocsd.ISA((p.currPacketData[0] &gt;&gt; 4) &amp; 0x3)
+                val &gt;&gt;= (addrshift[isa] - 1)
+                b5Shift := 4 - addrshift[isa]
+                if b5Shift &gt; 0 </span><span class="cov0" title="0">{
+                        // bit 5 address bits are no longer relevant
+                        nBits -= b5Shift
+                }</span>
+        } else<span class="cov8" title="1"> {
+                p.currPacket.CurrISA = ocsd.ISA((p.currPacketData[0] &gt;&gt; 4) &amp; 0x3)
+                p.currPacket.Context.CurrAltIsa = false
+        }</span>
+
+        // shift output to right place.
+        <span class="cov8" title="1">val &lt;&lt;= 1 // bottom bit handles in earlier &gt;&gt;
+
+        *nBitsOut = nBits + 1
+        return val</span>
+}
+
+func (p *PktProc) extractExceptionData() <span class="cov8" title="1">{
+        if !p.branchNeedsEx </span><span class="cov8" title="1">{
+                return
+        }</span>
+
+        <span class="cov8" title="1">for p.currPktIdx &lt; len(p.currPacketData) </span><span class="cov8" title="1">{
+                b := p.currPacketData[p.currPktIdx]
+                p.currPktIdx++
+
+                if (b &amp; 0x40) == 0x40 </span><span class="cov8" title="1">{
+                        // Exception Byte (bit 6 = 1)
+                        exNum := uint16((b &gt;&gt; 1) &amp; 0x0F)
+                        cancel := (b &amp; 0x20) != 0
+                        // AltISA is on bit 6, handled by extractExceptionData caller or here?
+                        // C++ UpdateAltISA((dataByte &amp; 0x40) != 0)
+                        p.currPacket.Context.CurrAltIsa = true // bit 6 is 1
+                        ns := (b &amp; 0x01) != 0
+                        p.currPacket.Context.CurrNS = ns
+                        p.currPacket.SetException(ocsd.ExcpNoException, exNum, cancel, false, 0, 0)
+                }</span> else<span class="cov8" title="1"> {
+                        // Context Information Byte (bit 6 = 0)
+                        p.currPacket.Context.CurrNS = (b &amp; 0x20) != 0
+                        p.currPacket.Context.CurrHyp = (b &amp; 0x10) != 0
+                        p.currPacket.Context.CurrAltIsa = (b &amp; 0x08) != 0
+                        p.currPacket.Context.Updated = true
+                }</span>
+                <span class="cov8" title="1">if (b &amp; 0x80) != 0x80 </span><span class="cov8" title="1">{
+                        break</span>
+                }
+        }
+}
+
+func (p *PktProc) extractCycleCount() uint32 <span class="cov8" title="1">{
+        val := uint32(0)
+        nBits := 0
+
+        for </span><span class="cov8" title="1">{
+                bByte := p.currPacketData[p.currPktIdx]
+                p.currPktIdx++
+
+                val |= uint32(bByte&amp;0x7F) &lt;&lt; nBits
+                nBits += 7
+
+                if (bByte &amp; 0x80) == 0 </span><span class="cov8" title="1">{
+                        break</span>
+                }
+        }
+        <span class="cov8" title="1">return val</span>
+}
+
+func (p *PktProc) extractCtxtID() uint32 <span class="cov8" title="1">{
+        val := uint32(0)
+        ctxtBytes := p.Config.CtxtIDBytes()
+
+        for i := 0; i &lt; ctxtBytes; i++ </span><span class="cov8" title="1">{
+                bByte := p.currPacketData[p.currPktIdx]
+                p.currPktIdx++
+                val |= uint32(bByte) &lt;&lt; (i * 8)
+        }</span>
+        <span class="cov8" title="1">return val</span>
+}
+
+func (p *PktProc) onISyncPacket() <span class="cov8" title="1">{
+        if p.currPacket.Type == PktISyncCycle </span><span class="cov8" title="1">{
+                p.currPktIdx = 1
+                p.currPacket.CycleCount = p.extractCycleCount()
+                p.currPacket.ISyncInfo.HasCycleCount = true
+        }</span> else<span class="cov8" title="1"> {
+                p.currPktIdx = 1
+        }</span>
+
+        <span class="cov8" title="1">infoByte := p.currPacketData[p.currPktIdx]
+        p.currPacket.ISyncInfo.Reason = ocsd.ISyncReason((infoByte &gt;&gt; 5) &amp; 0x3)
+
+        if (infoByte &amp; 0x01) == 0 </span><span class="cov8" title="1">{
+                p.currPacket.CurrISA = ocsd.ISA((infoByte &gt;&gt; 1) &amp; 0x3)
+        }</span> else<span class="cov8" title="1"> {
+                p.currPacket.CurrISA = ocsd.ISACustom
+        }</span>
+
+        <span class="cov8" title="1">p.currPacket.Context.CurrAltIsa = (infoByte &amp; 0x04) != 0
+        p.currPacket.Context.CurrNS = (infoByte &amp; 0x08) != 0
+        p.currPacket.Context.CurrHyp = (infoByte &amp; 0x02) != 0
+        p.currPacket.Context.Updated = true
+
+        if p.Config.CtxtIDBytes() &gt; 0 </span><span class="cov8" title="1">{
+                p.currPktIdx++
+                p.currPacket.Context.CtxtID = p.extractCtxtID()
+                p.currPacket.Context.UpdatedC = true
+        }</span> else<span class="cov8" title="1"> {
+                p.currPktIdx++
+        }</span>
+
+        <span class="cov8" title="1">if p.Config.IsInstrTrace() </span><span class="cov8" title="1">{
+                addrBytes := 4
+                if p.Config.IsV7MArch() &amp;&amp; (infoByte&amp;0x01) != 0 </span><span class="cov8" title="1">{
+                        addrBytes = 0
+                        p.currPacket.CurrISA = ocsd.ISAThumb2
+                }</span>
+
+                <span class="cov8" title="1">addr := uint64(0)
+                for i := 0; i &lt; addrBytes; i++ </span><span class="cov8" title="1">{
+                        b := p.currPacketData[p.currPktIdx]
+                        p.currPktIdx++
+                        addr |= uint64(b) &lt;&lt; (i * 8)
+                }</span>
+                <span class="cov8" title="1">p.currPacket.Addr = addr
+
+                if p.isyncGetLSiP </span><span class="cov0" title="0">{
+                        addr2 := uint64(0)
+                        for i := 0; i &lt; 4; i++ </span><span class="cov0" title="0">{
+                                b := p.currPacketData[p.currPktIdx]
+                                p.currPktIdx++
+                                addr2 |= uint64(b) &lt;&lt; (i * 8)
+                        }</span>
+                        <span class="cov0" title="0">p.currPacket.Data.Addr = addr2
+                        p.currPacket.ISyncInfo.HasLSipAddr = true</span>
+                }
+        } else<span class="cov0" title="0"> {
+                p.currPacket.ISyncInfo.NoAddress = true
+        }</span>
+
+        <span class="cov8" title="1">p.processState = sendPkt</span>
+}
+
+func (p *PktProc) extractDataAddress(bits *uint8, updateBE *bool, beVal *uint8) uint64 <span class="cov8" title="1">{
+        addr := uint64(0)
+        nBits := 0
+        shiftAddr := 0
+
+        for </span><span class="cov8" title="1">{
+                b := p.currPacketData[p.currPktIdx]
+                p.currPktIdx++
+
+                if nBits == 0 </span><span class="cov8" title="1">{
+                        addr |= uint64(b &amp; 0x7F) // lose continuation bit
+                        nBits += 7
+                }</span> else<span class="cov8" title="1"> {
+                        addr |= uint64(b&amp;0x7F) &lt;&lt; nBits
+                        nBits += 7
+                        // need to extract be here if 5th address byte.
+                        if nBits == 35 </span><span class="cov8" title="1">{ // 5 * 7 bits
+                                *updateBE = true
+                                if (b &amp; 0x40) != 0 </span><span class="cov8" title="1">{
+                                        *beVal = 1
+                                }</span> else<span class="cov8" title="1"> {
+                                        *beVal = 0
+                                }</span>
+                                <span class="cov8" title="1">addr &amp;= 0xFFFFFFFF</span> // max 32 bits on etmv3... (from doc: ETMv3 only trace 32-bit addresses)
+                        }
+                }
+                <span class="cov8" title="1">if (b &amp; 0x80) == 0 </span><span class="cov8" title="1">{
+                        break</span>
+                }
+        }
+        <span class="cov8" title="1">*bits = uint8(nBits)
+        if shiftAddr &gt; 0 </span><span class="cov0" title="0">{
+                addr &lt;&lt;= shiftAddr
+                *bits += uint8(shiftAddr)
+        }</span>
+        <span class="cov8" title="1">return addr</span>
+}
+
+func (p *PktProc) extractDataValue(sizeCode int) uint32 <span class="cov8" title="1">{
+        val := uint32(0)
+        bytes := sizeCode
+        if bytes == 3 </span><span class="cov8" title="1">{
+                bytes = 4
+        }</span> else<span class="cov8" title="1"> if bytes == 0 </span><span class="cov0" title="0">{
+                return 0 // no value
+        }</span>
+
+        <span class="cov8" title="1">for i := 0; i &lt; bytes; i++ </span><span class="cov8" title="1">{
+                b := p.currPacketData[p.currPktIdx]
+                p.currPktIdx++
+                val |= uint32(b) &lt;&lt; (i * 8)
+        }</span>
+        <span class="cov8" title="1">return val</span>
+}
+
+func (p *PktProc) extractTimestamp(tsBits *uint8) uint64 <span class="cov8" title="1">{
+        val := uint64(0)
+        nBits := 0
+
+        for </span><span class="cov8" title="1">{
+                b := p.currPacketData[p.currPktIdx]
+                p.currPktIdx++
+
+                val |= uint64(b&amp;0x7F) &lt;&lt; nBits
+                nBits += 7
+
+                if (b &amp; 0x80) == 0 </span><span class="cov8" title="1">{
+                        break</span>
+                }
+        }
+        <span class="cov8" title="1">*tsBits = uint8(nBits)
+        return val</span>
+}
+
+func (p *PktProc) throwPacketHeaderErr(msg string) <span class="cov8" title="1">{
+        p.processState = procErr
+        p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, msg))
+}</span>
+
+func (p *PktProc) throwMalformedPacketErr(msg string) <span class="cov8" title="1">{
+        p.processState = procErr
+        p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, msg))
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
