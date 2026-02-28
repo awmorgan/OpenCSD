@@ -317,11 +317,11 @@ func TestDecoder_CoverageBoost(t *testing.T) {
 	dec.DecodeInstruction(itThumbStart)
 
 	// Additional IT instruction patterns
-	InstThumbIsIT(0xbf100000)  // bit 16
-	InstThumbIsIT(0xbf200000)  // bit 17
-	InstThumbIsIT(0xbf400000)  // bit 18
-	InstThumbIsIT(0xbf800000)  // bit 19
-	InstThumbIsIT(0x00000000)  // non-IT
+	InstThumbIsIT(0xbf100000) // bit 16
+	InstThumbIsIT(0xbf200000) // bit 17
+	InstThumbIsIT(0xbf400000) // bit 18
+	InstThumbIsIT(0xbf800000) // bit 19
+	InstThumbIsIT(0x00000000) // non-IT
 
 	// Additional branch and link variations
 	InstThumbIsBranchAndLink(0x47800000, info)
@@ -357,7 +357,7 @@ func TestDecoder_CoverageBoost(t *testing.T) {
 	InstARMBarrier(0xf5700050) // dmb non-cp15
 	InstARMBarrier(0xf5700060) // isb non-cp15
 	InstARMBarrier(0xf5700000) // none non-cp15
-	
+
 	InstThumbBarrier(0xee070f9a)
 	InstThumbBarrier(0xee070fba)
 	InstThumbBarrier(0xee070f95)

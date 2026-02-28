@@ -592,7 +592,6 @@ func TestProcessPHdr_NeedAddr_SentUnknown_Skips(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpData, 2, phdrPkt)
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
-
 	// No new AddrUnknown element should appear (skip path)
 	// Actually, the previous PHdr call set bNeedAddr=true and reset bSentUnknown=false.
 	// So we need to call it ONCE to set bSentUnknown=true, then AGAIN to skip.

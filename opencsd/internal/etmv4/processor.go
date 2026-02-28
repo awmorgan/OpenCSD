@@ -524,7 +524,7 @@ func (p *Processor) iPktException(lastByte uint8) {
 
 	if len(p.currPacketData) == p.excepSize {
 		excepType := uint16((p.currPacketData[1] >> 1) & 0x1F)
-		addrInterp := (p.currPacketData[1] & 0x40) >> 5 | (p.currPacketData[1] & 0x1)
+		addrInterp := (p.currPacketData[1]&0x40)>>5 | (p.currPacketData[1] & 0x1)
 		mFaultPending := uint8(0)
 		mType := false
 		if p.config.CoreProf == ocsd.ProfileCortexM {
@@ -570,7 +570,7 @@ func (p *Processor) iPktCycleCntF123(lastByte uint8) {
 		switch format {
 		case PktCcntF3:
 			if !p.config.CommitOpt1() {
-				p.currPacket.CommitElements = (uint32(lastByte>>2)&0x3) + 1
+				p.currPacket.CommitElements = (uint32(lastByte>>2) & 0x3) + 1
 			}
 			p.currPacket.CycleCount = p.currPacket.CCThreshold + uint32(lastByte&0x3)
 			p.processState = SendPkt

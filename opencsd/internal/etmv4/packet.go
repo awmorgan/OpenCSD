@@ -12,29 +12,29 @@ type PktType int
 
 const (
 	/* state of decode markers */
-	PktNotSync         PktType = 0x200 /*!< no sync found yet. */
-	PktIncompleteEOT   PktType = 0x201 /*!< flushing incomplete/empty packet at end of trace.*/
-	PktNoErrType       PktType = 0x202 /*!< error type not set for packet. */
+	PktNotSync       PktType = 0x200 /*!< no sync found yet. */
+	PktIncompleteEOT PktType = 0x201 /*!< flushing incomplete/empty packet at end of trace.*/
+	PktNoErrType     PktType = 0x202 /*!< error type not set for packet. */
 
 	/* markers for unknown/bad packets */
-	PktBadSequence     PktType = 0x300 /*!< invalid sequence for packet type. */
-	PktBadTraceMode    PktType = 0x301 /*!< invalid packet type for this trace mode. */
-	PktReserved        PktType = 0x302 /*!< packet type reserved. */
-	PktReservedCfg     PktType = 0x303 /*!< packet type reserved for current configuration */
+	PktBadSequence  PktType = 0x300 /*!< invalid sequence for packet type. */
+	PktBadTraceMode PktType = 0x301 /*!< invalid packet type for this trace mode. */
+	PktReserved     PktType = 0x302 /*!< packet type reserved. */
+	PktReservedCfg  PktType = 0x303 /*!< packet type reserved for current configuration */
 
 	/* I stream packet types. */
 	/* extension header. */
-	PktExtension       PktType = 0x00 /*!< b00000000  */
+	PktExtension PktType = 0x00 /*!< b00000000  */
 
 	/* sync */
-	PktTraceInfo       PktType = 0x01 /*!< b00000001 */
+	PktTraceInfo PktType = 0x01 /*!< b00000001 */
 	// timestamp
-	PktTimestamp       PktType = 0x02 /*!< b0000001x */
-	PktTraceOn         PktType = 0x04 /*!< b00000100 */
-	PktFuncRet         PktType = 0x05 /*!< b00000101 (V8M only) */
+	PktTimestamp PktType = 0x02 /*!< b0000001x */
+	PktTraceOn   PktType = 0x04 /*!< b00000100 */
+	PktFuncRet   PktType = 0x05 /*!< b00000101 (V8M only) */
 	// Exceptions
-	PktExcept          PktType = 0x06 /*!< b00000110 */
-	PktExceptRtn       PktType = 0x07 /*!< b00000111 (ETE invalid) */
+	PktExcept    PktType = 0x06 /*!< b00000110 */
+	PktExceptRtn PktType = 0x07 /*!< b00000111 (ETE invalid) */
 
 	/* unused encoding              0x08         b00001000 */
 	ETE_PktITE         PktType = 0x09 /*!  b00001001 (ETE only) */
@@ -42,65 +42,65 @@ const (
 	ETE_PktTransCommit PktType = 0x0B /*!  b00001011 (ETE only) */
 
 	/* cycle count packets */
-	PktCcntF2          PktType = 0x0C /*!< b0000110x */
-	PktCcntF1          PktType = 0x0E /*!< b0000111x */
-	PktCcntF3          PktType = 0x10 /*!< b0001xxxx */
+	PktCcntF2 PktType = 0x0C /*!< b0000110x */
+	PktCcntF1 PktType = 0x0E /*!< b0000111x */
+	PktCcntF3 PktType = 0x10 /*!< b0001xxxx */
 
 	// data synchronisation markers
-	PktNumDsMkr        PktType = 0x20 /*!< b00100xxx */
-	PktUnnumDsMkr      PktType = 0x28 /*!< b00101000 to b00101100 0x2C */
+	PktNumDsMkr   PktType = 0x20 /*!< b00100xxx */
+	PktUnnumDsMkr PktType = 0x28 /*!< b00101000 to b00101100 0x2C */
 
 	// commit packets
-	PktCommit          PktType = 0x2D /*!< b00101101 */
+	PktCommit PktType = 0x2D /*!< b00101101 */
 
 	// cancel packets
 	PktCancelF1        PktType = 0x2E /*!< b00101110 */
 	PktCancelF1Mispred PktType = 0x2F /*!< b00101111 */
 
 	// mispredict packets
-	PktMispredict      PktType = 0x30 /*!< b001100xx */
-	PktCancelF2        PktType = 0x34 /*!< b001101xx */
-	PktCancelF3        PktType = 0x38 /*!< b00111xxx */
+	PktMispredict PktType = 0x30 /*!< b001100xx */
+	PktCancelF2   PktType = 0x34 /*!< b001101xx */
+	PktCancelF3   PktType = 0x38 /*!< b00111xxx */
 
 	// condition codes
-	PktCondIF2         PktType = 0x40 /*!< b0100000x */
-	PktCondFlush       PktType = 0x43 /*!< b01000011 */
-	PktCondResF4       PktType = 0x44 /*!< b0100010x */
-	PktCondResF2       PktType = 0x48 /*!< b0100100x */
-	PktCondResF3       PktType = 0x50 /*!< b0101xxxx */
-	PktCondResF1       PktType = 0x68 /*!< b011010xx */
-	PktCondIF1         PktType = 0x6C /*!< b01101100 */
-	PktCondIF3         PktType = 0x6D /*!< b01101101 */
+	PktCondIF2   PktType = 0x40 /*!< b0100000x */
+	PktCondFlush PktType = 0x43 /*!< b01000011 */
+	PktCondResF4 PktType = 0x44 /*!< b0100010x */
+	PktCondResF2 PktType = 0x48 /*!< b0100100x */
+	PktCondResF3 PktType = 0x50 /*!< b0101xxxx */
+	PktCondResF1 PktType = 0x68 /*!< b011010xx */
+	PktCondIF1   PktType = 0x6C /*!< b01101100 */
+	PktCondIF3   PktType = 0x6D /*!< b01101101 */
 
-	PktIgnore          PktType = 0x70 /*!< b01110000 */
-	PktEvent           PktType = 0x71 /*!< b01110001 */
+	PktIgnore PktType = 0x70 /*!< b01110000 */
+	PktEvent  PktType = 0x71 /*!< b01110001 */
 
 	// address / context
-	PktCtxtF1          PktType = 0x60 /*!< b0110xxxx */
-	PktCtxtF2          PktType = 0x61 /*!< b0110xxxx */
-	PktCtxtF3          PktType = 0x62 /*!< b0110xxxx */
-	PktCtxtF4          PktType = 0x63 /*!< b0110xxxx */
+	PktCtxtF1 PktType = 0x60 /*!< b0110xxxx */
+	PktCtxtF2 PktType = 0x61 /*!< b0110xxxx */
+	PktCtxtF3 PktType = 0x62 /*!< b0110xxxx */
+	PktCtxtF4 PktType = 0x63 /*!< b0110xxxx */
 
-	PktCtxt              PktType = 0x80 /*!< b1000xxxx */
+	PktCtxt PktType = 0x80 /*!< b1000xxxx */
 
-	PktAddrCtxtL_32IS0   PktType = 0x82 /*!< b10000010  */
-	PktAddrCtxtL_32IS1   PktType = 0x83 /*!< b10000011  */
-	PktAddrCtxtL_64IS0   PktType = 0x85 /*!< b10000101  */
-	PktAddrCtxtL_64IS1   PktType = 0x86 /*!< b10000110  */
+	PktAddrCtxtL_32IS0 PktType = 0x82 /*!< b10000010  */
+	PktAddrCtxtL_32IS1 PktType = 0x83 /*!< b10000011  */
+	PktAddrCtxtL_64IS0 PktType = 0x85 /*!< b10000101  */
+	PktAddrCtxtL_64IS1 PktType = 0x86 /*!< b10000110  */
 
-	ETE_PktTSMarker      PktType = 0x88 /*!< b10001000 (ETE 1.1) */
+	ETE_PktTSMarker PktType = 0x88 /*!< b10001000 (ETE 1.1) */
 
-	PktAddrMatch         PktType = 0x90 /*!< exact address match packet */
+	PktAddrMatch PktType = 0x90 /*!< exact address match packet */
 
-	PktAddrS_IS0         PktType = 0x95 /*!< Short addr IS0 */
-	PktAddrS_IS1         PktType = 0x96 /*!< Short addr IS1 */
+	PktAddrS_IS0 PktType = 0x95 /*!< Short addr IS0 */
+	PktAddrS_IS1 PktType = 0x96 /*!< Short addr IS1 */
 
-	PktAddrL_32IS0       PktType = 0x9A /*!< long address instruction format 5 */
-	PktAddrL_32IS1       PktType = 0x9B /*!< long address instruction format 6 */
-	PktAddrL_64IS0       PktType = 0x9D /*!< long address instruction format 7 */
-	PktAddrL_64IS1       PktType = 0x9E /*!< long address instruction format 8 */
+	PktAddrL_32IS0 PktType = 0x9A /*!< long address instruction format 5 */
+	PktAddrL_32IS1 PktType = 0x9B /*!< long address instruction format 6 */
+	PktAddrL_64IS0 PktType = 0x9D /*!< long address instruction format 7 */
+	PktAddrL_64IS1 PktType = 0x9E /*!< long address instruction format 8 */
 
-	PktQ               PktType = 0xA0 /*!< b1010xxxx */
+	PktQ PktType = 0xA0 /*!< b1010xxxx */
 
 	ETE_PktSrcAddrMatch   PktType = 0xB0
 	ETE_PktSrcAddrS_IS0   PktType = 0xB4
@@ -111,30 +111,30 @@ const (
 	ETE_PktSrcAddrL_64IS1 PktType = 0xB9
 
 	// atoms
-	PktAtomF6          PktType = 0xC0 /*!< b11000000 - b11010100 0xC0 - 0xD4, b11100000 - b11110100 0xE0 - 0xF4 */
-	PktAtomF5          PktType = 0xD5 /*!< b11010101 - b11010111 0xD5 - 0xD7, b11110101 0xF5 */
-	PktAtomF2          PktType = 0xD8 /*!< b110110xx to 0xDB */
-	PktAtomF4          PktType = 0xDC /*!< b110111xx to 0xDF */
-	PktAtomF1          PktType = 0xF6 /*!< b1111011x to 0xF7 */
-	PktAtomF3          PktType = 0xF8 /*!< b11111xxx to 0xFF */
+	PktAtomF6 PktType = 0xC0 /*!< b11000000 - b11010100 0xC0 - 0xD4, b11100000 - b11110100 0xE0 - 0xF4 */
+	PktAtomF5 PktType = 0xD5 /*!< b11010101 - b11010111 0xD5 - 0xD7, b11110101 0xF5 */
+	PktAtomF2 PktType = 0xD8 /*!< b110110xx to 0xDB */
+	PktAtomF4 PktType = 0xDC /*!< b110111xx to 0xDF */
+	PktAtomF1 PktType = 0xF6 /*!< b1111011x to 0xF7 */
+	PktAtomF3 PktType = 0xF8 /*!< b11111xxx to 0xFF */
 
 	// extension packets - follow 0x00 header
-	PktAsync           PktType = 0x100 /*!< b00000000 */
-	PktDiscard         PktType = 0x103 /*!< b00000011 */
-	PktOverflow        PktType = 0x105 /*!< b00000101 */
+	PktAsync    PktType = 0x100 /*!< b00000000 */
+	PktDiscard  PktType = 0x103 /*!< b00000011 */
+	PktOverflow PktType = 0x105 /*!< b00000101 */
 
-	// ETE extended types 
-	ETE_PktPeReset     PktType = 0x400 // base type is exception packet.
-	ETE_PktTransFail   PktType = 0x401 // base type is exception packet.
+	// ETE extended types
+	ETE_PktPeReset   PktType = 0x400 // base type is exception packet.
+	ETE_PktTransFail PktType = 0x401 // base type is exception packet.
 )
 
 // Info for TINFO packet.
 type TraceInfo struct {
-	CCEnabled        bool // 1 if cycle count enabled
-	CondEnabled      uint8 // conditional trace enabled type.
-	P0Load           bool // 1 if tracing with P0 load elements (for data trace)
-	P0Store          bool // 1 if tracing with P0 store elements (for data trace)
-	InTransState     bool // 1 if starting trace when in a transactional state (ETE trace).
+	CCEnabled    bool  // 1 if cycle count enabled
+	CondEnabled  uint8 // conditional trace enabled type.
+	P0Load       bool  // 1 if tracing with P0 load elements (for data trace)
+	P0Store      bool  // 1 if tracing with P0 store elements (for data trace)
+	InTransState bool  // 1 if starting trace when in a transactional state (ETE trace).
 
 	// internal decoder info for processing TINFO packets
 	InitialTInfo     bool // 1 if this tinfo is the initial one used to start decode
@@ -143,16 +143,16 @@ type TraceInfo struct {
 
 // Trace context.
 type Context struct {
-	EL          uint8 // exception level.
-	SF          bool  // sixty four bit
-	NS          bool  // none secure
-	Updated     bool  // updated this context packet (otherwise same as last time)
-	UpdatedC    bool  // updated CtxtID
-	UpdatedV    bool  // updated VMID
-	NSE         bool  // PE FEAT_RME: root / realm indicator
+	EL       uint8 // exception level.
+	SF       bool  // sixty four bit
+	NS       bool  // none secure
+	Updated  bool  // updated this context packet (otherwise same as last time)
+	UpdatedC bool  // updated CtxtID
+	UpdatedV bool  // updated VMID
+	NSE      bool  // PE FEAT_RME: root / realm indicator
 
-	CtxtID      uint32 // Current ctxtID
-	VMID        uint32 // current VMID
+	CtxtID uint32 // Current ctxtID
+	VMID   uint32 // current VMID
 }
 
 // Exception information.
@@ -164,25 +164,25 @@ type ExceptionInfo struct {
 }
 
 type CondInstr struct {
-	CondCKey     uint32
-	NumCElem     uint8
-	CondKeySet   bool
-	F3FinalElem  bool
-	F2CondIncr   bool
+	CondCKey    uint32
+	NumCElem    uint8
+	CondKeySet  bool
+	F3FinalElem bool
+	F2CondIncr  bool
 }
 
 type CondResult struct {
-	CondRKey0    uint32
-	CondRKey1    uint32
-	Res0         uint8
-	Res1         uint8
-	CI0          bool
-	CI1          bool
-	KeyRes0Set   bool
-	KeyRes1Set   bool
-	F2KeyIncr    uint8
-	F2F4Token    uint8
-	F3Tokens     uint16
+	CondRKey0  uint32
+	CondRKey1  uint32
+	Res0       uint8
+	Res1       uint8
+	CI0        bool
+	CI1        bool
+	KeyRes0Set bool
+	KeyRes1Set bool
+	F2KeyIncr  uint8
+	F2F4Token  uint8
+	F3Tokens   uint16
 }
 
 type QPkt struct {
@@ -213,23 +213,23 @@ type Valid struct {
 
 // Trace packet element.
 type TracePacket struct {
-	Type          PktType
-	ErrType       PktType
-	ErrHdrVal     uint8
+	Type      PktType
+	ErrType   PktType
+	ErrHdrVal uint8
 
 	// intra-packet data - valid across packets.
-	VAddr         ocsd.VAddr
-	VAddrISA      uint8
-	Context       Context
+	VAddr    ocsd.VAddr
+	VAddrISA uint8
+	Context  Context
 
 	Timestamp     uint64
 	TSBitsChanged uint8
 
-	CCThreshold   uint32
+	CCThreshold uint32
 
 	// single packet data - only valid for specific packet types on packet instance.
-	Atom          ocsd.PktAtom
-	CycleCount    uint32
+	Atom       ocsd.PktAtom
+	CycleCount uint32
 
 	CurrSpecDepth uint32
 	P0Key         uint32
@@ -237,7 +237,7 @@ type TracePacket struct {
 	CommitElements uint32
 	CancelElements uint32
 
-	TraceInfo     TraceInfo
+	TraceInfo TraceInfo
 
 	ExceptionInfo ExceptionInfo
 
@@ -245,13 +245,13 @@ type TracePacket struct {
 	DsmVal            uint8
 	EventVal          uint8
 
-	CondInstr     CondInstr
-	CondResult    CondResult
-	QPkt          QPkt
-	ITEPkt        ITEPkt
+	CondInstr  CondInstr
+	CondResult CondResult
+	QPkt       QPkt
+	ITEPkt     ITEPkt
 
-	Valid         Valid
-	
+	Valid Valid
+
 	ProtocolVersion uint8
 }
 
