@@ -54,11 +54,26 @@ const (
 	PktCommit          PktType = 0x30 /*!< b0011xxxx */
 
 	// cancel packets
-	PktCancelF1        PktType = 0x40 /*!< b01000000 */
+	PktCancelF1        PktType = 0x2E /*!< b00101110 */
+	PktCancelF1Mispred PktType = 0x2F /*!< b00101111 */
+
 	// mispredict packets
-	PktMispredict      PktType = 0x41 /*!< b01000001 */
-	PktCancelF2        PktType = 0x42 /*!< b01000010 */
-	PktCancelF3        PktType = 0x43 /*!< b01000011 */
+	PktMispredict      PktType = 0x30 /*!< b001100xx */
+	PktCancelF2        PktType = 0x34 /*!< b001101xx */
+	PktCancelF3        PktType = 0x38 /*!< b00111xxx */
+
+	// condition codes
+	PktCondIF2         PktType = 0x40 /*!< b0100000x */
+	PktCondFlush       PktType = 0x43 /*!< b01000011 */
+	PktCondResF4       PktType = 0x44 /*!< b0100010x */
+	PktCondResF2       PktType = 0x48 /*!< b0100100x */
+	PktCondResF3       PktType = 0x50 /*!< b0101xxxx */
+	PktCondResF1       PktType = 0x68 /*!< b011010xx */
+	PktCondIF1         PktType = 0x6C /*!< b01101100 */
+	PktCondIF3         PktType = 0x6D /*!< b01101101 */
+
+	PktIgnore          PktType = 0x70 /*!< b01110000 */
+	PktEvent           PktType = 0x71 /*!< b01110001 */
 
 	// address / context
 	PktCtxtF1          PktType = 0x60 /*!< b0110xxxx */
@@ -66,43 +81,34 @@ const (
 	PktCtxtF3          PktType = 0x62 /*!< b0110xxxx */
 	PktCtxtF4          PktType = 0x63 /*!< b0110xxxx */
 
-	PktAddrCtxtF1      PktType = 0x80 /*!< b1000xxxx */
-	PktAddrCtxtF2      PktType = 0x81 /*!< b1000xxxx */
+	PktCtxt              PktType = 0x80 /*!< b1000xxxx */
 
-	PktAddrCtxtF3      PktType = 0x82 /*!< b1000xxxx */
-	PktAddrCtxtF4      PktType = 0x83 /*!< b1000xxxx */
-	PktAddrCtxtF5      PktType = 0x84 /*!< b1000xxxx */
-	PktAddrCtxtF6      PktType = 0x85 /*!< b1000xxxx */
+	PktAddrCtxtL_32IS0   PktType = 0x82 /*!< b10000010  */
+	PktAddrCtxtL_32IS1   PktType = 0x83 /*!< b10000011  */
+	PktAddrCtxtL_64IS0   PktType = 0x85 /*!< b10000101  */
+	PktAddrCtxtL_64IS1   PktType = 0x86 /*!< b10000110  */
 
-	PktAddrMatch       PktType = 0x86 /*!< exact address match packet */
-	PktAddrCtxtF3_6    PktType = 0x87 /*!< b1000xxxx */
+	ETE_PktTSMarker      PktType = 0x88 /*!< b10001000 (ETE 1.1) */
 
-	PktAddrMatch_IS0   PktType = 0x88 /*!< exact match + IS0 */
-	PktAddrMatch_IS1   PktType = 0x89 /*!< exact match + IS1 */
+	PktAddrMatch         PktType = 0x90 /*!< exact address match packet */
 
-	PktShortAddrCtxt   PktType = 0x8a /*!< Short addr + ctx */
-	PktShortAddr       PktType = 0x8b /*!< Short addr */
+	PktAddrS_IS0         PktType = 0x95 /*!< Short addr IS0 */
+	PktAddrS_IS1         PktType = 0x96 /*!< Short addr IS1 */
 
-	PktAddrF1          PktType = 0x90 /*!< b1001xxxx */
-	PktAddrF2          PktType = 0x91 /*!< b1001xxxx */
-	PktAddrF3          PktType = 0x92 /*!< b1001xxxx */
-	PktAddrF4          PktType = 0x93 /*!< b1001xxxx */
-	PktAddrF5          PktType = 0x9A /*!< long address instruction format 5 */
-	PktAddrF6          PktType = 0x9B /*!< long address instruction format 6 */
+	PktAddrL_32IS0       PktType = 0x9A /*!< long address instruction format 5 */
+	PktAddrL_32IS1       PktType = 0x9B /*!< long address instruction format 6 */
+	PktAddrL_64IS0       PktType = 0x9D /*!< long address instruction format 7 */
+	PktAddrL_64IS1       PktType = 0x9E /*!< long address instruction format 8 */
 
 	PktQ               PktType = 0xA0 /*!< b1010xxxx */
 
-	// Instruction Condition Result
-	PktCondResF1       PktType = 0xB0 /*!< b101100xx */
-	PktCondResF2       PktType = 0xB4 /*!< b1011010x */
-	PktCondResF3       PktType = 0xB6 /*!< b10110110 */
-	PktCondResF4       PktType = 0xB7 /*!< b10110111 */
-
-	PktCondInstrF1     PktType = 0xB8 /*!< b10111xx0 */
-	PktCondInstrF2     PktType = 0xB9 /*!< b10111001 */
-	PktCondInstrF3     PktType = 0xBB /*!< b10111011 */
-	PktEvent           PktType = 0xBD /*!< b10111101 */
-	PktRes0            PktType = 0xBE /*!< b1011111x */
+	ETE_PktSrcAddrMatch   PktType = 0xB0
+	ETE_PktSrcAddrS_IS0   PktType = 0xB4
+	ETE_PktSrcAddrS_IS1   PktType = 0xB5
+	ETE_PktSrcAddrL_32IS0 PktType = 0xB6
+	ETE_PktSrcAddrL_32IS1 PktType = 0xB7
+	ETE_PktSrcAddrL_64IS0 PktType = 0xB8
+	ETE_PktSrcAddrL_64IS1 PktType = 0xB9
 
 	// atoms
 	PktAtomF6          PktType = 0xC0 /*!< b11000000 - b11010100 0xC0 - 0xD4, b11100000 - b11110100 0xE0 - 0xF4 */
@@ -302,76 +308,78 @@ func (t PktType) String() string {
 		return "I_COMMIT"
 	case PktCancelF1:
 		return "I_CANCEL_F1"
-	case PktMispredict:
-		return "I_MISPREDICT"
+	case PktCancelF1Mispred:
+		return "I_CANCEL_F1_MISPRED"
 	case PktCancelF2:
 		return "I_CANCEL_F2"
 	case PktCancelF3:
 		return "I_CANCEL_F3"
-	case PktCtxtF1:
-		return "I_CTXT_F1"
-	case PktCtxtF2:
-		return "I_CTXT_F2"
-	case PktCtxtF3:
-		return "I_CTXT_F3"
-	case PktCtxtF4:
-		return "I_CTXT_F4"
-	case PktAddrCtxtF1:
-		return "I_ADDR_CTXT_F1"
-	case PktAddrCtxtF2:
-		return "I_ADDR_CTXT_F2"
-	case PktAddrCtxtF3:
-		return "I_ADDR_CTXT_F3"
-	case PktAddrCtxtF4:
-		return "I_ADDR_CTXT_F4"
-	case PktAddrCtxtF5:
-		return "I_ADDR_CTXT_F5"
-	case PktAddrCtxtF6:
-		return "I_ADDR_CTXT_F6"
+	case PktCtxt:
+		return "I_CTXT"
+	case PktAddrCtxtL_32IS0:
+		return "I_ADDR_CTXT_L_32IS0"
+	case PktAddrCtxtL_32IS1:
+		return "I_ADDR_CTXT_L_32IS1"
+	case PktAddrCtxtL_64IS0:
+		return "I_ADDR_CTXT_L_64IS0"
+	case PktAddrCtxtL_64IS1:
+		return "I_ADDR_CTXT_L_64IS1"
+
+	case ETE_PktTSMarker:
+		return "I_TS_MARKER"
+
 	case PktAddrMatch:
 		return "I_ADDR_MATCH"
-	case PktAddrCtxtF3_6:
-		return "I_ADDR_CTXT_F3_6"
-	case PktAddrMatch_IS0:
-		return "I_ADDR_MATCH_IS0"
-	case PktAddrMatch_IS1:
-		return "I_ADDR_MATCH_IS1"
-	case PktShortAddrCtxt:
-		return "I_SHORT_ADDR_CTXT"
-	case PktShortAddr:
-		return "I_SHORT_ADDR"
-	case PktAddrF1:
-		return "I_ADDR_F1"
-	case PktAddrF2:
-		return "I_ADDR_F2"
-	case PktAddrF3:
-		return "I_ADDR_F3"
-	case PktAddrF4:
-		return "I_ADDR_F4"
-	case PktAddrF5:
-		return "I_ADDR_F5"
-	case PktAddrF6:
-		return "I_ADDR_F6"
+
+	case PktAddrS_IS0:
+		return "I_ADDR_S_IS0"
+	case PktAddrS_IS1:
+		return "I_ADDR_S_IS1"
+
+	case PktAddrL_32IS0:
+		return "I_ADDR_L_32IS0"
+	case PktAddrL_32IS1:
+		return "I_ADDR_L_32IS1"
+	case PktAddrL_64IS0:
+		return "I_ADDR_L_64IS0"
+	case PktAddrL_64IS1:
+		return "I_ADDR_L_64IS1"
 	case PktQ:
 		return "I_Q"
-	case PktCondResF1:
-		return "I_COND_RES_F1"
+	case PktCondIF2:
+		return "I_COND_I_F2"
+	case PktCondFlush:
+		return "I_COND_FLUSH"
+	case PktCondResF4:
+		return "I_COND_RES_F4"
 	case PktCondResF2:
 		return "I_COND_RES_F2"
 	case PktCondResF3:
 		return "I_COND_RES_F3"
-	case PktCondResF4:
-		return "I_COND_RES_F4"
-	case PktCondInstrF1:
-		return "I_COND_INSTR_F1"
-	case PktCondInstrF2:
-		return "I_COND_INSTR_F2"
-	case PktCondInstrF3:
-		return "I_COND_INSTR_F3"
+	case PktCondResF1:
+		return "I_COND_RES_F1"
+	case PktCondIF1:
+		return "I_COND_I_F1"
+	case PktCondIF3:
+		return "I_COND_I_F3"
+	case PktIgnore:
+		return "I_IGNORE"
 	case PktEvent:
 		return "I_EVENT"
-	case PktRes0:
-		return "I_RES_0"
+	case ETE_PktSrcAddrMatch:
+		return "ETE_PKT_I_SRC_ADDR_MATCH"
+	case ETE_PktSrcAddrS_IS0:
+		return "ETE_PKT_I_SRC_ADDR_S_IS0"
+	case ETE_PktSrcAddrS_IS1:
+		return "ETE_PKT_I_SRC_ADDR_S_IS1"
+	case ETE_PktSrcAddrL_32IS0:
+		return "ETE_PKT_I_SRC_ADDR_L_32IS0"
+	case ETE_PktSrcAddrL_32IS1:
+		return "ETE_PKT_I_SRC_ADDR_L_32IS1"
+	case ETE_PktSrcAddrL_64IS0:
+		return "ETE_PKT_I_SRC_ADDR_L_64IS0"
+	case ETE_PktSrcAddrL_64IS1:
+		return "ETE_PKT_I_SRC_ADDR_L_64IS1"
 	case PktAtomF6:
 		return "I_ATOM_F6"
 	case PktAtomF5:
