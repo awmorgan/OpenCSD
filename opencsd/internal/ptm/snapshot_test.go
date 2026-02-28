@@ -3,6 +3,7 @@ package ptm_test
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -19,6 +20,27 @@ import (
 
 type mapperAdapter struct {
 	mapper memacc.Mapper
+}
+
+type ptmRawPacketPrinter struct {
+	writer  io.Writer
+	traceID uint8
+}
+
+func (p *ptmRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *ptm.Packet, rawData []byte) {
+	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Idx:%d; ID:%x; [", indexSOP, p.traceID))
+	for _, b := range rawData {
+		sb.WriteString(fmt.Sprintf("0x%02x ", b))
+	}
+	sb.WriteString("];\t")
+	sb.WriteString(pkt.String())
+	sb.WriteString("\n")
+	_, _ = io.WriteString(p.writer, sb.String())
 }
 
 func (m *mapperAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
@@ -184,6 +206,13 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	var out bytes.Buffer
 	printer := printers.NewGenericElementPrinter(&out)
 	tree.SetGenTraceElemOutI(printer)
+	tree.ForEachElement(func(csID uint8, elem *dcdtree.DecodeTreeElement) {
+		proc, ok := elem.DataIn.(*ptm.PktProc)
+		if !ok || proc == nil {
+			return
+		}
+		_ = proc.PktRawMonI.ReplaceFirst(&ptmRawPacketPrinter{writer: &out, traceID: csID})
+	})
 
 	binFile := filepath.Join(snapshotDir, sourceTree.BufferInfo.DataFileName)
 	traceData, err := os.ReadFile(binFile)
@@ -248,29 +277,108 @@ func sanitizePPL(s string, traceIDs []string) string {
 		}
 	}
 
-	out := make([]string, 0, len(lines)-start)
+	type parsedLine struct {
+		line string
+		id   string
+	}
+
+	parsed := make([]parsedLine, 0, len(lines)-start)
 	for _, line := range lines[start:] {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		if !strings.Contains(line, "OCSD_GEN_TRC_ELEM_") {
+		if !strings.HasPrefix(line, "Idx:") {
 			continue
 		}
-		if len(idSet) != 0 {
-			idVal, ok := extractLineID(line)
-			if !ok {
-				continue
-			}
-			if _, ok := idSet[idVal]; !ok {
-				continue
-			}
+
+		normalized := normalizeSnapshotLine(line)
+		if normalized == "" {
+			continue
 		}
-		if strings.Contains(line, "OCSD_GEN_TRC_ELEM_") {
-			out = append(out, line)
+
+		idVal, ok := extractLineID(line)
+		if !ok {
+			continue
+		}
+		parsed = append(parsed, parsedLine{line: normalized, id: idVal})
+	}
+
+	if len(idSet) == 0 {
+		out := make([]string, 0, len(parsed))
+		for _, entry := range parsed {
+			out = append(out, entry.line)
+		}
+		return strings.Join(out, "\n")
+	}
+
+	out := make([]string, 0, len(parsed))
+	for _, entry := range parsed {
+		if _, ok := idSet[entry.id]; ok {
+			out = append(out, entry.line)
 		}
 	}
+
+	// Legacy PTM traces (e.g. trace_cov_a15) encode generic element lines with ID:2
+	// while packets use ID:0. If filtering by trace ID 0 would remove all generic lines,
+	// keep ID:2 generic lines as part of the PTM stream.
+	if _, hasZero := idSet["0"]; hasZero {
+		hasGeneric := false
+		hasKeptGeneric := false
+		for _, entry := range parsed {
+			if strings.Contains(entry.line, "OCSD_GEN_TRC_ELEM_") {
+				hasGeneric = true
+				if containsLine(out, entry.line) {
+					hasKeptGeneric = true
+				}
+			}
+		}
+		if hasGeneric && !hasKeptGeneric {
+			for _, entry := range parsed {
+				if entry.id == "2" && strings.Contains(entry.line, "OCSD_GEN_TRC_ELEM_") {
+					out = append(out, entry.line)
+				}
+			}
+		}
+	}
+
 	return strings.Join(out, "\n")
+}
+
+func normalizeSnapshotLine(line string) string {
+	if strings.Contains(line, "OCSD_GEN_TRC_ELEM_") {
+		return line
+	}
+
+	left, right, ok := strings.Cut(line, "\t")
+	if !ok {
+		return ""
+	}
+	packetType := extractPacketType(strings.TrimSpace(right))
+	if packetType == "" {
+		return ""
+	}
+	return strings.TrimSpace(left) + "\t" + packetType
+}
+
+func extractPacketType(s string) string {
+	if s == "" {
+		return ""
+	}
+	colon := strings.Index(s, ":")
+	if colon < 0 {
+		return ""
+	}
+	return strings.TrimSpace(s[:colon])
+}
+
+func containsLine(lines []string, target string) bool {
+	for _, line := range lines {
+		if line == target {
+			return true
+		}
+	}
+	return false
 }
 
 func firstDiff(got, want []string) (int, string, string) {

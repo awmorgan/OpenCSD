@@ -200,3 +200,13 @@ func (dt *DecodeTree) GetFirstElement() (uint8, *DecodeTreeElement) {
 	}
 	return 0, nil
 }
+
+// ForEachElement iterates all registered decode tree elements.
+func (dt *DecodeTree) ForEachElement(fn func(csID uint8, elem *DecodeTreeElement)) {
+	if fn == nil {
+		return
+	}
+	for csID, elem := range dt.decodeElements {
+		fn(csID, elem)
+	}
+}
