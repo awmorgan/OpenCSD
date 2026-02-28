@@ -1,0 +1,72 @@
+Trace Packet Lister: CS Decode library testing
+-----------------------------------------------
+
+** Library Version : 1.8.0
+
+Test Command Line:-
+C:\Users\arthu\git\OpenCSD\decoder\tests\bin\mingw64\rel\trc_pkt_lister.exe   -ss_dir  ./snapshots/trace_cov_a15  -decode  -no_time_print  -logfilename  ./results/trace_cov_a15.ppl  
+
+Trace Packet Lister : reading snapshot from path ./snapshots/trace_cov_a15
+Using PTM_0_2 as trace source
+Trace Packet Lister : Protocol printer PTM on Trace ID 0x0
+Trace Packet Lister : Set trace element decode printer
+Gen_Info : Mapped Memory Accessors
+Gen_Info : FileAcc; Range::0x80000000:80000277; Mem Space::Any S
+Filename=./snapshots/trace_cov_a15/mem_Cortex-A15_0_0_VECTORS.bin
+Gen_Info : FileAcc; Range::0x80000278:80001c27; Mem Space::Any S
+Filename=./snapshots/trace_cov_a15/mem_Cortex-A15_0_1_RO_CODE.bin
+Gen_Info : FileAcc; Range::0x80001c28:80001d57; Mem Space::Any S
+Filename=./snapshots/trace_cov_a15/mem_Cortex-A15_0_2_RO_DATA.bin
+Gen_Info : FileAcc; Range::0x80001d58:80001d67; Mem Space::Any S
+Filename=./snapshots/trace_cov_a15/mem_Cortex-A15_0_3_RW_DATA.bin
+Gen_Info : FileAcc; Range::0x80001d68:80001fa7; Mem Space::Any S
+Filename=./snapshots/trace_cov_a15/mem_Cortex-A15_0_4_ZI_DATA.bin
+Gen_Info : FileAcc; Range::0x80040000:8007ffff; Mem Space::Any S
+Filename=./snapshots/trace_cov_a15/mem_Cortex-A15_0_5_ARM_LIB_HEAP.bin
+Gen_Info : FileAcc; Range::0x80080000:8008ffff; Mem Space::Any S
+Filename=./snapshots/trace_cov_a15/mem_Cortex-A15_0_6_ARM_LIB_STACK.bin
+Gen_Info : FileAcc; Range::0x80090000:8009ffff; Mem Space::Any S
+Filename=./snapshots/trace_cov_a15/mem_Cortex-A15_0_7_IRQ_STACK.bin
+Gen_Info : FileAcc; Range::0x80100000:80103fff; Mem Space::Any S
+Filename=./snapshots/trace_cov_a15/mem_Cortex-A15_0_8_TTB.bin
+Gen_Info : ========================
+Idx:0; ID:0; [0x00 0x00 0x00 0x00 0x00 0x80 ];	ASYNC : Alignment Synchronisation Packet; 
+Idx:0; ID:2; OCSD_GEN_TRC_ELEM_NO_SYNC( [init-decoder])
+Idx:6; ID:0; [0x08 0x58 0x05 0x00 0x80 0x61 ];	ISYNC : Instruction Synchronisation packet; (Debug Exit); Addr=0x80000558; S;  ISA=ARM(32); 
+Idx:6; ID:2; OCSD_GEN_TRC_ELEM_TRACE_ON( [debug restart])
+Idx:6; ID:2; OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=A32) S; 32-bit; )
+Idx:12; ID:0; [0x84 ];	ATOM : Atom packet; E; 
+Idx:12; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x80000558:[0x8000055c] num_i(1) last_sz(4) (ISA=A32) E BR  b+link )
+Idx:13; ID:0; [0x81 0x80 0x80 0x80 0x48 0x02 ];	BRANCH_ADDRESS : Branch address packet; Addr=0x00000000 ~[0x0]; S; Excep=Debug Halt [01]; 
+Idx:13; ID:2; OCSD_GEN_TRC_ELEM_EXCEPTION(pref ret addr:0x80000504; excep num (0x01) )
+Idx:19; ID:0; [0x08 0x04 0x05 0x00 0x80 0x61 ];	ISYNC : Instruction Synchronisation packet; (Debug Exit); Addr=0x80000504; S;  ISA=ARM(32); 
+Idx:19; ID:2; OCSD_GEN_TRC_ELEM_TRACE_ON( [debug restart])
+Idx:25; ID:0; [0xd0 ];	ATOM : Atom packet; ENEEE; 
+Idx:25; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x80000504:[0x80000518] num_i(5) last_sz(4) (ISA=A32) E BR  b+link )
+Idx:25; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x800004d8:[0x800004ec] num_i(5) last_sz(4) (ISA=A32) N BR   <cond>)
+Idx:25; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x800004ec:[0x800004f4] num_i(2) last_sz(4) (ISA=A32) E BR   <cond>)
+Idx:25; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x80000500:[0x80000504] num_i(1) last_sz(4) (ISA=A32) E iBR V7:impl ret)
+Idx:25; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x80000518:[0x80000528] num_i(4) last_sz(4) (ISA=A32) E BR  b+link )
+Idx:26; ID:0; [0xd2 ];	ATOM : Atom packet; ENEEN; 
+Idx:26; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x800004d8:[0x800004ec] num_i(5) last_sz(4) (ISA=A32) E BR   <cond>)
+Idx:26; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x800004f4:[0x800004fc] num_i(2) last_sz(4) (ISA=A32) N BR   <cond>)
+Idx:26; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x800004fc:[0x80000504] num_i(2) last_sz(4) (ISA=A32) E iBR V7:impl ret)
+Idx:26; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x80000528:[0x80000538] num_i(4) last_sz(4) (ISA=A32) E BR  b+link )
+Idx:26; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x800004d8:[0x800004ec] num_i(5) last_sz(4) (ISA=A32) N BR   <cond>)
+Idx:27; ID:0; [0xe2 ];	ATOM : Atom packet; NEEEN; 
+Idx:27; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x800004ec:[0x800004f4] num_i(2) last_sz(4) (ISA=A32) N BR   <cond>)
+Idx:27; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x800004f4:[0x800004fc] num_i(2) last_sz(4) (ISA=A32) E BR   <cond>)
+Idx:27; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x80000500:[0x80000504] num_i(1) last_sz(4) (ISA=A32) E iBR V7:impl ret)
+Idx:27; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x80000538:[0x80000548] num_i(4) last_sz(4) (ISA=A32) E BR  b+link )
+Idx:27; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x800004d8:[0x800004ec] num_i(5) last_sz(4) (ISA=A32) N BR   <cond>)
+Idx:28; ID:0; [0x9c ];	ATOM : Atom packet; NNE; 
+Idx:28; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x800004ec:[0x800004f4] num_i(2) last_sz(4) (ISA=A32) N BR   <cond>)
+Idx:28; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x800004f4:[0x800004fc] num_i(2) last_sz(4) (ISA=A32) N BR   <cond>)
+Idx:28; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x800004fc:[0x80000504] num_i(2) last_sz(4) (ISA=A32) E iBR V7:impl ret)
+Idx:29; ID:0; [0x2f ];	BRANCH_ADDRESS : Branch address packet; Addr=0x8000055C ~[0x5C]; 
+Idx:29; ID:2; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x80000548:[0x8000054c] num_i(1) last_sz(4) (ISA=A32) E iBR V7:impl ret)
+Idx:30; ID:0; [0x81 0x80 0x80 0x80 0x48 0x02 ];	BRANCH_ADDRESS : Branch address packet; Addr=0x00000000 ~[0x0]; S; Excep=Debug Halt [01]; 
+Idx:30; ID:2; OCSD_GEN_TRC_ELEM_EXCEPTION(pref ret addr:0x8000055c; excep num (0x01) )
+Idx:30; ID:2; OCSD_GEN_TRC_ELEM_EO_TRACE( [end-of-trace])
+ID:0	END OF TRACE DATA
+Trace Packet Lister : Trace buffer done, processed 36 bytes.

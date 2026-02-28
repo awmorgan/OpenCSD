@@ -521,11 +521,11 @@ func (e *TraceElement) String() string {
 		case MemSpaceRoot:
 			strEx = "Root"
 		case MemSpaceS:
-			strEx = "S"
+			strEx = "Any S"
 		case MemSpaceN:
-			strEx = "N"
+			strEx = "Any NS"
 		case MemSpaceR:
-			strEx = "R"
+			strEx = "Any R"
 		case MemSpaceAny:
 			strEx = "Any"
 		case MemSpaceNone:

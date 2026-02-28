@@ -448,9 +448,9 @@ func (d *PktDecode) checkPendingNacc(resp *ocsd.DatapathResp) {
 		d.outputElem.SetType(ocsd.GenElemAddrNacc)
 		d.outputElem.StAddr = d.naccAddr
 		if d.peContext.SecurityLevel == ocsd.SecSecure {
-			d.outputElem.SetExceptionNum(uint32(ocsd.MemSpaceEL1S))
+			d.outputElem.SetExceptionNum(uint32(ocsd.MemSpaceS))
 		} else {
-			d.outputElem.SetExceptionNum(uint32(ocsd.MemSpaceEL1N))
+			d.outputElem.SetExceptionNum(uint32(ocsd.MemSpaceN))
 		}
 		*resp = d.OutputTraceElementIdx(d.IndexCurrPkt, &d.outputElem)
 		d.memNaccPending = false
