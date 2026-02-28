@@ -51,7 +51,7 @@ const (
 	PktUnnumDsMkr      PktType = 0x28 /*!< b00101000 to b00101100 0x2C */
 
 	// commit packets
-	PktCommit          PktType = 0x30 /*!< b0011xxxx */
+	PktCommit          PktType = 0x2D /*!< b00101101 */
 
 	// cancel packets
 	PktCancelF1        PktType = 0x2E /*!< b00101110 */
