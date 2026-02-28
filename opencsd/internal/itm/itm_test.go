@@ -4,15 +4,14 @@ import (
 	"fmt"
 	"testing"
 
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
 type testTrcElemIn struct {
-	elements []common.TraceElement
+	elements []ocsd.TraceElement
 }
 
-func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *common.TraceElement) ocsd.DatapathResp {
+func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
 	t.elements = append(t.elements, *elem)
 	return ocsd.RespCont
 }

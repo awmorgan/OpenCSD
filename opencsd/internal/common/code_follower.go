@@ -101,119 +101,79 @@ func (cf *CodeFollower) RangeEn() ocsd.VAddr {
 	return cf.enAddr
 }
 
-// FollowSingleInstr follows execution from the address for one instruction.
-func (cf *CodeFollower) FollowSingleInstr(addr ocsd.VAddr) ocsd.Err {
-	cf.stAddr = addr
-	cf.enAddr = addr
-	cf.nextAddr = addr
-	cf.bHasNxt = false
-	cf.naccErr = false
-	cf.instructs = 0
-
-	// Recompute valid every call so late-attached mocks are picked up
-	cf.valid = cf.memAccess != nil && cf.idDecode != nil &&
-		cf.memAccess.HasAttachedAndEnabled() && cf.idDecode.HasAttachedAndEnabled()
-	if !cf.valid {
-		return ocsd.ErrNotInit
-	}
-
-	cf.instrInfo.InstrAddr = addr
+// DecodeSingleOpCode decodes a single opcode at instrInfo.InstrAddr.
+func (cf *CodeFollower) DecodeSingleOpCode() ocsd.Err {
 	var bytesReq uint32 = 4
-	if cf.isa == ocsd.ISAThumb2 {
-		bytesReq = 2
-	}
 
-	readBytes, pData, err := cf.memAccess.First().ReadTargetMemory(addr, cf.csTraceID, cf.memSpace, bytesReq)
-	if err != ocsd.OK || readBytes < bytesReq || len(pData) < int(bytesReq) {
-		cf.naccErr = true
-		return ocsd.ErrMemNacc
-	}
-	_ = err
+	// Read memory location for opcode
+	readBytes, pData, err := cf.memAccess.First().ReadTargetMemory(cf.instrInfo.InstrAddr, cf.csTraceID, cf.memSpace, bytesReq)
 
-	cf.instrInfo.Opcode = 0
-	for i := 0; i < int(bytesReq); i++ {
-		cf.instrInfo.Opcode |= uint32(pData[i]) << (i * 8)
-	}
-
-	// Pre-check for 32-bit thumb format
-	if cf.isa == ocsd.ISAThumb2 && (cf.instrInfo.Opcode&0xE000) == 0xE000 && (cf.instrInfo.Opcode&0x1800) != 0 {
-		// Needs another 2 bytes
-		readBytes, pData2, err2 := cf.memAccess.First().ReadTargetMemory(addr+2, cf.csTraceID, cf.memSpace, 2)
-		if err2 != ocsd.OK || readBytes < 2 || len(pData2) < 2 {
-			cf.naccErr = true
-			return ocsd.ErrMemNacc
-		}
-		cf.instrInfo.Opcode |= uint32(pData2[0]) << 16
-		cf.instrInfo.Opcode |= uint32(pData2[1]) << 24
-		_ = err2
-	}
-
-	err = cf.idDecode.First().DecodeInstruction(&cf.instrInfo)
 	if err != ocsd.OK {
 		return err
 	}
-	_ = err
 
-	cf.instructs = 1
-	cf.enAddr = addr + ocsd.VAddr(cf.instrInfo.InstrSize)
+	if readBytes == 4 && len(pData) >= 4 {
+		cf.instrInfo.Opcode = 0
+		for i := 0; i < 4; i++ {
+			cf.instrInfo.Opcode |= uint32(pData[i]) << (i * 8)
+		}
 
-	if cf.instrInfo.Type != ocsd.InstrOther {
-		cf.nextAddr = cf.instrInfo.BranchAddr
-	} else {
-		cf.nextAddr = cf.enAddr
+		err = cf.idDecode.First().DecodeInstruction(&cf.instrInfo)
+		return err
 	}
 
-	cf.bHasNxt = true
-	return ocsd.OK
+	// Memory unavailable
+	cf.naccErr = true
+	cf.nextAddr = cf.instrInfo.InstrAddr
+	return ocsd.ErrMemNacc
 }
 
-// FollowSingleAtom follows instructions in a loop until a waypoint is found, then applies the atom.
-func (cf *CodeFollower) FollowSingleAtom(addr ocsd.VAddr, atom ocsd.AtmVal) ocsd.Err {
-	saveStAddr := addr
-	currAddr := addr
-	cf.stAddr = addr
-	cf.enAddr = addr
-	cf.nextAddr = addr
+func (cf *CodeFollower) initFollowerState() bool {
 	cf.bHasNxt = false
 	cf.naccErr = false
-	cf.instructs = 0
+	cf.enAddr = cf.stAddr
+	cf.nextAddr = cf.stAddr
 
-	totalInstructs := uint32(0)
+	cf.valid = cf.memAccess != nil && cf.idDecode != nil &&
+		cf.memAccess.HasAttachedAndEnabled() && cf.idDecode.HasAttachedAndEnabled()
+	return cf.valid
+}
 
-	for {
-		err := cf.FollowSingleInstr(currAddr)
-		if err != ocsd.OK {
-			// cf.instructs will have the number of instructions BEFORE the nacc
-			cf.instructs = totalInstructs
-			cf.stAddr = saveStAddr
-			return err
-		}
-		totalInstructs++
-
-		if cf.instrInfo.Type != ocsd.InstrOther {
-			// Waypoint found, apply atom
-			cf.instructs = totalInstructs
-			if atom == ocsd.AtomE {
-				// branch taken, cf.nextAddr is already set by FollowSingleInstr for direct branches
-				if cf.instrInfo.Type == ocsd.InstrBrIndirect {
-					cf.bHasNxt = false
-				}
-			} else {
-				// branch NOT taken
-				cf.nextAddr = cf.enAddr
-				cf.bHasNxt = true
-			}
-			cf.stAddr = saveStAddr
-			return ocsd.OK
-		}
-
-		if totalInstructs >= 1200 { // Matches typical OpenCSD limits
-			cf.instructs = totalInstructs
-			cf.stAddr = saveStAddr
-			cf.nextAddr = cf.enAddr
-			cf.bHasNxt = true
-			return ocsd.ErrIRangeLimitOverrun
-		}
-		currAddr = cf.nextAddr
+// FollowSingleAtom decodes an instruction at a single location and calculates the next address.
+func (cf *CodeFollower) FollowSingleAtom(addrStart ocsd.VAddr, atom ocsd.AtmVal) ocsd.Err {
+	if !cf.initFollowerState() {
+		return ocsd.ErrNotInit
 	}
+
+	cf.enAddr = addrStart
+	cf.stAddr = addrStart
+	cf.instrInfo.InstrAddr = addrStart
+	err := cf.DecodeSingleOpCode()
+
+	if err != ocsd.OK {
+		cf.naccErr = err == ocsd.ErrMemNacc
+		return err
+	}
+
+	// Set end range - always after the instruction executed
+	cf.enAddr = cf.instrInfo.InstrAddr + ocsd.VAddr(cf.instrInfo.InstrSize)
+	cf.instructs = 1
+
+	// Assume next addr is the instruction after
+	cf.nextAddr = cf.enAddr
+	cf.bHasNxt = true
+
+	// Case when next address is different depending on branch and atom
+	switch cf.instrInfo.Type {
+	case ocsd.InstrBr:
+		if atom == ocsd.AtomE { // Executed the direct branch
+			cf.nextAddr = cf.instrInfo.BranchAddr
+		}
+	case ocsd.InstrBrIndirect:
+		if atom == ocsd.AtomE { // Executed indirect branch
+			cf.bHasNxt = false
+		}
+	}
+
+	return ocsd.OK
 }

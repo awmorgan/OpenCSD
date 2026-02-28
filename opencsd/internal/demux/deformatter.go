@@ -243,12 +243,14 @@ func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byt
 	defer func() {
 		if r := recover(); r != nil {
 			if e, ok := r.(*common.Error); ok {
+				fmt.Printf("RECOVERED COMMON.ERROR: %v\n", e)
 				d.collateDataPathResp(ocsd.RespFatalInvalidData)
 				if d.errorLogger != nil {
 					d.errorLogger.LogError(e)
 				}
 			} else {
 				// Sys err
+				fmt.Printf("RECOVERED PANIC: %v\n", r)
 				errObj := common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrFail, fmt.Sprintf("Panic %v", r))
 				d.collateDataPathResp(ocsd.RespFatalSysErr)
 				if d.errorLogger != nil {

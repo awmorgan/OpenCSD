@@ -49,15 +49,15 @@ func buildDecInDecodePkts(config *Config) (*PktDecode, *testTrcElemIn) {
 }
 
 // elemTypes returns the slice of ElemTypes from the captured elements.
-func elemTypes(out *testTrcElemIn) []common.GenElemType {
-	types := make([]common.GenElemType, len(out.elements))
+func elemTypes(out *testTrcElemIn) []ocsd.GenElemType {
+	types := make([]ocsd.GenElemType, len(out.elements))
 	for i, e := range out.elements {
 		types[i] = e.ElemType
 	}
 	return types
 }
 
-func containsElemType(out *testTrcElemIn, want common.GenElemType) bool {
+func containsElemType(out *testTrcElemIn, want ocsd.GenElemType) bool {
 	for _, e := range out.elements {
 		if e.ElemType == want {
 			return true
@@ -88,7 +88,7 @@ func TestSendUnsyncPacket_EmitsNoSync(t *testing.T) {
 	pkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
 	dec.PacketDataIn(ocsd.OpData, 0, pkt)
 
-	if !containsElemType(out, common.GenElemNoSync) {
+	if !containsElemType(out, ocsd.GenElemNoSync) {
 		t.Error("expected GenElemNoSync from sendUnsyncPacket")
 	}
 }
@@ -110,10 +110,10 @@ func TestSendUnsyncPacket_UnsyncInfoPreserved(t *testing.T) {
 
 	found := false
 	for _, e := range out.elements {
-		if e.ElemType == common.GenElemNoSync {
+		if e.ElemType == ocsd.GenElemNoSync {
 			found = true
 			// verify the UnsyncEOTInfo was set from initDecoder's UnsyncInitDecoder
-			if e.Payload.UnsyncEOTInfo != common.UnsyncInitDecoder {
+			if e.Payload.UnsyncEOTInfo != ocsd.UnsyncInfo(common.UnsyncInitDecoder) {
 				t.Errorf("expected UnsyncInitDecoder, got %v", e.Payload.UnsyncEOTInfo)
 			}
 			break
@@ -211,10 +211,10 @@ func TestProcessBranchAddr_ExcepContextUpdate_EmitsPeContext(t *testing.T) {
 	hasPeCtx := false
 	hasExcep := false
 	for _, e := range out.elements[n0:] {
-		if e.ElemType == common.GenElemPeContext {
+		if e.ElemType == ocsd.GenElemPeContext {
 			hasPeCtx = true
 		}
-		if e.ElemType == common.GenElemException {
+		if e.ElemType == ocsd.GenElemException {
 			hasExcep = true
 		}
 	}
@@ -259,7 +259,7 @@ func TestProcessBranchAddr_ExcepPresent_SameSecuritySameEL(t *testing.T) {
 	// Exception element must be present
 	hasExcep := false
 	for _, e := range out.elements[n0:] {
-		if e.ElemType == common.GenElemException {
+		if e.ElemType == ocsd.GenElemException {
 			hasExcep = true
 		}
 	}
@@ -283,7 +283,7 @@ func TestProcessBranchAddr_ExcepPresent_NumberZero(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpData, 2, pkt)
 
 	for _, e := range out.elements[n0:] {
-		if e.ElemType == common.GenElemException {
+		if e.ElemType == ocsd.GenElemException {
 			t.Error("should NOT emit GenElemException when exception.Number == 0")
 		}
 	}
@@ -339,7 +339,7 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 		t.Error("expected InstrRange element from E-atom processing")
 	}
 	for _, e := range out.elements[n0:] {
-		if e.ElemType == common.GenElemInstrRange {
+		if e.ElemType == ocsd.GenElemInstrRange {
 			if e.StAddr != 0x1000 {
 				t.Errorf("expected StAddr=0x1000, got 0x%X", e.StAddr)
 			}
@@ -481,7 +481,7 @@ func TestProcessPHdr_CCFmt3_WithAtoms(t *testing.T) {
 	// Should emit element with CycleCount set
 	found := false
 	for _, e := range out.elements[n0:] {
-		if e.ElemType == common.GenElemInstrRange && e.CycleCount == 5 {
+		if e.ElemType == ocsd.GenElemInstrRange && e.CycleCount == 5 {
 			found = true
 		}
 	}
@@ -510,7 +510,7 @@ func TestProcessPHdr_CCOnly_ZeroAtoms(t *testing.T) {
 
 	hasCCElem := false
 	for _, e := range out.elements[n0:] {
-		if e.ElemType == common.GenElemCycleCount && e.CycleCount == 99 {
+		if e.ElemType == ocsd.GenElemCycleCount && e.CycleCount == 99 {
 			hasCCElem = true
 		}
 	}
@@ -547,7 +547,7 @@ func TestProcessPHdr_NeedAddr_EmitsAddrUnknown(t *testing.T) {
 
 	found := false
 	for _, e := range out.elements[n0:] {
-		if e.ElemType == common.GenElemAddrUnknown {
+		if e.ElemType == ocsd.GenElemAddrUnknown {
 			found = true
 			break
 		}
@@ -584,7 +584,7 @@ func TestProcessPHdr_NeedAddr_SentUnknown_Skips(t *testing.T) {
 
 	// No new AddrUnknown element should appear (skip path)
 	for _, e := range out.elements[n0:] {
-		if e.ElemType == common.GenElemAddrUnknown {
+		if e.ElemType == ocsd.GenElemAddrUnknown {
 			t.Error("should NOT emit AddrUnknown when bSentUnknown=true and !isCycleAcc")
 		}
 	}
@@ -627,7 +627,7 @@ func TestProcessPHdr_Nacc_ZeroInstructions(t *testing.T) {
 
 	found := false
 	for _, e := range out.elements[n0:] {
-		if e.ElemType == common.GenElemAddrNacc {
+		if e.ElemType == ocsd.GenElemAddrNacc {
 			found = true
 			break
 		}
@@ -691,7 +691,7 @@ func TestProcessPHdr_MemSpaceSecure(t *testing.T) {
 func TestProcessISync_NonPeriodic_EmitsTraceOn(t *testing.T) {
 	_, out := buildDecInDecodePkts(&Config{})
 	// buildDecInDecodePkts already sends non-periodic ISync (reason=1) → check TraceOn
-	if !containsElemType(out, common.GenElemTraceOn) {
+	if !containsElemType(out, ocsd.GenElemTraceOn) {
 		t.Error("expected GenElemTraceOn from non-periodic ISync")
 	}
 }
@@ -710,7 +710,7 @@ func TestProcessISync_Periodic_NoTraceOn(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
 	for _, e := range out.elements[n0:] {
-		if e.ElemType == common.GenElemTraceOn {
+		if e.ElemType == ocsd.GenElemTraceOn {
 			t.Error("should NOT emit TraceOn for periodic ISync")
 		}
 	}
@@ -751,7 +751,7 @@ func TestProcessISync_WithCC_LSipAddr(t *testing.T) {
 	if dec.iAddr != 0xDEAD {
 		t.Errorf("expected iAddr=0xDEAD from HasLSipAddr, got 0x%X", dec.iAddr)
 	}
-	if !containsElemType(out, common.GenElemTraceOn) {
+	if !containsElemType(out, ocsd.GenElemTraceOn) {
 		t.Error("expected GenElemTraceOn")
 	}
 }
@@ -778,7 +778,7 @@ func TestProcessISync_ContextUpdate_CtxAndVMID(t *testing.T) {
 
 	hasPeCtx := false
 	for _, e := range out.elements[n0:] {
-		if e.ElemType == common.GenElemPeContext {
+		if e.ElemType == ocsd.GenElemPeContext {
 			hasPeCtx = true
 			if e.Context.ContextID != 0xBEEF {
 				t.Errorf("expected ContextID=0xBEEF, got 0x%X", e.Context.ContextID)
@@ -824,7 +824,7 @@ func TestOnFlush_SendPktsState(t *testing.T) {
 	dec.currState = sendPkts
 	pElem := dec.outputElemList.GetNextElem(5)
 	if pElem != nil {
-		pElem.ElemType = common.GenElemEvent
+		pElem.ElemType = ocsd.GenElemEvent
 	}
 	dec.outputElemList.CommitAllPendElem()
 
@@ -836,7 +836,7 @@ func TestOnFlush_SendPktsState(t *testing.T) {
 	}
 	found := false
 	for _, e := range out.elements[n0:] {
-		if e.ElemType == common.GenElemEvent {
+		if e.ElemType == ocsd.GenElemEvent {
 			found = true
 		}
 	}
@@ -871,7 +871,7 @@ func TestOnFlush_SendPkts_WaitISync(t *testing.T) {
 	dec.bWaitISync = true
 	pElem := dec.outputElemList.GetNextElem(2)
 	if pElem != nil {
-		pElem.ElemType = common.GenElemTimestamp
+		pElem.ElemType = ocsd.GenElemTimestamp
 		pElem.Timestamp = 0xABCD
 	}
 	dec.outputElemList.CommitAllPendElem()
@@ -897,7 +897,7 @@ func TestOnEOT_EmitsEOTrace(t *testing.T) {
 
 	found := false
 	for _, e := range out.elements[n0:] {
-		if e.ElemType == common.GenElemEOTrace {
+		if e.ElemType == ocsd.GenElemEOTrace {
 			found = true
 			break
 		}
@@ -937,7 +937,7 @@ func TestPreISyncValid_CycleCount_Emitted(t *testing.T) {
 
 	found := false
 	for _, e := range out.elements {
-		if e.ElemType == common.GenElemCycleCount && e.CycleCount == 42 {
+		if e.ElemType == ocsd.GenElemCycleCount && e.CycleCount == 42 {
 			found = true
 			break
 		}
@@ -960,7 +960,7 @@ func TestDecoder_Trigger(t *testing.T) {
 
 	found := false
 	for _, e := range out.elements[n0:] {
-		if e.ElemType == common.GenElemEvent && e.Payload.TraceEvent.EvType == common.EventTrigger {
+		if e.ElemType == ocsd.GenElemEvent && e.Payload.TraceEvent.EvType == ocsd.EventTrigger {
 			found = true
 			break
 		}

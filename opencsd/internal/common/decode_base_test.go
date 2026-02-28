@@ -18,7 +18,7 @@ type myTrcGenElemIn struct {
 	lastID    uint8
 }
 
-func (m *myTrcGenElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *TraceElement) ocsd.DatapathResp {
+func (m *myTrcGenElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
 	m.lastIndex = indexSOP
 	m.lastID = trcChanID
 	return ocsd.RespCont
@@ -52,7 +52,7 @@ func TestPktDecodeBase(t *testing.T) {
 		t.Errorf("Packet not processed correctly")
 	}
 
-	elem := NewTraceElement()
+	elem := ocsd.NewTraceElement()
 	resp = pb.OutputTraceElement(elem)
 	if resp != ocsd.RespCont || elemIn.lastIndex != 10 {
 		t.Errorf("OutputTraceElement failed")

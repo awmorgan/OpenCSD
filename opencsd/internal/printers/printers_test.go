@@ -146,7 +146,7 @@ func TestGenericElementPrinter(t *testing.T) {
 
 	// Test muted
 	gp.SetMute(true)
-	elem := common.NewTraceElementWithType(common.GenElemTraceOn)
+	elem := ocsd.NewTraceElementWithType(ocsd.GenElemTraceOn)
 	resp := gp.TraceElemIn(123, 0x10, elem)
 	if resp != ocsd.RespCont || buf.Len() != 0 {
 		t.Errorf("expected cont and no output, got %v", resp)
@@ -203,8 +203,8 @@ func TestGenericElementPrinter(t *testing.T) {
 
 	// Test collect stats
 	gp.SetCollectStats()
-	gp.TraceElemIn(500, 0x55, common.NewTraceElementWithType(common.GenElemPeContext))
-	gp.TraceElemIn(501, 0x55, common.NewTraceElementWithType(common.GenElemPeContext))
+	gp.TraceElemIn(500, 0x55, ocsd.NewTraceElementWithType(ocsd.GenElemPeContext))
+	gp.TraceElemIn(501, 0x55, ocsd.NewTraceElementWithType(ocsd.GenElemPeContext))
 
 	buf.Reset()
 	gp.PrintStats()
@@ -216,7 +216,7 @@ func TestGenericElementPrinter(t *testing.T) {
 	}
 
 	// Out of bounds elemName check
-	if nm := elemName(common.GenElemType(999)); nm != "OCSD_GEN_TRC_ELEM_UNKNOWN" {
+	if nm := elemName(ocsd.GenElemType(999)); nm != "OCSD_GEN_TRC_ELEM_UNKNOWN" {
 		t.Errorf("expected unknown, got %s", nm)
 	}
 }

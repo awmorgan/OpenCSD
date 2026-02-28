@@ -19,7 +19,7 @@ type PktDecode struct {
 
 	currState decoderState
 
-	itmInfo        common.SWTItmInfo
+	itmInfo        ocsd.SWTItmInfo
 	localTSCount   uint64
 	globalTS       uint64
 	stimPage       uint8
@@ -29,7 +29,7 @@ type PktDecode struct {
 
 	unsyncInfo common.UnsyncInfo
 	csID       uint8
-	outputElem common.TraceElement
+	outputElem ocsd.TraceElement
 }
 
 // NewPktDecode creates a new ITM packet decoder.
@@ -59,8 +59,8 @@ func (d *PktDecode) processPacket() ocsd.DatapathResp {
 	for !bPktDone {
 		switch d.currState {
 		case dcdNoSync:
-			d.outputElem.SetType(common.GenElemNoSync)
-			d.outputElem.SetUnSyncEOTReason(d.unsyncInfo)
+			d.outputElem.SetType(ocsd.GenElemNoSync)
+			d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncInfo(d.unsyncInfo))
 			resp = d.OutputTraceElement(&d.outputElem)
 			d.currState = dcdWaitSync
 
@@ -79,8 +79,8 @@ func (d *PktDecode) processPacket() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) onEOT() ocsd.DatapathResp {
-	d.outputElem.SetType(common.GenElemEOTrace)
-	d.outputElem.SetUnSyncEOTReason(common.UnsyncEOT)
+	d.outputElem.SetType(ocsd.GenElemEOTrace)
+	d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncEOT)
 	return d.OutputTraceElement(&d.outputElem)
 }
 
@@ -144,14 +144,14 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 	bSendPacket := false
 	srcID := d.CurrPacketIn.SrcID
 
-	localTSTCTypes := []common.SWTItmType{
-		common.TSSync,
-		common.TSDelay,
-		common.TSPKTDelay,
-		common.TSPKTTSDelay,
+	localTSTCTypes := []ocsd.SWTItmType{
+		ocsd.TSSync,
+		ocsd.TSDelay,
+		ocsd.TSPKTDelay,
+		ocsd.TSPKTTSDelay,
 	}
 
-	d.itmInfo = common.SWTItmInfo{}
+	d.itmInfo = ocsd.SWTItmInfo{}
 
 	switch d.CurrPacketIn.Type {
 	case PktBadSequence, PktReserved:
@@ -165,14 +165,14 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 		// do nothing
 
 	case PktDWT:
-		d.itmInfo.PktType = common.DWTPayload
+		d.itmInfo.PktType = ocsd.DWTPayload
 		d.itmInfo.PayloadSize = d.CurrPacketIn.ValSz
 		d.itmInfo.Value = d.CurrPacketIn.Value
 		d.itmInfo.PayloadSrcID = srcID
 		bSendPacket = true
 
 	case PktSWIT:
-		d.itmInfo.PktType = common.SWITPayload
+		d.itmInfo.PktType = ocsd.SWITPayload
 		d.itmInfo.PayloadSize = d.CurrPacketIn.ValSz
 		d.itmInfo.Value = d.CurrPacketIn.Value
 		srcID = (srcID & 0x1F) | (d.stimPage << 5)
@@ -200,14 +200,14 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 		d.globalTS |= uint64(d.CurrPacketIn.Value)
 
 		if !d.bNeedGTS2 {
-			d.itmInfo.PktType = common.TSGlobal
+			d.itmInfo.PktType = ocsd.TSGlobal
 			d.outputElem.SetTS(d.globalTS, d.bGTSFreqChange)
 			d.bGTSFreqChange = false
 			bSendPacket = true
 		}
 
 	case PktTSGlobal2:
-		d.itmInfo.PktType = common.TSGlobal
+		d.itmInfo.PktType = ocsd.TSGlobal
 		d.globalTS &= ^globalTSHiMask
 		d.globalTS |= (d.CurrPacketIn.GetExtValue() << 26)
 		d.outputElem.SetTS(d.globalTS, d.bGTSFreqChange)
@@ -234,7 +234,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 			d.itmInfo.Overflow = 1
 			d.bPrevOverflow = false
 		}
-		d.outputElem.SetType(common.GenElemITMTrace)
+		d.outputElem.SetType(ocsd.GenElemITMTrace)
 		d.outputElem.SetSWTITMInfo(d.itmInfo)
 		resp = d.OutputTraceElement(&d.outputElem)
 	}

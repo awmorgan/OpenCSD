@@ -1,7 +1,6 @@
 package interfaces
 
 import (
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -17,7 +16,7 @@ type TrcDataIn interface {
 // TrcGenElemIn represents ITrcGenElemIn.
 // Interface for the input of generic trace elements.
 type TrcGenElemIn interface {
-	TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *common.TraceElement) ocsd.DatapathResp
+	TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp
 }
 
 // PktDataIn represents IPktDataIn<P>.

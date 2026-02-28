@@ -3,6 +3,7 @@ package common
 import (
 	"testing"
 
+	"opencsd/internal/interfaces"
 	"opencsd/internal/ocsd"
 )
 
@@ -10,14 +11,14 @@ type dummySendIf struct {
 	sentCount int
 }
 
-func (d *dummySendIf) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *TraceElement) ocsd.DatapathResp {
+func (d *dummySendIf) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
 	d.sentCount++
 	return ocsd.RespCont
 }
 
 func TestGenElemList(t *testing.T) {
 	list := NewGenElemList()
-	sendAttached := NewAttachPt[TrcGenElemIn]()
+	sendAttached := NewAttachPt[interfaces.TrcGenElemIn]()
 	dummy := &dummySendIf{}
 	sendAttached.Attach(dummy)
 
@@ -27,13 +28,13 @@ func TestGenElemList(t *testing.T) {
 	// Test array growth and insertion
 	for i := 0; i < 20; i++ {
 		elem := list.GetNextElem(ocsd.TrcIndex(i))
-		elem.SetType(GenElemInstrRange)
+		elem.SetType(ocsd.GenElemInstrRange)
 	}
 
 	if list.GetNumElem() != 20 {
 		t.Errorf("Expected 20 elements, got %d", list.GetNumElem())
 	}
-	if list.GetElemType(0) != GenElemInstrRange {
+	if list.GetElemType(0) != ocsd.GenElemInstrRange {
 		t.Errorf("Expected GenElemInstrRange, got %v", list.GetElemType(0))
 	}
 
@@ -71,7 +72,7 @@ func TestGenElemList(t *testing.T) {
 
 func TestGenElemStack(t *testing.T) {
 	stack := NewGenElemStack()
-	sendAttached := NewAttachPt[TrcGenElemIn]()
+	sendAttached := NewAttachPt[interfaces.TrcGenElemIn]()
 	dummy := &dummySendIf{}
 	sendAttached.Attach(dummy)
 
@@ -89,9 +90,9 @@ func TestGenElemStack(t *testing.T) {
 
 	stack.SetCurrElemIdx(10)
 	curr := stack.GetCurrElem()
-	curr.SetType(GenElemEvent)
+	curr.SetType(ocsd.GenElemEvent)
 
-	stack.AddElemType(11, GenElemTimestamp)
+	stack.AddElemType(11, ocsd.GenElemTimestamp)
 
 	if stack.NumElemToSend() != 8 {
 		t.Errorf("Expected 8 elements after AddElemType")

@@ -53,14 +53,16 @@ func (dt *DecodeTree) Destroy() {
 // TraceDataIn handles incoming raw byte trace streams into the tree.
 func (dt *DecodeTree) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, ocsd.DatapathResp) {
 	if dt.iDecoderRoot != nil {
-		return dt.iDecoderRoot.TraceDataIn(op, index, data)
+		amt, resp := dt.iDecoderRoot.TraceDataIn(op, index, data)
+		return amt, resp
 	}
 
 	// Unformatted single trace source fallback
 	if dt.treeType == ocsd.TrcSrcSingle {
 		for _, elem := range dt.decodeElements {
-			if proc, ok := elem.DecoderHandle.(interfaces.TrcDataIn); ok {
-				return proc.TraceDataIn(op, index, data)
+			if elem.DataIn != nil {
+				amt, resp := elem.DataIn.TraceDataIn(op, index, data)
+				return amt, resp
 			}
 		}
 	}
@@ -111,7 +113,7 @@ func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config 
 		return ocsd.ErrFail
 	}
 
-	elem := NewDecodeTreeElement(decoderName, mngr, handle, true)
+	elem := NewDecodeTreeElement(decoderName, mngr, handle, pktIn, true)
 	dt.decodeElements[csID] = elem
 
 	if dt.frameDeformatter != nil && pktIn != nil {

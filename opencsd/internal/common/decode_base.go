@@ -1,14 +1,9 @@
 package common
 
 import (
+	"opencsd/internal/interfaces"
 	"opencsd/internal/ocsd"
 )
-
-// TrcGenElemIn represents ITrcGenElemIn.
-// Interface for the input of generic trace elements.
-type TrcGenElemIn interface {
-	TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *TraceElement) ocsd.DatapathResp
-}
 
 // TargetMemAccess represents ITargetMemAccess.
 // Interface to memory access.
@@ -43,7 +38,7 @@ type PktRawDataMon[P any] interface {
 type PktDecodeI struct {
 	TraceComponent
 
-	TraceElemOut AttachPt[TrcGenElemIn]
+	TraceElemOut AttachPt[interfaces.TrcGenElemIn]
 	MemAccess    AttachPt[TargetMemAccess]
 	InstrDecode  AttachPt[InstrDecode]
 
@@ -65,13 +60,15 @@ type PktDecodeI struct {
 	FnOnFirstInitOK    func()
 }
 
-func (p *PktDecodeI) GetTraceElemOutAttachPt() *AttachPt[TrcGenElemIn] { return &p.TraceElemOut }
-func (p *PktDecodeI) GetInstrDecodeAttachPt() *AttachPt[InstrDecode]   { return &p.InstrDecode }
-func (p *PktDecodeI) GetMemAccAttachPt() *AttachPt[TargetMemAccess]    { return &p.MemAccess }
+func (p *PktDecodeI) GetTraceElemOutAttachPt() *AttachPt[interfaces.TrcGenElemIn] {
+	return &p.TraceElemOut
+}
+func (p *PktDecodeI) GetInstrDecodeAttachPt() *AttachPt[InstrDecode] { return &p.InstrDecode }
+func (p *PktDecodeI) GetMemAccAttachPt() *AttachPt[TargetMemAccess]  { return &p.MemAccess }
 
 func (p *PktDecodeI) InitPktDecodeI(name string) {
 	p.InitTraceComponent(name)
-	p.TraceElemOut = *NewAttachPt[TrcGenElemIn]()
+	p.TraceElemOut = *NewAttachPt[interfaces.TrcGenElemIn]()
 	p.MemAccess = *NewAttachPt[TargetMemAccess]()
 	p.InstrDecode = *NewAttachPt[InstrDecode]()
 	p.usesMemAccess = true
@@ -104,14 +101,14 @@ func (p *PktDecodeI) CheckInit() bool {
 	return p.decodeInitOK
 }
 
-func (p *PktDecodeI) OutputTraceElement(elem *TraceElement) ocsd.DatapathResp {
+func (p *PktDecodeI) OutputTraceElement(elem *ocsd.TraceElement) ocsd.DatapathResp {
 	if p.TraceElemOut.HasAttachedAndEnabled() && p.FnGetTraceID != nil {
 		return p.TraceElemOut.First().TraceElemIn(p.IndexCurrPkt, p.FnGetTraceID(), elem)
 	}
 	return ocsd.RespFatalNotInit
 }
 
-func (p *PktDecodeI) OutputTraceElementIdx(idx ocsd.TrcIndex, elem *TraceElement) ocsd.DatapathResp {
+func (p *PktDecodeI) OutputTraceElementIdx(idx ocsd.TrcIndex, elem *ocsd.TraceElement) ocsd.DatapathResp {
 	if p.TraceElemOut.HasAttachedAndEnabled() && p.FnGetTraceID != nil {
 		return p.TraceElemOut.First().TraceElemIn(idx, p.FnGetTraceID(), elem)
 	}

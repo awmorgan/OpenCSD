@@ -34,7 +34,7 @@ type PktDecode struct {
 	csID uint8
 
 	decodePass1 bool
-	outputElem  common.TraceElement
+	outputElem  ocsd.TraceElement
 }
 
 // NewPktDecode creates a new STM packet decoder.
@@ -62,8 +62,8 @@ func (d *PktDecode) processPacket() ocsd.DatapathResp {
 	for !bPktDone {
 		switch d.currState {
 		case dcdNoSync:
-			d.outputElem.SetType(common.GenElemNoSync)
-			d.outputElem.SetUnSyncEOTReason(d.unsyncInfo)
+			d.outputElem.SetType(ocsd.GenElemNoSync)
+			d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncInfo(d.unsyncInfo))
 			resp = d.OutputTraceElement(&d.outputElem)
 			d.currState = dcdWaitSync
 		case dcdWaitSync:
@@ -79,8 +79,8 @@ func (d *PktDecode) processPacket() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) onEOT() ocsd.DatapathResp {
-	d.outputElem.SetType(common.GenElemEOTrace)
-	d.outputElem.SetUnSyncEOTReason(common.UnsyncEOT)
+	d.outputElem.SetType(ocsd.GenElemEOTrace)
+	d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncEOT)
 	return d.OutputTraceElement(&d.outputElem)
 }
 
@@ -135,7 +135,7 @@ func (d *PktDecode) decodePacket(bPktDone *bool) ocsd.DatapathResp {
 	bSendPacket := false
 
 	*bPktDone = true
-	d.outputElem.SetType(common.GenElemSWTrace)
+	d.outputElem.SetType(ocsd.GenElemSWTrace)
 	d.clearSWTPerPcktInfo()
 
 	switch d.CurrPacketIn.Type {

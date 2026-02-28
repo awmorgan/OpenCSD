@@ -1,10 +1,13 @@
 package common
 
-import "opencsd/internal/ocsd"
+import (
+	"opencsd/internal/interfaces"
+	"opencsd/internal/ocsd"
+)
 
 // ElemPtr pairs a TraceElement pointer with a trace packet index.
 type ElemPtr struct {
-	PElem     *TraceElement
+	PElem     *ocsd.TraceElement
 	TrcPktIdx ocsd.TrcIndex
 }
 
@@ -16,7 +19,7 @@ type GenElemList struct {
 	numUsed   int
 	numPend   int
 	csID      uint8
-	sendIf    *AttachPt[TrcGenElemIn]
+	sendIf    *AttachPt[interfaces.TrcGenElemIn]
 }
 
 // NewGenElemList creates a new list with an initial capacity.
@@ -25,12 +28,12 @@ func NewGenElemList() *GenElemList {
 		elemArray: make([]ElemPtr, 16),
 	}
 	for i := range l.elemArray {
-		l.elemArray[i].PElem = NewTraceElement()
+		l.elemArray[i].PElem = ocsd.NewTraceElement()
 	}
 	return l
 }
 
-func (l *GenElemList) InitSendIf(sendIf *AttachPt[TrcGenElemIn]) {
+func (l *GenElemList) InitSendIf(sendIf *AttachPt[interfaces.TrcGenElemIn]) {
 	l.sendIf = sendIf
 }
 
@@ -51,7 +54,7 @@ func (l *GenElemList) growArray() {
 		if i < l.numUsed {
 			newArr[i] = l.elemArray[l.getAdjustedIdx(l.firstIdx+i)]
 		} else {
-			newArr[i].PElem = NewTraceElement()
+			newArr[i].PElem = ocsd.NewTraceElement()
 		}
 	}
 	l.elemArray = newArr
@@ -65,7 +68,7 @@ func (l *GenElemList) getAdjustedIdx(idx int) int {
 	return idx
 }
 
-func (l *GenElemList) GetNextElem(trcPktIdx ocsd.TrcIndex) *TraceElement {
+func (l *GenElemList) GetNextElem(trcPktIdx ocsd.TrcIndex) *ocsd.TraceElement {
 	if l.numUsed >= len(l.elemArray) {
 		l.growArray()
 	}
@@ -79,12 +82,12 @@ func (l *GenElemList) GetNumElem() int {
 	return l.numUsed
 }
 
-func (l *GenElemList) GetElemType(entryN int) GenElemType {
+func (l *GenElemList) GetElemType(entryN int) ocsd.GenElemType {
 	if entryN < l.numUsed {
 		idx := l.getAdjustedIdx(l.firstIdx + entryN)
 		return l.elemArray[idx].PElem.ElemType
 	}
-	return GenElemUnknown
+	return ocsd.GenElemUnknown
 }
 
 func (l *GenElemList) PendLastNElem(numPend int) {
@@ -135,7 +138,7 @@ type GenElemStack struct {
 	currElemIdx int
 	sendElemIdx int
 	csID        uint8
-	sendIf      *AttachPt[TrcGenElemIn]
+	sendIf      *AttachPt[interfaces.TrcGenElemIn]
 	isInit      bool
 }
 
@@ -146,13 +149,13 @@ func NewGenElemStack() *GenElemStack {
 		elemToSend: 1,
 	}
 	for i := range s.elemArray {
-		s.elemArray[i].PElem = NewTraceElement()
+		s.elemArray[i].PElem = ocsd.NewTraceElement()
 	}
 	s.isInit = true
 	return s
 }
 
-func (s *GenElemStack) InitSendIf(sendIf *AttachPt[TrcGenElemIn]) {
+func (s *GenElemStack) InitSendIf(sendIf *AttachPt[interfaces.TrcGenElemIn]) {
 	s.sendIf = sendIf
 }
 
@@ -160,7 +163,7 @@ func (s *GenElemStack) InitCSID(csID uint8) {
 	s.csID = csID
 }
 
-func (s *GenElemStack) GetCurrElem() *TraceElement {
+func (s *GenElemStack) GetCurrElem() *ocsd.TraceElement {
 	return s.elemArray[s.currElemIdx].PElem
 }
 
@@ -180,7 +183,7 @@ func (s *GenElemStack) growArray() ocsd.Err {
 	newArr := make([]ElemPtr, newSize)
 	copy(newArr, s.elemArray)
 	for i := len(s.elemArray); i < newSize; i++ {
-		newArr[i].PElem = NewTraceElement()
+		newArr[i].PElem = ocsd.NewTraceElement()
 	}
 	s.elemArray = newArr
 	return ocsd.OK
@@ -203,7 +206,7 @@ func (s *GenElemStack) SetCurrElemIdx(trcPktIdx ocsd.TrcIndex) {
 	s.elemArray[s.currElemIdx].TrcPktIdx = trcPktIdx
 }
 
-func (s *GenElemStack) AddElemType(trcPktIdx ocsd.TrcIndex, elemType GenElemType) ocsd.Err {
+func (s *GenElemStack) AddElemType(trcPktIdx ocsd.TrcIndex, elemType ocsd.GenElemType) ocsd.Err {
 	err := s.AddElem(trcPktIdx)
 	if err == ocsd.OK {
 		s.GetCurrElem().SetType(elemType)

@@ -56,7 +56,7 @@ func TestCodeFollower(t *testing.T) {
 	idAtt.Attach(mockID)
 
 	// Test without valid
-	err := cf.FollowSingleInstr(0x1000)
+	err := cf.FollowSingleAtom(0x1000, ocsd.AtomN)
 	if err != ocsd.ErrNotInit {
 		t.Errorf("Expected NotInit error")
 	}
@@ -67,9 +67,9 @@ func TestCodeFollower(t *testing.T) {
 	cf.SetTraceID(0x12)
 	cf.SetMemSpace(ocsd.MemSpaceAny)
 
-	err = cf.FollowSingleInstr(0x1000)
-	if err != ocsd.OK || !cf.HasNextInstr() {
-		t.Errorf("FollowSingleInstr failed")
+	err = cf.FollowSingleAtom(0x1000, ocsd.AtomE)
+	if err != ocsd.OK || !cf.HasNextAddr() {
+		t.Errorf("FollowSingleAtom failed")
 	}
 
 	if cf.GetNumInstructs() != 1 {
@@ -83,20 +83,17 @@ func TestCodeFollower(t *testing.T) {
 	// Test branch
 	mockID.instrType = ocsd.InstrBr
 	mockID.branchAddr = 0x2000
-	err = cf.FollowSingleInstr(0x1004)
+	err = cf.FollowSingleAtom(0x1004, ocsd.AtomE)
 	if err != ocsd.OK || cf.GetNextAddr() != 0x2000 {
 		t.Errorf("Branch target not followed")
 	}
 
 	// Test Thumb 32-bit decode requirement
 	cf.SetISA(ocsd.ISAThumb2)
-	mockMem.dataToReturn = []byte{0x00, 0xF0} // first half of 32-bit Thumb
+	mockMem.dataToReturn = []byte{0x00, 0xF0, 0x01, 0x02} // Provide full 4 bytes so DecodeSingleOpCode succeeds
 	mockID.instrSize = 4
 	mockID.instrType = ocsd.InstrOther
-	err = cf.FollowSingleInstr(0x1008)
-	// Because my mockMem always returns {0x00, 0xF0} and errToReturn = OK
-	// It will attempt to read the second half. Since the mockMem doesn't advance its offset
-	// dynamically in this simple test, it just returns {0x00, 0xF0} again. Size will be 4.
+	err = cf.FollowSingleAtom(0x1008, ocsd.AtomN)
 	if err != ocsd.OK || !mockID.called {
 		t.Errorf("Thumb 32-bit fetch failed")
 	}
@@ -104,7 +101,7 @@ func TestCodeFollower(t *testing.T) {
 	// Test MemNacc
 	mockMem.errToReturn = ocsd.ErrMemNacc
 	mockMem.dataToReturn = nil
-	err = cf.FollowSingleInstr(0x2000)
+	err = cf.FollowSingleAtom(0x2000, ocsd.AtomN)
 	if err != ocsd.ErrMemNacc || !cf.IsNaccErr() || !cf.HasError() {
 		t.Errorf("MemNacc error not tracked properly")
 	}
