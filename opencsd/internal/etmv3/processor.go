@@ -910,21 +910,40 @@ func (p *PktProc) extractDataValue(sizeCode int) uint32 {
 
 func (p *PktProc) extractTimestamp(tsBits *uint8) uint64 {
 	val := uint64(0)
-	nBits := 0
+	tsMaxBytes := 7
+	if p.Config.TSPkt64() {
+		tsMaxBytes = 9
+	}
+	tsCurrBytes := 0
+	bCont := true
+	mask := uint8(0x7F)
+	lastMask := uint8(0x3F)
+	if p.Config.TSPkt64() {
+		lastMask = 0xFF
+	}
+	tsIterBits := uint8(7)
+	tsLastIterBits := uint8(6)
+	if p.Config.TSPkt64() {
+		tsLastIterBits = 8
+	}
+	nBits := uint8(0)
 
-	for {
+	for tsCurrBytes < tsMaxBytes && bCont {
 		p.checkPktLimits()
-		b := p.currPacketData[p.currPktIdx]
+		currByte := p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
 
-		val |= uint64(b&0x7F) << nBits
-		nBits += 7
+		val |= uint64(currByte&mask) << (7 * tsCurrBytes)
+		tsCurrBytes++
+		nBits += tsIterBits
+		bCont = (currByte & 0x80) == 0x80
 
-		if (b&0x80) == 0 || nBits >= 64 {
-			break
+		if tsCurrBytes == tsMaxBytes-1 {
+			mask = lastMask
+			tsIterBits = tsLastIterBits
 		}
 	}
-	*tsBits = uint8(nBits)
+	*tsBits = nBits
 	return val
 }
 

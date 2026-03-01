@@ -91,7 +91,7 @@ func (l *GenElemList) GetElemType(entryN int) ocsd.GenElemType {
 }
 
 func (l *GenElemList) PendLastNElem(numPend int) {
-	if numPend <= l.numUsed {
+	if numPend >= l.numUsed {
 		l.numPend = numPend
 	}
 }
