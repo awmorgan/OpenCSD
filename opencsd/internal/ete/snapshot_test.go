@@ -91,6 +91,31 @@ func TestETESnapshotsAgainstGolden(t *testing.T) {
 	}
 }
 
+func TestSanitizePPLEmbeddedIdxRecords(t *testing.T) {
+	t.Parallel()
+
+	input := strings.Join([]string{
+		"Using infrastructure as trace source",
+		"Idx:2164; ID:10; [0x04 ];\tI_TRACE_ON : Trace On.",
+		"DCD_ETMV4_0016 : 0x0019 (OCSD_ERR_BAD_DECODE_PKT) [Reserved or unknown packet in decoder.]; TrcIdx=2164; CS ID=10; Unknown packet type.Idx:2165; ID:10; [0xfb ];\tI_ATOM_F3 : Atom format 3.; EEN",
+		"Idx:2166; ID:10; [0xf7 ];\tI_ATOM_F1 : Atom format 1.; E",
+		"Idx:2167; ID:10; [0x95 0x5b ];\tI_ADDR_S_IS0 : Address, Short, IS0.; Addr=0xFFFFFFC000592B6C ~[0x16C]",
+		"", // trailing newline
+	}, "\n")
+
+	got := sanitizePPL(input)
+	want := strings.Join([]string{
+		"ID:10;\tI_TRACE_ON",
+		"ID:10;\tI_ADDR_OR_ATOM",
+		"ID:10;\tI_ADDR_OR_ATOM",
+		"ID:10;\tI_ADDR_OR_ATOM",
+	}, "\n")
+
+	if got != want {
+		t.Fatalf("sanitizePPL mismatch\nwant:\n%s\n\ngot:\n%s", want, got)
+	}
+}
+
 func runETESnapshotDecode(snapshotDir, requestedSource string) ([]byte, error) {
 	reader := snapshot.NewReader()
 	reader.SetSnapshotDir(snapshotDir)
@@ -317,17 +342,46 @@ func sanitizePPL(s string) string {
 		if line == "" {
 			continue
 		}
-		if !strings.HasPrefix(line, "Idx:") {
-			continue
-		}
 
-		normalized := normalizeSnapshotLine(line)
-		if normalized == "" {
-			continue
+		for _, idxLine := range splitIdxRecords(line) {
+			normalized := normalizeSnapshotLine(idxLine)
+			if normalized == "" {
+				continue
+			}
+			out = append(out, normalized)
 		}
-		out = append(out, normalized)
 	}
 	return strings.Join(out, "\n")
+}
+
+func splitIdxRecords(line string) []string {
+	if !strings.Contains(line, "Idx:") {
+		return nil
+	}
+	starts := make([]int, 0, 2)
+	for pos := 0; pos < len(line); {
+		i := strings.Index(line[pos:], "Idx:")
+		if i < 0 {
+			break
+		}
+		starts = append(starts, pos+i)
+		pos += i + len("Idx:")
+	}
+	if len(starts) == 0 {
+		return nil
+	}
+	records := make([]string, 0, len(starts))
+	for i, st := range starts {
+		end := len(line)
+		if i+1 < len(starts) {
+			end = starts[i+1]
+		}
+		rec := strings.TrimSpace(line[st:end])
+		if strings.HasPrefix(rec, "Idx:") {
+			records = append(records, rec)
+		}
+	}
+	return records
 }
 
 var iPacketTokenRE = regexp.MustCompile(`\bI_[A-Z0-9_]+\b`)
