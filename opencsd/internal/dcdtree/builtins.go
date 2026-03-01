@@ -2,6 +2,7 @@ package dcdtree
 
 import (
 	"opencsd/internal/etmv3"
+	"opencsd/internal/etmv4"
 	"opencsd/internal/itm"
 	"opencsd/internal/ocsd"
 	"opencsd/internal/ptm"
@@ -15,5 +16,5 @@ func init() {
 	_ = reg.RegisterDecoderTypeByName(ocsd.BuiltinDcdITM, itm.NewDecoderManager())
 	_ = reg.RegisterDecoderTypeByName(ocsd.BuiltinDcdPTM, ptm.NewDecoderManager())
 	_ = reg.RegisterDecoderTypeByName(ocsd.BuiltinDcdETMV3, etmv3.NewDecoderManager())
-	// ETE, ETMv4 can be added here later once ported.
+	_ = reg.RegisterDecoderTypeByName(ocsd.BuiltinDcdETMV4I, etmv4.NewDecoderManager())
 }

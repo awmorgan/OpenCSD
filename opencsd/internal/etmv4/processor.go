@@ -1,6 +1,7 @@
 package etmv4
 
 import (
+	"opencsd/internal/common"
 	"opencsd/internal/interfaces"
 	"opencsd/internal/ocsd"
 )
@@ -51,6 +52,9 @@ type Processor struct {
 	// output interface
 	pktOut interfaces.PktDataIn[TracePacket]
 
+	// raw packet monitor
+	PktRawMonI *common.AttachPt[interfaces.PktRawDataMon[TracePacket]]
+
 	processState ProcessState
 
 	// packet data
@@ -59,6 +63,7 @@ type Processor struct {
 	pktFn                pktHandler
 	packetIndex          ocsd.TrcIndex
 	blockIndex           ocsd.TrcIndex
+	blockBytesProcessed  int
 	updateOnUnsyncPktIdx ocsd.TrcIndex
 
 	// syncing
@@ -118,6 +123,7 @@ func NewProcessor(config *Config) *Processor {
 	p := &Processor{
 		config:       *config,
 		processState: ProcHdr,
+		PktRawMonI:   common.NewAttachPt[interfaces.PktRawDataMon[TracePacket]](),
 	}
 	p.buildIPacketTable()
 	p.currPacket.ProtocolVersion = config.FullVersion()
@@ -151,6 +157,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 	}
 
 	p.blockIndex = index
+	p.blockBytesProcessed = 0
 	resp := ocsd.RespCont
 	consumed := 0
 
@@ -174,6 +181,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				nextByte := dataBlock[consumed]
 				p.currPacketData = append(p.currPacketData, nextByte)
 				consumed++
+				p.blockBytesProcessed = consumed
 				if p.pktFn != nil {
 					p.pktFn(nextByte)
 				}
@@ -250,6 +258,9 @@ func (p *Processor) initProcessorState() {
 }
 
 func (p *Processor) outputPacket() ocsd.DatapathResp {
+	if p.PktRawMonI != nil && p.PktRawMonI.HasAttached() {
+		p.PktRawMonI.First().RawPacketDataMon(ocsd.OpData, p.packetIndex, &p.currPacket, p.currPacketData)
+	}
 	if p.pktOut == nil {
 		return ocsd.RespCont
 	}
@@ -286,15 +297,15 @@ func (p *Processor) iNotSync(lastByte uint8) {
 		if len(p.currPacketData) > 1 {
 			p.dumpUnsyncedBytes = len(p.currPacketData) - 1
 			p.processState = SendUnsynced
-			p.updateOnUnsyncPktIdx = p.blockIndex + ocsd.TrcIndex(len(p.currPacketData)) - 1
+			p.updateOnUnsyncPktIdx = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
 		} else {
-			p.packetIndex = p.blockIndex + ocsd.TrcIndex(len(p.currPacketData)) - 1
+			p.packetIndex = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
 		}
 		p.pktFn = p.iTable[lastByte].fn
 	} else if len(p.currPacketData) >= 8 {
 		p.dumpUnsyncedBytes = len(p.currPacketData)
 		p.processState = SendUnsynced
-		p.updateOnUnsyncPktIdx = p.blockIndex + ocsd.TrcIndex(len(p.currPacketData))
+		p.updateOnUnsyncPktIdx = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed)
 	}
 }
 
