@@ -484,7 +484,7 @@ func TestASync_UnexpectedByte(t *testing.T) {
 // onISyncPacket: V7M architecture + bit0=1 → Thumb2 ISA, addrBytes=0
 // ---------------------------------------------------------------------------
 
-// TestISync_V7M_Thumb2ISA: V7M with infoByte bit0=1 → ISAThumb2, address not extracted.
+// TestISync_V7M_Thumb2ISA: V7M with T bit (bit 0 of address) = 1 → ISAThumb2.
 func TestISync_V7M_Thumb2ISA(t *testing.T) {
 	config := &Config{}
 	config.ArchVer = ocsd.ArchV7
@@ -492,10 +492,10 @@ func TestISync_V7M_Thumb2ISA(t *testing.T) {
 
 	proc, sink := newSyncedProc(config)
 
-	// ISync: header=0x08, then info byte 0x01 (bit0=1 → V7M+bit0=1 → Thumb2, addrBytes=0)
-	// bytesExpected=6 (instr trace, no cc, no ctxt): [hdr][info][4 addr bytes if any]
-	// With V7M+bit0=1, addrBytes=0 but bytesExpected still 6 for the packet frame
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x08, 0x01, 0x00, 0x00, 0x00, 0x00})
+	// ISync: header=0x08, then info byte 0x01 (Reason=0, J=0, LSiP=0), then 4 addr bytes.
+	// We set the T bit (bit 0) in the first address byte to indicate Thumb state.
+	// [hdr][info][addr_0][addr_1][addr_2][addr_3]
+	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x08, 0x00, 0x01, 0x00, 0x00, 0x00})
 
 	var iSyncPkt *Packet
 	for i := range sink.packets {
@@ -508,22 +508,22 @@ func TestISync_V7M_Thumb2ISA(t *testing.T) {
 		t.Fatal("expected PktISync packet")
 	}
 	if iSyncPkt.CurrISA != ocsd.ISAThumb2 {
-		t.Errorf("expected ISAThumb2 for V7M+bit0=1, got %v", iSyncPkt.CurrISA)
+		t.Errorf("expected ISAThumb2 for T=1, got %v", iSyncPkt.CurrISA)
 	}
-	// addrBytes=0 → addr extracted as 0
+	// Addr extracted without the T bit.
 	if iSyncPkt.Addr != 0 {
-		t.Errorf("expected Addr=0 when V7M addrBytes=0, got 0x%X", iSyncPkt.Addr)
+		t.Errorf("expected Addr=0 when address bits [31:1] are 0, got 0x%X", iSyncPkt.Addr)
 	}
 }
 
-// TestISync_CustomISA: infoByte bit0=1 for non-V7M → ISACustom.
-func TestISync_CustomISA(t *testing.T) {
+// TestISync_JazelleISA: infoByte bit 4 (J bit) = 1 → ISAJazelle.
+func TestISync_JazelleISA(t *testing.T) {
 	config := &Config{}
-	// Not V7M: CoreProf ≠ CortexM, so bit0=1 → ISACustom
 
 	proc, sink := newSyncedProc(config)
 
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x08, 0x01, 0x00, 0x00, 0x00, 0x00})
+	// info byte 0x10 has bit 4 (J) set.
+	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x08, 0x10, 0x00, 0x00, 0x00, 0x00})
 
 	var iSyncPkt *Packet
 	for i := range sink.packets {
@@ -535,8 +535,8 @@ func TestISync_CustomISA(t *testing.T) {
 	if iSyncPkt == nil {
 		t.Fatal("expected PktISync packet")
 	}
-	if iSyncPkt.CurrISA != ocsd.ISACustom {
-		t.Errorf("expected ISACustom for non-V7M+bit0=1, got %v", iSyncPkt.CurrISA)
+	if iSyncPkt.CurrISA != ocsd.ISAJazelle {
+		t.Errorf("expected ISAJazelle for J=1, got %v", iSyncPkt.CurrISA)
 	}
 }
 

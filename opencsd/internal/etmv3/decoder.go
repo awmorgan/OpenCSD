@@ -253,7 +253,7 @@ func (d *PktDecode) decodePacket(pktDone *bool) ocsd.DatapathResp {
 		pElem, err = d.getNextOpElem()
 		if err == nil {
 			pElem.ElemType = ocsd.GenElemCycleCount
-			pElem.CycleCount = packetIn.CycleCount
+			pElem.SetCycleCount(packetIn.CycleCount)
 		}
 	case PktTrigger:
 		pElem, err = d.getNextOpElem()
@@ -405,7 +405,7 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 		d.codeFollower.SetISA(packetIn.CurrISA)
 
 		if packetIn.ISyncInfo.HasCycleCount {
-			pElem.CycleCount = packetIn.CycleCount
+			pElem.SetCycleCount(packetIn.CycleCount)
 		}
 	}
 
@@ -534,20 +534,6 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 
 	isCCPacket := d.Config.IsCycleAcc()
 
-	hasAtomCC := func() bool {
-		if !isCCPacket {
-			return false
-		}
-		switch packetIn.PHdrFmt {
-		case 3, 1:
-			return true
-		case 2:
-			return atomsNum > 1
-		default:
-			return false
-		}
-	}
-
 	getAtomCC := func() uint32 {
 		if !isCCPacket {
 			return 0
@@ -611,7 +597,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					pElem.ElemType = ocsd.GenElemAddrUnknown
 				}
 				if d.Config.IsCycleAcc() {
-					pElem.CycleCount = getRemainCC()
+					pElem.SetCycleCount(getRemainCC())
 				}
 				d.bSentUnknown = true
 			}
@@ -639,6 +625,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					pElem.ElemType = ocsd.GenElemInstrRange
 					pElem.StAddr = d.codeFollower.RangeSt()
 					pElem.EnAddr = d.codeFollower.RangeEn()
+					pElem.Payload.NumInstrRange = d.codeFollower.GetNumInstructs()
 
 					instrInfo := d.codeFollower.GetInstrInfo()
 					pElem.SetLastInstrExec(val == ocsd.AtomE)
@@ -648,7 +635,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					pElem.SetLastInstrCond(instrInfo.IsConditional != 0)
 					pElem.ISA = isa
 
-					if d.Config.IsCycleAcc() && hasAtomCC() {
+					if d.Config.IsCycleAcc() {
 						pElem.SetCycleCount(getAtomCC())
 					}
 
@@ -680,7 +667,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					return ocsd.RespFatalSysErr
 				}
 				pElem.ElemType = ocsd.GenElemCycleCount
-				pElem.CycleCount = getRemainCC()
+				pElem.SetCycleCount(getRemainCC())
 			}
 		}
 

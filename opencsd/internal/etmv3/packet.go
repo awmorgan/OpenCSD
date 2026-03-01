@@ -167,19 +167,18 @@ type Packet struct {
 }
 
 func (p *Packet) Clear() {
-	// Clears dynamic packet elements for a new packet but retains context like previous ISA
+	// Clears dynamic packet elements for a new packet but retains persistent state
+	// like Timestamp, Addr, Context, and ISA.
 	p.Type = PktNoError
 	p.ErrType = PktNoError
 	p.Context.Updated = false
 	p.Context.UpdatedC = false
 	p.Context.UpdatedV = false
-	p.Addr = 0
 	p.Exception = Excep{}
 	p.ISyncInfo = ISyncInfo{}
 	p.Atom = ocsd.PktAtom{}
 	p.PHdrFmt = 0
 	p.CycleCount = 0
-	p.Timestamp = 0
 	p.TsUpdateBits = 0
 	p.Data.UpdateBE = false
 	p.Data.UpdateAddr = false
@@ -199,8 +198,25 @@ func (p *Packet) IsBadPacket() bool {
 }
 
 func (p *Packet) UpdateAddress(partAddrVal uint64, updateBits int) {
-	mask := uint64((1 << updateBits) - 1)
+	mask := uint64(0xFFFFFFFF)
+	if updateBits < 32 {
+		mask >>= (32 - updateBits)
+	}
 	p.Addr = (p.Addr & ^mask) | (partAddrVal & mask)
+}
+
+func (p *Packet) UpdateTimestamp(tsVal uint64, updateBits uint8) {
+	if updateBits == 0 {
+		return
+	}
+	var mask uint64
+	if updateBits >= 64 {
+		mask = ^uint64(0)
+	} else {
+		mask = uint64((1 << updateBits) - 1)
+	}
+	p.Timestamp = (p.Timestamp & ^mask) | (tsVal & mask)
+	p.TsUpdateBits = updateBits
 }
 
 func (p *Packet) SetException(exType ocsd.ArmV7Exception, num uint16, cancel, cmType bool, irqN uint16, resume uint8) {
@@ -213,89 +229,100 @@ func (p *Packet) SetException(exType ocsd.ArmV7Exception, num uint16, cancel, cm
 	p.Exception.CmResume = resume
 }
 
+func (p *Packet) UpdateISA(isa ocsd.ISA) {
+	p.PrevISA = p.CurrISA
+	p.CurrISA = isa
+}
+
 func (p *Packet) UpdateAtomFromPHdr(pHdr uint8, cycleAccurate bool) bool {
 	// Ported from trc_pkt_elem_etmv3.cpp UpdateAtomFromPHdr
 	isValid := true
 	p.Atom.EnBits = 0
 	p.Atom.Num = 0
 
-	wBit1 := (pHdr & 0x40) != 0
-	wBit0 := (pHdr & 0x20) != 0
-
-	// Format 4
-	if (pHdr & 0x1F) == 0 {
-		p.PHdrFmt = 4
-		if cycleAccurate {
-			// format 4 not allowed for cycle accurate tracing!
+	if !cycleAccurate {
+		// Non-cycle-accurate mode
+		if (pHdr & 0x3) == 0x0 {
+			// Format 1 (non-CA)
+			p.PHdrFmt = 1
+			e := (pHdr >> 2) & 0xF
+			n := uint8(0)
+			if (pHdr & 0x40) != 0 {
+				n = 1
+			}
+			p.Atom.Num = e + n
+			p.Atom.EnBits = (uint32(1) << e) - 1
+		} else if (pHdr & 0x3) == 0x2 {
+			// Format 2 (non-CA)
+			p.PHdrFmt = 2
+			p.Atom.Num = 2
+			p.Atom.EnBits = 0
+			if (pHdr & 0x8) == 0 {
+				p.Atom.EnBits |= 1
+			}
+			if (pHdr & 0x4) == 0 {
+				p.Atom.EnBits |= 2
+			}
+		} else {
 			isValid = false
-			return isValid
 		}
-
-		// 6 atoms 0bxEEEEE00
-		p.Atom.EnBits = uint32(pHdr>>2) & 0x1F
-
-		if wBit1 {
-			p.Atom.EnBits |= 0x20
-			p.Atom.Num = 6
-		} else {
-			if wBit0 {
-				p.Atom.Num = 5
-				p.Atom.EnBits &= 0x0F
-			} else {
-				p.Atom.Num = 4
-				p.Atom.EnBits &= 0x07
-			}
-		}
-
-	} else if (pHdr & 0x0F) == 0 {
-		// Format 3
-		p.PHdrFmt = 3
-		p.Atom.Num = 0
-
-		if wBit1 {
-			p.Atom.Num = 1
-			p.Atom.EnBits = 0x1 // E atom
-		}
-		// cycle count will be added later by pkt processor if applicable
-	} else if (pHdr & 0x03) == 0 {
-		// Format 2
-		p.PHdrFmt = 2
-		p.Atom.EnBits = uint32(pHdr>>2) & 0x7
-
-		if wBit1 {
-			p.Atom.EnBits |= 0x08
-			p.Atom.Num = 4
-		} else {
-			if wBit0 {
-				p.Atom.Num = 3
-				p.Atom.EnBits &= 0x03
-			} else {
-				p.Atom.Num = 2
-				p.Atom.EnBits &= 0x01
-			}
-		}
-		// will be w atom here if CA
-	} else if (pHdr & 0x01) == 0 {
-		// Format 1
-		p.PHdrFmt = 1
-		p.Atom.EnBits = uint32(pHdr>>1) & 0x3
-
-		if wBit1 {
-			p.Atom.EnBits |= 0x04
-			p.Atom.Num = 3
-		} else {
-			if wBit0 {
-				p.Atom.Num = 2
-				p.Atom.EnBits &= 0x01
-			} else {
-				p.Atom.Num = 1
-				p.Atom.EnBits &= 0x0
-			}
-		}
-
 	} else {
-		// not a p-header
-		isValid = false
+		// Cycle-accurate mode
+		pHdrCode := pHdr & 0xA3
+		switch pHdrCode {
+		case 0x80:
+			// Format 1 (CA)
+			p.PHdrFmt = 1
+			e := (pHdr >> 2) & 0x7
+			n := uint8(0)
+			if (pHdr & 0x40) != 0 {
+				n = 1
+			}
+			p.Atom.Num = e + n
+			if p.Atom.Num > 0 {
+				p.Atom.EnBits = (uint32(1) << e) - 1
+				p.CycleCount = uint32(e + n)
+			} else {
+				isValid = false // deprecated 8b'10000000 code
+			}
+		case 0x82:
+			// Format 2 or 4 (CA)
+			if (pHdr & 0x10) != 0 {
+				// Format 4 (CA)
+				p.PHdrFmt = 4
+				p.Atom.Num = 1
+				p.CycleCount = 0
+				if (pHdr & 0x04) != 0 {
+					p.Atom.EnBits = 0
+				} else {
+					p.Atom.EnBits = 1
+				}
+			} else {
+				// Format 2 (CA)
+				p.PHdrFmt = 2
+				p.Atom.Num = 2
+				p.CycleCount = 1
+				p.Atom.EnBits = 0
+				if (pHdr & 0x8) == 0 {
+					p.Atom.EnBits |= 1
+				}
+				if (pHdr & 0x4) == 0 {
+					p.Atom.EnBits |= 2
+				}
+			}
+		case 0xA0:
+			// Format 3 (CA)
+			p.PHdrFmt = 3
+			p.CycleCount = uint32(((pHdr >> 2) & 7) + 1)
+			e := uint8(0)
+			if (pHdr & 0x40) != 0 {
+				e = 1
+			}
+			p.Atom.Num = e
+			p.Atom.EnBits = uint32(e)
+		default:
+			isValid = false
+		}
 	}
 
 	return isValid

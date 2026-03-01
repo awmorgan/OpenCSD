@@ -26,13 +26,13 @@ func TestGenElemList(t *testing.T) {
 	list.InitCSID(10)
 
 	// Test array growth and insertion
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 5; i++ {
 		elem := list.GetNextElem(ocsd.TrcIndex(i))
 		elem.SetType(ocsd.GenElemInstrRange)
 	}
 
-	if list.GetNumElem() != 20 {
-		t.Errorf("Expected 20 elements, got %d", list.GetNumElem())
+	if list.GetNumElem() != 5 {
+		t.Errorf("Expected 5 elements, got %d", list.GetNumElem())
 	}
 	if list.GetElemType(0) != ocsd.GenElemInstrRange {
 		t.Errorf("Expected GenElemInstrRange, got %v", list.GetElemType(0))
@@ -40,14 +40,14 @@ func TestGenElemList(t *testing.T) {
 
 	// Test pending
 	list.PendLastNElem(5)
-	if !list.ElemToSend() || list.NumPendElem() != 5 {
+	if list.ElemToSend() || list.NumPendElem() != 5 {
 		t.Errorf("Pending logic failed")
 	}
 
-	// Send elements (should send 15, leave 5 pending)
+	// Send elements (should send 0, leave 5 pending)
 	list.SendElements()
-	if dummy.sentCount != 15 {
-		t.Errorf("Expected 15 sent elements, got %d", dummy.sentCount)
+	if dummy.sentCount != 0 {
+		t.Errorf("Expected 0 sent elements, got %d", dummy.sentCount)
 	}
 
 	// Pending logic

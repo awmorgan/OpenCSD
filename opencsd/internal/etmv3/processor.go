@@ -515,9 +515,7 @@ func (p *PktProc) processPayloadByte(by uint8) {
 			tsBits := uint8(0)
 			p.currPktIdx = 1
 			tsVal := p.extractTimestamp(&tsBits)
-			// p.currPacket.UpdateTimestamp(tsVal, tsBits)
-			p.currPacket.Timestamp = tsVal
-			p.currPacket.TsUpdateBits = tsBits
+			p.currPacket.UpdateTimestamp(tsVal, tsBits)
 			p.processState = sendPkt
 		}
 	case PktVMID:
@@ -534,7 +532,7 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 	dpResp := ocsd.RespFatalNotInit
 	if true { // assuming p.isInit=true conceptually
 		if !p.bSendPartPkt {
-			dpResp = p.OutputDecodedPacket(p.packetIndex, &p.currPacket)
+			dpResp = p.OutputOnAllInterfaces(p.packetIndex, &p.currPacket, p.currPacket.Type, p.currPacketData)
 			if p.bStreamSync {
 				p.processState = procHdr
 			} else {
@@ -542,7 +540,7 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 			}
 			p.currPacketData = p.currPacketData[:0]
 		} else {
-			dpResp = p.OutputDecodedPacket(p.packetIndex, &p.currPacket)
+			dpResp = p.OutputOnAllInterfaces(p.packetIndex, &p.currPacket, p.currPacket.Type, p.partPktData)
 			p.processState = p.postPartPktState
 			p.packetIndex += ocsd.TrcIndex(len(p.partPktData))
 			p.bSendPartPkt = false
@@ -569,59 +567,112 @@ func (p *PktProc) onBranchAddress() {
 
 func (p *PktProc) extractBrAddrPkt(nBitsOut *int) uint64 {
 	addrshift := []int{2, 1, 1, 0}
-	addrMask := []uint8{0x7, 0xF, 0xF, 0x1}
+	addrMask := []uint8{0x7, 0xF, 0xF, 0x1F}
+	addrBits := []int{3, 4, 4, 5}
 
-	bByte := p.currPacketData[0]
-	idxB := 0
-	val := uint64(bByte & 0x7E) // shift >> 1, up 1 ... >> 1 loses bit 0 which is 1
-	nBits := 6
+	CBit := true
+	bytecount := 0
+	bitcount := 0
+	shift := 0
+	isa_idx := 0
+	value := uint64(0)
+	var addrbyte uint8
+	byte5AddrUpdate := false
 
-	for (bByte & 0x80) != 0 {
-		idxB++
-		bByte = p.currPacketData[idxB]
-		if idxB == 4 {
-			// bByte is the 5th byte - index [4]
-			// extract ISA from bits 5:4 in header 0
-			isa := ocsd.ISA((p.currPacketData[0] >> 4) & 0x3)
-			pByteValMask := bByte & addrMask[isa]
-			val |= uint64(pByteValMask) << nBits
-			pByteValMask <<= addrshift[isa]
-			if pByteValMask != 0 {
-				nBits += 4
-			} else if bByte&0x7F != 0 {
-				nBits += 4 // still output 4 bits - even if these are cleared address bits
-			}
+	for CBit && bytecount < 4 {
+		p.checkPktLimits()
+		addrbyte = p.currPacketData[p.currPktIdx]
+		p.currPktIdx++
+		CBit = (addrbyte & 0x80) != 0
+		shift = bitcount
+		if bytecount == 0 {
+			addrbyte &= ^uint8(0x81)
+			bitcount += 6
+			addrbyte >>= 1
 		} else {
-			pByteValMask := bByte & 0x7F
-			val |= uint64(pByteValMask) << nBits
-			nBits += 7
+			if p.Config.IsAltBranch() && !CBit {
+				if (addrbyte & 0x40) == 0x40 {
+					p.extractExceptionData()
+				}
+				addrbyte &= 0x3F
+				bitcount += 6
+			} else {
+				addrbyte &= 0x7F
+				bitcount += 7
+			}
 		}
+		value |= uint64(addrbyte) << shift
+		bytecount++
 	}
 
-	p.currPktIdx = idxB + 1
+	if CBit {
+		p.checkPktLimits()
+		addrbyte = p.currPacketData[p.currPktIdx]
+		p.currPktIdx++
 
-	p.extractExceptionData()
+		if (addrbyte & 0x80) != 0 {
+			excep_num := (addrbyte >> 3) & 0x7
+			p.currPacket.UpdateISA(ocsd.ISAArm)
+			p.currPacket.SetException(exceptionTypeARMdeprecated[excep_num], uint16(excep_num), (addrbyte&0x40) != 0, p.Config.IsV7MArch(), 0, 0)
+		} else {
+			if (addrbyte & 0x40) == 0x40 {
+				p.extractExceptionData()
+			}
 
-	if p.Config.IsAltBranch() && (p.currPacketData[0]&0x10) != 0 {
-		// handle alternative format
-		// shift val by address shifts (less bit 0). mask was handled.
-		isa := ocsd.ISA((p.currPacketData[0] >> 4) & 0x3)
-		val >>= (addrshift[isa] - 1)
-		b5Shift := 4 - addrshift[isa]
-		if b5Shift > 0 {
-			// bit 5 address bits are no longer relevant
-			nBits -= b5Shift
+			if (addrbyte & 0xB8) == 0x08 {
+				p.currPacket.UpdateISA(ocsd.ISAArm)
+			} else if (addrbyte & 0xB0) == 0x10 {
+				if p.currPacket.Context.CurrAltIsa {
+					p.currPacket.UpdateISA(ocsd.ISATee)
+				} else {
+					p.currPacket.UpdateISA(ocsd.ISAThumb2)
+				}
+			} else if (addrbyte & 0xA0) == 0x20 {
+				p.currPacket.UpdateISA(ocsd.ISAJazelle)
+			} else {
+				// Malformed, but we should not panic directly here or just log.
+				// For now silently fail or return what we have (PktProc handles err state).
+			}
 		}
-	} else {
-		p.currPacket.CurrISA = ocsd.ISA((p.currPacketData[0] >> 4) & 0x3)
-		p.currPacket.Context.CurrAltIsa = false
+
+		byte5AddrUpdate = true
 	}
 
-	// shift output to right place.
-	val <<= 1 // bottom bit handles in earlier >>
+	switch p.currPacket.CurrISA { // Using CurrISA as it's the current ISA
+	case ocsd.ISAThumb2:
+		isa_idx = 1
+	case ocsd.ISATee:
+		isa_idx = 2
+	case ocsd.ISAJazelle:
+		isa_idx = 3
+	default:
+		isa_idx = 0
+	}
 
-	*nBitsOut = nBits + 1
-	return val
+	if byte5AddrUpdate {
+		value |= uint64(addrbyte&addrMask[isa_idx]) << bitcount
+		bitcount += addrBits[isa_idx]
+	}
+
+	shift = addrshift[isa_idx]
+	value <<= shift
+	bitcount += shift
+
+	*nBitsOut = bitcount
+	return value
+}
+
+var addrMaskB5 = []uint8{0x7, 0xF, 0xF, 0x1F}
+var addrBitsB5 = []int{3, 4, 4, 5}
+var exceptionTypeARMdeprecated = []ocsd.ArmV7Exception{
+	ocsd.ExcpReset,
+	ocsd.ExcpIRQ,
+	ocsd.ExcpReserved,
+	ocsd.ExcpReserved,
+	ocsd.ExcpJazelle,
+	ocsd.ExcpFIQ,
+	ocsd.ExcpAsyncDAbort,
+	ocsd.ExcpDebugHalt,
 }
 
 func (p *PktProc) extractExceptionData() {
@@ -657,26 +708,44 @@ func (p *PktProc) extractExceptionData() {
 }
 
 func (p *PktProc) extractCycleCount() uint32 {
-	val := uint32(0)
-	nBits := 0
+	cycleCount := uint32(0)
+	byteIdx := 0
+	mask := uint8(0x7F)
+	bCond := true
 
-	for {
-		bByte := p.currPacketData[p.currPktIdx]
+	for bCond {
+		p.checkPktLimits()
+		currByte := p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
 
-		val |= uint32(bByte&0x7F) << nBits
-		nBits += 7
+		cycleCount |= uint32(currByte&mask) << (7 * byteIdx)
+		bCond = (currByte & 0x80) == 0x80
+		byteIdx++
 
-		if (bByte & 0x80) == 0 {
-			break
+		if byteIdx == 4 {
+			mask = 0x0F
+		}
+		if byteIdx == 5 {
+			bCond = false
 		}
 	}
-	return val
+	return cycleCount
+}
+
+func (p *PktProc) checkPktLimits() {
+	if p.currPktIdx >= len(p.currPacketData) {
+		p.throwMalformedPacketErr("Malformed Packet - oversized packet.")
+	}
 }
 
 func (p *PktProc) extractCtxtID() uint32 {
 	val := uint32(0)
 	ctxtBytes := p.Config.CtxtIDBytes()
+
+	if p.currPktIdx+ctxtBytes > len(p.currPacketData) {
+		p.throwMalformedPacketErr("Too few bytes to extract context ID.")
+		return 0
+	}
 
 	for i := 0; i < ctxtBytes; i++ {
 		bByte := p.currPacketData[p.currPktIdx]
@@ -687,59 +756,94 @@ func (p *PktProc) extractCtxtID() uint32 {
 }
 
 func (p *PktProc) onISyncPacket() {
+	var instrAddr uint32
+	var j, t, altISA uint8
+
+	p.currPktIdx = 1
+
+	// 1. Extract cycle count (if present) - same as C++
 	if p.currPacket.Type == PktISyncCycle {
-		p.currPktIdx = 1
 		p.currPacket.CycleCount = p.extractCycleCount()
 		p.currPacket.ISyncInfo.HasCycleCount = true
-	} else {
-		p.currPktIdx = 1
 	}
 
-	infoByte := p.currPacketData[p.currPktIdx]
-	p.currPacket.ISyncInfo.Reason = ocsd.ISyncReason((infoByte >> 5) & 0x3)
-
-	if (infoByte & 0x01) == 0 {
-		p.currPacket.CurrISA = ocsd.ISA((infoByte >> 1) & 0x3)
-	} else {
-		p.currPacket.CurrISA = ocsd.ISACustom
-	}
-
-	p.currPacket.Context.CurrAltIsa = (infoByte & 0x04) != 0
-	p.currPacket.Context.CurrNS = (infoByte & 0x08) != 0
-	p.currPacket.Context.CurrHyp = (infoByte & 0x02) != 0
-	p.currPacket.Context.Updated = true
-
+	// 2. Extract context ID BEFORE info byte (C++ order)
 	if p.Config.CtxtIDBytes() > 0 {
-		p.currPktIdx++
 		p.currPacket.Context.CtxtID = p.extractCtxtID()
 		p.currPacket.Context.UpdatedC = true
-	} else {
-		p.currPktIdx++
 	}
 
+	// 3. Extract info byte
+	p.checkPktLimits()
+	infoByte := p.currPacketData[p.currPktIdx]
+	p.currPktIdx++
+
+	p.currPacket.ISyncInfo.Reason = ocsd.ISyncReason((infoByte >> 5) & 0x3)
+	j = (infoByte >> 4) & 0x1
+	if p.Config.MinorRev() >= 3 {
+		altISA = (infoByte >> 2) & 0x1
+	}
+	p.currPacket.Context.CurrNS = (infoByte & 0x08) != 0
+	if p.Config.HasVirtExt() {
+		p.currPacket.Context.CurrHyp = ((infoByte >> 1) & 0x1) != 0
+	}
+	p.currPacket.Context.Updated = true
+
+	// 4. Extract address and determine ISA
 	if p.Config.IsInstrTrace() {
 		addrBytes := 4
-		if p.Config.IsV7MArch() && (infoByte&0x01) != 0 {
+		if p.Config.IsV7MArch() && (j != 0) {
+			// Jazelle on V7M uses alternate format
 			addrBytes = 0
 			p.currPacket.CurrISA = ocsd.ISAThumb2
 		}
 
-		addr := uint64(0)
 		for i := 0; i < addrBytes; i++ {
-			b := p.currPacketData[p.currPktIdx]
+			p.checkPktLimits()
+			instrAddr |= uint32(p.currPacketData[p.currPktIdx]) << (i * 8)
 			p.currPktIdx++
-			addr |= uint64(b) << (i * 8)
 		}
-		p.currPacket.Addr = addr
 
+		if addrBytes > 0 {
+			t = uint8(instrAddr & 0x1) // extract T bit
+			instrAddr &= 0xFFFFFFFE    // remove T bit from address (bit 0)
+			p.currPacket.UpdateAddress(uint64(instrAddr), 32)
+
+			// Determine ISA from J, T, AltISA (matches C++ exactly)
+			currISA := ocsd.ISAArm
+			if j != 0 {
+				currISA = ocsd.ISAJazelle
+			} else if t != 0 {
+				if altISA != 0 {
+					currISA = ocsd.ISATee
+				} else {
+					currISA = ocsd.ISAThumb2
+				}
+			}
+			p.currPacket.CurrISA = currISA
+			p.currPacket.Context.CurrAltIsa = altISA != 0
+		}
+
+		// 5. LSiP address (variable-length continuation-encoded)
 		if p.isyncGetLSiP {
-			addr2 := uint64(0)
-			for i := 0; i < 4; i++ {
+			lsiPBits := 0
+			lsiPAddr := uint32(0)
+			for p.currPktIdx < len(p.currPacketData) {
 				b := p.currPacketData[p.currPktIdx]
 				p.currPktIdx++
-				addr2 |= uint64(b) << (i * 8)
+				lsiPAddr |= uint32(b&0x7F) << lsiPBits
+				lsiPBits += 7
+				if (b & 0x80) == 0 {
+					break
+				}
 			}
-			p.currPacket.Data.Addr = addr2
+			// Store: set data addr to instr addr, then overlay LSiP bits
+			p.currPacket.Data.Addr = uint64(instrAddr)
+			p.currPacket.Data.UpdateAddr = true
+			if lsiPBits > 0 {
+				mask := uint64((1 << lsiPBits) - 1)
+				p.currPacket.Data.Addr = (p.currPacket.Data.Addr & ^mask) | (uint64(lsiPAddr) & mask)
+			}
 			p.currPacket.ISyncInfo.HasLSipAddr = true
 		}
 	} else {
@@ -809,13 +913,14 @@ func (p *PktProc) extractTimestamp(tsBits *uint8) uint64 {
 	nBits := 0
 
 	for {
+		p.checkPktLimits()
 		b := p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
 
 		val |= uint64(b&0x7F) << nBits
 		nBits += 7
 
-		if (b & 0x80) == 0 {
+		if (b&0x80) == 0 || nBits >= 64 {
 			break
 		}
 	}

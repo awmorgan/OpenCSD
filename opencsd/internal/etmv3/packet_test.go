@@ -60,25 +60,36 @@ func TestPacket(t *testing.T) {
 	}
 
 	// Test UpdateAtomFromPHdr
-	// Format 4
-	if p.UpdateAtomFromPHdr(0x00, true) {
-		t.Error("fmt4 not allowed cycleAcc")
-	}
+	// Format 1 (Non-CA)
 	if !p.UpdateAtomFromPHdr(0x00, false) {
-		t.Error("fmt4 allowed non-cycleAcc")
+		t.Error("fmt1 allowed non-cycleAcc")
 	}
-	if p.PHdrFmt != 4 {
-		t.Error("expected fmt 4")
+	if p.PHdrFmt != 1 {
+		t.Errorf("expected fmt 1, got %d", p.PHdrFmt)
 	}
 
-	// Fmt 3
-	if !p.UpdateAtomFromPHdr(0x42, false) {
-		t.Error("fmt3")
+	// Format 2 (Non-CA)
+	if !p.UpdateAtomFromPHdr(0x02, false) {
+		t.Error("fmt2 allowed non-cycleAcc")
 	}
-	p.UpdateAtomFromPHdr(0x00, false) // 0x00 fmt4
-	p.UpdateAtomFromPHdr(0x01, false) // 0x01 fmt3
-	p.UpdateAtomFromPHdr(0x10, false) // 0x10 fmt3
-	p.UpdateAtomFromPHdr(0x11, false) // 0x11 fmt4
-	p.UpdateAtomFromPHdr(0x08, false) // 0x08 fmt2
-	p.UpdateAtomFromPHdr(0x02, false) // 0x02 fmt1
+	if p.PHdrFmt != 2 {
+		t.Errorf("expected fmt 2, got %d", p.PHdrFmt)
+	}
+
+	// Format 1 (CA)
+	if !p.UpdateAtomFromPHdr(0x84, true) {
+		t.Error("fmt1 allowed cycleAcc")
+	}
+	if p.PHdrFmt != 1 {
+		t.Errorf("expected fmt 1 (CA), got %d", p.PHdrFmt)
+	}
+
+	// Format 4 (CA) - 0x92 is fmt 4 (1001 0010)
+	// (0x92 & 0xA3) == 0x82 AND (0x92 & 0x10) == 0x10
+	if !p.UpdateAtomFromPHdr(0x92, true) {
+		t.Error("fmt4 allowed cycleAcc")
+	}
+	if p.PHdrFmt != 4 {
+		t.Errorf("expected fmt 4, got %d", p.PHdrFmt)
+	}
 }
