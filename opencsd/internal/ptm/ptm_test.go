@@ -17,6 +17,19 @@ func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, ele
 	return ocsd.RespCont
 }
 
+type rawPktCapture struct {
+	packets [][]byte
+}
+
+func (r *rawPktCapture) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet, rawData []byte) {
+	if op != ocsd.OpData || len(rawData) == 0 {
+		return
+	}
+	cp := make([]byte, len(rawData))
+	copy(cp, rawData)
+	r.packets = append(r.packets, cp)
+}
+
 // --- Mocks ---
 
 type mockMemAcc struct {
@@ -409,6 +422,41 @@ func TestProcAtomFormats(t *testing.T) {
 	data = append(data, 0xC0)
 
 	proc.TraceDataIn(ocsd.OpData, 0, data)
+}
+
+// TestProcWaitAsyncCarryOverRawTailByte locks bug-for-bug compatibility for the
+// NOTSYNC raw monitor path where a carry-over SOP candidate (0x00) from the
+// previous block contributes one synthetic trailing byte (0x0f here) on output.
+func TestProcWaitAsyncCarryOverRawTailByte(t *testing.T) {
+	config := NewConfig()
+	proc := setupProcOnly(config)
+
+	rawCap := &rawPktCapture{}
+	proc.PktRawMonI.Attach(rawCap)
+
+	// First block leaves waitASyncSOPkt=true with a carry-over 0x00.
+	if _, resp := proc.TraceDataIn(ocsd.OpData, 4669, []byte{0x00}); ocsd.DataRespIsFatal(resp) {
+		t.Fatalf("unexpected fatal resp on carry-over setup: %v", resp)
+	}
+
+	// Second block is all non-zero and long enough to force an unsynced flush.
+	// This reproduces the carry-over NOT_ASYNC accounting edge case.
+	data := []byte{0xc0, 0x29, 0xf4, 0x0b, 0xe3, 0x18, 0x50, 0x01, 0xb8, 0xe0, 0x01, 0xef, 0xab, 0x0b, 0x20}
+	if _, resp := proc.TraceDataIn(ocsd.OpData, 4670, data); ocsd.DataRespIsFatal(resp) {
+		t.Fatalf("unexpected fatal resp on reproducer block: %v", resp)
+	}
+
+	if len(rawCap.packets) < 2 {
+		t.Fatalf("expected at least 2 raw monitor packets, got %d", len(rawCap.packets))
+	}
+
+	unsyncRaw := rawCap.packets[1]
+	if len(unsyncRaw) != 16 {
+		t.Fatalf("expected 16-byte unsynced raw packet, got %d", len(unsyncRaw))
+	}
+	if got := unsyncRaw[len(unsyncRaw)-1]; got != 0x0f {
+		t.Fatalf("expected trailing synthetic byte 0x0f, got 0x%02x", got)
+	}
 }
 
 func TestProcWPointExcepISASwap(t *testing.T) {

@@ -321,7 +321,28 @@ func (p *PktProc) waitASync() ocsd.DatapathResp {
 					p.OutputRawPacketToMonitor(p.currPktIndex, &p.currPacket, spareZeros[:pktBytesOnEntry])
 					p.currPktIndex += ocsd.TrcIndex(pktBytesOnEntry)
 				}
-				p.OutputRawPacketToMonitor(p.currPktIndex, &p.currPacket, p.pDataIn[unsyncScanBlockStart:unsyncScanBlockStart+unsyncedBytes])
+				rawData := p.pDataIn
+				rawEnd := unsyncScanBlockStart + unsyncedBytes
+				if rawEnd <= len(rawData) {
+					p.OutputRawPacketToMonitor(p.currPktIndex, &p.currPacket, rawData[unsyncScanBlockStart:rawEnd])
+				} else if unsyncScanBlockStart < len(rawData) {
+					// Keep bug-for-bug raw packet monitor output compatible with OpenCSD C++ in
+					// the carry-over NOT_ASYNC path: one synthetic tail byte may be emitted when
+					// unsynced accounting includes a previous SOP-candidate byte.
+					base := rawData[unsyncScanBlockStart:len(rawData)]
+					missing := rawEnd - len(rawData)
+					if missing > 0 {
+						fill := byte(len(p.pDataIn))
+						tmp := make([]byte, len(base)+missing)
+						copy(tmp, base)
+						for i := len(base); i < len(tmp); i++ {
+							tmp[i] = fill
+						}
+						p.OutputRawPacketToMonitor(p.currPktIndex, &p.currPacket, tmp)
+					} else {
+						p.OutputRawPacketToMonitor(p.currPktIndex, &p.currPacket, base)
+					}
+				}
 			}
 			if !p.bOPNotSyncPkt {
 				resp = p.OutputDecodedPacket(p.currPktIndex, &p.currPacket)

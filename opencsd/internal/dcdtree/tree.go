@@ -86,8 +86,12 @@ func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config 
 		return ocsd.ErrInvalidParamType
 	}
 	csID := cfgID.TraceID()
+	routeID := csID
+	if dt.treeType == ocsd.TrcSrcSingle {
+		routeID = 0
+	}
 
-	if _, exists := dt.decodeElements[csID]; exists {
+	if _, exists := dt.decodeElements[routeID]; exists {
 		return ocsd.ErrAttachTooMany
 	}
 
@@ -96,12 +100,12 @@ func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config 
 
 	if (createFlags & ocsd.CreateFlgFullDecoder) != 0 {
 		var err2 ocsd.Err
-		pktIn, handle, err2 = mngr.CreateDecoder(int(csID), config)
+		pktIn, handle, err2 = mngr.CreateDecoder(int(routeID), config)
 		if err2 != ocsd.OK {
 			return err2
 		}
 	} else if (createFlags & ocsd.CreateFlgPacketProc) != 0 {
-		h := mngr.CreatePktProc(int(csID), config)
+		h := mngr.CreatePktProc(int(routeID), config)
 		if h == nil {
 			return ocsd.ErrInvalidParamType
 		}
@@ -116,10 +120,10 @@ func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config 
 	}
 
 	elem := NewDecodeTreeElement(decoderName, mngr, handle, pktIn, true)
-	dt.decodeElements[csID] = elem
+	dt.decodeElements[routeID] = elem
 
 	if dt.frameDeformatter != nil && pktIn != nil {
-		dt.frameDeformatter.SetIDStream(csID, pktIn)
+		dt.frameDeformatter.SetIDStream(routeID, pktIn)
 	}
 
 	// Try auto-wire interfaces
