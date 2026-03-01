@@ -1,0 +1,156 @@
+Trace Packet Lister: CS Decode library testing
+-----------------------------------------------
+
+** Library Version : 1.8.0
+
+Test Command Line:-
+C:\Users\arthu\git\OpenCSD\decoder\tests\bin\mingw64\rel\trc_pkt_lister.exe   -ss_dir  ./snapshots/itm_only_csformat  -decode  -no_time_print  -logfilename  ./results/itm_only_csformat.ppl  
+
+Trace Packet Lister : reading snapshot from path ./snapshots/itm_only_csformat
+Using ETB_1 as trace source
+Trace Packet Lister : Protocol printer ITM on Trace ID 0x14
+Trace Packet Lister : Set trace element decode printer
+Gen_Info : Mapped Memory Accessors
+Gen_Info : ========================
+Idx:0; ID:14; [0xf0 ];	ITM_NOTSYNC: ; 'ITM data stream not synchronised'
+Idx:0; ID:14; OCSD_GEN_TRC_ELEM_NO_SYNC( [init-decoder])
+Idx:1; ID:14; [0x00 0x00 0x34 ];	ITM_NOTSYNC: ; 'ITM data stream not synchronised'
+Idx:4; ID:14; [0x00 0x12 0x33 0x44 0x12 0x43 0x55 0x66 ];	ITM_NOTSYNC: ; 'ITM data stream not synchronised'
+Idx:4; ID:14; [0x22 0x77 ];	ITM_NOTSYNC: ; 'ITM data stream not synchronised'
+Idx:16; ID:14; [0x88 0x99 ];	ITM_NOTSYNC: ; 'ITM data stream not synchronised'
+Idx:18; ID:14; [0x00 0x00 0x00 0x00 0x00 0x80 ];	ITM_ASYNC: ; 'Alignment synchronisation packet'
+Idx:24; ID:14; [0x70 ];	ITM_OVERFLOW: ; 'ITM overflow packet'
+Idx:25; ID:14; [0x19 0xbb ];	ITM_SWIT: {src id: 0x03}  0xbb; 'Software Stimulus write packet'
+Idx:25; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_OVERFLOW; ITM_SWIT (ch: 0x3; Data: 0xbb) )
+Idx:27; ID:14; [0x20 ];	ITM_TS_LOCAL: 0x02 { TS Sync }; 'Local Timestamp'
+Idx:27; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x00000002, { TS Sync}; TS cumulative: 0x0000000000000002) )
+Idx:28; ID:14; [0x00 0x00 0x00 0x00 0x00 0x80 ];	ITM_ASYNC: ; 'Alignment synchronisation packet'
+Idx:35; ID:14; [0x09 0xac ];	ITM_SWIT: {src id: 0x01}  0xac; 'Software Stimulus write packet'
+Idx:35; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x1; Data: 0xac) )
+Idx:37; ID:14; [0x20 ];	ITM_TS_LOCAL: 0x02 { TS Sync }; 'Local Timestamp'
+Idx:37; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x00000002, { TS Sync}; TS cumulative: 0x0000000000000004) )
+Idx:38; ID:14; [0x0a 0x45 0x23 ];	ITM_SWIT: {src id: 0x01}  0x2345; 'Software Stimulus write packet'
+Idx:38; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x1; Data: 0x2345) )
+Idx:41; ID:14; [0x0b 0x23 0x01 0x89 0x67 ];	ITM_SWIT: {src id: 0x01}  0x67890123; 'Software Stimulus write packet'
+Idx:41; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x1; Data: 0x67890123) )
+Idx:46; ID:14; [0xd0 0x0d ];	ITM_TS_LOCAL: 0x0d { TS Delayed }; 'Local Timestamp'
+Idx:46; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x0000000d, { TS Delay}; TS cumulative: 0x0000000000000011) )
+Idx:49; ID:14; [0x00 0x00 0x00 0x00 0x00 0x80 ];	ITM_ASYNC: ; 'Alignment synchronisation packet'
+Idx:55; ID:14; [0x05 0x15 ];	ITM_DWT: {desc: 0x00} [Event Counter: 0x15; Flags:  CPI  ---  Sleep  ---  Fold  --- ] ; 'DWT hardware stimulus write'
+Idx:55; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_DWT (desc: 0x0; Data: 0x15) )
+Idx:57; ID:14; [0xc0 0x82 0xc8 0x04 ];	ITM_TS_LOCAL: 0x012402 { TS Sync }; 'Local Timestamp'
+Idx:57; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x00012402, { TS Sync}; TS cumulative: 0x0000000000012413) )
+Idx:61; ID:14; [0x0e 0x04 0x10 ];	ITM_DWT: {desc: 0x01} [Exception Num:  0x0004(entered) ]; 'DWT hardware stimulus write'
+Idx:61; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_DWT (desc: 0x1; Data: 0x1004) )
+Idx:65; ID:14; [0xd0 0xa0 0x64 ];	ITM_TS_LOCAL: 0x3220 { TS Delayed }; 'Local Timestamp'
+Idx:65; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x00003220, { TS Delay}; TS cumulative: 0x0000000000015633) )
+Idx:68; ID:14; [0x17 0x00 0x10 0x00 0x00 ];	ITM_DWT: {desc: 0x02} [PC Sample: 0x00001000] ; 'DWT hardware stimulus write'
+Idx:68; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_DWT (desc: 0x2; Data: 0x00001000) )
+Idx:73; ID:14; [0xe0 0xc2 0x26 ];	ITM_TS_LOCAL: 0x1342 { TS Sync, Packet Delayed }; 'Local Timestamp'
+Idx:73; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x00001342, { Packet Delay}; TS cumulative: 0x0000000000016975) )
+Idx:76; ID:14; [0x17 0x80 0x10 0x00 0x00 ];	ITM_DWT: {desc: 0x02} [PC Sample: 0x00001080] ; 'DWT hardware stimulus write'
+Idx:76; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_DWT (desc: 0x2; Data: 0x00001080) )
+Idx:82; ID:14; [0x15 0x00 ];	ITM_DWT: {desc: 0x02} [PC Sample: 0x00] ; 'DWT hardware stimulus write'
+Idx:82; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_DWT (desc: 0x2; Data: 0x00) )
+Idx:84; ID:14; [0x70 ];	ITM_OVERFLOW: ; 'ITM overflow packet'
+Idx:85; ID:14; [0x95 0x44 ];	ITM_DWT: {desc: 0x12} [Data Trc: comp=1; Val read: 0x44] ; 'DWT hardware stimulus write'
+Idx:85; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_OVERFLOW; ITM_DWT (desc: 0x12; Data: 0x44) )
+Idx:87; ID:14; [0xf0 0xde 0xfe 0xd0 0x3a ];	ITM_TS_LOCAL: 0x07543f5e { TS Delayed, Packet Delayed }; 'Local Timestamp'
+Idx:87; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x07543f5e, { TS and Packet Delay}; TS cumulative: 0x0000000007543f5e) )
+Idx:92; ID:14; [0x86 0x66 0x55 ];	ITM_DWT: {desc: 0x10} [Data Trc: comp=0; Val read: 0x5566] ; 'DWT hardware stimulus write'
+Idx:92; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_DWT (desc: 0x10; Data: 0x5566) )
+Idx:96; ID:14; [0xc0 0x78 ];	ITM_TS_LOCAL: 0x78 { TS Sync }; 'Local Timestamp'
+Idx:96; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x00000078, { TS Sync}; TS cumulative: 0x0000000007543fd6) )
+Idx:98; ID:14; [0xa7 0xaa 0x99 0x88 0x77 ];	ITM_DWT: {desc: 0x14} [Data Trc: comp=2; Val read: 0x778899aa] ; 'DWT hardware stimulus write'
+Idx:98; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_DWT (desc: 0x14; Data: 0x778899aa) )
+Idx:103; ID:14; [0x60 ];	ITM_TS_LOCAL: 0x06 { TS Sync }; 'Local Timestamp'
+Idx:103; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x00000006, { TS Sync}; TS cumulative: 0x0000000007543fdc) )
+Idx:104; ID:14; [0x0e 0x23 0x21 ];	ITM_DWT: {desc: 0x01} [Exception Num:  0x0123(exited) ]; 'DWT hardware stimulus write'
+Idx:104; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_DWT (desc: 0x1; Data: 0x2123) )
+Idx:107; ID:14; [0x30 ];	ITM_TS_LOCAL: 0x03 { TS Sync }; 'Local Timestamp'
+Idx:107; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x00000003, { TS Sync}; TS cumulative: 0x0000000007543fdf) )
+Idx:108; ID:14; [0x0e 0x03 0x30 ];	ITM_DWT: {desc: 0x01} [Exception Num:  0x0003(returned to) ]; 'DWT hardware stimulus write'
+Idx:108; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_DWT (desc: 0x1; Data: 0x3003) )
+Idx:112; ID:14; [0x37 0x00 0x20 0x00 0x00 ];	ITM_DWT: {desc: 0x06} [Reserved discriminator value] ; 'DWT hardware stimulus write'
+Idx:112; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_DWT (desc: 0x6; Data: 0x00002000) )
+Idx:117; ID:14; [0x2e 0x22 0x03 ];	ITM_DWT: {desc: 0x05} [Reserved discriminator value] ; 'DWT hardware stimulus write'
+Idx:117; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_DWT (desc: 0x5; Data: 0x0322) )
+Idx:120; ID:14; [0x8d 0x11 ];	ITM_DWT: {desc: 0x11} [Data Trc: comp=0; Val write: 0x11] ; 'DWT hardware stimulus write'
+Idx:120; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_DWT (desc: 0x11; Data: 0x11) )
+Idx:122; ID:14; [0x40 ];	ITM_TS_LOCAL: 0x04 { TS Sync }; 'Local Timestamp'
+Idx:122; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x00000004, { TS Sync}; TS cumulative: 0x0000000007543fe3) )
+Idx:123; ID:14; [0x9e 0x33 0x22 ];	ITM_DWT: {desc: 0x13} [Data Trc: comp=1; Val write: 0x2233] ; 'DWT hardware stimulus write'
+Idx:123; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_DWT (desc: 0x13; Data: 0x2233) )
+Idx:126; ID:14; [0x30 ];	ITM_TS_LOCAL: 0x03 { TS Sync }; 'Local Timestamp'
+Idx:126; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x00000003, { TS Sync}; TS cumulative: 0x0000000007543fe6) )
+Idx:128; ID:14; [0xaf 0x77 0x66 0x55 0x44 ];	ITM_DWT: {desc: 0x15} [Data Trc: comp=2; Val write: 0x44556677] ; 'DWT hardware stimulus write'
+Idx:128; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_DWT (desc: 0x15; Data: 0x44556677) )
+Idx:133; ID:14; [0x20 ];	ITM_TS_LOCAL: 0x02 { TS Sync }; 'Local Timestamp'
+Idx:133; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x00000002, { TS Sync}; TS cumulative: 0x0000000007543fe8) )
+Idx:134; ID:14; [0x00 0x00 0x00 0x00 0x00 0x80 ];	ITM_ASYNC: ; 'Alignment synchronisation packet'
+Idx:140; ID:14; [0x70 ];	ITM_OVERFLOW: ; 'ITM overflow packet'
+Idx:141; ID:14; [0x51 0xac ];	ITM_SWIT: {src id: 0x0a}  0xac; 'Software Stimulus write packet'
+Idx:141; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_OVERFLOW; ITM_SWIT (ch: 0xa; Data: 0xac) )
+Idx:144; ID:14; [0x20 ];	ITM_TS_LOCAL: 0x02 { TS Sync }; 'Local Timestamp'
+Idx:144; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x00000002, { TS Sync}; TS cumulative: 0x0000000000000002) )
+Idx:145; ID:14; [0x28 ];	ITM_EXTENSION: {stim port page} 0x02; 'Extension packet'
+Idx:146; ID:14; [0x52 0x45 0x23 ];	ITM_SWIT: {src id: 0x0a}  0x2345; 'Software Stimulus write packet'
+Idx:146; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x4a; Data: 0x2345) )
+Idx:149; ID:14; [0x48 ];	ITM_EXTENSION: {stim port page} 0x04; 'Extension packet'
+Idx:150; ID:14; [0x5b 0x23 0x01 0x89 0x67 ];	ITM_SWIT: {src id: 0x0b}  0x67890123; 'Software Stimulus write packet'
+Idx:150; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x8b; Data: 0x67890123) )
+Idx:155; ID:14; [0x08 ];	ITM_EXTENSION: {stim port page} 0x00; 'Extension packet'
+Idx:156; ID:14; [0x52 0xfe 0x32 ];	ITM_SWIT: {src id: 0x0a}  0x32fe; 'Software Stimulus write packet'
+Idx:156; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0xa; Data: 0x32fe) )
+Idx:160; ID:14; [0x00 0x00 0x00 0x00 0x00 0x80 ];	ITM_ASYNC: ; 'Alignment synchronisation packet'
+Idx:166; ID:14; [0x70 ];	ITM_OVERFLOW: ; 'ITM overflow packet'
+Idx:167; ID:14; [0x94 0xd6 0xe8 0xc8 0x07 ];	ITM_GTS_1: { TS bits [25:0]} 0x00f23456; 'Global Timestamp [25:0]'
+Idx:172; ID:14; [0xb4 0x93 0x98 0xa0 0xa0 0x80 0x00 ];	ITM_GTS_2: { TS bits [63:26]} 0x0004080c13; 'Global Timestamp [{63|42}:26]'
+Idx:172; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_OVERFLOW; ITM_TS_GLOBAL ( TS: 0x001020304cf23456) )
+Idx:180; ID:14; [0x82 0x34 0x12 ];	ITM_SWIT: {src id: 0x10}  0x1234; 'Software Stimulus write packet'
+Idx:180; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x10; Data: 0x1234) )
+Idx:183; ID:14; [0x94 0x7a ];	ITM_GTS_1: { TS bits [6:0]} 0x7a; 'Global Timestamp [25:0]'
+Idx:183; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_GLOBAL ( TS: 0x001020304cf2347a) )
+Idx:185; ID:14; [0x83 0xbc 0x9a 0x78 0x56 ];	ITM_SWIT: {src id: 0x10}  0x56789abc; 'Software Stimulus write packet'
+Idx:185; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x10; Data: 0x56789abc) )
+Idx:190; ID:14; [0x94 0x92 0x4e ];	ITM_GTS_1: { TS bits [13:0]} 0x2712; 'Global Timestamp [25:0]'
+Idx:190; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_GLOBAL ( TS: 0x001020304cf22712) )
+Idx:194; ID:14; [0x8a 0x76 0x98 ];	ITM_SWIT: {src id: 0x11}  0x9876; 'Software Stimulus write packet'
+Idx:194; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x11; Data: 0x9876) )
+Idx:197; ID:14; [0x94 0xd3 0xc6 0x10 ];	ITM_GTS_1: { TS bits [20:0]} 0x042353; 'Global Timestamp [25:0]'
+Idx:197; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_GLOBAL ( TS: 0x001020304ce42353) )
+Idx:201; ID:14; [0x8b 0xdc 0x1a 0x32 0x54 ];	ITM_SWIT: {src id: 0x11}  0x54321adc; 'Software Stimulus write packet'
+Idx:201; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x11; Data: 0x54321adc) )
+Idx:206; ID:14; [0x94 0x82 0xcf 0xfa 0x17 ];	ITM_GTS_1: { TS bits [25:0]} 0x02fea782; 'Global Timestamp [25:0]'
+Idx:206; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_GLOBAL ( TS: 0x001020304efea782) )
+Idx:212; ID:14; [0x8a 0xa5 0xa5 ];	ITM_SWIT: {src id: 0x11}  0xa5a5; 'Software Stimulus write packet'
+Idx:212; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x11; Data: 0xa5a5) )
+Idx:215; ID:14; [0x94 0x82 0xcf 0xfa 0x17 ];	ITM_GTS_1: { TS bits [25:0], Clk change, Clk wrap} 0x02fea782; 'Global Timestamp [25:0]'
+Idx:220; ID:14; [0x8a 0xb6 0xb6 ];	ITM_SWIT: {src id: 0x11}  0xb6b6; 'Software Stimulus write packet'
+Idx:220; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x11; Data: 0xb6b6) )
+Idx:224; ID:14; [0xb4 0x93 0x98 0xa0 0xa0 0x80 0x00 ];	ITM_GTS_2: { TS bits [63:26]} 0x0004080c13; 'Global Timestamp [{63|42}:26]'
+Idx:224; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_GLOBAL ( TS: 0x001020304efea782) )
+Idx:231; ID:14; [0x8a 0xc7 0xc7 ];	ITM_SWIT: {src id: 0x11}  0xc7c7; 'Software Stimulus write packet'
+Idx:231; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x11; Data: 0xc7c7) )
+Idx:234; ID:14; [0x94 0xba 0xa4 0x8e 0x1a ];	ITM_GTS_1: { TS bits [25:0], Clk wrap} 0x0343923a; 'Global Timestamp [25:0]'
+Idx:240; ID:14; [0x8a 0xc7 0xc7 ];	ITM_SWIT: {src id: 0x11}  0xc7c7; 'Software Stimulus write packet'
+Idx:240; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x11; Data: 0xc7c7) )
+Idx:243; ID:14; [0x94 0x5d ];	ITM_GTS_1: { TS bits [6:0]} 0x5d; 'Global Timestamp [25:0]'
+Idx:245; ID:14; [0x8a 0xd8 0xd8 ];	ITM_SWIT: {src id: 0x11}  0xd8d8; 'Software Stimulus write packet'
+Idx:245; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x11; Data: 0xd8d8) )
+Idx:248; ID:14; [0xb4 0x94 0x98 0xa0 0xa0 0x80 0x00 ];	ITM_GTS_2: { TS bits [63:26]} 0x0004080c14; 'Global Timestamp [{63|42}:26]'
+Idx:248; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_GLOBAL ( TS: 0x001020305343925d) )
+Idx:257; ID:14; [0x8a 0xe9 0xe9 ];	ITM_SWIT: {src id: 0x11}  0xe9e9; 'Software Stimulus write packet'
+Idx:257; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x11; Data: 0xe9e9) )
+Idx:260; ID:14; [0x94 0xd1 0x68 ];	ITM_GTS_1: { TS bits [13:0]} 0x3451; 'Global Timestamp [25:0]'
+Idx:260; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_GLOBAL ( TS: 0x001020305343b451) )
+Idx:263; ID:14; [0x82 0xf0 0xf0 ];	ITM_SWIT: {src id: 0x10}  0xf0f0; 'Software Stimulus write packet'
+Idx:263; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x10; Data: 0xf0f0) )
+Idx:266; ID:14; [0x94 0xb2 0xfc 0xeb 0x01 ];	ITM_GTS_1: { TS bits [25:0], Clk wrap} 0x003afe32; 'Global Timestamp [25:0]'
+Idx:272; ID:14; [0xb4 0x96 0x9a 0x92 0x00 ];	ITM_GTS_2: { TS bits [47:26]} 0x00048d16; 'Global Timestamp [{63|42}:26]'
+Idx:272; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_GLOBAL ( TS: 0x00001234583afe32) )
+Idx:277; ID:14; [0x82 0x01 0x01 ];	ITM_SWIT: {src id: 0x10}  0x0101; 'Software Stimulus write packet'
+Idx:277; ID:14; OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_SWIT (ch: 0x10; Data: 0x0101) )
+Idx:277; ID:14; OCSD_GEN_TRC_ELEM_EO_TRACE( [end-of-trace])
+ID:14	END OF TRACE DATA
+Trace Packet Lister : Trace buffer done, processed 288 bytes.
