@@ -117,13 +117,15 @@ func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp,
 					resp = ocsd.RespFatalInvalidData
 				}
 			} else {
-				resp = ocsd.RespFatalSysErr
-				fatal := common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrFail, fmt.Sprintf("Unknown System Error decoding trace: %v", r))
-				fatal.Idx = p.packetIndex
+				warn := common.NewErrorMsg(ocsd.ErrSevWarn, ocsd.ErrFail, fmt.Sprintf("Recovered decode panic, forcing resync: %v", r))
+				warn.Idx = p.packetIndex
 				if p.Config != nil {
-					fatal.ChanID = p.Config.TraceID()
+					warn.ChanID = p.Config.TraceID()
 				}
-				p.LogError(fatal)
+				p.LogError(warn)
+				p.currPacket.SetPacketType(PktNotSync, false)
+				p.procState = procWaitSync
+				resp = ocsd.RespErrCont
 			}
 			handled = true
 		}

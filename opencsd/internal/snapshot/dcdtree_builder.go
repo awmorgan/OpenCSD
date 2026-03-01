@@ -58,7 +58,6 @@ func (b *CreateDcdTreeFromSnapShot) CreateDecodeTree(sourceName string, bPacketP
 		if dataFormat == "source_data" {
 			srcFormat = ocsd.TrcSrcSingle
 		}
-		fmt.Printf("DEBUG: Snapshot DataFormat=%s -> srcFormat=%v\n", tree.BufferInfo.DataFormat, srcFormat)
 
 		if dataFormat == "dstream_coresight" {
 			formatterFlags = ocsd.DfrmtrHasFsyncs
