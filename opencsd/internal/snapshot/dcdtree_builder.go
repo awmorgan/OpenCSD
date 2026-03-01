@@ -3,6 +3,7 @@ package snapshot
 import (
 	"fmt"
 	"opencsd/internal/dcdtree"
+	"opencsd/internal/ete"
 	"opencsd/internal/etmv3"
 	"opencsd/internal/itm"
 	"opencsd/internal/ocsd"
@@ -129,6 +130,8 @@ func (b *CreateDcdTreeFromSnapShot) createPEDecoder(coreName string, devSrc *Par
 
 	if strings.HasPrefix(devTypeName, "ETMv3") || strings.HasPrefix(devTypeName, "ETM3") {
 		return b.createETMv3Decoder(coreName, devSrc)
+	} else if strings.HasPrefix(devTypeName, "ETE") {
+		return b.createETEDecoder(coreName, devSrc)
 	} else if strings.HasPrefix(devTypeName, "PTM") || strings.HasPrefix(devTypeName, "PFT") {
 		return b.createPTMDecoder(coreName, devSrc)
 	}
@@ -196,6 +199,42 @@ func (b *CreateDcdTreeFromSnapShot) createPTMDecoder(coreName string, devSrc *Pa
 	err := b.dcdTree.CreateDecoder(ocsd.BuiltinDcdPTM, int(createFlags), cfg)
 	if err != ocsd.OK {
 		return fmt.Errorf("dcdTree.CreateDecoder PTM failed: %v", err)
+	}
+	return nil
+}
+
+func (b *CreateDcdTreeFromSnapShot) createETEDecoder(coreName string, devSrc *ParsedDevice) error {
+	cfg := ete.NewConfig()
+
+	if val, ok := devSrc.GetRegValue("trcidr0"); ok {
+		cfg.RegIdr0 = uint32(parseUint(val))
+	}
+	if val, ok := devSrc.GetRegValue("trcidr1"); ok {
+		cfg.RegIdr1 = uint32(parseUint(val))
+	}
+	if val, ok := devSrc.GetRegValue("trcidr2"); ok {
+		cfg.RegIdr2 = uint32(parseUint(val))
+	}
+	if val, ok := devSrc.GetRegValue("trcidr8"); ok {
+		cfg.RegIdr8 = uint32(parseUint(val))
+	}
+	if val, ok := devSrc.GetRegValue("trcdevarch"); ok {
+		cfg.RegDevArch = uint32(parseUint(val))
+	}
+	if val, ok := devSrc.GetRegValue("trcconfigr"); ok {
+		cfg.RegConfigr = uint32(parseUint(val))
+	}
+	if val, ok := devSrc.GetRegValue("trctraceidr"); ok {
+		cfg.RegTraceidr = uint32(parseUint(val))
+	}
+
+	createFlags := ocsd.CreateFlgFullDecoder
+	if b.bPacketProcOnly {
+		createFlags = ocsd.CreateFlgPacketProc
+	}
+	err := b.dcdTree.CreateDecoder(ocsd.BuiltinDcdETE, int(createFlags), cfg)
+	if err != ocsd.OK {
+		return fmt.Errorf("dcdTree.CreateDecoder ETE failed: %v", err)
 	}
 	return nil
 }

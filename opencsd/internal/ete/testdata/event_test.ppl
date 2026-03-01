@@ -1,0 +1,21 @@
+Trace Packet Lister: CS Decode library testing
+-----------------------------------------------
+
+** Library Version : 1.8.0
+
+Test Command Line:-
+C:\Users\arthu\git\OpenCSD\decoder\tests\bin\mingw64\rel\trc_pkt_lister.exe   -ss_dir  ./snapshots-ete/event_test  -decode  -no_time_print  -logfilename  ./results-ete/event_test.ppl  
+
+Trace Packet Lister : reading snapshot from path ./snapshots-ete/event_test
+Using ETB_1 as trace source
+ss2_dcdtree : 0x0003 (OCSD_ERR_NOT_INIT) [Component not initialised.]; Failed to create memory accessor for file ./snapshots-ete/event_test/bindir_64/OTHERS_exec.ss2_dcdtree : 0x0003 (OCSD_ERR_NOT_INIT) [Component not initialised.]; Failed to create memory accessor for file ./snapshots-ete/event_test/bindir_64/VAL_NON_DET_CODE_exec.Trace Packet Lister : Protocol printer ETE on Trace ID 0x0
+Trace Packet Lister : Set trace element decode printer
+Gen_Info : Mapped Memory Accessors
+Gen_Info : ========================
+Idx:0; ID:0; [0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x80 ];	I_ASYNC : Alignment Synchronisation.
+Idx:0; ID:1; OCSD_GEN_TRC_ELEM_NO_SYNC( [init-decoder])
+Idx:12; ID:0; [0x71 ];	I_EVENT : Trace Event.
+Idx:12; ID:1; OCSD_GEN_TRC_ELEM_EVENT( Numbered:1; )
+Idx:12; ID:1; OCSD_GEN_TRC_ELEM_EO_TRACE( [end-of-trace])
+ID:0	END OF TRACE DATA
+Trace Packet Lister : Trace buffer done, processed 13 bytes.

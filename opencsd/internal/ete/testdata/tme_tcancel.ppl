@@ -1,0 +1,32 @@
+Trace Packet Lister: CS Decode library testing
+-----------------------------------------------
+
+** Library Version : 1.8.0
+
+Test Command Line:-
+C:\Users\arthu\git\OpenCSD\decoder\tests\bin\mingw64\rel\trc_pkt_lister.exe   -ss_dir  ./snapshots-ete/tme_tcancel  -decode  -no_time_print  -logfilename  ./results-ete/tme_tcancel.ppl  
+
+Trace Packet Lister : reading snapshot from path ./snapshots-ete/tme_tcancel
+Using ETB_1 as trace source
+Trace Packet Lister : Protocol printer ETE on Trace ID 0x0
+Trace Packet Lister : Set trace element decode printer
+Gen_Info : Mapped Memory Accessors
+Gen_Info : FileAcc; Range::0x60000:c95df; Mem Space::Any
+Filename=./snapshots-ete/tme_tcancel/bindir_64/OTHERS_exec
+Gen_Info : FileAcc; Range::0x10000:2a27f; Mem Space::Any
+Filename=./snapshots-ete/tme_tcancel/bindir_64/VAL_NON_DET_CODE_exec
+Gen_Info : ========================
+Idx:0; ID:0; [0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x80 ];	I_ASYNC : Alignment Synchronisation.
+Idx:0; ID:1; OCSD_GEN_TRC_ELEM_NO_SYNC( [init-decoder])
+Idx:12; ID:0; [0x01 0x01 0x10 ];	I_TRACE_INFO : Trace Info.; INFO=0x10 { CC.0, TSTATE.0 }; Decoder Sync point TINFO
+Idx:15; ID:0; [0x04 ];	I_TRACE_ON : Trace On.
+Idx:16; ID:0; [0x0a ];	I_TRANS_ST : Transaction Start.
+Idx:15; ID:1; OCSD_GEN_TRC_ELEM_TRACE_ON( [begin or filter])
+Idx:16; ID:1; OCSD_GEN_TRC_ELEM_MEMTRANS(Start)
+Idx:17; ID:0; [0x82 0x33 0x1b 0x0c 0x00 0x31 ];	I_ADDR_CTXT_L_32IS0 : Address & Context, Long, 32 bit, IS0.; Addr=0x00000000000C36CC; Ctxt: AArch64,EL1, NS; 
+Idx:23; ID:0; [0x06 0x31 0x70 ];	I_TRANS_FAIL : Transaction Fail.
+Idx:26; ID:0; [0x9a 0x31 0x1b 0x0c 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x00000000000C36C4; 
+Idx:23; ID:1; OCSD_GEN_TRC_ELEM_MEMTRANS(Fail)
+Idx:26; ID:1; OCSD_GEN_TRC_ELEM_EO_TRACE( [end-of-trace])
+ID:0	END OF TRACE DATA
+Trace Packet Lister : Trace buffer done, processed 31 bytes.

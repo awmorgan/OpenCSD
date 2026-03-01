@@ -269,9 +269,40 @@ func (p *Processor) outputPacket() ocsd.DatapathResp {
 }
 
 func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
+	if p.config.MajVersion() < 0x5 {
+		n := p.dumpUnsyncedBytes
+		if !p.sentNotsyncPacket {
+			resp := p.outputPacket()
+			p.sentNotsyncPacket = true
+			if n <= len(p.currPacketData) {
+				p.currPacketData = p.currPacketData[n:]
+			} else {
+				p.currPacketData = p.currPacketData[:0]
+			}
+			return resp
+		}
+		if n <= len(p.currPacketData) {
+			p.currPacketData = p.currPacketData[n:]
+		} else {
+			p.currPacketData = p.currPacketData[:0]
+		}
+		return ocsd.RespCont
+	}
+
 	n := p.dumpUnsyncedBytes
+	if p.PktRawMonI != nil && p.PktRawMonI.HasAttached() && n > 0 && len(p.currPacketData) > 0 {
+		if n > len(p.currPacketData) {
+			n = len(p.currPacketData)
+		}
+		p.PktRawMonI.First().RawPacketDataMon(ocsd.OpData, p.packetIndex, &p.currPacket, p.currPacketData[:n])
+	}
+	n = p.dumpUnsyncedBytes
 	if !p.sentNotsyncPacket {
-		resp := p.outputPacket()
+		resp := ocsd.RespCont
+		if p.pktOut != nil {
+			pkt := p.currPacket
+			resp = p.pktOut.PacketDataIn(ocsd.OpData, p.packetIndex, &pkt)
+		}
 		p.sentNotsyncPacket = true
 		if n <= len(p.currPacketData) {
 			p.currPacketData = p.currPacketData[n:]

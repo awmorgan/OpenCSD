@@ -1,0 +1,40 @@
+Trace Packet Lister: CS Decode library testing
+-----------------------------------------------
+
+** Library Version : 1.8.0
+
+Test Command Line:-
+C:\Users\arthu\git\OpenCSD\decoder\tests\bin\mingw64\rel\trc_pkt_lister.exe   -ss_dir  ./snapshots-ete/feat_cmpbr  -decode  -no_time_print  -logfilename  ./results-ete/feat_cmpbr.ppl  
+
+Trace Packet Lister : reading snapshot from path ./snapshots-ete/feat_cmpbr
+Using ETB_1 as trace source
+Trace Packet Lister : Protocol printer ETE on Trace ID 0x0
+Trace Packet Lister : Set trace element decode printer
+Gen_Info : Mapped Memory Accessors
+Gen_Info : FileAcc; Range::0x1000000:103e99f; Mem Space::Any
+Filename=./snapshots-ete/feat_cmpbr/bindir_64/VAL_TEST_CODE_exec
+Gen_Info : FileAcc; Range::0x10000:3d5af; Mem Space::Any
+Filename=./snapshots-ete/feat_cmpbr/bindir_64/VAL_NON_DET_CODE_exec
+Gen_Info : FileAcc; Range::0x50000:50233; Mem Space::Any
+Filename=./snapshots-ete/feat_cmpbr/bindir_64/TEST_NON_DET_CODE_exec
+Gen_Info : FileAcc; Range::0x60000:8716f; Mem Space::Any
+Filename=./snapshots-ete/feat_cmpbr/bindir_64/OTHERS_exec
+Gen_Info : ========================
+Idx:0; ID:0; [0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x80 ];	I_ASYNC : Alignment Synchronisation.
+Idx:0; ID:1; OCSD_GEN_TRC_ELEM_NO_SYNC( [init-decoder])
+Idx:12; ID:0; [0x01 0x00 ];	I_TRACE_INFO : Trace Info.; INFO=0x0 { CC.0, TSTATE.0 }; Decoder Sync point TINFO
+Idx:14; ID:0; [0x04 ];	I_TRACE_ON : Trace On.
+Idx:15; ID:0; [0x82 0x2e 0x60 0x02 0x01 0x31 ];	I_ADDR_CTXT_L_32IS0 : Address & Context, Long, 32 bit, IS0.; Addr=0x000000000102C0B8; Ctxt: AArch64,EL1, NS; 
+Idx:21; ID:0; [0xdb ];	I_ATOM_F2 : Atom format 2.; EE
+Idx:14; ID:1; OCSD_GEN_TRC_ELEM_TRACE_ON( [begin or filter])
+Idx:15; ID:1; OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=A64) EL1N; 64-bit; )
+Idx:21; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x102c0b8:[0x102c0c4] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:21; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x102c0c4:[0x102c0cc] num_i(2) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:22; ID:0; [0x9a 0x34 0x18 0x00 0x01 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x00000000010030D0; 
+Idx:27; ID:0; [0xdb ];	I_ATOM_F2 : Atom format 2.; EE
+Idx:27; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x10030d0:[0x10030d4] num_i(1) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:27; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x102c0cc:[0x102c0d8] num_i(3) last_sz(4) (ISA=A64) E iBR b+link )
+Idx:28; ID:0; [0x9a 0x0e 0x76 0x02 0x01 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x000000000102EC38; 
+Idx:28; ID:1; OCSD_GEN_TRC_ELEM_EO_TRACE( [end-of-trace])
+ID:0	END OF TRACE DATA
+Trace Packet Lister : Trace buffer done, processed 33 bytes.

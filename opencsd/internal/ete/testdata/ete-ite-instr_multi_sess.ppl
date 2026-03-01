@@ -1,0 +1,111 @@
+Trace Packet Lister: CS Decode library testing
+-----------------------------------------------
+
+** Library Version : 1.8.0
+
+Test Command Line:-
+C:\Users\arthu\git\OpenCSD\decoder\tests\bin\mingw64\rel\trc_pkt_lister.exe   -ss_dir  ./snapshots-ete/ete-ite-instr  -decode  -no_time_print  -multi_session  -logfilename  ./results-ete/ete-ite-instr_multi_sess.ppl  
+
+Trace Packet Lister : reading snapshot from path ./snapshots-ete/ete-ite-instr
+Using ETB_2 as trace source
+Trace Packet Lister : Protocol printer ETE on Trace ID 0x0
+Trace Packet Lister : Set trace element decode printer
+Gen_Info : Mapped Memory Accessors
+Gen_Info : FileAcc; Range::0x60000:7bf67; Mem Space::Any
+Filename=./snapshots-ete/ete-ite-instr/bindir_64/OTHERS_exec
+Gen_Info : FileAcc; Range::0x1000000:102cb5f; Mem Space::Any
+Filename=./snapshots-ete/ete-ite-instr/bindir_64/VAL_TEST_CODE_exec
+Gen_Info : FileAcc; Range::0x10000:30813; Mem Space::Any
+Filename=./snapshots-ete/ete-ite-instr/bindir_64/VAL_NON_DET_CODE_exec
+Gen_Info : FileAcc; Range::0x50000:5014b; Mem Space::Any
+Filename=./snapshots-ete/ete-ite-instr/bindir_64/TEST_NON_DET_CODE_exec
+Gen_Info : ========================
+####### Multi Session decode: Buffer 1 of 2; Source name = ETB_2.
+
+Idx:0; ID:0; [0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x80 ];	I_ASYNC : Alignment Synchronisation.
+Idx:0; ID:1; OCSD_GEN_TRC_ELEM_NO_SYNC( [init-decoder])
+Idx:12; ID:0; [0x01 0x00 ];	I_TRACE_INFO : Trace Info.; INFO=0x0 { CC.0, TSTATE.0 }; Decoder Sync point TINFO
+Idx:14; ID:0; [0x04 ];	I_TRACE_ON : Trace On.
+Idx:15; ID:0; [0x82 0x04 0x00 0x05 0x00 0x31 ];	I_ADDR_CTXT_L_32IS0 : Address & Context, Long, 32 bit, IS0.; Addr=0x0000000000050010; Ctxt: AArch64,EL1, NS; 
+Idx:21; ID:0; [0xf9 ];	I_ATOM_F3 : Atom format 3.; ENN
+Idx:14; ID:1; OCSD_GEN_TRC_ELEM_TRACE_ON( [begin or filter])
+Idx:15; ID:1; OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=A64) EL1N; 64-bit; )
+Idx:21; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x50010:[0x5001c] num_i(3) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:21; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x50050:[0x50058] num_i(2) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:21; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x50058:[0x5006c] num_i(5) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:22; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:22; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x5006c:[0x50074] num_i(2) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:23; ID:0; [0x95 0x07 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x000000000005001C ~[0x1C]
+Idx:25; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:25; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x5001c:[0x50024] num_i(2) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:26; ID:0; [0x9a 0x38 0x43 0x00 0x01 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x00000000010086E0; 
+Idx:31; ID:0; [0xdb ];	I_ATOM_F2 : Atom format 2.; EE
+Idx:31; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x10086e0:[0x10086e4] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:31; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1008700:[0x100870c] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:32; ID:0; [0x95 0xab 0x49 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x00000000010092AC ~[0x92AC]
+Idx:35; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:35; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x10092ac:[0x10092b8] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:36; ID:0; [0x95 0xec 0x16 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000001002DB0 ~[0x2DB0]
+Idx:39; ID:0; [0xdb ];	I_ATOM_F2 : Atom format 2.; EE
+Idx:39; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1002db0:[0x1002db4] num_i(1) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:39; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1020f30:[0x1020f3c] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:40; ID:0; [0x95 0x6d ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000001002DB4 ~[0x1B4]
+Idx:42; ID:0; [0x09 0x01 0xff 0xff 0x0f 0x00 0x00 0x00 0x00 0x00 ];	I_ITE : Instrumentation; EL1; Payload=0xfffff
+Idx:52; ID:0; [0xdb ];	I_ATOM_F2 : Atom format 2.; EE
+Idx:42; ID:1; OCSD_GEN_TRC_ELEM_INSTRUMENTATION(EL1; 0x00000000000fffff)
+Idx:52; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1002db4:[0x1002db8] num_i(1) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:52; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1020f3c:[0x1020f48] num_i(3) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:52; ID:1; OCSD_GEN_TRC_ELEM_EO_TRACE( [end-of-trace])
+ID:0	END OF TRACE DATA
+Trace Packet Lister : Trace buffer done, processed 53 bytes.
+ID:0	RESET operation on trace decode path
+####### Buffer 1 : ETB_2 Complete
+
+####### Multi Session decode: Buffer 2 of 2; Source name = ETB_1.
+
+Idx:0; ID:0; [0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x80 ];	I_ASYNC : Alignment Synchronisation.
+Idx:0; ID:1; OCSD_GEN_TRC_ELEM_NO_SYNC( [reset-decoder])
+Idx:12; ID:0; [0x01 0x00 ];	I_TRACE_INFO : Trace Info.; INFO=0x0 { CC.0, TSTATE.0 }; Decoder Sync point TINFO
+Idx:14; ID:0; [0x04 ];	I_TRACE_ON : Trace On.
+Idx:15; ID:0; [0x82 0x04 0x00 0x05 0x00 0x31 ];	I_ADDR_CTXT_L_32IS0 : Address & Context, Long, 32 bit, IS0.; Addr=0x0000000000050010; Ctxt: AArch64,EL1, NS; 
+Idx:21; ID:0; [0xf9 ];	I_ATOM_F3 : Atom format 3.; ENN
+Idx:14; ID:1; OCSD_GEN_TRC_ELEM_TRACE_ON( [begin or filter])
+Idx:15; ID:1; OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=A64) EL1N; 64-bit; )
+Idx:21; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x50010:[0x5001c] num_i(3) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:21; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x50050:[0x50058] num_i(2) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:21; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x50058:[0x5006c] num_i(5) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:22; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:22; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x5006c:[0x50074] num_i(2) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:23; ID:0; [0x95 0x07 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x000000000005001C ~[0x1C]
+Idx:25; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:25; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x5001c:[0x50024] num_i(2) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:26; ID:0; [0x9a 0x38 0x43 0x00 0x01 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x00000000010086E0; 
+Idx:31; ID:0; [0xdb ];	I_ATOM_F2 : Atom format 2.; EE
+Idx:31; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x10086e0:[0x10086e4] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:31; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1008700:[0x100870c] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:32; ID:0; [0x95 0xab 0x49 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x00000000010092AC ~[0x92AC]
+Idx:35; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:35; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x10092ac:[0x10092b8] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:36; ID:0; [0x95 0xef 0x15 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000001002BBC ~[0x2BBC]
+Idx:39; ID:0; [0xdb ];	I_ATOM_F2 : Atom format 2.; EE
+Idx:39; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1002bbc:[0x1002bc0] num_i(1) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:39; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1020f08:[0x1020f14] num_i(3) last_sz(4) (ISA=A64) E iBR b+link )
+Idx:40; ID:0; [0x9a 0x68 0x07 0x02 0x01 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x0000000001020FA0; 
+Idx:45; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:45; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1020fa0:[0x1020fac] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:46; ID:0; [0x95 0x45 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000001020F14 ~[0x114]
+Idx:48; ID:0; [0x09 0x01 0xff 0xff 0x00 0x00 0x00 0x00 0x00 0x00 ];	I_ITE : Instrumentation; EL1; Payload=0xffff
+Idx:58; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:48; ID:1; OCSD_GEN_TRC_ELEM_INSTRUMENTATION(EL1; 0x000000000000ffff)
+Idx:58; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1020f14:[0x1020f24] num_i(4) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:59; ID:0; [0x9a 0x70 0x15 0x00 0x01 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x0000000001002BC0; 
+Idx:64; ID:0; [0xdb ];	I_ATOM_F2 : Atom format 2.; EE
+Idx:64; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1002bc0:[0x1002bc4] num_i(1) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:64; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1020f24:[0x1020f30] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:65; ID:0; [0x95 0x71 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000001002BC4 ~[0x1C4]
+Idx:65; ID:1; OCSD_GEN_TRC_ELEM_EO_TRACE( [end-of-trace])
+ID:0	END OF TRACE DATA
+Trace Packet Lister : Trace buffer done, processed 67 bytes.
+ID:0	RESET operation on trace decode path
+####### Buffer 2 : ETB_1 Complete
+

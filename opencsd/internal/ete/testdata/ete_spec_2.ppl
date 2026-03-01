@@ -1,0 +1,168 @@
+Trace Packet Lister: CS Decode library testing
+-----------------------------------------------
+
+** Library Version : 1.8.0
+
+Test Command Line:-
+C:\Users\arthu\git\OpenCSD\decoder\tests\bin\mingw64\rel\trc_pkt_lister.exe   -ss_dir  ./snapshots-ete/ete_spec_2  -decode  -no_time_print  -logfilename  ./results-ete/ete_spec_2.ppl  
+
+Trace Packet Lister : reading snapshot from path ./snapshots-ete/ete_spec_2
+Using ETB_1 as trace source
+Trace Packet Lister : Protocol printer ETE on Trace ID 0x0
+Trace Packet Lister : Set trace element decode printer
+Gen_Info : Mapped Memory Accessors
+Gen_Info : FileAcc; Range::0x60000:c72ff; Mem Space::Any
+Filename=./snapshots-ete/ete_spec_2/bindir_64/OTHERS_exec
+Gen_Info : FileAcc; Range::0x10000:2a27f; Mem Space::Any
+Filename=./snapshots-ete/ete_spec_2/bindir_64/VAL_NON_DET_CODE_exec
+Gen_Info : ========================
+Idx:0; ID:0; [0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x80 ];	I_ASYNC : Alignment Synchronisation.
+Idx:0; ID:1; OCSD_GEN_TRC_ELEM_NO_SYNC( [init-decoder])
+Idx:12; ID:0; [0x01 0x00 ];	I_TRACE_INFO : Trace Info.; INFO=0x0 { CC.0, TSTATE.0 }; Decoder Sync point TINFO
+Idx:14; ID:0; [0x04 ];	I_TRACE_ON : Trace On.
+Idx:15; ID:0; [0x82 0x21 0x0a 0x0c 0x00 0x11 ];	I_ADDR_CTXT_L_32IS0 : Address & Context, Long, 32 bit, IS0.; Addr=0x00000000000C1484; Ctxt: AArch64,EL1, S; 
+Idx:21; ID:0; [0xf6 ];	I_ATOM_F1 : Atom format 1.; N
+Idx:22; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:23; ID:0; [0x34 ];	I_CANCEL_F2 : Cancel Format 2.; Cancel(1), Mispredict
+Idx:24; ID:0; [0x2d 0x01 ];	I_COMMIT : Commit; Commit(1)
+Idx:14; ID:1; OCSD_GEN_TRC_ELEM_TRACE_ON( [begin or filter])
+Idx:15; ID:1; OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=A64) EL1S; 64-bit; )
+Idx:21; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0xc1484:[0xc1490] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:26; ID:0; [0x9a 0x4e 0x4a 0x06 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x0000000000069538; 
+Idx:31; ID:0; [0xdb ];	I_ATOM_F2 : Atom format 2.; EE
+Idx:32; ID:0; [0x2d 0x02 ];	I_COMMIT : Commit; Commit(2)
+Idx:31; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x69538:[0x6953c] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:31; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x69558:[0x69564] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:34; ID:0; [0x95 0xb0 0x4f ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000000069EC0 ~[0x9EC0]
+Idx:37; ID:0; [0xf6 ];	I_ATOM_F1 : Atom format 1.; N
+Idx:38; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:39; ID:0; [0x34 ];	I_CANCEL_F2 : Cancel Format 2.; Cancel(1), Mispredict
+Idx:40; ID:0; [0x2d 0x01 ];	I_COMMIT : Commit; Commit(1)
+Idx:37; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x69ec0:[0x69ecc] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:42; ID:0; [0x95 0xca 0x1e ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000000063D28 ~[0x3D28]
+Idx:45; ID:0; [0xff ];	I_ATOM_F3 : Atom format 3.; EEE
+Idx:46; ID:0; [0x2d 0x03 ];	I_COMMIT : Commit; Commit(3)
+Idx:45; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x63d28:[0x63d2c] num_i(1) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:45; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0xc0504:[0xc050c] num_i(2) last_sz(4) (ISA=A64) E BR  )
+Idx:45; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0xc050c:[0xc0514] num_i(2) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:48; ID:0; [0x95 0x4b ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000000063D2C ~[0x12C]
+Idx:50; ID:0; [0xc2 ];	I_ATOM_F6 : Atom format 6.; EEEEEE
+Idx:51; ID:0; [0x2d 0x06 ];	I_COMMIT : Commit; Commit(6)
+Idx:50; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x63d2c:[0x63d58] num_i(11) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:50; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x69ecc:[0x69efc] num_i(12) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:50; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6ab70:[0x6ab90] num_i(8) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:50; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1886c:[0x18878] num_i(3) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:50; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18894:[0x188a0] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:50; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x188b0:[0x188bc] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:53; ID:0; [0x95 0xe4 0x55 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x000000000006AB90 ~[0xAB90]
+Idx:56; ID:0; [0xff ];	I_ATOM_F3 : Atom format 3.; EEE
+Idx:57; ID:0; [0x2d 0x03 ];	I_COMMIT : Commit; Commit(3)
+Idx:56; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6ab90:[0x6abd8] num_i(18) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:56; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18718:[0x18728] num_i(4) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:56; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x28180:[0x28188] num_i(2) last_sz(4) (ISA=A64) E iBR )
+Idx:59; ID:0; [0x9a 0x4a 0x43 0x01 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x0000000000018728; 
+Idx:64; ID:0; [0xdc ];	I_ATOM_F4 : Atom format 4.; NEEE
+Idx:65; ID:0; [0x2d 0x04 ];	I_COMMIT : Commit; Commit(4)
+Idx:64; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18728:[0x18734] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:64; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18734:[0x1873c] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:64; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18754:[0x18778] num_i(9) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:64; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1878c:[0x1879c] num_i(4) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:67; ID:0; [0x9a 0x76 0x55 0x06 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x000000000006ABD8; 
+Idx:72; ID:0; [0xc0 ];	I_ATOM_F6 : Atom format 6.; EEEE
+Idx:73; ID:0; [0x2d 0x04 ];	I_COMMIT : Commit; Commit(4)
+Idx:72; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6abd8:[0x6abdc] num_i(1) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:72; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6abf0:[0x6abfc] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:72; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6abfc:[0x6ac04] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:72; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6ac50:[0x6ac5c] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:75; ID:0; [0x95 0xbf 0x4f ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000000069EFC ~[0x9EFC]
+Idx:78; ID:0; [0xc2 ];	I_ATOM_F6 : Atom format 6.; EEEEEE
+Idx:79; ID:0; [0x2d 0x06 ];	I_COMMIT : Commit; Commit(6)
+Idx:78; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x69efc:[0x69f04] num_i(2) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:78; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x68e78:[0x68e90] num_i(6) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:78; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6ab70:[0x6ab90] num_i(8) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:78; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1886c:[0x18878] num_i(3) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:78; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18894:[0x188a0] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:78; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x188b0:[0x188bc] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:81; ID:0; [0x95 0xe4 0x55 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x000000000006AB90 ~[0xAB90]
+Idx:84; ID:0; [0xff ];	I_ATOM_F3 : Atom format 3.; EEE
+Idx:85; ID:0; [0x2d 0x03 ];	I_COMMIT : Commit; Commit(3)
+Idx:84; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6ab90:[0x6abd8] num_i(18) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:84; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18718:[0x18728] num_i(4) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:84; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x28180:[0x28188] num_i(2) last_sz(4) (ISA=A64) E iBR )
+Idx:87; ID:0; [0x9a 0x4a 0x43 0x01 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x0000000000018728; 
+Idx:92; ID:0; [0xdc ];	I_ATOM_F4 : Atom format 4.; NEEE
+Idx:93; ID:0; [0x2d 0x04 ];	I_COMMIT : Commit; Commit(4)
+Idx:92; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18728:[0x18734] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:92; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18734:[0x1873c] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:92; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18754:[0x18778] num_i(9) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:92; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1878c:[0x1879c] num_i(4) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:95; ID:0; [0x9a 0x76 0x55 0x06 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x000000000006ABD8; 
+Idx:100; ID:0; [0xc0 ];	I_ATOM_F6 : Atom format 6.; EEEE
+Idx:101; ID:0; [0x2d 0x04 ];	I_COMMIT : Commit; Commit(4)
+Idx:100; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6abd8:[0x6abdc] num_i(1) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:100; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6abf0:[0x6abfc] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:100; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6abfc:[0x6ac04] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:100; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6ac50:[0x6ac5c] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:103; ID:0; [0x95 0xa4 0x47 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000000068E90 ~[0x8E90]
+Idx:106; ID:0; [0xc0 ];	I_ATOM_F6 : Atom format 6.; EEEE
+Idx:107; ID:0; [0x2d 0x04 ];	I_COMMIT : Commit; Commit(4)
+Idx:106; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x68e90:[0x68ea0] num_i(4) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:106; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6c700:[0x6c710] num_i(4) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:106; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18718:[0x18728] num_i(4) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:106; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x28180:[0x28188] num_i(2) last_sz(4) (ISA=A64) E iBR )
+Idx:109; ID:0; [0x92 ];	I_ADDR_MATCH : Exact Address Match., [2]; Addr=0x0000000000018728; 
+Idx:110; ID:0; [0xdc ];	I_ATOM_F4 : Atom format 4.; NEEE
+Idx:111; ID:0; [0x2d 0x04 ];	I_COMMIT : Commit; Commit(4)
+Idx:110; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18728:[0x18734] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:110; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18734:[0x1873c] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:110; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18754:[0x18778] num_i(9) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:110; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1878c:[0x1879c] num_i(4) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:113; ID:0; [0x9a 0x44 0x63 0x06 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x000000000006C710; 
+Idx:118; ID:0; [0xdc ];	I_ATOM_F4 : Atom format 4.; NEEE
+Idx:119; ID:0; [0x2d 0x04 ];	I_COMMIT : Commit; Commit(4)
+Idx:118; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6c710:[0x6c714] num_i(1) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:118; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6c714:[0x6c718] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:118; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6c718:[0x6c724] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:118; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6c730:[0x6c740] num_i(4) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:121; ID:0; [0x95 0xa8 0x47 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000000068EA0 ~[0x8EA0]
+Idx:124; ID:0; [0xdc ];	I_ATOM_F4 : Atom format 4.; NEEE
+Idx:125; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:126; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:127; ID:0; [0x34 ];	I_CANCEL_F2 : Cancel Format 2.; Cancel(1), Mispredict
+Idx:128; ID:0; [0x2d 0x05 ];	I_COMMIT : Commit; Commit(5)
+Idx:124; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x68ea0:[0x68ea8] num_i(2) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:124; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x68ea8:[0x68eac] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:124; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x68eac:[0x68eb8] num_i(3) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:124; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x26f90:[0x26f98] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:125; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x26fa0:[0x26fa8] num_i(2) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:130; ID:0; [0x06 0x05 ];	I_EXCEPT : Exception.;  Call; Ret Addr Follows;
+Idx:132; ID:0; [0x9a 0x6e 0x37 0x02 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x0000000000026FB8; 
+Idx:137; ID:0; [0x2d 0x01 ];	I_COMMIT : Commit; Commit(1)
+Idx:130; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x26fa8:[0x26fb8] num_i(4) last_sz(4) (ISA=A64) E --- )
+Idx:130; ID:1; OCSD_GEN_TRC_ELEM_EXCEPTION(pref ret addr:0x26fb8; excep num (0x02) )
+Idx:139; ID:0; [0x04 ];	I_TRACE_ON : Trace On.
+Idx:140; ID:0; [0x82 0x6e 0x37 0x02 0x00 0x11 ];	I_ADDR_CTXT_L_32IS0 : Address & Context, Long, 32 bit, IS0.; Addr=0x0000000000026FB8; Ctxt: AArch64,EL1, S; 
+Idx:146; ID:0; [0xdb ];	I_ATOM_F2 : Atom format 2.; EE
+Idx:147; ID:0; [0x2d 0x02 ];	I_COMMIT : Commit; Commit(2)
+Idx:139; ID:1; OCSD_GEN_TRC_ELEM_TRACE_ON( [begin or filter])
+Idx:140; ID:1; OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=A64) EL1S; 64-bit; )
+Idx:146; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x26fb8:[0x26fbc] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:146; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x26fcc:[0x26fd0] num_i(1) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:149; ID:0; [0x9a 0x2e 0x47 0x06 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x0000000000068EB8; 
+Idx:154; ID:0; [0xfb ];	I_ATOM_F3 : Atom format 3.; EEN
+Idx:155; ID:0; [0x2d 0x03 ];	I_COMMIT : Commit; Commit(3)
+Idx:154; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x68eb8:[0x68ee0] num_i(10) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:154; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x27034:[0x27048] num_i(5) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:154; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x27080:[0x27088] num_i(2) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:157; ID:0; [0x06 0x05 ];	I_EXCEPT : Exception.;  Call; Ret Addr Follows;
+Idx:159; ID:0; [0x9a 0x27 0x38 0x02 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x000000000002709C; 
+Idx:164; ID:0; [0x2d 0x01 ];	I_COMMIT : Commit; Commit(1)
+Idx:157; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x27088:[0x2709c] num_i(5) last_sz(4) (ISA=A64) E --- )
+Idx:157; ID:1; OCSD_GEN_TRC_ELEM_EXCEPTION(pref ret addr:0x2709c; excep num (0x02) )
+Idx:166; ID:0; [0xc3 ];	I_ATOM_F6 : Atom format 6.; EEEEEEE
+Idx:166; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x2709c:[0x270a0] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:167; ID:0; [0x00 0x03 ];	I_DISCARD : Discard.
+Idx:167; ID:1; OCSD_GEN_TRC_ELEM_NO_SYNC( [discard])
+Idx:167; ID:1; OCSD_GEN_TRC_ELEM_EO_TRACE( [end-of-trace])
+ID:0	END OF TRACE DATA
+Trace Packet Lister : Trace buffer done, processed 169 bytes.

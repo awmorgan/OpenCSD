@@ -1,0 +1,289 @@
+Trace Packet Lister: CS Decode library testing
+-----------------------------------------------
+
+** Library Version : 1.8.0
+
+Test Command Line:-
+C:\Users\arthu\git\OpenCSD\decoder\tests\bin\mingw64\rel\trc_pkt_lister.exe   -ss_dir  ./snapshots-ete/ete-wfet  -decode  -no_time_print  -logfilename  ./results-ete/ete-wfet.ppl  
+
+Trace Packet Lister : reading snapshot from path ./snapshots-ete/ete-wfet
+Using ETB_1 as trace source
+Trace Packet Lister : Protocol printer ETE on Trace ID 0x0
+Trace Packet Lister : Set trace element decode printer
+Gen_Info : Mapped Memory Accessors
+Gen_Info : FileAcc; Range::0x60000:e439f; Mem Space::Any
+Filename=./snapshots-ete/ete-wfet/bindir_64/OTHERS_exec
+Gen_Info : FileAcc; Range::0x10000:2c937; Mem Space::Any
+Filename=./snapshots-ete/ete-wfet/bindir_64/VAL_NON_DET_CODE_exec
+Gen_Info : ========================
+Idx:0; ID:0; [0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x80 ];	I_ASYNC : Alignment Synchronisation.
+Idx:0; ID:1; OCSD_GEN_TRC_ELEM_NO_SYNC( [init-decoder])
+Idx:12; ID:0; [0x01 0x00 ];	I_TRACE_INFO : Trace Info.; INFO=0x0 { CC.0, TSTATE.0 }; Decoder Sync point TINFO
+Idx:14; ID:0; [0x04 ];	I_TRACE_ON : Trace On.
+Idx:15; ID:0; [0x82 0x6d 0x6e 0x0d 0x00 0x31 ];	I_ADDR_CTXT_L_32IS0 : Address & Context, Long, 32 bit, IS0.; Addr=0x00000000000DDDB4; Ctxt: AArch64,EL1, NS; 
+Idx:21; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:14; ID:1; OCSD_GEN_TRC_ELEM_TRACE_ON( [begin or filter])
+Idx:15; ID:1; OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=A64) EL1N; 64-bit; )
+Idx:21; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0xdddb4:[0xdddc0] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:22; ID:0; [0x9a 0x7c 0x50 0x06 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x000000000006A1F0; 
+Idx:27; ID:0; [0xdb ];	I_ATOM_F2 : Atom format 2.; EE
+Idx:27; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6a1f0:[0x6a1f4] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:27; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6a210:[0x6a21c] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:28; ID:0; [0x95 0xeb 0x55 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x000000000006ABAC ~[0xABAC]
+Idx:31; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:31; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6abac:[0x6abb8] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:32; ID:0; [0x95 0x96 0x24 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000000064858 ~[0x4858]
+Idx:35; ID:0; [0xc0 ];	I_ATOM_F6 : Atom format 6.; EEEE
+Idx:35; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64858:[0x6485c] num_i(1) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:35; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0xdcda4:[0xdcdbc] num_i(6) last_sz(4) (ISA=A64) E WFI.WFE)
+Idx:35; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0xdcdbc:[0xdcdc0] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:35; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0xdcdc4:[0xdcdcc] num_i(2) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:36; ID:0; [0x95 0x17 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x000000000006485C ~[0x5C]
+Idx:38; ID:0; [0xfd ];	I_ATOM_F3 : Atom format 3.; ENE
+Idx:38; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6485c:[0x64868] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:38; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:38; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:39; ID:0; [0xfb ];	I_ATOM_F3 : Atom format 3.; EEN
+Idx:39; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:39; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:39; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:40; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:40; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:40; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:40; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:40; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:41; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:41; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:41; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:41; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:41; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:42; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:42; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:42; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:42; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:42; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:43; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:43; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:43; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:43; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:43; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:44; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:44; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:44; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:44; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:44; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:45; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:45; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:45; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:45; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:45; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:46; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:46; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:46; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:46; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:46; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:47; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:47; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:47; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:47; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:47; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:48; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:48; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:48; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:48; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:48; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:49; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:49; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:49; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:49; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:49; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:50; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:50; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:50; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:50; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:50; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:51; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:51; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:51; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:51; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:51; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:52; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:52; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:52; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:52; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:52; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:53; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:53; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:53; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:53; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:53; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:54; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:54; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:54; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:54; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:54; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:55; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:55; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:55; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:55; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:55; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:56; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:56; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:56; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:56; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:56; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:57; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:57; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:57; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:57; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:57; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:58; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:58; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:58; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:58; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:58; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:59; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:59; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:59; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:59; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:59; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:60; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:60; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:60; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:60; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:60; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:61; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:61; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:61; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:61; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:61; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:62; ID:0; [0xc6 ];	I_ATOM_F6 : Atom format 6.; EEEEEEEEEE
+Idx:62; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64874:[0x64878] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:62; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64878:[0x64890] num_i(6) last_sz(4) (ISA=A64) E BR  )
+Idx:62; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64890:[0x648a0] num_i(4) last_sz(4) (ISA=A64) E BR  )
+Idx:62; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x64868:[0x64874] num_i(3) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:62; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x648a0:[0x648d0] num_i(12) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:62; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6abb8:[0x6abe0] num_i(10) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:62; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bad4:[0x6baf0] num_i(7) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:62; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18844:[0x18850] num_i(3) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:62; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1886c:[0x18878] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:62; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18888:[0x18894] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:63; ID:0; [0x95 0xbc 0x5d ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x000000000006BAF0 ~[0xBAF0]
+Idx:66; ID:0; [0xff ];	I_ATOM_F3 : Atom format 3.; EEE
+Idx:66; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6baf0:[0x6bb2c] num_i(15) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:66; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x186f0:[0x18700] num_i(4) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:66; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x2a860:[0x2a868] num_i(2) last_sz(4) (ISA=A64) E iBR )
+Idx:67; ID:0; [0x9a 0x40 0x43 0x01 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x0000000000018700; 
+Idx:72; ID:0; [0xdc ];	I_ATOM_F4 : Atom format 4.; NEEE
+Idx:72; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18700:[0x1870c] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:72; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1870c:[0x18714] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:72; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1872c:[0x18750] num_i(9) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:72; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18764:[0x18774] num_i(4) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:73; ID:0; [0x9a 0x4b 0x5d 0x06 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x000000000006BB2C; 
+Idx:78; ID:0; [0xc0 ];	I_ATOM_F6 : Atom format 6.; EEEE
+Idx:78; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bb2c:[0x6bb30] num_i(1) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:78; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bb40:[0x6bb4c] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:78; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bb4c:[0x6bb54] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:78; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bba0:[0x6bbac] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:79; ID:0; [0x95 0xf8 0x55 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x000000000006ABE0 ~[0xABE0]
+Idx:82; ID:0; [0xc2 ];	I_ATOM_F6 : Atom format 6.; EEEEEE
+Idx:82; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6abe0:[0x6abe8] num_i(2) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:82; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x69b10:[0x69b28] num_i(6) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:82; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bad4:[0x6baf0] num_i(7) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:82; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18844:[0x18850] num_i(3) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:82; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1886c:[0x18878] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:82; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18888:[0x18894] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:83; ID:0; [0x95 0xbc 0x5d ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x000000000006BAF0 ~[0xBAF0]
+Idx:86; ID:0; [0xff ];	I_ATOM_F3 : Atom format 3.; EEE
+Idx:86; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6baf0:[0x6bb2c] num_i(15) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:86; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x186f0:[0x18700] num_i(4) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:86; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x2a860:[0x2a868] num_i(2) last_sz(4) (ISA=A64) E iBR )
+Idx:87; ID:0; [0x9a 0x40 0x43 0x01 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x0000000000018700; 
+Idx:92; ID:0; [0xdc ];	I_ATOM_F4 : Atom format 4.; NEEE
+Idx:92; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18700:[0x1870c] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:92; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1870c:[0x18714] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:92; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1872c:[0x18750] num_i(9) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:92; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18764:[0x18774] num_i(4) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:93; ID:0; [0x9a 0x4b 0x5d 0x06 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x000000000006BB2C; 
+Idx:98; ID:0; [0xc0 ];	I_ATOM_F6 : Atom format 6.; EEEE
+Idx:98; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bb2c:[0x6bb30] num_i(1) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:98; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bb40:[0x6bb4c] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:98; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bb4c:[0x6bb54] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:98; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bba0:[0x6bbac] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:99; ID:0; [0x95 0xca 0x4d ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000000069B28 ~[0x9B28]
+Idx:102; ID:0; [0xc1 ];	I_ATOM_F6 : Atom format 6.; EEEEE
+Idx:102; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x69b28:[0x69b50] num_i(10) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:102; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x70e2c:[0x70e3c] num_i(4) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:102; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6d720:[0x6d730] num_i(4) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:102; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x186f0:[0x18700] num_i(4) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:102; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x2a860:[0x2a868] num_i(2) last_sz(4) (ISA=A64) E iBR )
+Idx:103; ID:0; [0x92 ];	I_ADDR_MATCH : Exact Address Match., [2]; Addr=0x0000000000018700; 
+Idx:104; ID:0; [0xdc ];	I_ATOM_F4 : Atom format 4.; NEEE
+Idx:104; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18700:[0x1870c] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:104; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1870c:[0x18714] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:104; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1872c:[0x18750] num_i(9) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:104; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18764:[0x18774] num_i(4) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:105; ID:0; [0x9a 0x4c 0x6b 0x06 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x000000000006D730; 
+Idx:110; ID:0; [0xdc ];	I_ATOM_F4 : Atom format 4.; NEEE
+Idx:110; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6d730:[0x6d734] num_i(1) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:110; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6d734:[0x6d738] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:110; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6d738:[0x6d744] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:110; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6d750:[0x6d760] num_i(4) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:111; ID:0; [0x95 0x8f 0x87 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000000070E3C ~[0x10E3C]
+Idx:114; ID:0; [0xc0 ];	I_ATOM_F6 : Atom format 6.; EEEE
+Idx:114; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x70e3c:[0x70e44] num_i(2) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:114; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6d5fc:[0x6d60c] num_i(4) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:114; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x186f0:[0x18700] num_i(4) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:114; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x2a860:[0x2a868] num_i(2) last_sz(4) (ISA=A64) E iBR )
+Idx:115; ID:0; [0x92 ];	I_ADDR_MATCH : Exact Address Match., [2]; Addr=0x0000000000018700; 
+Idx:116; ID:0; [0xdc ];	I_ATOM_F4 : Atom format 4.; NEEE
+Idx:116; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18700:[0x1870c] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:116; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1870c:[0x18714] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:116; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1872c:[0x18750] num_i(9) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:116; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18764:[0x18774] num_i(4) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:117; ID:0; [0x9a 0x03 0x6b 0x06 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x000000000006D60C; 
+Idx:122; ID:0; [0xdc ];	I_ATOM_F4 : Atom format 4.; NEEE
+Idx:122; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6d60c:[0x6d610] num_i(1) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:122; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6d610:[0x6d614] num_i(1) last_sz(4) (ISA=A64) E BR  )
+Idx:122; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6d614:[0x6d620] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:122; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6d62c:[0x6d63c] num_i(4) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:123; ID:0; [0x95 0x91 0x87 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000000070E44 ~[0x10E44]
+Idx:126; ID:0; [0xc2 ];	I_ATOM_F6 : Atom format 6.; EEEEEE
+Idx:126; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x70e44:[0x70e50] num_i(3) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:126; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x72298:[0x722b0] num_i(6) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:126; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bad4:[0x6baf0] num_i(7) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:126; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18844:[0x18850] num_i(3) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:126; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1886c:[0x18878] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:126; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18888:[0x18894] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:127; ID:0; [0x95 0xbc 0x5d ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x000000000006BAF0 ~[0xBAF0]
+Idx:130; ID:0; [0xff ];	I_ATOM_F3 : Atom format 3.; EEE
+Idx:130; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6baf0:[0x6bb2c] num_i(15) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:130; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x186f0:[0x18700] num_i(4) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:130; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x2a860:[0x2a868] num_i(2) last_sz(4) (ISA=A64) E iBR )
+Idx:131; ID:0; [0x9a 0x40 0x43 0x01 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x0000000000018700; 
+Idx:136; ID:0; [0xdc ];	I_ATOM_F4 : Atom format 4.; NEEE
+Idx:136; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18700:[0x1870c] num_i(3) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:136; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1870c:[0x18714] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:136; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1872c:[0x18750] num_i(9) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:136; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x18764:[0x18774] num_i(4) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:137; ID:0; [0x9a 0x4b 0x5d 0x06 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x000000000006BB2C; 
+Idx:142; ID:0; [0xc0 ];	I_ATOM_F6 : Atom format 6.; EEEE
+Idx:142; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bb2c:[0x6bb30] num_i(1) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:142; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bb40:[0x6bb4c] num_i(3) last_sz(4) (ISA=A64) E BR  )
+Idx:142; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bb4c:[0x6bb54] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:142; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x6bba0:[0x6bbac] num_i(3) last_sz(4) (ISA=A64) E iBR A64:ret )
+Idx:143; ID:0; [0x95 0xac 0x91 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x00000000000722B0 ~[0x122B0]
+Idx:146; ID:0; [0xfb ];	I_ATOM_F3 : Atom format 3.; EEN
+Idx:146; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x722b0:[0x72308] num_i(22) last_sz(4) (ISA=A64) E BR  b+link )
+Idx:146; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x27c80:[0x27c88] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:146; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x27cac:[0x27cb4] num_i(2) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:147; ID:0; [0xda ];	I_ATOM_F2 : Atom format 2.; NE
+Idx:147; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x27cb4:[0x27cbc] num_i(2) last_sz(4) (ISA=A64) N BR   <cond>)
+Idx:147; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x27cbc:[0x27cc4] num_i(2) last_sz(4) (ISA=A64) E BR   <cond>)
+Idx:148; ID:0; [0x06 0x05 ];	I_EXCEPT : Exception.;  Call; Ret Addr Follows;
+Idx:150; ID:0; [0x9a 0x3c 0x3e 0x02 0x00 ];	I_ADDR_L_32IS0 : Address, Long, 32 bit, IS0.; Addr=0x0000000000027CF0; 
+Idx:148; ID:1; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x27cdc:[0x27cf0] num_i(5) last_sz(4) (ISA=A64) E --- )
+Idx:148; ID:1; OCSD_GEN_TRC_ELEM_EXCEPTION(pref ret addr:0x27cf0; excep num (0x02) )
+Idx:150; ID:1; OCSD_GEN_TRC_ELEM_EO_TRACE( [end-of-trace])
+ID:0	END OF TRACE DATA
+Trace Packet Lister : Trace buffer done, processed 155 bytes.

@@ -289,11 +289,11 @@ func (t PktType) String() string {
 	case PktExceptRtn:
 		return "I_EXCEPT_RTN"
 	case ETE_PktITE:
-		return "I_ETE_ITE"
+		return "I_ITE"
 	case ETE_PktTransSt:
-		return "I_ETE_TRANS_ST"
+		return "I_TRANS_ST"
 	case ETE_PktTransCommit:
-		return "I_ETE_TRANS_COMMIT"
+		return "I_TRANS_COMMIT"
 	case PktCcntF2:
 		return "I_CCNT_F2"
 	case PktCcntF1:
@@ -310,6 +310,8 @@ func (t PktType) String() string {
 		return "I_CANCEL_F1"
 	case PktCancelF1Mispred:
 		return "I_CANCEL_F1_MISPRED"
+	case PktMispredict:
+		return "I_MISPREDICT"
 	case PktCancelF2:
 		return "I_CANCEL_F2"
 	case PktCancelF3:
@@ -367,19 +369,19 @@ func (t PktType) String() string {
 	case PktEvent:
 		return "I_EVENT"
 	case ETE_PktSrcAddrMatch:
-		return "ETE_PKT_I_SRC_ADDR_MATCH"
+		return "I_SRC_ADDR_MATCH"
 	case ETE_PktSrcAddrS_IS0:
-		return "ETE_PKT_I_SRC_ADDR_S_IS0"
+		return "I_SRC_ADDR_S_IS0"
 	case ETE_PktSrcAddrS_IS1:
-		return "ETE_PKT_I_SRC_ADDR_S_IS1"
+		return "I_SRC_ADDR_S_IS1"
 	case ETE_PktSrcAddrL_32IS0:
-		return "ETE_PKT_I_SRC_ADDR_L_32IS0"
+		return "I_SRC_ADDR_L_32IS0"
 	case ETE_PktSrcAddrL_32IS1:
-		return "ETE_PKT_I_SRC_ADDR_L_32IS1"
+		return "I_SRC_ADDR_L_32IS1"
 	case ETE_PktSrcAddrL_64IS0:
-		return "ETE_PKT_I_SRC_ADDR_L_64IS0"
+		return "I_SRC_ADDR_L_64IS0"
 	case ETE_PktSrcAddrL_64IS1:
-		return "ETE_PKT_I_SRC_ADDR_L_64IS1"
+		return "I_SRC_ADDR_L_64IS1"
 	case PktAtomF6:
 		return "I_ATOM_F6"
 	case PktAtomF5:
@@ -399,9 +401,9 @@ func (t PktType) String() string {
 	case PktOverflow:
 		return "I_OVERFLOW"
 	case ETE_PktPeReset:
-		return "I_ETE_PE_RESET"
+		return "I_PE_RESET"
 	case ETE_PktTransFail:
-		return "I_ETE_TRANS_FAIL"
+		return "I_TRANS_FAIL"
 	}
 	return "I_UNKNOWN"
 }
