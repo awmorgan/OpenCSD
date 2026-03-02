@@ -2,6 +2,7 @@ package etmv4_test
 
 import (
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
@@ -66,6 +67,8 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 		{name: "juno-uname-002", sourceName: "ETB_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
 		{name: "juno-ret-stck", sourceName: "ETB_0", traceIDs: []string{"10", "11", "12", "13", "14", "15"}},
 		{name: "test-file-mem-offsets", sourceName: "ETB_0", traceIDs: []string{"16"}},
+		{name: "init-short-addr", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"0"}},
+		{name: "bugfix-exact-match", sourceName: "etr_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
 	}
 
 	for _, tc := range testCases {
@@ -74,13 +77,32 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 
 			snapshotDir := filepath.Join("testdata", tc.name)
 			goldenPath := filepath.Join("testdata", tc.name+".ppl")
+			if _, err := os.Stat(goldenPath); os.IsNotExist(err) {
+				goldenPath = filepath.Join("testdata", tc.name+".ppl.gz")
+			}
 
 			goOut, err := runSnapshotDecode(snapshotDir, tc.sourceName)
 			if err != nil {
 				t.Fatalf("runSnapshotDecode failed: %v", err)
 			}
 
-			goldenBytes, err := os.ReadFile(goldenPath)
+			goldenFile, err := os.Open(goldenPath)
+			if err != nil {
+				t.Fatalf("open golden file %s: %v", goldenPath, err)
+			}
+			defer goldenFile.Close()
+
+			var goldenReader io.Reader = goldenFile
+			if strings.HasSuffix(goldenPath, ".gz") {
+				gzReader, err := gzip.NewReader(goldenFile)
+				if err != nil {
+					t.Fatalf("gzip reader for %s: %v", goldenPath, err)
+				}
+				defer gzReader.Close()
+				goldenReader = gzReader
+			}
+
+			goldenBytes, err := io.ReadAll(goldenReader)
 			if err != nil {
 				t.Fatalf("read golden file %s: %v", goldenPath, err)
 			}
