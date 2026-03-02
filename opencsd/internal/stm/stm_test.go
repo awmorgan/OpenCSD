@@ -44,7 +44,7 @@ func (b *StmStreamBuilder) Flush() {
 	}
 }
 
-func TestSTMPrehensive(t *testing.T) {
+func TestSTMEndToEndDecode(t *testing.T) {
 	config := NewConfig()
 	config.SetTraceID(0x10)
 
@@ -287,17 +287,29 @@ func TestSTMConfig(t *testing.T) {
 	_ = cfg.HWTraceMasterIdx()
 }
 
-func TestSTMOtherCoverage(t *testing.T) {
+func TestSTMFlushResetAndBadPacketClassification(t *testing.T) {
 	config := NewConfig()
 	manager := NewDecoderManager()
 	proc := manager.CreatePktProc(0, config).(*PktProc)
 	dec := manager.CreatePktDecode(0, config).(*PktDecode)
 
-	proc.TraceDataIn(ocsd.OpFlush, 0, nil)
-	proc.TraceDataIn(ocsd.OpReset, 0, nil)
+	_, resp := proc.TraceDataIn(ocsd.OpFlush, 0, nil)
+	if ocsd.DataRespIsFatal(resp) {
+		t.Errorf("Expected non-fatal response on proc flush, got %v", resp)
+	}
+	_, resp = proc.TraceDataIn(ocsd.OpReset, 0, nil)
+	if ocsd.DataRespIsFatal(resp) {
+		t.Errorf("Expected non-fatal response on proc reset, got %v", resp)
+	}
 
-	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	resp = dec.PacketDataIn(ocsd.OpFlush, 0, nil)
+	if resp != ocsd.RespFatalNotInit {
+		t.Errorf("Expected RespFatalNotInit on decoder flush without full init, got %v", resp)
+	}
+	resp = dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	if resp != ocsd.RespFatalNotInit {
+		t.Errorf("Expected RespFatalNotInit on decoder reset without full init, got %v", resp)
+	}
 
 	pkt := &Packet{}
 	pkt.InitNextPacket()

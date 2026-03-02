@@ -1,7 +1,6 @@
 package itm
 
 import (
-	"fmt"
 	"testing"
 
 	"opencsd/internal/ocsd"
@@ -93,65 +92,96 @@ func (b *ItmStreamBuilder) AddExtension(srcHW bool, nSize uint8, val uint32, num
 	b.AddBytes(hdr)
 }
 
-func TestITMPrehensive(t *testing.T) {
-	cfg := NewConfig()
-	cfg.SetTraceID(0x11)
+func TestITMEndToEndDecode(t *testing.T) {
+	runDecode := func(stream []byte) []ocsd.TraceElement {
+		cfg := NewConfig()
+		cfg.SetTraceID(0x11)
 
-	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, cfg).(*PktProc)
-	dec := manager.CreatePktDecode(0, cfg).(*PktDecode)
+		manager := NewDecoderManager()
+		proc := manager.CreatePktProc(0, cfg).(*PktProc)
+		dec := manager.CreatePktDecode(0, cfg).(*PktDecode)
 
-	proc.PktOutI.Attach(dec)
-	outReceiver := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(outReceiver)
+		proc.PktOutI.Attach(dec)
+		outReceiver := &testTrcElemIn{}
+		dec.TraceElemOut.Attach(outReceiver)
 
-	sb := &ItmStreamBuilder{}
-
-	// initial unsynced
-	sb.AddBytes(0xF0, 0x00, 0x34)
-	sb.AddAsync()
-
-	sb.AddOverflow()
-
-	// SWIT tests
-	sb.AddSWIT(3, 0xBB, 1)       // 8 bit
-	sb.AddSWIT(1, 0x2345, 2)     // 16 bit
-	sb.AddSWIT(1, 0x67890123, 3) // 32 bit (size 3)
-
-	// DWT tests
-	sb.AddDWT(0, 0x15, 1)      // EVENT CPI, SLP, FLD etc. (0x15 = 0x01 | 0x04 | 0x10)
-	sb.AddDWT(1, 0x12, 2)      // EXCEP Enter
-	sb.AddDWT(2, 0x1000, 3)    // PC Sample
-	sb.AddDWT(0x10, 0x44, 1)   // DT Data Read (cmpn 0 = 0x10)
-	sb.AddDWT(0x11, 0x33, 1)   // DT Data Write (cmpn 0 = 0x11)
-	sb.AddDWT(0x04, 0x2000, 3) // DT PC value (cmpn 0 = 0x04)
-	sb.AddDWT(0x05, 0x1000, 2) // DT ADDR value (cmpn 0 = 0x05)
-
-	// Local TS
-	sb.AddLTSSync(2)        // single byte sync
-	sb.AddLTS(1, 0x3220, 2) // multi-byte delay
-
-	// Global TS
-	sb.AddBytes(0x94, 0x7A)                               // GTS1 small
-	sb.AddBytes(0x94, 0x82, 0x7A)                         // GTS1 mid
-	sb.AddBytes(0xB4, 0x00)                               // GTS2 small
-	sb.AddBytes(0xB4, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00) // GTS2 64-bit (size > 5)
-
-	// Extension
-	sb.AddBytes(0x08)             // page 0 (simple extension SW)
-	sb.AddBytes(0x0C, 0x80, 0x00) // HW extension size 9 bit (0x0C = 0x08 | 0x04)
-
-	proc.TraceDataIn(ocsd.OpData, 0, sb.data)
-	proc.TraceDataIn(ocsd.OpFlush, 0, nil)
-	proc.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(len(sb.data)), nil)
-
-	if len(outReceiver.elements) == 0 {
-		t.Errorf("Expected parsed trace elements, but got 0. Did proc even parse packets? pktCount=%d, eot=%v", len(outReceiver.elements), proc.ComponentOpMode())
+		proc.TraceDataIn(ocsd.OpData, 0, stream)
+		proc.TraceDataIn(ocsd.OpFlush, 0, nil)
+		proc.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(len(stream)), nil)
+		return outReceiver.elements
 	}
 
-	for i, el := range outReceiver.elements {
-		fmt.Printf("Element %d: %s\n", i, el.String())
-	}
+	t.Run("SWITAndDWT", func(t *testing.T) {
+		sb := &ItmStreamBuilder{}
+		sb.AddBytes(0xF0, 0x00, 0x34)
+		sb.AddAsync()
+		sb.AddOverflow()
+		sb.AddSWIT(3, 0xBB, 1)
+		sb.AddSWIT(1, 0x2345, 2)
+		sb.AddSWIT(1, 0x67890123, 3)
+		sb.AddDWT(0, 0x15, 1)
+		sb.AddDWT(1, 0x12, 2)
+		sb.AddDWT(2, 0x1000, 3)
+		sb.AddDWT(0x10, 0x44, 1)
+		sb.AddDWT(0x11, 0x33, 1)
+		sb.AddDWT(0x04, 0x2000, 3)
+		sb.AddDWT(0x05, 0x1000, 2)
+
+		elems := runDecode(sb.data)
+		if len(elems) == 0 {
+			t.Fatalf("expected parsed trace elements for SWIT/DWT stream")
+		}
+		for i, el := range elems {
+			if el.String() == "" {
+				t.Fatalf("element %d rendered empty string", i)
+			}
+		}
+	})
+
+	t.Run("TimestampAndExtension", func(t *testing.T) {
+		sb := &ItmStreamBuilder{}
+		sb.AddAsync()
+		sb.AddLTSSync(2)
+		sb.AddLTS(1, 0x3220, 2)
+		sb.AddBytes(0x94, 0x7A)
+		sb.AddBytes(0x94, 0x82, 0x7A)
+		sb.AddBytes(0xB4, 0x00)
+		sb.AddBytes(0xB4, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00)
+		sb.AddBytes(0x08)
+		sb.AddBytes(0x0C, 0x80, 0x00)
+
+		elems := runDecode(sb.data)
+		if len(elems) == 0 {
+			t.Fatalf("expected parsed trace elements for timestamp/extension stream")
+		}
+		for i, el := range elems {
+			if el.String() == "" {
+				t.Fatalf("element %d rendered empty string", i)
+			}
+		}
+	})
+
+	t.Run("MixedEndToEnd", func(t *testing.T) {
+		sb := &ItmStreamBuilder{}
+		sb.AddBytes(0xF0, 0x00, 0x34)
+		sb.AddAsync()
+		sb.AddOverflow()
+		sb.AddSWIT(2, 0xAB, 1)
+		sb.AddDWT(0x10, 0x44, 1)
+		sb.AddLTSSync(1)
+		sb.AddBytes(0x94, 0x7A)
+		sb.AddBytes(0x08)
+
+		elems := runDecode(sb.data)
+		if len(elems) == 0 {
+			t.Fatalf("expected parsed trace elements for mixed stream")
+		}
+		for i, el := range elems {
+			if el.String() == "" {
+				t.Fatalf("element %d rendered empty string", i)
+			}
+		}
+	})
 }
 
 func TestITMErrorCases(t *testing.T) {
@@ -241,7 +271,7 @@ func TestITMErrorCases(t *testing.T) {
 	dec.FnOnReset()
 }
 
-func TestITMPacketString(t *testing.T) {
+func TestITMPacketStringVariants(t *testing.T) {
 	pkt := &Packet{}
 	pkt.InitPacket()
 	if pkt.String() != "NOTSYNC:ITM not synchronised" {
@@ -252,13 +282,17 @@ func TestITMPacketString(t *testing.T) {
 	pkt.SetSrcID(0)
 	pkt.SetValue(0x15, 1) // CPI, SLP, FLD
 	str := pkt.String()
-	fmt.Printf("DWT Str: %s\n", str)
+	if str == "" {
+		t.Fatalf("expected non-empty DWT string")
+	}
 
 	pkt.SetPacketType(PktSWIT)
 	pkt.SetSrcID(3)
 	pkt.SetValue(0xAA, 1)
 	str = pkt.String()
-	fmt.Printf("SWIT Str: %s\n", str)
+	if str == "" {
+		t.Fatalf("expected non-empty SWIT string")
+	}
 
 	pkt.UpdateErrType(PktBadSequence)
 	if !pkt.IsBadPacket() {
@@ -269,42 +303,62 @@ func TestITMPacketString(t *testing.T) {
 	for id := uint8(0); id < 4; id++ {
 		pkt.SetSrcID(id)
 		pkt.SetValue(0x10, 2)
-		fmt.Printf("LocalTS Str %d: %s\n", id, pkt.String())
+		if pkt.String() == "" {
+			t.Fatalf("expected non-empty local TS string for id=%d", id)
+		}
 	}
 
 	pkt.SetPacketType(PktTSGlobal1)
 	pkt.SetValue(0x100, 3)
-	fmt.Printf("GlobalTS Str: %s\n", pkt.String())
+	if pkt.String() == "" {
+		t.Fatalf("expected non-empty global TS1 string")
+	}
 
 	pkt.SetPacketType(PktTSGlobal2)
 	pkt.SetExtValue(0x1000)
-	fmt.Printf("GlobalTS2 Str: %s\n", pkt.String())
+	if pkt.String() == "" {
+		t.Fatalf("expected non-empty global TS2 string")
+	}
 
 	pkt.SetPacketType(PktExtension)
 	pkt.SetSrcID(0)
-	fmt.Printf("Ext Str: %s\n", pkt.String())
+	if pkt.String() == "" {
+		t.Fatalf("expected non-empty extension SW string")
+	}
 
 	pkt.SetPacketType(PktExtension)
 	pkt.SetSrcID(0x80)
-	fmt.Printf("Ext HW Str: %s\n", pkt.String())
+	if pkt.String() == "" {
+		t.Fatalf("expected non-empty extension HW string")
+	}
 
 	pkt.SetPacketType(PktOverflow)
-	fmt.Printf("Overflow Str: %s\n", pkt.String())
+	if pkt.String() == "" {
+		t.Fatalf("expected non-empty overflow string")
+	}
 
 	// valSize coverage
 	pkt.ValSz = 0
 	pkt.SetPacketType(PktDWT)
-	pkt.String()
+	if pkt.String() == "" {
+		t.Fatalf("expected non-empty DWT string for val size 0")
+	}
 	pkt.ValSz = 2
-	pkt.String()
+	if pkt.String() == "" {
+		t.Fatalf("expected non-empty DWT string for val size 2")
+	}
 	pkt.ValSz = 4
-	pkt.String()
+	if pkt.String() == "" {
+		t.Fatalf("expected non-empty DWT string for val size 4")
+	}
 	pkt.ValSz = 1
 
 	// DWT detailed coverage
 	for _, id := range []uint8{1, 2, 8, 9, 16, 18, 99} {
 		pkt.SetSrcID(id)
-		pkt.String()
+		if pkt.String() == "" {
+			t.Fatalf("expected non-empty DWT string for src id %d", id)
+		}
 	}
 
 	types := []PktType{
@@ -312,8 +366,10 @@ func TestITMPacketString(t *testing.T) {
 		PktSWIT, PktDWT, PktTSLocal, PktTSGlobal1, PktTSGlobal2, PktExtension,
 		PktBadSequence, PktReserved, PktType(99),
 	}
-	for _, t := range types {
-		pkt.SetPacketType(t)
-		pkt.String()
+	for _, pktType := range types {
+		pkt.SetPacketType(pktType)
+		if pkt.String() == "" {
+			t.Fatalf("expected non-empty packet string for type %v", pktType)
+		}
 	}
 }

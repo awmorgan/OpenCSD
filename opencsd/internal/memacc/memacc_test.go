@@ -535,7 +535,7 @@ func testMemAccBadLenCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, 
 	return reqBytes + 1 // deliberately bad
 }
 
-func TestMissingCoverage(t *testing.T) {
+func TestMapper_ErrorAndCacheEdgePaths(t *testing.T) {
 	// 1. Cache invalidations with nil blocks
 	mapper := NewGlobalMapper()
 	mapper.cache.InvalidateAll()
@@ -599,5 +599,8 @@ func TestMissingCoverage(t *testing.T) {
 	mapper.EnableCaching(true)
 	mapper.accCurr = accBuf // set back to valid buffer
 	numBytes = 4
-	mapper.cache.ReadBytesFromCache(accBuf, 0x1000, ocsd.MemSpaceEL1N, 0x10, &numBytes, readBuf) // out of bounds
+	err = mapper.cache.ReadBytesFromCache(accBuf, 0x1000, ocsd.MemSpaceEL1N, 0x10, &numBytes, readBuf) // out of bounds
+	if err != ocsd.ErrMemNacc {
+		t.Errorf("Expected ErrMemNacc on cache miss/out-of-range read, got %v", err)
+	}
 }

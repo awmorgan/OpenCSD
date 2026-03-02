@@ -6,55 +6,76 @@ import (
 )
 
 func TestProcStreamComplete(t *testing.T) {
-	config := &Config{}
-	config.RegCtrl = ctrlCycleAcc | ctrlVmidEna | ctrlTsEna | ctrlDataVal | ctrlDataAddr | (2 << 14) // ctxtid=2
-	config.RegCCER = ccerHasTs
-
-	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config).(*PktProc)
-	proc.PktOutI.Attach(&noopPktSink{})
-	proc.PktOutI.Attach(&noopPktSink{})
-
-	data := []byte{
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
-		0x04, 0x01, // CycleCount
-		0x70, 0x01, 0x22, 0x33, 0x44, 0x00, 0x01, 0xaa, 0xbb, // ISYNC Cycle
-		0x08, 0x01, 0x22, 0x33, 0x44, 0x00, 0xaa, 0xbb, // ISYNC
-		0x80,       // Atom P-Hdr Fmt
-		0x01, 0x00, // Branch
-		0x0C,       // Trigger
-		0x3C, 0x11, // VMID
-		0x42, 0x01, 0x02, // Timestamp
-		0x76, // Exception Return
-		0x66, // Reserved
+	newProc := func() *PktProc {
+		config := &Config{}
+		config.RegCtrl = ctrlCycleAcc | ctrlVmidEna | ctrlTsEna | ctrlDataVal | ctrlDataAddr | (2 << 14) // ctxtid=2
+		config.RegCCER = ccerHasTs
+		manager := NewDecoderManager()
+		proc := manager.CreatePktProc(0, config).(*PktProc)
+		proc.PktOutI.Attach(&noopPktSink{})
+		proc.PktOutI.Attach(&noopPktSink{})
+		return proc
 	}
 
-	data = append(data, 0x50) // StoreFail
+	t.Run("ControlAndContextPackets", func(t *testing.T) {
+		proc := newProc()
+		data := []byte{
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
+			0x04, 0x01, // CycleCount
+			0x70, 0x01, 0x22, 0x33, 0x44, 0x00, 0x01, 0xaa, 0xbb, // ISYNC Cycle
+			0x08, 0x01, 0x22, 0x33, 0x44, 0x00, 0xaa, 0xbb, // ISYNC
+			0x80,       // Atom P-Hdr Fmt
+			0x01, 0x00, // Branch
+			0x0C,       // Trigger
+			0x3C, 0x11, // VMID
+			0x42, 0x01, 0x02, // Timestamp
+			0x76, // Exception Return
+			0x66, // Reserved
+		}
+		processed, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+		if processed == 0 {
+			t.Fatalf("expected control/context stream to consume input bytes")
+		}
+	})
 
-	// OOO Data
-	data = append(data, 0x20)                         // size0
-	data = append(data, 0x24, 0x11)                   // size1
-	data = append(data, 0x28, 0x11, 0x22)             // size2
-	data = append(data, 0x2C, 0x11, 0x22, 0x33, 0x44) // size4 (val 3)
+	t.Run("DataAndAddressPackets", func(t *testing.T) {
+		proc := newProc()
+		data := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80} // ASYNC
+		data = append(data, 0x50)                          // StoreFail
+		data = append(data, 0x20)                          // OOO size0
+		data = append(data, 0x24, 0x11)                    // OOO size1
+		data = append(data, 0x28, 0x11, 0x22)              // OOO size2
+		data = append(data, 0x2C, 0x11, 0x22, 0x33, 0x44)  // OOO size4
+		data = append(data, 0x54)                          // OOO addr placeholder
+		data = append(data, 0x74)                          // addr trace active
+		data = append(data, 0x80, 0x00)                    // address bytes
+		data = append(data, 0x5C)
+		data = append(data, 0x02)             // normal size0
+		data = append(data, 0x06, 0x11)       // normal size1
+		data = append(data, 0x0A, 0x11, 0x22) // normal size2
+		data = append(data, 0x22)             // normal size0 expect addr
+		data = append(data, 0x80, 0x00)       // addr bytes
+		processed, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+		if processed == 0 {
+			t.Fatalf("expected data/address stream to consume input bytes")
+		}
+	})
 
-	// OOO Addr Placeholder
-	data = append(data, 0x54)
-	data = append(data, 0x74)       // Addr trace active
-	data = append(data, 0x80, 0x00) // address bytes
-	data = append(data, 0x5C)
-
-	// Normal Data
-	data = append(data, 0x02)             // size0 normal data
-	data = append(data, 0x06, 0x11)       // size1
-	data = append(data, 0x0A, 0x11, 0x22) // size2
-	data = append(data, 0x22)             // size0, normal data expect addr
-	data = append(data, 0x80, 0x00)       // addr bytes
-
-	// ExceptionData
-	data = append(data, 0x01, 0x40, 0x00) // Branch with exception
-
-	proc.TraceDataIn(ocsd.OpData, 0, data)
-	proc.TraceDataIn(ocsd.OpFlush, 0, nil)
+	t.Run("ExceptionBranchAndFlush", func(t *testing.T) {
+		proc := newProc()
+		data := []byte{
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
+			0x01, 0x40, 0x00, // Branch with exception data
+		}
+		processed, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+		if processed == 0 {
+			t.Fatalf("expected exception stream to consume input bytes")
+		}
+		processed, _ = proc.TraceDataIn(ocsd.OpFlush, 0, nil)
+		if processed != 0 {
+			t.Fatalf("expected flush to report zero consumed bytes, got %d", processed)
+		}
+	})
 }
 
 func TestProcStreamBadTraceMode(t *testing.T) {
@@ -73,7 +94,10 @@ func TestProcStreamBadTraceMode(t *testing.T) {
 		0x66, // Reserved
 	}
 
-	proc.TraceDataIn(ocsd.OpData, 0, data)
+	processed, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+	if processed == 0 {
+		t.Fatalf("expected processor to consume bytes in bad-trace-mode stream")
+	}
 }
 
 func TestProcStreamMalformed(t *testing.T) {
@@ -118,14 +142,23 @@ func TestProcStreamPartPacket(t *testing.T) {
 	proc.PktOutI.Attach(&noopPktSink{})
 
 	// ASYNC
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
+	_, resp := proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
+	if ocsd.DataRespIsFatal(resp) {
+		t.Fatalf("unexpected fatal response for sync sequence: %v", resp)
+	}
 
 	// ISYNC but split across chunks
 	part1 := []byte{0x08, 0x01, 0x22}
 	part2 := []byte{0x33, 0x44, 0x00, 0xaa, 0xbb}
 
-	proc.TraceDataIn(ocsd.OpData, 0, part1)
-	proc.TraceDataIn(ocsd.OpData, 0, part2)
+	_, resp = proc.TraceDataIn(ocsd.OpData, 0, part1)
+	if ocsd.DataRespIsFatal(resp) {
+		t.Fatalf("unexpected fatal response for first part packet: %v", resp)
+	}
+	_, resp = proc.TraceDataIn(ocsd.OpData, 0, part2)
+	if ocsd.DataRespIsFatal(resp) {
+		t.Fatalf("unexpected fatal response for second part packet: %v", resp)
+	}
 }
 
 func TestProcStreamExceptionData(t *testing.T) {
@@ -157,18 +190,27 @@ func TestProcStreamExceptionData(t *testing.T) {
 	proc.TraceDataIn(ocsd.OpEOT, 0, nil)
 }
 
-func TestProcessorUnusedInternals(t *testing.T) {
+func TestProcessorPartialPacketAndMalformedState(t *testing.T) {
 	config := &Config{}
 	manager := NewDecoderManager()
 	proc := manager.CreatePktProc(0, config).(*PktProc)
 
 	proc.currPacketData = []byte{1, 2, 3}
 	proc.setBytesPartPkt(1, waitSync, PktASync)
+	if !proc.bSendPartPkt || len(proc.partPktData) != 1 || proc.partPktData[0] != 1 {
+		t.Fatalf("setBytesPartPkt did not preserve expected partial packet state")
+	}
+	if len(proc.currPacketData) != 2 || proc.currPacketData[0] != 2 || proc.currPacketData[1] != 3 {
+		t.Fatalf("setBytesPartPkt did not consume expected bytes")
+	}
+	if proc.postPartPktState != waitSync || proc.postPartPktType != PktASync {
+		t.Fatalf("setBytesPartPkt did not set post-partial state")
+	}
 
-	defer func() {
-		recover() // catch panic from malformed err
-	}()
 	proc.throwMalformedPacketErr("test")
+	if proc.processState != procErr {
+		t.Fatalf("throwMalformedPacketErr should set process state to procErr")
+	}
 }
 
 func TestProcStreamDataValues(t *testing.T) {

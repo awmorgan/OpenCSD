@@ -240,139 +240,81 @@ func TestDecoder_DecodeA64(t *testing.T) {
 	})
 }
 
-func TestDecoder_CoverageBoost(t *testing.T) {
-	// Calling auxiliary coverage functions directly
+func TestDecoder_HelperClassificationAndDestinations(t *testing.T) {
 	dec := NewDecoder()
-	dec.SetAA64ErrOnBadOpcode(true) // trivial line coverage
+	dec.SetAA64ErrOnBadOpcode(true)
 
-	info := &DecodeInfo{
-		ArchVersion: ocsd.ArchV7,
+	info := &DecodeInfo{ArchVersion: ocsd.ArchV7}
+	if !InstARMIsBranch(0xEA000000, info) || !InstThumbIsBranch(0xD0000000, info) || !InstA64IsBranch(0x14000000, info) {
+		t.Fatalf("expected known opcodes to classify as branches")
+	}
+	if !InstARMIsUDF(0xe7f000f0) || !InstThumbIsUDF(0xde000000) || !InstThumbIsUDF(0xf7f0a000) || !InstA64IsUDF(0x00000000) {
+		t.Fatalf("expected known UDF opcodes to classify as UDF")
 	}
 
-	// Misc remaining branches
-	InstARMIsBranch(0xEA000000, info)
-	InstThumbIsBranch(0x0000D000, info)
-	InstA64IsBranch(0x14000000, info)
+	if InstThumbIsIT(0xbf000000) != 0 {
+		t.Fatalf("unexpected IT block decoding")
+	}
 
-	InstARMIsUDF(0xe7f000f0)
-	InstThumbIsUDF(0xde000000)
-	InstThumbIsUDF(0xf7f0a000)
-	InstA64IsUDF(0x00000000)
-
-	InstThumbIsIT(0xbf100000)
-	InstThumbIsIT(0xbf200000)
-	InstThumbIsIT(0xbf400000)
-	InstThumbIsIT(0xbf800000)
-	InstThumbIsIT(0xbf000000)
-
-	// Test branch destinations
-	var armDest uint32
-	InstARMBranchDestination(0x1000, 0x0a000004, &armDest) // B
-	InstARMBranchDestination(0x1000, 0xfa000004, &armDest) // BLX
-	InstARMBranchDestination(0x1000, 0xE0000000, &armDest) // Other
+	var armDest uint32 = 0xDEADBEEF
+	if !InstARMBranchDestination(0x1000, 0x0a000004, &armDest) || armDest == 0xDEADBEEF {
+		t.Fatalf("expected ARM branch destination to be computed")
+	}
+	armDest = 0xCAFE
+	if InstARMBranchDestination(0x1000, 0xE0000000, &armDest) || armDest != 0xCAFE {
+		t.Fatalf("non-branch ARM opcode should not update destination")
+	}
 
 	var thumbDest uint32
-	InstThumbBranchDestination(0x1000, 0xd0000000, &thumbDest) // T1 B<c>
-	InstThumbBranchDestination(0x1000, 0xe0000000, &thumbDest) // T2 B
-	InstThumbBranchDestination(0x1000, 0xf0008000, &thumbDest) // T3 B
-	InstThumbBranchDestination(0x1000, 0xf0009000, &thumbDest) // T4 B
-	InstThumbBranchDestination(0x1000, 0xf000c000, &thumbDest) // T2 BLX
-	InstThumbBranchDestination(0x1000, 0xb1000000, &thumbDest) // CB(NZ)
-	InstThumbBranchDestination(0x1000, 0xf00fc001, &thumbDest) // LE T1
-	InstThumbBranchDestination(0x1000, 0xf02fc001, &thumbDest) // LE T2
-	InstThumbBranchDestination(0x1000, 0xf01fc001, &thumbDest) // LETP
-	InstThumbBranchDestination(0x1000, 0xf040c001, &thumbDest) // WLS
-	InstThumbBranchDestination(0x1000, 0xf000c001, &thumbDest) // WLSTP
-	InstThumbBranchDestination(0x1000, 0x44000000, &thumbDest) // Other
-
-	var a64Dest uint64
-	InstA64BranchDestination(0x1000, 0x54000000, &a64Dest) // B.cond
-	InstA64BranchDestination(0x1000, 0x14000000, &a64Dest) // B
-	InstA64BranchDestination(0x1000, 0x34000000, &a64Dest) // CB
-	InstA64BranchDestination(0x1000, 0x36000000, &a64Dest) // TB
-	InstA64BranchDestination(0x1000, 0x74000000, &a64Dest) // CBB
-	InstA64BranchDestination(0x1000, 0x8B000000, &a64Dest) // Other
-
-	// Direct testing unsupported
-	unsuppInfo := &ocsd.InstrInfo{
-		Isa: ocsd.ISATee,
+	if !InstThumbBranchDestination(0x1000, 0xd0000000, &thumbDest) || (thumbDest&1) == 0 {
+		t.Fatalf("expected Thumb conditional branch destination with Thumb bit set")
 	}
-	dec.DecodeInstruction(unsuppInfo)
-
-	// Thumb conditional IT block tests
-	itThumb := &ocsd.InstrInfo{
-		Isa:               ocsd.ISAThumb2,
-		Opcode:            0x00004400,
-		TrackItBlock:      1,
-		ThumbItConditions: 1, // Decrement IT conditions
+	if !InstThumbBranchDestination(0x1000, 0xf000c001, &thumbDest) || (thumbDest&1) == 0 {
+		t.Fatalf("expected WLSTP Thumb destination")
 	}
-	dec.DecodeInstruction(itThumb)
 
-	itThumbStart := &ocsd.InstrInfo{
-		Isa:               ocsd.ISAThumb2,
-		Opcode:            0x0000bf80, // IT
-		TrackItBlock:      1,
-		ThumbItConditions: 0,
+	var a64Dest uint64 = 0xABCDEF
+	if !InstA64BranchDestination(0x1000, 0x54000000, &a64Dest) || a64Dest == 0xABCDEF {
+		t.Fatalf("expected A64 branch destination to be computed")
 	}
-	dec.DecodeInstruction(itThumbStart)
+	a64Dest = 0xABCDEF
+	if InstA64BranchDestination(0x1000, 0x8B000000, &a64Dest) || a64Dest != 0xABCDEF {
+		t.Fatalf("non-branch A64 opcode should not update destination")
+	}
 
-	// Additional IT instruction patterns
-	InstThumbIsIT(0xbf100000) // bit 16
-	InstThumbIsIT(0xbf200000) // bit 17
-	InstThumbIsIT(0xbf400000) // bit 18
-	InstThumbIsIT(0xbf800000) // bit 19
-	InstThumbIsIT(0x00000000) // non-IT
+	if InstARMBarrier(0x0e070f9a) != ArmBarrierDsb || InstARMBarrier(0xf5700060) != ArmBarrierIsb || InstThumbBarrier(0xf3bf8f50) != ArmBarrierDmb || InstA64Barrier(0xd503300f) != ArmBarrierNone {
+		t.Fatalf("unexpected barrier classification")
+	}
 
-	// Additional branch and link variations
-	InstThumbIsBranchAndLink(0x47800000, info)
-	InstThumbIsBranchAndLink(0xf000c000, info)
-	InstThumbIsBranchAndLink(0x00000000, info)
+	unsuppInfo := &ocsd.InstrInfo{Isa: ocsd.ISATee}
+	if err := dec.DecodeInstruction(unsuppInfo); err != ocsd.ErrUnsupportedISA {
+		t.Fatalf("expected unsupported ISA error, got %v", err)
+	}
 
-	InstA64IsBranchAndLink(0xd63f0000, info) // BLR
-	InstA64IsBranchAndLink(0x94000000, info) // BL
+	itThumb := &ocsd.InstrInfo{Isa: ocsd.ISAThumb2, Opcode: 0x00004400, TrackItBlock: 1, ThumbItConditions: 1}
+	if err := dec.DecodeInstruction(itThumb); err != ocsd.OK || itThumb.ThumbItConditions != 0 {
+		t.Fatalf("expected IT condition decrement, err=%v cond=%d", err, itThumb.ThumbItConditions)
+	}
+
+	if !InstThumbIsBranchAndLink(0x47800000, info) || !InstThumbIsBranchAndLink(0xf000c000, info) || InstThumbIsBranchAndLink(0x00000000, info) {
+		t.Fatalf("unexpected Thumb branch-link classification")
+	}
+	if !InstA64IsBranchAndLink(0xd63f0000, info) || !InstA64IsBranchAndLink(0x94000000, info) {
+		t.Fatalf("expected A64 BLR/BL to classify as branch-link")
+	}
 	info.ArchVersion = ocsd.ArchV8r3
-	InstA64IsBranchAndLink(0xd73f0800, info) // BLRAA
-	InstA64IsBranchAndLink(0xd63f081F, info) // BLRAAZ
-	InstA64IsBranchAndLink(0x00000000, info) // other
+	if !InstA64IsBranchAndLink(0xd73f0800, info) || !InstA64IsBranchAndLink(0xd63f081F, info) || InstA64IsBranchAndLink(0x00000000, info) {
+		t.Fatalf("unexpected A64 v8.3 branch-link classification")
+	}
 
 	var isLink, isCond uint8
-	InstThumbIsDirectBranchLink(0xf00fc001, &isLink, &isCond, info)
-	InstThumbIsDirectBranchLink(0xf02fc001, &isLink, &isCond, info)
-	InstThumbIsDirectBranchLink(0xf01fc001, &isLink, &isCond, info)
-	InstThumbIsDirectBranchLink(0xf040c001, &isLink, &isCond, info)
-	InstThumbIsDirectBranchLink(0xf000c001, &isLink, &isCond, info)
-
-	InstA64IsIndirectBranchLink(0xd69f0bff, &isLink, info)
-	InstA64IsIndirectBranchLink(0xd65f0bff, &isLink, info)
-	InstA64IsIndirectBranchLink(0x5500001f, &isLink, info)
-	InstA64IsIndirectBranchLink(0xd65f0be0, &isLink, info)
-	InstA64IsIndirectBranchLink(0xd6ff03e0, &isLink, info)
-	InstA64IsIndirectBranchLink(0xd6ff07e0, &isLink, info)
-
-	InstARMBarrier(0x0e070f9a)
-	InstARMBarrier(0x0e070fba)
-	InstARMBarrier(0x0e070f95)
-	InstARMBarrier(0x0e070f00) // none
-	InstARMBarrier(0xf5700040) // dsb non-cp15
-	InstARMBarrier(0xf5700050) // dmb non-cp15
-	InstARMBarrier(0xf5700060) // isb non-cp15
-	InstARMBarrier(0xf5700000) // none non-cp15
-
-	InstThumbBarrier(0xee070f9a)
-	InstThumbBarrier(0xee070fba)
-	InstThumbBarrier(0xee070f95)
-	InstThumbBarrier(0xee070f00) // none
-	InstThumbBarrier(0xf3bf8f40) // dsb non-cp15
-	InstThumbBarrier(0xf3bf8f50) // dmb non-cp15
-	InstThumbBarrier(0xf3bf8f60) // isb non-cp15
-	InstThumbBarrier(0xf3bf8f00) // none non-cp15
-
-	InstA64Barrier(0xd503301f) // Dsb
-	InstA64Barrier(0xd503303f) // Dmb
-	InstA64Barrier(0xd503305f) // Isb
-	InstA64Barrier(0xd503300f) // none
-
-	InstThumbIsUDF(0xde000000)
-	InstThumbIsUDF(0xf7f0a000)
-	InstThumbIsUDF(0x00000000)
+	if !InstThumbIsDirectBranchLink(0xf00fc001, &isLink, &isCond, info) || !InstThumbIsDirectBranchLink(0xf040c001, &isLink, &isCond, info) {
+		t.Fatalf("expected Thumb direct branch-link classification")
+	}
+	if !InstA64IsIndirectBranchLink(0xd69f0bff, &isLink, info) || !InstA64IsIndirectBranchLink(0xd6ff03e0, &isLink, info) {
+		t.Fatalf("expected A64 indirect branch-link classification")
+	}
+	if InstThumbIsUDF(0x00000000) {
+		t.Fatalf("non-UDF Thumb opcode misclassified")
+	}
 }
