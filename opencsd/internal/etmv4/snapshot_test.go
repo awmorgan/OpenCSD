@@ -410,24 +410,7 @@ func normalizeSnapshotLine(line string) string {
 	if packetType == "" {
 		return ""
 	}
-	left = stripRawBytes(strings.TrimSpace(left))
-	return left + "\t" + packetType
-}
-
-// stripRawBytes removes raw byte dumps of the form " [0xNN ...  ];" from the
-// "Idx:N; ID:xx; [...];" prefix that the C++ tool emits but the Go
-// implementation omits.
-func stripRawBytes(s string) string {
-	start := strings.Index(s, " [")
-	if start < 0 {
-		return s
-	}
-	end := strings.Index(s[start:], "];")
-	if end < 0 {
-		return s
-	}
-	// Keep everything before " [" and strip through the closing "];"
-	return strings.TrimRight(s[:start], " \t")
+	return strings.TrimSpace(left) + "\t" + packetType
 }
 
 func extractPacketType(s string) string {
