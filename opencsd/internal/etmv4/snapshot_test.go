@@ -60,6 +60,12 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 		traceIDs   []string
 	}{
 		{name: "juno_r1_1", sourceName: "ETB_0", traceIDs: []string{"10", "11", "12", "13", "14", "15"}},
+		{name: "a57_single_step", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"10"}},
+		{name: "armv8_1m_branches", sourceName: "etr_0", traceIDs: []string{"0"}},
+		{name: "juno-uname-001", sourceName: "ETB_0", traceIDs: []string{"10"}},
+		{name: "juno-uname-002", sourceName: "ETB_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
+		{name: "juno-ret-stck", sourceName: "ETB_0", traceIDs: []string{"10", "11", "12", "13", "14", "15"}},
+		{name: "test-file-mem-offsets", sourceName: "ETB_0", traceIDs: []string{"16"}},
 	}
 
 	for _, tc := range testCases {
@@ -382,7 +388,24 @@ func normalizeSnapshotLine(line string) string {
 	if packetType == "" {
 		return ""
 	}
-	return strings.TrimSpace(left) + "\t" + packetType
+	left = stripRawBytes(strings.TrimSpace(left))
+	return left + "\t" + packetType
+}
+
+// stripRawBytes removes raw byte dumps of the form " [0xNN ...  ];" from the
+// "Idx:N; ID:xx; [...];" prefix that the C++ tool emits but the Go
+// implementation omits.
+func stripRawBytes(s string) string {
+	start := strings.Index(s, " [")
+	if start < 0 {
+		return s
+	}
+	end := strings.Index(s[start:], "];")
+	if end < 0 {
+		return s
+	}
+	// Keep everything before " [" and strip through the closing "];"
+	return strings.TrimRight(s[:start], " \t")
 }
 
 func extractPacketType(s string) string {
