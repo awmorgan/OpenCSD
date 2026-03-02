@@ -390,18 +390,17 @@ func sanitizePPL(s string, traceIDs []string) string {
 		if line == "" {
 			continue
 		}
-		if !strings.HasPrefix(line, "Idx:") {
-			continue
+		for _, idxLine := range splitIdxRecords(line) {
+			normalized := normalizeSnapshotLine(idxLine)
+			if normalized == "" {
+				continue
+			}
+			idVal, ok := extractLineID(idxLine)
+			if !ok {
+				continue
+			}
+			parsed = append(parsed, parsedLine{line: normalized, id: idVal})
 		}
-		normalized := normalizeSnapshotLine(line)
-		if normalized == "" {
-			continue
-		}
-		idVal, ok := extractLineID(line)
-		if !ok {
-			continue
-		}
-		parsed = append(parsed, parsedLine{line: normalized, id: idVal})
 	}
 
 	if len(idSet) == 0 {
@@ -420,6 +419,36 @@ func sanitizePPL(s string, traceIDs []string) string {
 	}
 
 	return strings.Join(out, "\n")
+}
+
+func splitIdxRecords(line string) []string {
+	if !strings.Contains(line, "Idx:") {
+		return nil
+	}
+	starts := make([]int, 0, 2)
+	for pos := 0; pos < len(line); {
+		i := strings.Index(line[pos:], "Idx:")
+		if i < 0 {
+			break
+		}
+		starts = append(starts, pos+i)
+		pos += i + len("Idx:")
+	}
+	if len(starts) == 0 {
+		return nil
+	}
+	records := make([]string, 0, len(starts))
+	for i, st := range starts {
+		end := len(line)
+		if i+1 < len(starts) {
+			end = starts[i+1]
+		}
+		rec := strings.TrimSpace(line[st:end])
+		if strings.HasPrefix(rec, "Idx:") {
+			records = append(records, rec)
+		}
+	}
+	return records
 }
 
 func normalizeSnapshotLine(line string) string {
