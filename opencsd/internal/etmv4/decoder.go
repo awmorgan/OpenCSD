@@ -87,10 +87,7 @@ func (e *p0Elem) commitOldest() ocsd.AtmVal {
 }
 
 func (e *p0Elem) cancelNewest(nCancel int) int {
-	nRemove := nCancel
-	if nCancel > int(e.atom.Num) {
-		nRemove = int(e.atom.Num)
-	}
+	nRemove := min(nCancel, int(e.atom.Num))
 	e.atom.Num -= uint8(nRemove)
 	return nRemove
 }
@@ -1144,7 +1141,7 @@ func (d *PktDecode) processQElement(pElem *p0Elem) ocsd.Err {
 	addrRange.numInstr = 0
 	isBranch := false
 
-	for i := 0; i < iCount; i++ {
+	for range iCount {
 		bytesReq := uint32(4)
 		bytesRead, memData, errMem := d.AccessMemory(d.instrInfo.InstrAddr, d.getCurrMemSpace(), bytesReq)
 		if errMem != ocsd.OK {

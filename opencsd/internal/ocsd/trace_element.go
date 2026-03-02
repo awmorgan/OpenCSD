@@ -299,10 +299,7 @@ func (e *TraceElement) SetContext(newCtx PEContext) {
 }
 
 func (e *TraceElement) SetISA(isa ISA) {
-	e.ISA = isa
-	if e.ISA > ISAUnknown {
-		e.ISA = ISAUnknown
-	}
+	e.ISA = min(isa, ISAUnknown)
 }
 
 func (e *TraceElement) SetCycleCount(cycleCount uint32) {

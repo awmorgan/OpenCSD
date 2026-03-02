@@ -1297,7 +1297,7 @@ func (p *Processor) extract32BitLongAddr(buf []byte, stIdx int, IS uint8, value 
 // Ported from TrcPktProcEtmV4I::BuildIPacketTable.
 func (p *Processor) buildIPacketTable() {
 	// default to reserved
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		p.iTable[i].pktType = PktReserved
 		p.iTable[i].fn = p.iPktReserved
 	}
@@ -1347,7 +1347,7 @@ func (p *Processor) buildIPacketTable() {
 	}
 
 	// cycle count F2/F1 - 0x0C-0x0F
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		p.iTable[0x0C+i].pktType = PktCcntF2
 		p.iTable[0x0C+i].fn = p.iPktCycleCntF123
 	}
@@ -1357,13 +1357,13 @@ func (p *Processor) buildIPacketTable() {
 	}
 
 	// cycle count F3 - 0x10-0x1F
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		p.iTable[0x10+i].pktType = PktCcntF3
 		p.iTable[0x10+i].fn = p.iPktCycleCntF123
 	}
 
 	// NDSM 0x20-0x27
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		p.iTable[0x20+i].pktType = PktNumDsMkr
 		if p.config.EnabledDataTrace() {
 			p.iTable[0x20+i].fn = p.iPktNoPayload
@@ -1373,7 +1373,7 @@ func (p *Processor) buildIPacketTable() {
 	}
 
 	// UDSM 0x28-0x2C
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		p.iTable[0x28+i].pktType = PktUnnumDsMkr
 		if p.config.EnabledDataTrace() {
 			p.iTable[0x28+i].fn = p.iPktNoPayload
@@ -1393,19 +1393,19 @@ func (p *Processor) buildIPacketTable() {
 	p.iTable[0x2F].fn = p.iPktSpeclRes
 
 	// mispredict 0x30-0x33
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		p.iTable[0x30+i].pktType = PktMispredict
 		p.iTable[0x30+i].fn = p.iPktSpeclRes
 	}
 
 	// cancel F2 0x34-0x37
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		p.iTable[0x34+i].pktType = PktCancelF2
 		p.iTable[0x34+i].fn = p.iPktSpeclRes
 	}
 
 	// cancel F3 0x38-0x3F
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		p.iTable[0x38+i].pktType = PktCancelF3
 		p.iTable[0x38+i].fn = p.iPktSpeclRes
 	}
@@ -1413,7 +1413,7 @@ func (p *Processor) buildIPacketTable() {
 	bCondValid := p.config.HasCondTrace() && p.config.EnabledCondITrace() != CondTrDis
 
 	// cond I F2 0x40-0x42
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		p.iTable[0x40+i].pktType = PktCondIF2
 		if bCondValid {
 			p.iTable[0x40+i].fn = p.iPktCondInstr
@@ -1431,7 +1431,7 @@ func (p *Processor) buildIPacketTable() {
 	}
 
 	// cond res F4 0x44-0x46
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		p.iTable[0x44+i].pktType = PktCondResF4
 		if bCondValid {
 			p.iTable[0x44+i].fn = p.iPktCondResult
@@ -1441,7 +1441,7 @@ func (p *Processor) buildIPacketTable() {
 	}
 
 	// cond res F2 0x48-0x4A, 0x4C-0x4E
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		p.iTable[0x48+i].pktType = PktCondResF2
 		if bCondValid {
 			p.iTable[0x48+i].fn = p.iPktCondResult
@@ -1449,7 +1449,7 @@ func (p *Processor) buildIPacketTable() {
 			p.iTable[0x48+i].fn = p.iPktInvalidCfg
 		}
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		p.iTable[0x4C+i].pktType = PktCondResF2
 		if bCondValid {
 			p.iTable[0x4C+i].fn = p.iPktCondResult
@@ -1459,7 +1459,7 @@ func (p *Processor) buildIPacketTable() {
 	}
 
 	// cond res F3 0x50-0x5F
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		p.iTable[0x50+i].pktType = PktCondResF3
 		if bCondValid {
 			p.iTable[0x50+i].fn = p.iPktCondResult
@@ -1469,7 +1469,7 @@ func (p *Processor) buildIPacketTable() {
 	}
 
 	// cond res F1 0x68-0x6B
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		p.iTable[0x68+i].pktType = PktCondResF1
 		if bCondValid {
 			p.iTable[0x68+i].fn = p.iPktCondResult
@@ -1495,7 +1495,7 @@ func (p *Processor) buildIPacketTable() {
 	}
 
 	// cond res F1 extra 0x6E-0x6F
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		p.iTable[0x6E+i].pktType = PktCondResF1
 		if bCondValid {
 			p.iTable[0x6E+i].fn = p.iPktCondResult
@@ -1511,13 +1511,13 @@ func (p *Processor) buildIPacketTable() {
 	}
 
 	// event trace 0x71-0x7F
-	for i := 0; i < 15; i++ {
+	for i := range 15 {
 		p.iTable[0x71+i].pktType = PktEvent
 		p.iTable[0x71+i].fn = p.iPktNoPayload
 	}
 
 	// context 0x80-0x81
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		p.iTable[0x80+i].pktType = PktCtxt
 		p.iTable[0x80+i].fn = p.iPktContext
 	}
@@ -1539,7 +1539,7 @@ func (p *Processor) buildIPacketTable() {
 	}
 
 	// exact match addr 0x90-0x92
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		p.iTable[0x90+i].pktType = PktAddrMatch
 		p.iTable[0x90+i].fn = p.iPktNoPayload
 	}
@@ -1563,7 +1563,7 @@ func (p *Processor) buildIPacketTable() {
 	p.iTable[0x9E].fn = p.iPktLongAddr
 
 	// Q packets 0xA0-0xAF
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		p.iTable[0xA0+i].pktType = PktQ
 		switch i {
 		case 0x3, 0x4, 0x7, 0x8, 0x9, 0xD, 0xE:
@@ -1577,7 +1577,7 @@ func (p *Processor) buildIPacketTable() {
 
 	// ETE source address packets 0xB0-0xB9
 	if p.config.FullVersion() >= 0x50 {
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			p.iTable[0xB0+i].pktType = ETE_PktSrcAddrMatch
 			p.iTable[0xB0+i].fn = p.iPktNoPayload
 		}

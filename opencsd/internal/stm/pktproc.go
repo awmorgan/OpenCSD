@@ -263,7 +263,7 @@ func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {
 				nibblesToSend = p.numNibbles - 22
 			}
 			bytesToSend := (nibblesToSend / 2) + (nibblesToSend % 2)
-			for i := uint8(0); i < bytesToSend; i++ {
+			for i := range bytesToSend {
 				p.savePacketByte(p.dataIn[startOffset+uint32(i)])
 			}
 		}
@@ -273,7 +273,7 @@ func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {
 		p.clearSyncCount()
 		p.packetIndex = p.syncIndex
 		if p.PktRawMonI.HasAttachedAndEnabled() {
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				p.savePacketByte(0xFF)
 			}
 			p.savePacketByte(0x0F)
@@ -803,7 +803,7 @@ func (p *PktProc) binToGray(binValue uint64) uint64 {
 
 func (p *PktProc) grayToBin(grayValue uint64) uint64 {
 	var binValue uint64
-	for binBit := uint64(0); binBit < 64; binBit++ {
+	for binBit := range uint64(64) {
 		bitTmp := ((1 << binBit) & grayValue) >> binBit
 		for grayBit := binBit + 1; grayBit < 64; grayBit++ {
 			bitTmp ^= (((1 << grayBit) & grayValue) >> grayBit)
@@ -814,7 +814,7 @@ func (p *PktProc) grayToBin(grayValue uint64) uint64 {
 }
 
 func (p *PktProc) buildOpTables() {
-	for i := 0; i < 0x10; i++ {
+	for i := range 0x10 {
 		p.op1N[i] = p.stmPktReserved
 		p.op2N[i] = p.stmPktReservedFn
 		p.op3N[i] = p.stmPktReservedF0n

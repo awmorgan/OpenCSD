@@ -50,7 +50,7 @@ func (l *GenElemList) Reset() {
 func (l *GenElemList) growArray() {
 	newSize := len(l.elemArray) * 2
 	newArr := make([]ElemPtr, newSize)
-	for i := 0; i < newSize; i++ {
+	for i := range newSize {
 		if i < l.numUsed {
 			newArr[i] = l.elemArray[l.getAdjustedIdx(l.firstIdx+i)]
 		} else {

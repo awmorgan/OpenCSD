@@ -62,7 +62,7 @@ func TestSTMEndToEndDecode(t *testing.T) {
 	sb := &StmStreamBuilder{}
 
 	// 1) ASYNC
-	for i := 0; i < 21; i++ {
+	for range 21 {
 		sb.AddNibble(0xF)
 	}
 	sb.AddNibble(0x0)
@@ -133,7 +133,7 @@ func TestSTMEndToEndDecode(t *testing.T) {
 	sb.AddNibbles(0xF, 0x0, 0x8, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8) // FREQ
 
 	// ASYNC packet mid-stream (alignment sync)
-	for i := 0; i < 21; i++ {
+	for range 21 {
 		sb.AddNibble(0xF)
 	}
 	sb.AddNibble(0x0)
@@ -158,7 +158,7 @@ func TestSTMErrorCases(t *testing.T) {
 
 	// Error case 1: ASYNC with invalid padding
 	sb := &StmStreamBuilder{}
-	for i := 0; i < 21; i++ {
+	for range 21 {
 		sb.AddNibble(0xF)
 	}
 	sb.AddNibble(0x1) // invalid ASYNC sync char
@@ -173,7 +173,7 @@ func TestSTMErrorCases(t *testing.T) {
 	sb = &StmStreamBuilder{}
 	sb.AddNibbles(0xF) // wait sync needs data, so we won't get it to complain unless it's in sync.
 	// Actually to be in sync, it needs to see ASYNC.
-	for i := 0; i < 21; i++ {
+	for range 21 {
 		sb.AddNibble(0xF)
 	}
 	sb.AddNibble(0x0)
@@ -196,7 +196,7 @@ func TestSTMErrorCases(t *testing.T) {
 	// Try gray TS
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)
 	sb = &StmStreamBuilder{}
-	for i := 0; i < 21; i++ {
+	for range 21 {
 		sb.AddNibble(0xF)
 	}
 	sb.AddNibble(0x0)
@@ -223,7 +223,7 @@ func TestSTMErrorCases(t *testing.T) {
 	// Try reserved F0n
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)
 	sb = &StmStreamBuilder{}
-	for i := 0; i < 21; i++ {
+	for range 21 {
 		sb.AddNibble(0xF)
 	}
 	sb.AddNibble(0x0)

@@ -54,7 +54,7 @@ func (p *RawFramePrinter) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcInde
 		// Process byte data if available
 		if len(data) > 0 {
 			lineBytes := 0
-			for i := 0; i < len(data); i++ {
+			for i := range data {
 				if lineBytes == 16 {
 					sb.WriteString("\n")
 					lineBytes = 0

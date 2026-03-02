@@ -114,7 +114,7 @@ func (cf *CodeFollower) DecodeSingleOpCode() ocsd.Err {
 
 	if readBytes == 4 && len(pData) >= 4 {
 		cf.instrInfo.Opcode = 0
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			cf.instrInfo.Opcode |= uint32(pData[i]) << (i * 8)
 		}
 

@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"io"
+	"maps"
 	"strconv"
 	"strings"
 )
@@ -72,9 +73,7 @@ func ParseDeviceList(input io.Reader) (*ParsedDevices, error) {
 	}
 
 	if devListSec, ok := ini.Sections[DeviceListSectionName]; ok {
-		for k, v := range devListSec {
-			parsed.DeviceList[k] = v
-		}
+		maps.Copy(parsed.DeviceList, devListSec)
 	}
 
 	if traceSec, ok := ini.Sections[TraceSectionName]; ok {
@@ -93,8 +92,8 @@ func ParseTraceMetaData(input io.Reader) (*ParsedTrace, error) {
 	if tbSec, ok := ini.Sections[TraceBuffersSectionName]; ok {
 		if buffers, ok := tbSec[BufferListKey]; ok {
 			// Split by comma
-			bufNames := strings.Split(buffers, ",")
-			for _, bufName := range bufNames {
+			bufNames := strings.SplitSeq(buffers, ",")
+			for bufName := range bufNames {
 				name := strings.TrimSpace(bufName)
 				if name != "" {
 					parsed.BufferSectionNames = append(parsed.BufferSectionNames, name)
@@ -116,16 +115,12 @@ func ParseTraceMetaData(input io.Reader) (*ParsedTrace, error) {
 
 	// source_buffers section
 	if sbSec, ok := ini.Sections[SourceBuffersSectionName]; ok {
-		for k, v := range sbSec {
-			parsed.SourceBufferAssoc[k] = v
-		}
+		maps.Copy(parsed.SourceBufferAssoc, sbSec)
 	}
 
 	// core_trace_sources section
 	if ctsSec, ok := ini.Sections[CoreSourcesSectionName]; ok {
-		for k, v := range ctsSec {
-			parsed.CPUSourceAssoc[k] = v
-		}
+		maps.Copy(parsed.CPUSourceAssoc, ctsSec)
 	}
 
 	return parsed, nil

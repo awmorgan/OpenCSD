@@ -974,7 +974,7 @@ func (p *PktProc) pktReserved() {
 }
 
 func (p *PktProc) buildIPacketTable() {
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		if (i & 0x01) == 0x01 {
 			p.iTable[i].pktType = PktBranchAddress
 			p.iTable[i].pktFn = p.pktBranchAddr

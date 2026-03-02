@@ -301,10 +301,7 @@ func (e *TraceElement) SetContext(newCtx ocsd.PEContext) {
 }
 
 func (e *TraceElement) SetISA(isa ocsd.ISA) {
-	e.ISA = isa
-	if e.ISA > ocsd.ISAUnknown {
-		e.ISA = ocsd.ISAUnknown
-	}
+	e.ISA = min(isa, ocsd.ISAUnknown)
 }
 
 func (e *TraceElement) SetCycleCount(cycleCount uint32) {

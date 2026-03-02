@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -69,7 +70,6 @@ func TestPTMSnapshotsAgainstGolden(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -394,28 +394,20 @@ func extractPacketType(s string) string {
 	if s == "" {
 		return ""
 	}
-	colon := strings.Index(s, ":")
-	if colon < 0 {
+	before, _, ok := strings.Cut(s, ":")
+	if !ok {
 		return ""
 	}
-	return strings.TrimSpace(s[:colon])
+	return strings.TrimSpace(before)
 }
 
 func containsLine(lines []string, target string) bool {
-	for _, line := range lines {
-		if line == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(lines, target)
 }
 
 func firstDiff(got, want []string) (int, string, string) {
-	maxLen := len(got)
-	if len(want) > maxLen {
-		maxLen = len(want)
-	}
-	for i := 0; i < maxLen; i++ {
+	maxLen := max(len(want), len(got))
+	for i := range maxLen {
 		var gotLine, wantLine string
 		if i < len(got) {
 			gotLine = got[i]
@@ -450,14 +442,14 @@ func parseHexOrDec(s string) uint64 {
 }
 
 func extractLineID(line string) (string, bool) {
-	idx := strings.Index(line, "ID:")
-	if idx < 0 {
+	_, after, ok := strings.Cut(line, "ID:")
+	if !ok {
 		return "", false
 	}
-	rest := line[idx+3:]
-	semi := strings.Index(rest, ";")
-	if semi < 0 {
+	rest := after
+	before, _, ok := strings.Cut(rest, ";")
+	if !ok {
 		return "", false
 	}
-	return strings.ToLower(strings.TrimSpace(rest[:semi])), true
+	return strings.ToLower(strings.TrimSpace(before)), true
 }

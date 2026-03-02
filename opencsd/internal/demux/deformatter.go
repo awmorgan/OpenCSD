@@ -169,7 +169,7 @@ func (d *FrameDeformatter) outputRawMonBytes(op ocsd.DatapathOp, index ocsd.TrcI
 }
 
 func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocsd.TrcIndex) ocsd.DatapathResp {
-	for id := 0; id < 128; id++ {
+	for id := range 128 {
 		if d.idStreams[id] != nil { // if attached
 			_, resp := d.idStreams[id].TraceDataIn(op, index, nil)
 			d.collateDataPathResp(resp)

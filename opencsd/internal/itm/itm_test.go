@@ -300,7 +300,7 @@ func TestITMPacketStringVariants(t *testing.T) {
 	}
 
 	pkt.SetPacketType(PktTSLocal)
-	for id := uint8(0); id < 4; id++ {
+	for id := range uint8(4) {
 		pkt.SetSrcID(id)
 		pkt.SetValue(0x10, 2)
 		if pkt.String() == "" {

@@ -747,7 +747,7 @@ func (p *PktProc) extractCtxtID() uint32 {
 		return 0
 	}
 
-	for i := 0; i < ctxtBytes; i++ {
+	for i := range ctxtBytes {
 		bByte := p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
 		val |= uint32(bByte) << (i * 8)

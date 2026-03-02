@@ -67,7 +67,7 @@ func TestAddrReturnStack(t *testing.T) {
 
 	s.Flush()
 	// Test wrap around
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		s.Push(ocsd.VAddr(0x1000+i*4), ocsd.ISAArm)
 	}
 	if s.numEntries != 16 {

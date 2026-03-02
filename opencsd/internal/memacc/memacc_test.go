@@ -29,8 +29,8 @@ func blockVal(memSpace ocsd.MemSpaceAcc, blockNum int, index int) uint32 {
 }
 
 func populateBlock(memSpace ocsd.MemSpaceAcc, blocks *[NumBlocks][BlockNumWords]uint32) {
-	for i := 0; i < NumBlocks; i++ {
-		for j := 0; j < BlockNumWords; j++ {
+	for i := range NumBlocks {
+		for j := range BlockNumWords {
 			blocks[i][j] = blockVal(memSpace, i, j)
 		}
 	}
@@ -49,7 +49,7 @@ func init() {
 
 func asByteSlice(blocks *[NumBlocks][BlockNumWords]uint32, blockIdx int) []byte {
 	buf := make([]byte, BlockSizeBytes)
-	for i := 0; i < BlockNumWords; i++ {
+	for i := range BlockNumWords {
 		binary.LittleEndian.PutUint32(buf[i*4:], blocks[blockIdx][i])
 	}
 	return buf
@@ -116,11 +116,7 @@ func testMemAccCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID 
 		if (uint32(memSpace)&uint32(r.memSpace) != 0) && (trcID == r.trcID) {
 			if address >= r.sAddr && address < (r.sAddr+ocsd.VAddr(r.size)) {
 				offset := address - r.sAddr
-				if r.size-uint32(offset) >= reqBytes {
-					bytesRead = reqBytes
-				} else {
-					bytesRead = r.size - uint32(offset)
-				}
+				bytesRead = min(r.size-uint32(offset), reqBytes)
 				copy(byteBuffer, r.buffer[offset:offset+ocsd.VAddr(bytesRead)])
 				break
 			}
@@ -493,10 +489,7 @@ func TestEdgeCasesAndUtilities(t *testing.T) {
 func testMemAccSimpleCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, byteBuffer []byte) uint32 {
 	buf := ctx.([]byte)
 	if address == 0 {
-		read := reqBytes
-		if reqBytes > uint32(len(buf)) {
-			read = uint32(len(buf))
-		}
+		read := min(reqBytes, uint32(len(buf)))
 		copy(byteBuffer, buf[:read])
 		return read
 	}

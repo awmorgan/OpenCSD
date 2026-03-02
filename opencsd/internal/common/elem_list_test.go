@@ -26,7 +26,7 @@ func TestGenElemList(t *testing.T) {
 	list.InitCSID(10)
 
 	// Test array growth and insertion
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		elem := list.GetNextElem(ocsd.TrcIndex(i))
 		elem.SetType(ocsd.GenElemInstrRange)
 	}
@@ -80,7 +80,7 @@ func TestGenElemStack(t *testing.T) {
 	stack.InitCSID(11)
 
 	// Add elems to grow array
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		stack.AddElem(ocsd.TrcIndex(i))
 	}
 

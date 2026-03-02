@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -229,13 +230,7 @@ func run(args []string) error {
 	if opts.srcName == "" {
 		opts.srcName = sourceNames[0]
 	} else {
-		valid := false
-		for _, src := range sourceNames {
-			if src == opts.srcName {
-				valid = true
-				break
-			}
-		}
+		valid := slices.Contains(sourceNames, opts.srcName)
 		if !valid {
 			fmt.Fprintf(out, "Trace Packet Lister : Trace source name %s not found\n", opts.srcName)
 			fmt.Fprintln(out, "Valid source names are:-")
@@ -863,11 +858,4 @@ func parseMemSpace(space string) ocsd.MemSpaceAcc {
 	default:
 		return ocsd.MemSpaceAny
 	}
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

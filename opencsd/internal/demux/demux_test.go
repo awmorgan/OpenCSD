@@ -523,13 +523,10 @@ func TestGoldenFileVerification(t *testing.T) {
 	}
 	goldenLines = fixedGoldenLines
 
-	minLen := len(actualLines)
-	if len(goldenLines) < minLen {
-		minLen = len(goldenLines)
-	}
+	minLen := min(len(goldenLines), len(actualLines))
 
 	mismatches := 0
-	for i := 0; i < minLen; i++ {
+	for i := range minLen {
 		a := strings.TrimRight(actualLines[i], "\r\n\t ")
 		g := goldenLines[i]
 		if a != g {

@@ -471,7 +471,7 @@ func resolveETESourceName(requested string, trace *snapshot.ParsedTrace, devs ma
 }
 
 func extractSourceNameFromGolden(ppl string) string {
-	for _, line := range strings.Split(strings.ReplaceAll(ppl, "\r\n", "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.ReplaceAll(ppl, "\r\n", "\n"), "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "Using ") && strings.Contains(line, " as trace source") {
 			name := strings.TrimPrefix(line, "Using ")
@@ -496,11 +496,8 @@ func sourceTreeHasETEDevices(sourceTree *snapshot.TraceBufferSourceTree, devs ma
 }
 
 func firstDiff(gotLines, wantLines []string) (line int, gotLine, wantLine string) {
-	n := len(gotLines)
-	if len(wantLines) > n {
-		n = len(wantLines)
-	}
-	for i := 0; i < n; i++ {
+	n := max(len(wantLines), len(gotLines))
+	for i := range n {
 		var g, w string
 		if i < len(gotLines) {
 			g = gotLines[i]
