@@ -1,29 +1,42 @@
-Idx:0; ID:0;	I_ASYNC : description
-Idx:12; ID:0;	I_TRACE_INFO : description
-Idx:15; ID:0;	I_TRACE_ON : description
-Idx:16; ID:0;	I_CTXT : description
-Idx:22; ID:0;	I_TRACE_ON : description
-Idx:23; ID:0;	I_CTXT : description
-Idx:29; ID:0;	I_ADDR_S_IS0 : description
-Idx:32; ID:0;	I_ATOM_F3 : description
-Idx:33; ID:0;	I_ATOM_F6 : description
-Idx:34; ID:0;	I_ATOM_F2 : description
-Idx:35; ID:0;	I_ATOM_F1 : description
-Idx:36; ID:0;	I_ADDR_S_IS0 : description
-Idx:38; ID:0;	I_ATOM_F6 : description
-Idx:39; ID:0;	I_ATOM_F1 : description
-Idx:40; ID:0;	I_ATOM_F1 : description
-Idx:41; ID:0;	I_ATOM_F1 : description
-Idx:42; ID:0;	I_ADDR_S_IS0 : description
-Idx:44; ID:0;	I_ATOM_F6 : description
-Idx:45; ID:0;	I_ATOM_F6 : description
-Idx:46; ID:0;	I_ATOM_F2 : description
-Idx:47; ID:0;	I_ATOM_F1 : description
-Idx:48; ID:0;	I_ADDR_MATCH : description
-Idx:49; ID:0;	I_ATOM_F6 : description
-Idx:50; ID:0;	I_ATOM_F2 : description
-Idx:51; ID:0;	I_ATOM_F1 : description
-Idx:52; ID:0;	I_ADDR_MATCH : description
-Idx:53; ID:0;	I_ATOM_F3 : description
-Idx:54; ID:0;	I_ATOM_F2 : description
-Idx:55; ID:0;	I_IGNORE : description
+Trace Packet Lister: CS Decode library testing
+-----------------------------------------------
+
+** Library Version : 1.8.0
+
+Test Command Line:-
+C:\Users\arthu\git\OpenCSD\decoder\tests\bin\mingw64\rel\trc_pkt_lister.exe   -ss_dir  ./snapshots/init-short-addr  -pkt_mon  -no_time_print  -logfilename  ./results/init-short-addr.ppl  
+
+Trace Packet Lister : reading snapshot from path ./snapshots/init-short-addr
+Using CSTMC_TRACE_FIFO as trace source
+Trace Packet Lister : Protocol printer ETMV4I on Trace ID 0x0
+Idx:0; ID:0; [0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x80 ];	I_ASYNC : Alignment Synchronisation.
+Idx:12; ID:0; [0x01 0x01 0x00 ];	I_TRACE_INFO : Trace Info.; INFO=0x0 { CC.0 }; Decoder Sync point TINFO
+Idx:15; ID:0; [0x04 ];	I_TRACE_ON : Trace On.
+Idx:16; ID:0; [0x81 0x93 0x00 0x00 0x00 0x00 ];	I_CTXT : Context Packet.; Ctxt: AArch64,EL3, S; CID=0x00000000; 
+Idx:22; ID:0; [0x04 ];	I_TRACE_ON : Trace On.
+Idx:23; ID:0; [0x81 0x93 0x00 0x00 0x00 0x00 ];	I_CTXT : Context Packet.; Ctxt: AArch64,EL3, S; CID=0x00000000; 
+Idx:29; ID:0; [0x95 0xaf 0x17 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000000002EBC ~[0x2EBC]
+Idx:32; ID:0; [0xfd ];	I_ATOM_F3 : Atom format 3.; ENE
+Idx:33; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:34; ID:0; [0xda ];	I_ATOM_F2 : Atom format 2.; NE
+Idx:35; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:36; ID:0; [0x95 0x3d ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000000002EF4 ~[0xF4]
+Idx:38; ID:0; [0xe4 ];	I_ATOM_F6 : Atom format 6.; EEEEEEEN
+Idx:39; ID:0; [0xf6 ];	I_ATOM_F1 : Atom format 1.; N
+Idx:40; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:41; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:42; ID:0; [0x95 0x46 ];	I_ADDR_S_IS0 : Address, Short, IS0.; Addr=0x0000000000002F18 ~[0x118]
+Idx:44; ID:0; [0xe0 ];	I_ATOM_F6 : Atom format 6.; EEEN
+Idx:45; ID:0; [0xe1 ];	I_ATOM_F6 : Atom format 6.; EEEEN
+Idx:46; ID:0; [0xda ];	I_ATOM_F2 : Atom format 2.; NE
+Idx:47; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:48; ID:0; [0x91 ];	I_ADDR_MATCH : Exact Address Match., [1]; Addr=0x0000000000002EF4; 
+Idx:49; ID:0; [0xe4 ];	I_ATOM_F6 : Atom format 6.; EEEEEEEN
+Idx:50; ID:0; [0xda ];	I_ATOM_F2 : Atom format 2.; NE
+Idx:51; ID:0; [0xf7 ];	I_ATOM_F1 : Atom format 1.; E
+Idx:52; ID:0; [0x91 ];	I_ADDR_MATCH : Exact Address Match., [1]; Addr=0x0000000000002F18; 
+Idx:53; ID:0; [0xfb ];	I_ATOM_F3 : Atom format 3.; EEN
+Idx:54; ID:0; [0xdb ];	I_ATOM_F2 : Atom format 2.; EE
+Idx:55; ID:0; [0x70 ];	I_IGNORE : Ignore.
+ID:0	END OF TRACE DATA
+Trace Packet Lister : Trace buffer done, processed 56 bytes.

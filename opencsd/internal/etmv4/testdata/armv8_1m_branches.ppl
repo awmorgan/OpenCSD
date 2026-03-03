@@ -1,14 +1,71 @@
-Idx:0; ID:0;	I_ASYNC : description
-Idx:12; ID:0;	I_TRACE_INFO : description
-Idx:14; ID:0;	I_ADDR_CTXT_L_32IS1 : description
-Idx:20; ID:0;	I_ADDR_S_IS1 : description
-Idx:23; ID:0;	I_ATOM_F3 : description
-Idx:24; ID:0;	I_ATOM_F3 : description
-Idx:25; ID:0;	I_ATOM_F3 : description
-Idx:26; ID:0;	I_ATOM_F3 : description
-Idx:27; ID:0;	I_ATOM_F3 : description
-Idx:28; ID:0;	I_ATOM_F3 : description
-Idx:29; ID:0;	I_ATOM_F5 : description
-Idx:30; ID:0;	I_ATOM_F3 : description
-Idx:31; ID:0;	I_ATOM_F3 : description
-Idx:32; ID:0;	I_ATOM_F6 : description
+Trace Packet Lister: CS Decode library testing
+-----------------------------------------------
+
+** Library Version : 1.8.0
+
+Test Command Line:-
+C:\Users\arthu\git\OpenCSD\decoder\tests\bin\mingw64\rel\trc_pkt_lister.exe   -ss_dir  ./snapshots/armv8_1m_branches  -decode  -no_time_print  -logfilename  ./results/armv8_1m_branches.ppl  
+
+Trace Packet Lister : reading snapshot from path ./snapshots/armv8_1m_branches
+Using etr_0 as trace source
+Trace Packet Lister : Protocol printer ETMV4I on Trace ID 0x0
+Trace Packet Lister : Set trace element decode printer
+Gen_Info : Mapped Memory Accessors
+Gen_Info : FileAcc; Range::0x1e008:1e1bb; Mem Space::Any
+Filename=./snapshots/armv8_1m_branches/range1.bin
+Gen_Info : FileAcc; Range::0x4f9a02:4fa4d9; Mem Space::Any
+Filename=./snapshots/armv8_1m_branches/range2.bin
+Gen_Info : ========================
+Idx:0; ID:0; [0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x80 ];	I_ASYNC : Alignment Synchronisation.
+Idx:0; ID:0; OCSD_GEN_TRC_ELEM_NO_SYNC( [init-decoder])
+Idx:12; ID:0; [0x01 0x00 ];	I_TRACE_INFO : Trace Info.; INFO=0x0 { CC.0 }; Decoder Sync point TINFO
+Idx:14; ID:0; [0x83 0x01 0x9a 0x4f 0x00 0x00 ];	I_ADDR_CTXT_L_32IS1 : Address & Context, Long, 32 bit, IS1.; Addr=0x00000000004F9A02; Ctxt: AArch32, EL0, S; 
+Idx:20; ID:0; [0x96 0x81 0x9a ];	I_ADDR_S_IS1 : Address, Short, IS1.; Addr=0x00000000004F9A02 ~[0x9A02]
+Idx:23; ID:0; [0xfc ];	I_ATOM_F3 : Atom format 3.; NNE
+Idx:14; ID:0; OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=T32) EL0S; 32-bit; )
+Idx:23; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x4f9a02:[0x4f9a06] num_i(2) last_sz(2) (ISA=T32) N BR   <cond>)
+Idx:23; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x4f9a06:[0x4f9a0e] num_i(3) last_sz(2) (ISA=T32) N BR   <cond>)
+Idx:23; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x4f9a0e:[0x4f9a1c] num_i(5) last_sz(4) (ISA=T32) E BR  b+link )
+Idx:24; ID:0; [0xfe ];	I_ATOM_F3 : Atom format 3.; NEE
+Idx:24; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x4f9e00:[0x4f9e1c] num_i(10) last_sz(2) (ISA=T32) N BR   <cond>)
+Idx:24; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x4f9e1c:[0x4f9e3a] num_i(8) last_sz(2) (ISA=T32) E BR   <cond>)
+Idx:24; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x4f9e96:[0x4f9e9c] num_i(2) last_sz(4) (ISA=T32) E BR  b+link )
+Idx:25; ID:0; [0xfa ];	I_ATOM_F3 : Atom format 3.; NEN
+Idx:25; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x4fa488:[0x4fa4a4] num_i(9) last_sz(2) (ISA=T32) N BR   <cond>)
+Idx:25; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x4fa4a4:[0x4fa4da] num_i(18) last_sz(4) (ISA=T32) E BR  b+link )
+Idx:25; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e008:[0x1e01a] num_i(7) last_sz(2) (ISA=T32) N BR   <cond>)
+Idx:26; ID:0; [0xf8 ];	I_ATOM_F3 : Atom format 3.; NNN
+Idx:26; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e01a:[0x1e026] num_i(3) last_sz(4) (ISA=T32) N BR   <cond>)
+Idx:26; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e026:[0x1e030] num_i(3) last_sz(4) (ISA=T32) N BR   <cond>)
+Idx:26; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e030:[0x1e034] num_i(1) last_sz(4) (ISA=T32) N BR   <cond>)
+Idx:27; ID:0; [0xfd ];	I_ATOM_F3 : Atom format 3.; ENE
+Idx:27; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e034:[0x1e056] num_i(13) last_sz(2) (ISA=T32) E BR  )
+Idx:27; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e072:[0x1e094] num_i(13) last_sz(2) (ISA=T32) N BR   <cond>)
+Idx:27; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e094:[0x1e0a6] num_i(7) last_sz(2) (ISA=T32) E BR  )
+Idx:28; ID:0; [0xfd ];	I_ATOM_F3 : Atom format 3.; ENE
+Idx:28; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e0a6:[0x1e0c8] num_i(9) last_sz(4) (ISA=T32) E BR  )
+Idx:28; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e0cc:[0x1e0ec] num_i(11) last_sz(2) (ISA=T32) N BR   <cond>)
+Idx:28; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e0ec:[0x1e0ee] num_i(1) last_sz(2) (ISA=T32) E BR  )
+Idx:29; ID:0; [0xd6 ];	I_ATOM_F5 : Atom format 5.; NENEN
+Idx:29; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e0a6:[0x1e0c8] num_i(9) last_sz(4) (ISA=T32) N BR  )
+Idx:29; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e0c8:[0x1e0ca] num_i(1) last_sz(2) (ISA=T32) E BR  )
+Idx:29; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e0ee:[0x1e108] num_i(8) last_sz(4) (ISA=T32) N BR  )
+Idx:29; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e108:[0x1e10a] num_i(1) last_sz(2) (ISA=T32) E BR  )
+Idx:29; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e0cc:[0x1e0ec] num_i(11) last_sz(2) (ISA=T32) N BR   <cond>)
+Idx:30; ID:0; [0xfd ];	I_ATOM_F3 : Atom format 3.; ENE
+Idx:30; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e0ec:[0x1e0ee] num_i(1) last_sz(2) (ISA=T32) E BR  )
+Idx:30; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e0a6:[0x1e0c8] num_i(9) last_sz(4) (ISA=T32) N BR  )
+Idx:30; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e0c8:[0x1e0ca] num_i(1) last_sz(2) (ISA=T32) E BR  )
+Idx:31; ID:0; [0xfd ];	I_ATOM_F3 : Atom format 3.; ENE
+Idx:31; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e0ee:[0x1e108] num_i(8) last_sz(4) (ISA=T32) E BR  )
+Idx:31; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e0f4:[0x1e108] num_i(5) last_sz(4) (ISA=T32) N BR  )
+Idx:31; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e108:[0x1e10a] num_i(1) last_sz(2) (ISA=T32) E BR  )
+Idx:32; ID:0; [0xc1 ];	I_ATOM_F6 : Atom format 6.; EEEEE
+Idx:32; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e0cc:[0x1e0ec] num_i(11) last_sz(2) (ISA=T32) E BR   <cond>)
+Idx:32; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e10c:[0x1e112] num_i(2) last_sz(2) (ISA=T32) E BR   <cond>)
+Idx:32; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e058:[0x1e072] num_i(11) last_sz(2) (ISA=T32) E BR   <cond>)
+Idx:32; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e14a:[0x1e152] num_i(3) last_sz(2) (ISA=T32) E BR   <cond>)
+Idx:32; ID:0; OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x1e188:[0x1e18e] num_i(2) last_sz(4) (ISA=T32) E iBR V7:impl ret)
+Idx:32; ID:0; OCSD_GEN_TRC_ELEM_EO_TRACE( [end-of-trace])
+ID:0	END OF TRACE DATA
+Trace Packet Lister : Trace buffer done, processed 33 bytes.
