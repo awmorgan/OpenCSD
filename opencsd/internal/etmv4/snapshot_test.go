@@ -34,7 +34,7 @@ func (p *etmv4RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP oc
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Idx:%d; ID:%x;\t", indexSOP, p.traceID))
+	fmt.Fprintf(&sb, "Idx:%d; ID:%x;\t", indexSOP, p.traceID)
 	sb.WriteString(pkt.Type.String())
 	sb.WriteString(" : description")
 	sb.WriteString("\n")
