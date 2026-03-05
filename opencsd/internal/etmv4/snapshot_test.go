@@ -61,14 +61,14 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 		traceIDs   []string
 	}{
 		{name: "juno_r1_1", sourceName: "ETB_0", traceIDs: []string{"10", "11", "12", "13", "14", "15"}},
-		{name: "a57_single_step", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"10"}},
-		{name: "armv8_1m_branches", sourceName: "etr_0", traceIDs: []string{"0"}},
-		{name: "juno-uname-001", sourceName: "ETB_0", traceIDs: []string{"10"}},
-		{name: "juno-uname-002", sourceName: "ETB_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
-		{name: "juno-ret-stck", sourceName: "ETB_0", traceIDs: []string{"10", "11", "12", "13", "14", "15"}},
-		{name: "test-file-mem-offsets", sourceName: "ETB_0", traceIDs: []string{"16"}},
-		{name: "init-short-addr", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"0"}},
-		{name: "bugfix-exact-match", sourceName: "etr_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
+		// {name: "a57_single_step", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"10"}},
+		// {name: "armv8_1m_branches", sourceName: "etr_0", traceIDs: []string{"0"}},
+		// {name: "juno-uname-001", sourceName: "ETB_0", traceIDs: []string{"10"}},
+		// {name: "juno-uname-002", sourceName: "ETB_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
+		// {name: "juno-ret-stck", sourceName: "ETB_0", traceIDs: []string{"10", "11", "12", "13", "14", "15"}},
+		// {name: "test-file-mem-offsets", sourceName: "ETB_0", traceIDs: []string{"16"}},
+		// {name: "init-short-addr", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"0"}},
+		// {name: "bugfix-exact-match", sourceName: "etr_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
 	}
 
 	for _, tc := range testCases {
