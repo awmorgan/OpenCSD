@@ -147,6 +147,8 @@ type PktDecode struct {
 
 	// Return stack, etc...
 	returnStack common.AddrReturnStack
+
+	unsyncEOTInfo ocsd.UnsyncInfo
 }
 
 // NewPktDecode creates a new ETMv4/ETE trace decoder
@@ -194,6 +196,7 @@ func (d *PktDecode) initDecoder() {
 	d.poppedElems = nil
 	d.outElem = *common.NewGenElemStack()
 	d.returnStack = *common.NewAddrReturnStack()
+	d.unsyncEOTInfo = ocsd.UnsyncInitDecoder
 }
 
 func (d *PktDecode) onProtocolConfig() ocsd.Err {
@@ -205,18 +208,86 @@ func (d *PktDecode) onProtocolConfig() ocsd.Err {
 	d.maxSpecDepth = int(d.config.MaxSpecDepth())
 	// d.InitDecoderCore()
 	d.initDecoder()
+	d.outElem.InitCSID(d.config.TraceID())
+	d.outElem.InitSendIf(d.GetTraceElemOutAttachPt())
 	return ocsd.OK
+}
+
+func (d *PktDecode) commitElemOnEOT() ocsd.Err {
+	err := ocsd.OK
+
+	if d.outElem.NumElemToSend() == 0 {
+		d.outElem.ResetElemStack()
+	}
+
+	for len(d.p0Stack) > 0 && err == ocsd.OK {
+		pElem := d.p0Stack[len(d.p0Stack)-1] // back() is the newest element in C++, but stack[] in Go pushes at the end?
+		// Wait, let's look at how stack is pushed.
+		// append() pushes at the end, so [len-1] is the back.
+		switch pElem.p0Type {
+		case p0TrcOn, p0Atom, p0Excep, p0ExcepRet, p0Q, p0UnseenUncommitted:
+			d.poppedElems = append(d.poppedElems, d.p0Stack...)
+			d.p0Stack = nil
+
+		case p0Addr, p0Ctxt:
+			// skip
+
+		case p0TransStart:
+			if d.config.CommTransP0() {
+				d.poppedElems = append(d.poppedElems, d.p0Stack...)
+				d.p0Stack = nil
+			}
+
+		case p0TransFail, p0TransCommit:
+			if d.maxSpecDepth == 0 || d.currSpecDepth == 0 {
+				err = d.processTransElem(pElem)
+			}
+
+		case p0TransTraceInit, p0TInfo:
+			// skip
+
+		case p0Event, p0TS, p0CC, p0TSCC:
+			err = d.processTSCCEventElem(pElem)
+
+		case p0Marker:
+			err = d.processMarkerElem(pElem)
+
+		case p0ITE:
+			err = d.processITEElem(pElem)
+		}
+		if len(d.p0Stack) > 0 {
+			d.poppedElems = append(d.poppedElems, d.p0Stack[len(d.p0Stack)-1])
+			d.p0Stack = d.p0Stack[:len(d.p0Stack)-1]
+		}
+	}
+
+	if err == ocsd.OK {
+		err = d.outElem.AddElemType(d.IndexCurrPkt, ocsd.GenElemEOTrace)
+		reason := ocsd.UnsyncEOT
+		if d.prevOverflow {
+			reason = ocsd.UnsyncOverflow
+		}
+		d.outElem.GetCurrElem().SetUnSyncEOTReason(reason)
+	}
+	return err
 }
 
 func (d *PktDecode) onEOT() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if d.currState == resolveElem {
-		resp = d.resolveElements()
+	var err ocsd.Err
+
+	err = d.commitElemOnEOT()
+	if err != ocsd.OK {
+		resp = ocsd.RespFatalInvalidData
+		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err, "Error flushing element stack at end of trace data."))
+	} else {
+		resp = d.outElem.SendElements()
 	}
 	return resp
 }
 
 func (d *PktDecode) onReset() ocsd.DatapathResp {
+	d.unsyncEOTInfo = ocsd.UnsyncResetDecoder
 	d.initDecoder()
 	return ocsd.RespCont
 }
@@ -230,63 +301,63 @@ func (d *PktDecode) processPacket() ocsd.DatapathResp {
 	var err ocsd.Err
 
 	pkt := d.CurrPacketIn
+	pktDone := false
 
-	switch d.currState {
-	case noSync:
-		if pkt.Type == PktAsync {
-			d.currState = waitISync
+	for !pktDone {
+		switch d.currState {
+		case noSync:
 			err = d.outElem.ResetElemStack()
 			if err == ocsd.OK {
-				d.outElem.AddElemType(d.IndexCurrPkt, ocsd.GenElemNoSync)
-				resp = d.outElem.SendElements()
-			}
-		}
-
-	case waitISync:
-		if pkt.Type == PktTraceInfo {
-			d.doTraceInfoPacket()
-		} else if pkt.Type == PktAddrCtxtL_32IS0 || pkt.Type == PktAddrCtxtL_32IS1 ||
-			pkt.Type == PktAddrCtxtL_64IS0 || pkt.Type == PktAddrCtxtL_64IS1 {
-
-			d.currState = decodePkts
-			err = d.outElem.ResetElemStack()
-			if err == ocsd.OK {
-				d.outElem.AddElemType(d.IndexCurrPkt, ocsd.GenElemTraceOn)
-				d.outElem.GetCurrElem().Payload.TraceOnReason = ocsd.TraceOnNormal
-				if d.prevOverflow {
-					d.outElem.GetCurrElem().Payload.TraceOnReason = ocsd.TraceOnOverflow
-					d.prevOverflow = false
+				err = d.outElem.AddElemType(d.IndexCurrPkt, ocsd.GenElemNoSync)
+				if err == ocsd.OK {
+					d.outElem.GetCurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
+					resp = d.outElem.SendElements()
+					d.currState = waitSync
 				}
-				resp = d.outElem.SendElements()
 			}
-			if resp == ocsd.RespCont {
+			if err != ocsd.OK {
+				resp = ocsd.RespFatalSysErr
+			}
+
+		case waitSync:
+			if pkt.Type == PktAsync {
+				d.currState = waitISync
+			}
+			pktDone = true
+
+		case waitISync:
+			d.needCtxt = true
+			d.needAddr = true
+			if pkt.Type == PktTraceInfo {
+				d.doTraceInfoPacket()
+				d.currState = decodePkts
+				d.returnStack.Flush()
+			} else if d.config.MajVersion() >= 0x5 && pkt.Type == PktEvent {
 				err = d.decodePacket()
+				if err != ocsd.OK {
+					resp = ocsd.RespFatalInvalidData
+				}
 			}
-		} else if pkt.Type == PktAsync {
-			// keep waiting
-		} else if pkt.Type == PktOverflow {
-			d.prevOverflow = true
-		} else if pkt.Type == PktTraceOn {
-			d.prevOverflow = false
-		}
+			pktDone = true
 
-	case decodePkts:
-		err = d.decodePacket()
+		case decodePkts:
+			err = d.decodePacket()
+			if err != ocsd.OK {
+				// We don't have operational flags like componentOpMode in Go yet, so just fail on bad data
+				resp = ocsd.RespFatalInvalidData
+				pktDone = true
+			} else if d.currState != resolveElem {
+				pktDone = true
+			}
 
-	case resolveElem:
-		resp = d.resolveElements()
-		if resp == ocsd.RespCont && d.currState == resolveElem {
-			d.currState = decodePkts
-		}
-	}
-
-	if err != ocsd.OK {
-		if d.currState == noSync {
-			resp = ocsd.RespErrCont
-		} else {
-			resp = ocsd.RespFatalInvalidData
+		case resolveElem:
+			resp = d.resolveElements()
+			if d.currState == decodePkts || resp != ocsd.RespCont {
+				pktDone = true
+			}
 		}
 	}
+
 	return resp
 }
 
@@ -403,6 +474,14 @@ func (d *PktDecode) decodePacket() ocsd.Err {
 	if isAddr && d.elemPendingAddr {
 		d.currSpecDepth++
 		d.elemPendingAddr = false
+	}
+
+	if d.currSpecDepth > d.maxSpecDepth {
+		d.elemRes.P0Commit = d.currSpecDepth - d.maxSpecDepth
+	}
+
+	if err == ocsd.OK && d.isElemForRes() {
+		d.currState = resolveElem
 	}
 
 	return err
@@ -534,7 +613,6 @@ func (d *PktDecode) commitElements() ocsd.Err {
 				d.returnStack.SetTInfoWaitAddr() // tinfo_wait_addr
 				d.returnStack.Flush()
 			}
-
 			if bPopElem {
 				e := d.p0Stack[0]
 				d.poppedElems = append(d.poppedElems, e)
@@ -542,6 +620,8 @@ func (d *PktDecode) commitElements() ocsd.Err {
 			}
 		} else {
 			err = d.handlePacketSeqErr(ocsd.ErrCommitPktOverrun, errIdx, "Not enough elements to commit")
+			d.elemRes.P0Commit = 0
+			break
 		}
 	}
 
@@ -821,7 +901,7 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, pElem *p0Elem) ocsd.Err {
 					d.returnStack.Push(nextAddr, d.instrInfo.Isa)
 				}
 				d.returnStack.SetPopPending()
-				if d.config.ArchVer >= ocsd.ArchV8 && d.instrInfo.SubType == ocsd.SInstrV8Eret {
+				if d.config.MajVersion() >= 0x5 && d.instrInfo.SubType == ocsd.SInstrV8Eret {
 					ETE_ERET = true // simulate ETE ERET
 				}
 			}

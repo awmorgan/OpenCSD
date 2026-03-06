@@ -216,38 +216,77 @@ func (p *Processor) onEOT() ocsd.DatapathResp {
 	if !p.isInit {
 		return ocsd.RespFatalNotInit
 	}
+
+	resp := ocsd.RespCont
 	if len(p.currPacketData) != 0 {
 		p.currPacket.ErrType = PktIncompleteEOT
-		resp := p.outputPacket()
+		resp = p.outputPacket()
 		p.initPacketState()
-		return resp
 	}
-	return ocsd.RespCont
+
+	if p.pktOut != nil && !ocsd.DataRespIsFatal(resp) {
+		resp = p.pktOut.PacketDataIn(ocsd.OpEOT, 0, nil)
+	}
+
+	return resp
 }
 
 func (p *Processor) onReset() ocsd.DatapathResp {
 	if !p.isInit {
 		return ocsd.RespFatalNotInit
 	}
-	p.initProcessorState()
-	return ocsd.RespCont
+
+	resp := ocsd.RespCont
+	if p.pktOut != nil {
+		resp = p.pktOut.PacketDataIn(ocsd.OpReset, 0, nil)
+	}
+	if !ocsd.DataRespIsFatal(resp) {
+		p.initProcessorState()
+	}
+	return resp
 }
 
 func (p *Processor) onFlush() ocsd.DatapathResp {
 	if !p.isInit {
 		return ocsd.RespFatalNotInit
 	}
-	return ocsd.RespCont
+
+	resp := ocsd.RespCont
+	if p.pktOut != nil {
+		resp = p.pktOut.PacketDataIn(ocsd.OpFlush, 0, nil)
+	}
+	return resp
+}
+
+func (p *Processor) initStartState() {
+	p.currPacket = TracePacket{}
+	p.currPacket.ProtocolVersion = p.config.FullVersion()
 }
 
 func (p *Processor) initPacketState() {
 	p.currPacketData = p.currPacketData[:0]
-	p.currPacket = TracePacket{}
-	p.currPacket.ProtocolVersion = p.config.FullVersion()
+
+	p.currPacket.Type = 0
+	p.currPacket.ErrType = PktNoErrType
+	p.currPacket.ErrHdrVal = 0
+
+	p.currPacket.Valid.CycleCount = false
+	p.currPacket.Valid.CommitElem = false
+	p.currPacket.Valid.CancelElem = false
+
+	p.currPacket.Atom.Num = 0
+	p.currPacket.Context.Updated = false
+	p.currPacket.Context.UpdatedV = false
+	p.currPacket.Context.UpdatedC = false
+
+	p.currPacket.TraceInfo.InitialTInfo = false
+	p.currPacket.TraceInfo.SpecFieldPresent = false
+
 	p.updateOnUnsyncPktIdx = 0
 }
 
 func (p *Processor) initProcessorState() {
+	p.initStartState()
 	p.initPacketState()
 	p.pktFn = p.iNotSync
 	p.packetIndex = 0
@@ -269,54 +308,28 @@ func (p *Processor) outputPacket() ocsd.DatapathResp {
 }
 
 func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
-	if p.config.MajVersion() < 0x5 {
-		n := p.dumpUnsyncedBytes
-		if !p.sentNotsyncPacket {
-			resp := p.outputPacket()
-			p.sentNotsyncPacket = true
-			if n <= len(p.currPacketData) {
-				p.currPacketData = p.currPacketData[n:]
-			} else {
-				p.currPacketData = p.currPacketData[:0]
-			}
-			return resp
-		}
-		if n <= len(p.currPacketData) {
-			p.currPacketData = p.currPacketData[n:]
-		} else {
-			p.currPacketData = p.currPacketData[:0]
-		}
-		return ocsd.RespCont
+	n := p.dumpUnsyncedBytes
+
+	if p.PktRawMonI != nil && p.PktRawMonI.HasAttached() && n > 0 && len(p.currPacketData) > 0 {
+		monBytes := min(n, len(p.currPacketData))
+		p.PktRawMonI.First().RawPacketDataMon(ocsd.OpData, p.packetIndex, &p.currPacket, p.currPacketData[:monBytes])
 	}
 
-	n := p.dumpUnsyncedBytes
-	if p.PktRawMonI != nil && p.PktRawMonI.HasAttached() && n > 0 && len(p.currPacketData) > 0 {
-		if n > len(p.currPacketData) {
-			n = len(p.currPacketData)
-		}
-		p.PktRawMonI.First().RawPacketDataMon(ocsd.OpData, p.packetIndex, &p.currPacket, p.currPacketData[:n])
-	}
-	n = p.dumpUnsyncedBytes
+	resp := ocsd.RespCont
 	if !p.sentNotsyncPacket {
-		resp := ocsd.RespCont
 		if p.pktOut != nil {
 			pkt := p.currPacket
 			resp = p.pktOut.PacketDataIn(ocsd.OpData, p.packetIndex, &pkt)
 		}
 		p.sentNotsyncPacket = true
-		if n <= len(p.currPacketData) {
-			p.currPacketData = p.currPacketData[n:]
-		} else {
-			p.currPacketData = p.currPacketData[:0]
-		}
-		return resp
 	}
+
 	if n <= len(p.currPacketData) {
 		p.currPacketData = p.currPacketData[n:]
 	} else {
 		p.currPacketData = p.currPacketData[:0]
 	}
-	return ocsd.RespCont
+	return resp
 }
 
 // ============================
@@ -344,6 +357,8 @@ func (p *Processor) iPktNoPayload(lastByte uint8) {
 	switch p.currPacket.Type {
 	case PktAddrMatch, ETE_PktSrcAddrMatch:
 		p.currPacket.AddrExactMatchIdx = lastByte & 0x3
+		p.currPacket.PopVAddrIdx(p.currPacket.AddrExactMatchIdx)
+		p.currPacket.PushVAddr()
 	case PktEvent:
 		p.currPacket.EventVal = lastByte & 0xF
 	case PktNumDsMkr, PktUnnumDsMkr:
@@ -461,7 +476,7 @@ func (p *Processor) iPktTraceInfo(lastByte uint8) {
 		idx := int(p.tinfoSections.CtrlBytes) + 1
 		presSect := p.currPacketData[1] & uint8(TInfoAllSect)
 
-		p.currPacket.TraceInfo = TraceInfo{} // clear
+		p.currPacket.ClearTraceInfo()
 
 		if presSect&uint8(TInfoInfoSect) != 0 && idx < len(p.currPacketData) {
 			var fieldVal uint32
@@ -840,9 +855,10 @@ func (p *Processor) iPktAddrCtxt(lastByte uint8) {
 				var val32 uint32
 				n := p.extract32BitLongAddr(p.currPacketData, stIdx, p.addrIS, &val32)
 				stIdx += n
-				p.currPacket.VAddr = ocsd.VAddr(val32)
+				p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, val32)
 				p.currPacket.VAddrISA = p.addrIS
 			}
+			p.currPacket.PushVAddr()
 			p.extractAndSetContextInfo(p.currPacketData, stIdx)
 			p.processState = SendPkt
 		}
@@ -866,6 +882,7 @@ func (p *Processor) iPktShortAddr(lastByte uint8) {
 		p.extractShortAddrFromBuf(p.currPacketData, 1, p.addrIS, &addrVal, &bits)
 		p.currPacket.VAddr = p.updateShortAddress(p.currPacket.VAddr, addrVal, p.addrIS, bits)
 		p.currPacket.VAddrISA = p.addrIS
+		p.currPacket.PushVAddr()
 		p.processState = SendPkt
 	}
 }
@@ -898,11 +915,21 @@ func (p *Processor) iPktLongAddr(lastByte uint8) {
 		} else {
 			var val32 uint32
 			p.extract32BitLongAddr(p.currPacketData, stIdx, p.addrIS, &val32)
-			p.currPacket.VAddr = ocsd.VAddr(val32)
+			p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, val32)
 		}
 		p.currPacket.VAddrISA = p.addrIS
+		p.currPacket.PushVAddr()
 		p.processState = SendPkt
 	}
+}
+
+func (p *Processor) update32BitAddress(currAddr ocsd.VAddr, newVal32 uint32) ocsd.VAddr {
+	if p.currPacket.Valid.Context && p.currPacket.Context.SF {
+		// Context is 64-bit, keep upper 32 bits, replace lower 32 bits
+		mask := ocsd.VAddr(0xFFFFFFFF)
+		return (currAddr & ^mask) | (ocsd.VAddr(newVal32) & mask)
+	}
+	return ocsd.VAddr(newVal32)
 }
 
 func (p *Processor) iPktQ(lastByte uint8) {
@@ -1033,7 +1060,7 @@ func (p *Processor) iAtom(lastByte uint8) {
 		pattCount := uint32(lastByte&0x1F) + 3
 		pattern := (uint32(1) << pattCount) - 1
 		if (lastByte & 0x20) == 0x00 {
-			pattern = 0
+			pattern |= (uint32(1) << pattCount)
 		}
 		p.currPacket.Atom = ocsd.PktAtom{EnBits: pattern, Num: uint8(pattCount + 1)}
 	}

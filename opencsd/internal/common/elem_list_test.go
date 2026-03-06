@@ -84,8 +84,8 @@ func TestGenElemStack(t *testing.T) {
 		stack.AddElem(ocsd.TrcIndex(i))
 	}
 
-	if stack.NumElemToSend() != 7 { // 1 initial + 6 added
-		t.Errorf("Expected 7 elements, got %d", stack.NumElemToSend())
+	if stack.NumElemToSend() != 6 { // 6 added
+		t.Errorf("Expected 6 elements, got %d", stack.NumElemToSend())
 	}
 
 	stack.SetCurrElemIdx(10)
@@ -94,16 +94,16 @@ func TestGenElemStack(t *testing.T) {
 
 	stack.AddElemType(11, ocsd.GenElemTimestamp)
 
-	if stack.NumElemToSend() != 8 {
-		t.Errorf("Expected 8 elements after AddElemType")
+	if stack.NumElemToSend() != 7 {
+		t.Errorf("Expected 7 elements after AddElemType")
 	}
 
 	stack.SendElements()
-	if dummy.sentCount != 8 {
-		t.Errorf("Expected 8 sent elements, got %d", dummy.sentCount)
+	if dummy.sentCount != 7 {
+		t.Errorf("Expected 7 sent elements, got %d", dummy.sentCount)
 	}
 
-	if stack.NumElemToSend() != 1 {
+	if stack.NumElemToSend() != 0 {
 		t.Errorf("Expected reset after send, got %d", stack.NumElemToSend())
 	}
 }

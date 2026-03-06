@@ -145,8 +145,10 @@ type GenElemStack struct {
 // NewGenElemStack creates a new trace element stack.
 func NewGenElemStack() *GenElemStack {
 	s := &GenElemStack{
-		elemArray:  make([]ElemPtr, 4),
-		elemToSend: 1,
+		elemArray:   make([]ElemPtr, 4),
+		elemToSend:  0,
+		currElemIdx: 0,
+		sendElemIdx: 0,
 	}
 	for i := range s.elemArray {
 		s.elemArray[i].PElem = ocsd.NewTraceElement()
@@ -168,10 +170,17 @@ func (s *GenElemStack) GetCurrElem() *ocsd.TraceElement {
 }
 
 func (s *GenElemStack) ResetElemStack() ocsd.Err {
-	s.elemToSend = 1
+	s.resetIndexes()
+	return ocsd.OK
+}
+
+func (s *GenElemStack) resetIndexes() {
+	if s.currElemIdx > 0 {
+		s.copyPersistentData(s.currElemIdx, 0)
+	}
 	s.currElemIdx = 0
 	s.sendElemIdx = 0
-	return ocsd.OK
+	s.elemToSend = 0
 }
 
 func (s *GenElemStack) copyPersistentData(src, dst int) {
@@ -179,7 +188,7 @@ func (s *GenElemStack) copyPersistentData(src, dst int) {
 }
 
 func (s *GenElemStack) growArray() ocsd.Err {
-	newSize := len(s.elemArray) * 2
+	newSize := len(s.elemArray) + 4
 	newArr := make([]ElemPtr, newSize)
 	copy(newArr, s.elemArray)
 	for i := len(s.elemArray); i < newSize; i++ {
@@ -190,15 +199,17 @@ func (s *GenElemStack) growArray() ocsd.Err {
 }
 
 func (s *GenElemStack) AddElem(trcPktIdx ocsd.TrcIndex) ocsd.Err {
-	if s.currElemIdx+1 >= len(s.elemArray) {
+	if s.currElemIdx+1 == len(s.elemArray) {
 		if err := s.growArray(); err != ocsd.OK {
 			return err
 		}
 	}
-	s.copyPersistentData(s.currElemIdx, s.currElemIdx+1)
-	s.currElemIdx++
-	s.elemToSend++
+	if s.elemToSend > 0 {
+		s.copyPersistentData(s.currElemIdx, s.currElemIdx+1)
+		s.currElemIdx++
+	}
 	s.elemArray[s.currElemIdx].TrcPktIdx = trcPktIdx
+	s.elemToSend++
 	return ocsd.OK
 }
 
@@ -230,7 +241,7 @@ func (s *GenElemStack) SendElements() ocsd.DatapathResp {
 		s.sendElemIdx++
 	}
 	if s.elemToSend == 0 {
-		s.ResetElemStack()
+		s.resetIndexes()
 	}
 	return resp
 }

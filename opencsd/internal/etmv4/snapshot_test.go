@@ -34,10 +34,13 @@ func (p *etmv4RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP oc
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "Idx:%d; ID:%x;\t", indexSOP, p.traceID)
+	fmt.Fprintf(&sb, "Idx:%d; ID:%x; [", indexSOP, p.traceID)
+	for _, b := range rawData {
+		fmt.Fprintf(&sb, "0x%02x ", b)
+	}
+	sb.WriteString("];\t")
 	sb.WriteString(pkt.Type.String())
-	sb.WriteString(" : description")
-	sb.WriteString("\n")
+	sb.WriteString(" : description\n")
 	_, _ = io.WriteString(p.writer, sb.String())
 }
 
@@ -109,11 +112,40 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 
 			got := sanitizePPL(string(goOut), tc.traceIDs)
 			want := sanitizePPL(string(goldenBytes), tc.traceIDs)
+			os.WriteFile("got.txt", []byte(got), 0644)
 
 			if got != want {
 				gotLines := strings.Split(got, "\n")
 				wantLines := strings.Split(want, "\n")
 				line, gotLine, wantLine := firstDiff(gotLines, wantLines)
+
+				// Write context around diff to help debugging
+				const ctx = 5
+				startCtx := max(line-1-ctx, 0)
+				endCtx := line - 1 + ctx
+				t.Logf("=== Context around first diff (line %d) ===", line)
+				for i := startCtx; i < endCtx; i++ {
+					marker := " "
+					if i == line-1 {
+						marker = ">"
+					}
+					wl := ""
+					if i < len(wantLines) {
+						wl = wantLines[i]
+					}
+					gl := ""
+					if i < len(gotLines) {
+						gl = gotLines[i]
+					}
+					if wl == gl {
+						t.Logf("%s %3d MATCH: %s", marker, i+1, wl)
+					} else {
+						t.Logf("%s %3d WANT: %s", marker, i+1, wl)
+						t.Logf("%s %3d  GOT: %s", marker, i+1, gl)
+					}
+				}
+				t.Logf("=== want total: %d lines, got total: %d lines ===", len(wantLines), len(gotLines))
+
 				t.Fatalf("snapshot mismatch at line %d\nwant: %s\n got: %s", line, wantLine, gotLine)
 			}
 		})

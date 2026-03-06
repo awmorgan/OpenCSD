@@ -218,9 +218,11 @@ type TracePacket struct {
 	ErrHdrVal uint8
 
 	// intra-packet data - valid across packets.
-	VAddr    ocsd.VAddr
-	VAddrISA uint8
-	Context  Context
+	VAddr         ocsd.VAddr
+	VAddrISA      uint8
+	VAddrStack    [3]ocsd.VAddr
+	VAddrISAStack [3]uint8
+	Context       Context
 
 	Timestamp     uint64
 	TSBitsChanged uint8
@@ -406,4 +408,39 @@ func (t PktType) String() string {
 		return "I_TRANS_FAIL"
 	}
 	return "I_UNKNOWN"
+}
+
+// PushVAddr pushes the current VAddr and VAddrISA to the top of the history stack
+func (p *TracePacket) PushVAddr() {
+	p.VAddrStack[2] = p.VAddrStack[1]
+	p.VAddrStack[1] = p.VAddrStack[0]
+	p.VAddrStack[0] = p.VAddr
+	p.VAddrISAStack[2] = p.VAddrISAStack[1]
+	p.VAddrISAStack[1] = p.VAddrISAStack[0]
+	p.VAddrISAStack[0] = p.VAddrISA
+}
+
+// PopVAddrIdx retrieves an address from the history stack
+func (p *TracePacket) PopVAddrIdx(idx uint8) {
+	if idx < 3 {
+		p.VAddr = p.VAddrStack[idx]
+		p.VAddrISA = p.VAddrISAStack[idx]
+	}
+}
+
+// ClearTraceInfo resets trace info and address stack state
+func (p *TracePacket) ClearTraceInfo() {
+	p.Valid.Timestamp = false
+	p.Valid.TInfo = false
+	p.Valid.CCThreshold = false
+
+	p.TraceInfo = TraceInfo{}
+	p.CurrSpecDepth = 0
+
+	for i := 0; i < 3; i++ {
+		p.VAddrStack[i] = 0
+		p.VAddrISAStack[i] = 0
+	}
+	p.VAddr = p.VAddrStack[0]
+	p.VAddrISA = p.VAddrISAStack[0]
 }
