@@ -1,0 +1,10 @@
+=== RUN   TestETMv4SnapshotsAgainstGolden
+=== PAUSE TestETMv4SnapshotsAgainstGolden
+=== CONT  TestETMv4SnapshotsAgainstGolden
+=== RUN   TestETMv4SnapshotsAgainstGolden/juno-uname-001
+=== PAUSE TestETMv4SnapshotsAgainstGolden/juno-uname-001
+=== CONT  TestETMv4SnapshotsAgainstGolden/juno-uname-001
+--- PASS: TestETMv4SnapshotsAgainstGolden (0.00s)
+    --- PASS: TestETMv4SnapshotsAgainstGolden/juno-uname-001 (0.06s)
+PASS
+ok  	opencsd/internal/etmv4	0.079s
