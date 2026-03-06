@@ -498,6 +498,34 @@ func (d *PktDecode) decodePacket() ocsd.Err {
 			p0Type = p0TSCC
 		}
 		d.pushP0ElemParam(p0Type, false, pkt.Type, d.IndexCurrPkt, params)
+
+	// speculation - mispredict/cancel with atoms
+	case PktMispredict, PktCancelF1Mispred, PktCancelF2, PktCancelF3:
+		d.elemRes.Mispredict = true
+		if pkt.Atom.Num > 0 {
+			d.pushP0ElemAtom(pkt.Type, d.IndexCurrPkt, pkt.Atom)
+			d.currSpecDepth += int(pkt.Atom.Num)
+		}
+		d.elemRes.P0Cancel = int(pkt.CancelElements)
+
+	// cancel without mispredict
+	case PktCancelF1:
+		d.elemRes.P0Cancel = int(pkt.CancelElements)
+
+	// commit
+	case PktCommit:
+		d.elemRes.P0Commit = int(pkt.CommitElements)
+
+	// overflow (falls through to discard logic)
+	case PktOverflow:
+		d.prevOverflow = true
+		d.currSpecDepth = 0
+		d.elemRes.Discard = true
+
+	// discard
+	case PktDiscard:
+		d.currSpecDepth = 0
+		d.elemRes.Discard = true
 	}
 
 	if isAddr && d.elemPendingAddr {
@@ -1419,7 +1447,13 @@ func (d *PktDecode) discardElements() ocsd.Err {
 	d.currSpecDepth = 0
 
 	d.currState = noSync
-	// m_unsync_eot_info handling etc...
+	if d.prevOverflow {
+		d.unsyncEOTInfo = ocsd.UnsyncOverflow
+	} else {
+		d.unsyncEOTInfo = ocsd.UnsyncDiscard
+	}
+
+	// unsync so need context & address
 	d.needCtxt = true
 	d.needAddr = true
 	d.elemPendingAddr = false

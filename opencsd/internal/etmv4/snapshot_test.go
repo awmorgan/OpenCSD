@@ -67,7 +67,7 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 		{name: "a57_single_step", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"10"}},
 		{name: "armv8_1m_branches", sourceName: "etr_0", traceIDs: []string{"0"}},
 		{name: "juno-uname-001", sourceName: "ETB_0", traceIDs: []string{"10"}},
-		// {name: "juno-uname-002", sourceName: "ETB_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
+		{name: "juno-uname-002", sourceName: "ETB_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
 		// {name: "juno-ret-stck", sourceName: "ETB_0", traceIDs: []string{"10", "11", "12", "13", "14", "15"}},
 		// {name: "test-file-mem-offsets", sourceName: "ETB_0", traceIDs: []string{"16"}},
 		// {name: "init-short-addr", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"0"}},
@@ -112,7 +112,7 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 
 			got := sanitizePPL(string(goOut), tc.traceIDs)
 			want := sanitizePPL(string(goldenBytes), tc.traceIDs)
-			os.WriteFile("got.txt", []byte(got), 0644)
+			// os.WriteFile("got.txt", []byte(got), 0644)
 
 			if got != want {
 				gotLines := strings.Split(got, "\n")
