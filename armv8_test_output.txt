@@ -1,0 +1,10 @@
+=== RUN   TestETMv4SnapshotsAgainstGolden
+=== PAUSE TestETMv4SnapshotsAgainstGolden
+=== CONT  TestETMv4SnapshotsAgainstGolden
+=== RUN   TestETMv4SnapshotsAgainstGolden/armv8_1m_branches
+=== PAUSE TestETMv4SnapshotsAgainstGolden/armv8_1m_branches
+=== CONT  TestETMv4SnapshotsAgainstGolden/armv8_1m_branches
+--- PASS: TestETMv4SnapshotsAgainstGolden (0.00s)
+    --- PASS: TestETMv4SnapshotsAgainstGolden/armv8_1m_branches (0.00s)
+PASS
+ok  	opencsd/internal/etmv4	0.014s
