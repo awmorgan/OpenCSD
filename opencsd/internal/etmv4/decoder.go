@@ -220,12 +220,13 @@ func (d *PktDecode) commitElemOnEOT() ocsd.Err {
 		d.outElem.ResetElemStack()
 	}
 
+	// Iterate from oldest (index 0) to newest, matching C++ back()/delete_back()
+	// where back() returns the oldest element in the deque.
 	for len(d.p0Stack) > 0 && err == ocsd.OK {
-		pElem := d.p0Stack[len(d.p0Stack)-1] // back() is the newest element in C++, but stack[] in Go pushes at the end?
-		// Wait, let's look at how stack is pushed.
-		// append() pushes at the end, so [len-1] is the back.
+		pElem := d.p0Stack[0] // oldest element (C++ back())
 		switch pElem.p0Type {
 		case p0TrcOn, p0Atom, p0Excep, p0ExcepRet, p0Q, p0UnseenUncommitted:
+			// clear stack and stop
 			d.poppedElems = append(d.poppedElems, d.p0Stack...)
 			d.p0Stack = nil
 
@@ -256,8 +257,8 @@ func (d *PktDecode) commitElemOnEOT() ocsd.Err {
 			err = d.processITEElem(pElem)
 		}
 		if len(d.p0Stack) > 0 {
-			d.poppedElems = append(d.poppedElems, d.p0Stack[len(d.p0Stack)-1])
-			d.p0Stack = d.p0Stack[:len(d.p0Stack)-1]
+			d.poppedElems = append(d.poppedElems, d.p0Stack[0])
+			d.p0Stack = d.p0Stack[1:] // pop oldest (C++ delete_back())
 		}
 	}
 
@@ -469,6 +470,34 @@ func (d *PktDecode) decodePacket() ocsd.Err {
 		if bV7MProfile {
 			d.currSpecDepth++
 		}
+
+	// event trace
+	case PktEvent:
+		params := []uint32{uint32(pkt.EventVal)}
+		d.pushP0ElemParam(p0Event, false, pkt.Type, d.IndexCurrPkt, params)
+
+	// cycle count packets
+	case PktCcntF1, PktCcntF2, PktCcntF3:
+		params := []uint32{pkt.CycleCount}
+		d.pushP0ElemParam(p0CC, false, pkt.Type, d.IndexCurrPkt, params)
+		d.elemRes.P0Commit = int(pkt.CommitElements)
+
+	// timestamp
+	case PktTimestamp:
+		bTSwithCC := d.config.EnabledCCI()
+		ts := pkt.Timestamp
+		params := []uint32{
+			uint32(ts & 0xFFFFFFFF),
+			uint32((ts >> 32) & 0xFFFFFFFF),
+		}
+		if bTSwithCC {
+			params = append(params, pkt.CycleCount)
+		}
+		p0Type := p0TS
+		if bTSwithCC {
+			p0Type = p0TSCC
+		}
+		d.pushP0ElemParam(p0Type, false, pkt.Type, d.IndexCurrPkt, params)
 	}
 
 	if isAddr && d.elemPendingAddr {

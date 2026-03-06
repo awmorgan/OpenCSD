@@ -1,0 +1,14 @@
+=== RUN   TestETMv4SnapshotsAgainstGolden
+=== PAUSE TestETMv4SnapshotsAgainstGolden
+=== CONT  TestETMv4SnapshotsAgainstGolden
+=== RUN   TestETMv4SnapshotsAgainstGolden/juno_r1_1
+=== PAUSE TestETMv4SnapshotsAgainstGolden/juno_r1_1
+=== RUN   TestETMv4SnapshotsAgainstGolden/a57_single_step
+=== PAUSE TestETMv4SnapshotsAgainstGolden/a57_single_step
+=== CONT  TestETMv4SnapshotsAgainstGolden/juno_r1_1
+=== CONT  TestETMv4SnapshotsAgainstGolden/a57_single_step
+--- PASS: TestETMv4SnapshotsAgainstGolden (0.00s)
+    --- PASS: TestETMv4SnapshotsAgainstGolden/a57_single_step (0.00s)
+    --- PASS: TestETMv4SnapshotsAgainstGolden/juno_r1_1 (0.07s)
+PASS
+ok  	opencsd/internal/etmv4	0.086s
