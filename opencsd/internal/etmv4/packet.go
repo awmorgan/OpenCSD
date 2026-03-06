@@ -257,6 +257,18 @@ type TracePacket struct {
 	ProtocolVersion uint8
 }
 
+// EffectiveType returns the packet type used for reporting/printing.
+// Only incomplete-EOT overrides the packet type for raw packet output.
+func (p *TracePacket) EffectiveType() PktType {
+	if p == nil {
+		return PktNoErrType
+	}
+	if p.ErrType == PktIncompleteEOT {
+		return p.ErrType
+	}
+	return p.Type
+}
+
 // ensure PktType meets Stringer requirements
 var _ fmt.Stringer = PktType(0)
 

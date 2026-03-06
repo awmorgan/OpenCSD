@@ -21,7 +21,7 @@ type AddrReturnStack struct {
 
 // NewAddrReturnStack returns a new initialized AddrReturnStack.
 func NewAddrReturnStack() *AddrReturnStack {
-	s := &AddrReturnStack{}
+	s := &AddrReturnStack{headIdx: 0}
 	s.Flush()
 	return s
 }
@@ -45,6 +45,7 @@ func (s *AddrReturnStack) Push(addr ocsd.VAddr, isa ocsd.ISA) {
 		if s.numEntries < 16 {
 			s.numEntries++
 		}
+		s.popPending = false
 	}
 }
 
@@ -54,20 +55,20 @@ func (s *AddrReturnStack) Pop(isa *ocsd.ISA) ocsd.VAddr {
 		if s.numEntries > 0 {
 			addr = s.stack[s.headIdx].RetAddr
 			*isa = s.stack[s.headIdx].RetISA
-			s.numEntries--
 			s.headIdx--
 			if s.headIdx < 0 {
 				s.headIdx = 15
 			}
-		} else {
-			s.numEntries = -1 // trigger overflow/underflow
 		}
+		// Match C++ behavior: always decrement on pop when active.
+		// An empty pop drives numEntries negative so Overflow() detects underflow.
+		s.numEntries--
+		s.popPending = false
 	}
 	return addr
 }
 
 func (s *AddrReturnStack) Flush() {
-	s.headIdx = -1
 	s.numEntries = 0
 	s.popPending = false
 }

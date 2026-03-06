@@ -39,7 +39,7 @@ func (p *etmv4RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP oc
 		fmt.Fprintf(&sb, "0x%02x ", b)
 	}
 	sb.WriteString("];\t")
-	sb.WriteString(pkt.Type.String())
+	sb.WriteString(pkt.EffectiveType().String())
 	sb.WriteString(" : description\n")
 	_, _ = io.WriteString(p.writer, sb.String())
 }
@@ -68,10 +68,10 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 		{name: "armv8_1m_branches", sourceName: "etr_0", traceIDs: []string{"0"}},
 		{name: "juno-uname-001", sourceName: "ETB_0", traceIDs: []string{"10"}},
 		{name: "juno-uname-002", sourceName: "ETB_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
-		// {name: "juno-ret-stck", sourceName: "ETB_0", traceIDs: []string{"10", "11", "12", "13", "14", "15"}},
-		// {name: "test-file-mem-offsets", sourceName: "ETB_0", traceIDs: []string{"16"}},
-		// {name: "init-short-addr", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"0"}},
-		// {name: "bugfix-exact-match", sourceName: "etr_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
+		{name: "juno-ret-stck", sourceName: "ETB_0", traceIDs: []string{"10", "11", "12", "13", "14", "15"}},
+		{name: "test-file-mem-offsets", sourceName: "ETB_0", traceIDs: []string{"16"}},
+		{name: "init-short-addr", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"0"}},
+		{name: "bugfix-exact-match", sourceName: "etr_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
 	}
 
 	for _, tc := range testCases {
@@ -110,8 +110,9 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 				t.Fatalf("read golden file %s: %v", goldenPath, err)
 			}
 
-			got := sanitizePPL(string(goOut), tc.traceIDs)
-			want := sanitizePPL(string(goldenBytes), tc.traceIDs)
+			includeGenElems := strings.Contains(string(goldenBytes), "OCSD_GEN_TRC_ELEM_")
+			got := sanitizePPL(string(goOut), tc.traceIDs, includeGenElems)
+			want := sanitizePPL(string(goldenBytes), tc.traceIDs, includeGenElems)
 			// os.WriteFile("got.txt", []byte(got), 0644)
 
 			if got != want {
@@ -337,7 +338,7 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-func sanitizePPL(s string, traceIDs []string) string {
+func sanitizePPL(s string, traceIDs []string, includeGenElems bool) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.ReplaceAll(s, "\r", "\n")
 	lines := strings.Split(s, "\n")
@@ -369,7 +370,7 @@ func sanitizePPL(s string, traceIDs []string) string {
 		}
 
 		for _, idxLine := range splitIdxRecords(line) {
-			normalized := normalizeSnapshotLine(idxLine)
+			normalized := normalizeSnapshotLine(idxLine, includeGenElems)
 			if normalized == "" {
 				continue
 			}
@@ -430,8 +431,11 @@ func splitIdxRecords(line string) []string {
 	return records
 }
 
-func normalizeSnapshotLine(line string) string {
+func normalizeSnapshotLine(line string, includeGenElems bool) string {
 	if strings.Contains(line, "OCSD_GEN_TRC_ELEM_") {
+		if !includeGenElems {
+			return ""
+		}
 		return line
 	}
 

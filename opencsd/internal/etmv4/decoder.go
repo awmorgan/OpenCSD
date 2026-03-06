@@ -210,6 +210,11 @@ func (d *PktDecode) onProtocolConfig() ocsd.Err {
 	d.initDecoder()
 	d.outElem.InitCSID(d.config.TraceID())
 	d.outElem.InitSendIf(d.GetTraceElemOutAttachPt())
+
+	// Match C++ decoder behavior: enable the return stack only when configured.
+	if d.config.EnabledRetStack() {
+		d.returnStack.SetActive(true)
+	}
 	return ocsd.OK
 }
 
