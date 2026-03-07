@@ -66,7 +66,7 @@ type PktProc struct {
 // NewPktProc creates a new STM packet processor.
 func NewPktProc(instIDNum int) *PktProc {
 	p := &PktProc{}
-	p.InitPktProcBase(fmt.Sprintf("%s_%d", "PKTP_STM", instIDNum))
+	p.InitPktProcBase(fmt.Sprintf("PKTP_STM_%d", instIDNum))
 
 	p.FnProcessData = p.processData
 	p.FnOnEOT = p.onEOT
@@ -699,9 +699,10 @@ func (p *PktProc) stmExtractTS() {
 	if !p.tsReqSet {
 		if p.readNibble() {
 			p.reqTSNibbles = p.nibble
-			if p.nibble == 0xD {
+			switch p.nibble {
+			case 0xD:
 				p.reqTSNibbles = 14
-			} else if p.nibble == 0xE {
+			case 0xE:
 				p.reqTSNibbles = 16
 			}
 			if p.nibble == 0xF {
@@ -792,23 +793,13 @@ func (p *PktProc) stmExtractVal64(nibblesToVal uint8) {
 }
 
 func (p *PktProc) binToGray(binValue uint64) uint64 {
-	grayValue := (1 << 63) & binValue
-	for i := 62; i >= 0; i-- {
-		grayArg1 := ((1 << (i + 1)) & binValue) >> (i + 1)
-		grayArg2 := ((1 << i) & binValue) >> i
-		grayValue |= ((grayArg1 ^ grayArg2) << i)
-	}
-	return grayValue
+	return binValue ^ (binValue >> 1)
 }
 
 func (p *PktProc) grayToBin(grayValue uint64) uint64 {
-	var binValue uint64
-	for binBit := range uint64(64) {
-		bitTmp := ((1 << binBit) & grayValue) >> binBit
-		for grayBit := binBit + 1; grayBit < 64; grayBit++ {
-			bitTmp ^= (((1 << grayBit) & grayValue) >> grayBit)
-		}
-		binValue |= (bitTmp << binBit)
+	binValue := grayValue
+	for shift := uint(1); shift < 64; shift <<= 1 {
+		binValue ^= binValue >> shift
 	}
 	return binValue
 }
