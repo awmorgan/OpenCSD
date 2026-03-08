@@ -61,6 +61,10 @@ type PktProc struct {
 	syncStart   bool
 	isSync      bool
 	syncIndex   ocsd.TrcIndex
+
+	// pktErr is set by setBadSequenceError / setReservedHdrError and is checked
+	// in processStateLoop after each packet function.
+	pktErr *common.Error
 }
 
 // NewPktProc creates a new STM packet processor.
@@ -103,34 +107,6 @@ func (p *PktProc) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, oc
 func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp, handled bool) {
 	resp = ocsd.RespCont
 
-	defer func() {
-		if r := recover(); r != nil {
-			if e, ok := r.(*common.Error); ok {
-				p.LogError(e)
-				if (e.Code == ocsd.ErrBadPacketSeq || e.Code == ocsd.ErrInvalidPcktHdr) &&
-					(p.ComponentOpMode()&ocsd.OpflgPktprocErrBadPkts) == 0 {
-					resp = p.outputPacket()
-					if (p.ComponentOpMode() & ocsd.OpflgPktprocUnsyncOnBadPkts) != 0 {
-						p.procState = procWaitSync
-					}
-				} else {
-					resp = ocsd.RespFatalInvalidData
-				}
-			} else {
-				warn := common.NewErrorMsg(ocsd.ErrSevWarn, ocsd.ErrFail, fmt.Sprintf("Recovered decode panic, forcing resync: %v", r))
-				warn.Idx = p.packetIndex
-				if p.Config != nil {
-					warn.ChanID = p.Config.TraceID()
-				}
-				p.LogError(warn)
-				p.currPacket.SetPacketType(PktNotSync, false)
-				p.procState = procWaitSync
-				resp = ocsd.RespErrCont
-			}
-			handled = true
-		}
-	}()
-
 	switch p.procState {
 	case procWaitSync:
 		p.waitForSync(index)
@@ -145,6 +121,20 @@ func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp,
 		fallthrough
 	case procDataState:
 		p.currPktFn()
+		if e := p.pktErr; e != nil {
+			p.pktErr = nil
+			p.LogError(e)
+			if (e.Code == ocsd.ErrBadPacketSeq || e.Code == ocsd.ErrInvalidPcktHdr) &&
+				(p.ComponentOpMode()&ocsd.OpflgPktprocErrBadPkts) == 0 {
+				resp = p.outputPacket()
+				if (p.ComponentOpMode() & ocsd.OpflgPktprocUnsyncOnBadPkts) != 0 {
+					p.procState = procWaitSync
+				}
+			} else {
+				resp = ocsd.RespFatalInvalidData
+			}
+			return resp, true
+		}
 		if p.procState != procSendPkt {
 			break
 		}
@@ -197,24 +187,26 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 	return resp
 }
 
-func (p *PktProc) throwBadSequenceError(msg string) {
+// setBadSequenceError records a bad-sequence error on the processor.
+// Callers must return immediately after calling this.
+func (p *PktProc) setBadSequenceError(msg string) {
 	p.currPacket.UpdateErrType(PktBadSequence)
 	trcID := uint8(0)
 	if p.Config != nil {
 		trcID = p.Config.TraceID()
 	}
-	err := common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, p.packetIndex, trcID, msg)
-	panic(err)
+	p.pktErr = common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, p.packetIndex, trcID, msg)
 }
 
-func (p *PktProc) throwReservedHdrError(msg string) {
+// setReservedHdrError records a reserved-header error on the processor.
+// Callers must return immediately after calling this.
+func (p *PktProc) setReservedHdrError(msg string) {
 	p.currPacket.SetPacketType(PktReserved, false)
 	trcID := uint8(0)
 	if p.Config != nil {
 		trcID = p.Config.TraceID()
 	}
-	err := common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, p.packetIndex, trcID, msg)
-	panic(err)
+	p.pktErr = common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, p.packetIndex, trcID, msg)
 }
 
 func (p *PktProc) initProcessorState() {
@@ -225,6 +217,7 @@ func (p *PktProc) initProcessorState() {
 	p.initNextPacket()
 	p.bWaitSyncSaveSuppressed = false
 	p.packetData = nil
+	p.pktErr = nil
 }
 
 func (p *PktProc) initNextPacket() {
@@ -258,13 +251,19 @@ func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {
 	if !bGotData || p.numNibbles > 22 {
 		p.currPacket.SetPacketType(PktNotSync, false)
 		if p.PktRawMonI.HasAttachedAndEnabled() {
-			nibblesToSend := p.numNibbles - p.numFNibbles
+			nibblesToSend := uint32(p.numNibbles - p.numFNibbles)
 			if p.isSync {
-				nibblesToSend = p.numNibbles - 22
+				nibblesToSend = uint32(p.numNibbles - 22)
 			}
 			bytesToSend := (nibblesToSend / 2) + (nibblesToSend % 2)
+			// Clamp to the bytes actually available in the current dataIn window.
+			// If clearSyncCount() reset numFNibbles to 0 mid-loop, nibblesToSend
+			// would overcount and cause an out-of-bounds access.
+			if available := p.dataInSize - startOffset; bytesToSend > available {
+				bytesToSend = available
+			}
 			for i := range bytesToSend {
-				p.savePacketByte(p.dataIn[startOffset+uint32(i)])
+				p.savePacketByte(p.dataIn[startOffset+i])
 			}
 		}
 	} else {
@@ -285,7 +284,7 @@ func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {
 func (p *PktProc) stmPktReserved() {
 	badOpcode := uint16(p.nibble)
 	p.currPacket.SetD16Payload(badOpcode)
-	p.throwReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
+	p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
 }
 
 func (p *PktProc) stmPktNull() {
@@ -476,7 +475,7 @@ func (p *PktProc) stmPktFExt() {
 func (p *PktProc) stmPktReservedFn() {
 	badOpcode := uint16(0x00F) | (uint16(p.nibble) << 4)
 	p.currPacket.SetD16Payload(badOpcode)
-	p.throwReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
+	p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
 }
 
 func (p *PktProc) stmPktF0Ext() {
@@ -592,7 +591,7 @@ func (p *PktProc) stmPktFlag() {
 func (p *PktProc) stmPktReservedF0n() {
 	badOpcode := uint16(0x00F) | (uint16(p.nibble) << 8)
 	p.currPacket.SetD16Payload(badOpcode)
-	p.throwReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
+	p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
 }
 
 func (p *PktProc) stmPktVersion() {
@@ -607,7 +606,8 @@ func (p *PktProc) stmPktVersion() {
 		case 4:
 			p.currPacket.OnVersionPkt(TSGrey)
 		default:
-			p.throwBadSequenceError("STM VERSION packet : unrecognised version number.")
+			p.setBadSequenceError("STM VERSION packet : unrecognised version number.")
+			return
 		}
 		p.sendPacket()
 	}
@@ -659,7 +659,8 @@ func (p *PktProc) stmPktASync() {
 				p.clearSyncCount()
 				p.sendPacket()
 			} else if !p.syncStart {
-				p.throwBadSequenceError("STM: Invalid ASYNC sequence")
+				p.setBadSequenceError("STM: Invalid ASYNC sequence")
+				return
 			}
 		}
 	}
@@ -706,7 +707,8 @@ func (p *PktProc) stmExtractTS() {
 				p.reqTSNibbles = 16
 			}
 			if p.nibble == 0xF {
-				p.throwBadSequenceError("STM: Invalid timestamp size 0xF")
+				p.setBadSequenceError("STM: Invalid timestamp size 0xF")
+				return
 			}
 			p.tsReqSet = true
 		}
@@ -741,7 +743,8 @@ func (p *PktProc) stmExtractTS() {
 			case TSNatBinary:
 				p.currPacket.SetTS(p.tsUpdateValue, newBits)
 			default:
-				p.throwBadSequenceError("STM: unknown timestamp encoding")
+				p.setBadSequenceError("STM: unknown timestamp encoding")
+				return
 			}
 			p.sendPacket()
 		}
