@@ -46,10 +46,6 @@ type PktProc struct {
 	dumpUnsyncedBytes int
 
 	decodeState packetDecodeState
-
-	// pktErr is set by setBadSequenceError / setReservedHdrError and is checked
-	// in processStateLoop after each packet function.
-	pktErr *common.Error
 }
 
 // NewPktProc creates a new ITM packet processor.
@@ -69,7 +65,6 @@ func (p *PktProc) initProcessorState() {
 	p.sentNotSyncPacket = false
 	p.syncStart = false
 	p.dumpUnsyncedBytes = 0
-	p.pktErr = nil
 }
 
 func (p *PktProc) initNextPacket() {
@@ -119,42 +114,18 @@ func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp,
 		return resp, nil, true
 	case procHdr:
 		p.packetIndex = index + ocsd.TrcIndex(p.dataInUsed)
-		p.ProcessHdr() // will set to procData or procSendPkt on a valid header.
-		if e := p.pktErr; e != nil {
-			p.pktErr = nil
-			p.LogError(e)
-			err = e
-			if (e.Code == ocsd.ErrBadPacketSeq || e.Code == ocsd.ErrInvalidPcktHdr) &&
-				(p.ComponentOpMode()&ocsd.OpflgPktprocErrBadPkts) == 0 {
-				resp = p.outputPacket()
-				if (p.ComponentOpMode() & ocsd.OpflgPktprocUnsyncOnBadPkts) != 0 {
-					p.procState = procWaitSync
-				}
-			} else {
-				resp = ocsd.RespFatalInvalidData
-			}
-			return resp, err, true
+		err = p.ProcessHdr() // sets procState for valid headers.
+		if errResp, loopErr, errHandled := p.handleProcError(err); errHandled {
+			return errResp, loopErr, true
 		}
 		if p.procState != procData {
 			break
 		}
 		fallthrough
 	case procData:
-		p.runDataDecodeState()
-		if e := p.pktErr; e != nil {
-			p.pktErr = nil
-			p.LogError(e)
-			err = e
-			if (e.Code == ocsd.ErrBadPacketSeq || e.Code == ocsd.ErrInvalidPcktHdr) &&
-				(p.ComponentOpMode()&ocsd.OpflgPktprocErrBadPkts) == 0 {
-				resp = p.outputPacket()
-				if (p.ComponentOpMode() & ocsd.OpflgPktprocUnsyncOnBadPkts) != 0 {
-					p.procState = procWaitSync
-				}
-			} else {
-				resp = ocsd.RespFatalInvalidData
-			}
-			return resp, err, true
+		err = p.runDataDecodeState()
+		if errResp, loopErr, errHandled := p.handleProcError(err); errHandled {
+			return errResp, loopErr, true
 		}
 		if p.procState != procSendPkt {
 			break
@@ -165,6 +136,28 @@ func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp,
 		return resp, nil, true
 	}
 	return resp, nil, false
+}
+
+func (p *PktProc) handleProcError(err error) (resp ocsd.DatapathResp, outErr error, handled bool) {
+	if err == nil {
+		return ocsd.RespCont, nil, false
+	}
+
+	e, ok := err.(*common.Error)
+	if !ok {
+		return ocsd.RespFatalInvalidData, err, true
+	}
+
+	p.LogError(e)
+	if (e.Code == ocsd.ErrBadPacketSeq || e.Code == ocsd.ErrInvalidPcktHdr) &&
+		(p.ComponentOpMode()&ocsd.OpflgPktprocErrBadPkts) == 0 {
+		resp = p.outputPacket()
+		if (p.ComponentOpMode() & ocsd.OpflgPktprocUnsyncOnBadPkts) != 0 {
+			p.procState = procWaitSync
+		}
+		return resp, err, true
+	}
+	return ocsd.RespFatalInvalidData, err, true
 }
 
 func (p *PktProc) traceID() uint8 {
@@ -214,16 +207,16 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 
 // setBadSequenceError records a bad-sequence error on the processor.
 // Callers must return immediately after calling this.
-func (p *PktProc) setBadSequenceError(msg string) {
+func (p *PktProc) setBadSequenceError(msg string) error {
 	p.currPacket.UpdateErrType(PktBadSequence)
-	p.pktErr = common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, p.packetIndex, p.traceID(), msg)
+	return common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, p.packetIndex, p.traceID(), msg)
 }
 
 // setReservedHdrError records a reserved-header error on the processor.
 // Callers must return immediately after calling this.
-func (p *PktProc) setReservedHdrError(msg string) {
+func (p *PktProc) setReservedHdrError(msg string) error {
 	p.currPacket.SetPacketType(PktReserved)
-	p.pktErr = common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, p.packetIndex, p.traceID(), msg)
+	return common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, p.packetIndex, p.traceID(), msg)
 }
 
 func (p *PktProc) savePacketByte(val byte) {
@@ -240,10 +233,10 @@ func (p *PktProc) readByte() (byte, bool) {
 	return 0, false
 }
 
-func (p *PktProc) ProcessHdr() {
+func (p *PktProc) ProcessHdr() error {
 	b, ok := p.readByte()
 	if !ok {
-		return
+		return nil
 	}
 	p.headerByte = b
 
@@ -256,14 +249,15 @@ func (p *PktProc) ProcessHdr() {
 		p.decodeState = decodeData
 		p.procState = procData
 	} else if (b & 0x0F) == 0x00 {
-		if (b & 0xF0) == 0x00 {
+		switch b & 0xF0 {
+		case 0x00:
 			p.currPacket.SetPacketType(PktAsync)
 			p.decodeState = decodeAsync
 			p.procState = procData
-		} else if (b & 0xF0) == 0x70 {
+		case 0x70:
 			p.currPacket.SetPacketType(PktOverflow)
 			p.procState = procSendPkt
-		} else {
+		default:
 			p.currPacket.SetPacketType(PktTSLocal)
 			p.decodeState = decodeLocalTS
 			p.procState = procData
@@ -282,31 +276,32 @@ func (p *PktProc) ProcessHdr() {
 		}
 		p.procState = procData
 	} else {
-		p.setReservedHdrError("")
-		return
+		return p.setReservedHdrError("")
 	}
+	return nil
 }
 
-func (p *PktProc) runDataDecodeState() {
+func (p *PktProc) runDataDecodeState() error {
 	switch p.decodeState {
 	case decodeData:
-		p.PktData()
+		return p.PktData()
 	case decodeAsync:
-		p.PktAsync()
+		return p.PktAsync()
 	case decodeLocalTS:
-		p.PktLocalTS()
+		return p.PktLocalTS()
 	case decodeExtension:
-		p.PktExtension()
+		return p.PktExtension()
 	case decodeGlobalTS1:
-		p.PktGlobalTS1()
+		return p.PktGlobalTS1()
 	case decodeGlobalTS2:
-		p.PktGlobalTS2()
+		return p.PktGlobalTS2()
 	default:
-		p.setBadSequenceError("ITM packet decode state not set")
+		return p.setBadSequenceError("ITM packet decode state not set")
 	}
+	return nil
 }
 
-func (p *PktProc) PktData() {
+func (p *PktProc) PktData() error {
 	payloadBytesReq := int(p.headerByte & 0x3)
 	payloadBytesGot := len(p.packetData) - 1
 
@@ -337,6 +332,7 @@ func (p *PktProc) PktData() {
 		p.currPacket.SetValue(value, uint8(payloadBytesReq))
 		p.procState = procSendPkt
 	}
+	return nil
 }
 
 func (p *PktProc) readContBytes(limit int) bool {
@@ -375,7 +371,7 @@ func (p *PktProc) extractContVal64() uint64 {
 	return value
 }
 
-func (p *PktProc) PktLocalTS() {
+func (p *PktProc) PktLocalTS() error {
 	const pktSizeLimit = 5
 	bGotContVal := false
 
@@ -386,7 +382,7 @@ func (p *PktProc) PktLocalTS() {
 			p.currPacket.SetSrcID(0)
 			p.currPacket.SetValue(uint32((p.headerByte>>4)&0x7), 1)
 			p.procState = procSendPkt
-			return
+			return nil
 		}
 	}
 
@@ -396,12 +392,12 @@ func (p *PktProc) PktLocalTS() {
 		p.currPacket.SetValue(p.extractContVal32(), uint8(len(p.packetData)-1))
 		p.procState = procSendPkt
 	} else if len(p.packetData) == pktSizeLimit {
-		p.setBadSequenceError("Local TS packet: Payload continuation value too long")
-		return
+		return p.setBadSequenceError("Local TS packet: Payload continuation value too long")
 	}
+	return nil
 }
 
-func (p *PktProc) PktGlobalTS1() {
+func (p *PktProc) PktGlobalTS1() error {
 	const pktSizeLimit = 5
 	bGotContVal := p.readContBytes(pktSizeLimit)
 
@@ -414,12 +410,12 @@ func (p *PktProc) PktGlobalTS1() {
 		p.currPacket.SetValue(p.extractContVal32(), uint8(len(p.packetData)-1))
 		p.procState = procSendPkt
 	} else if len(p.packetData) == pktSizeLimit {
-		p.setBadSequenceError("GTS1 packet: Payload continuation value too long")
-		return
+		return p.setBadSequenceError("GTS1 packet: Payload continuation value too long")
 	}
+	return nil
 }
 
-func (p *PktProc) PktGlobalTS2() {
+func (p *PktProc) PktGlobalTS2() error {
 	const pktSizeLimit = 7
 	bGotContVal := p.readContBytes(pktSizeLimit)
 
@@ -431,12 +427,12 @@ func (p *PktProc) PktGlobalTS2() {
 		}
 		p.procState = procSendPkt
 	} else if len(p.packetData) == pktSizeLimit {
-		p.setBadSequenceError("GTS2 packet: Payload continuation value too long")
-		return
+		return p.setBadSequenceError("GTS2 packet: Payload continuation value too long")
 	}
+	return nil
 }
 
-func (p *PktProc) PktExtension() {
+func (p *PktProc) PktExtension() error {
 	const pktSizeLimit = 5
 	nBitLength := []uint8{2, 9, 16, 23, 31}
 	bGotContVal := false
@@ -463,9 +459,9 @@ func (p *PktProc) PktExtension() {
 		p.currPacket.SetValue(value, 4)
 		p.procState = procSendPkt
 	} else if len(p.packetData) == pktSizeLimit {
-		p.setBadSequenceError("Extension packet: Payload continuation value too long")
-		return
+		return p.setBadSequenceError("Extension packet: Payload continuation value too long")
 	}
+	return nil
 }
 
 func (p *PktProc) readAsyncSeq() (bFoundAsync bool, bError bool) {
@@ -496,14 +492,14 @@ func (p *PktProc) readAsyncSeq() (bFoundAsync bool, bError bool) {
 	return bFoundAsync, bError
 }
 
-func (p *PktProc) PktAsync() {
+func (p *PktProc) PktAsync() error {
 	bFoundAsync, bError := p.readAsyncSeq()
 	if bFoundAsync {
 		p.procState = procSendPkt
 	} else if bError {
-		p.setBadSequenceError("Async Packet: unexpected none zero value")
-		return
+		return p.setBadSequenceError("Async Packet: unexpected none zero value")
 	}
+	return nil
 }
 
 func (p *PktProc) flushUnsyncedBytes() ocsd.DatapathResp {

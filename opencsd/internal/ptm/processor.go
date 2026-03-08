@@ -158,7 +158,7 @@ func (p *PktProc) isSync() bool {
 	return p.currPacket.Type == PktNotSync
 }
 
-func (p *PktProc) malformedPacketErr(msg string) *common.Error {
+func (p *PktProc) malformedPacketErr(msg string) error {
 	p.currPacket.ErrType = PktBadSequence
 	return common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, p.currPktIndex, p.chanIDCopy, msg)
 }
@@ -193,12 +193,16 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, o
 
 func (p *PktProc) doProcessLoop(currByte *uint8, ok *bool) (ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
-	handleErr := func(err *common.Error) (ocsd.DatapathResp, error) {
+	handleErr := func(err error) (ocsd.DatapathResp, error) {
 		if err == nil {
 			return ocsd.RespCont, nil
 		}
-		p.LogError(err)
-		if err.Code == ocsd.ErrBadPacketSeq || err.Code == ocsd.ErrInvalidPcktHdr {
+		ce, ok := err.(*common.Error)
+		if !ok {
+			return ocsd.RespFatalInvalidData, err
+		}
+		p.LogError(ce)
+		if ce.Code == ocsd.ErrBadPacketSeq || ce.Code == ocsd.ErrInvalidPcktHdr {
 			p.processState = stateSendPkt
 			return ocsd.RespCont, err
 		}
@@ -239,7 +243,7 @@ func (p *PktProc) doProcessLoop(currByte *uint8, ok *bool) (ocsd.DatapathResp, e
 	return resp, nil
 }
 
-func (p *PktProc) runDecodeAction() *common.Error {
+func (p *PktProc) runDecodeAction() error {
 	switch p.currDecode {
 	case decodeBranchAddr:
 		return p.pktBranchAddr()
@@ -434,7 +438,7 @@ func (p *PktProc) findAsync() asyncResult {
 	return asyncRes
 }
 
-func (p *PktProc) pktASync() *common.Error {
+func (p *PktProc) pktASync() error {
 	if len(p.currPacketData) == 1 {
 		p.async0 = 1
 	}
@@ -448,7 +452,7 @@ func (p *PktProc) pktASync() *common.Error {
 	return nil
 }
 
-func (p *PktProc) extractCycleCount(offset int) (uint32, *common.Error) {
+func (p *PktProc) extractCycleCount(offset int) (uint32, error) {
 	bCont := true
 	cycleCount := uint32(0)
 	byIdx := 0
@@ -476,7 +480,7 @@ func (p *PktProc) extractCycleCount(offset int) (uint32, *common.Error) {
 	return cycleCount, nil
 }
 
-func (p *PktProc) extractCtxtID(idx int) (uint32, *common.Error) {
+func (p *PktProc) extractCtxtID(idx int) (uint32, error) {
 	ctxtID := uint32(0)
 	shift := 0
 	for i := 0; i < p.numCtxtIDBytes; i++ {
@@ -489,7 +493,7 @@ func (p *PktProc) extractCtxtID(idx int) (uint32, *common.Error) {
 	return ctxtID, nil
 }
 
-func (p *PktProc) extractTS() (uint64, uint8, int, *common.Error) {
+func (p *PktProc) extractTS() (uint64, uint8, int, error) {
 	bCont := true
 	tsIdx := 1
 	b64BitVal := p.Config.TSPkt64()
@@ -542,10 +546,11 @@ func (p *PktProc) extractAddress(offset int) (uint32, uint8) {
 		if i == 4 {
 			mask = 0x0F
 			numBits = 4
-			if p.addrPktIsa == ocsd.ISAJazelle {
+			switch p.addrPktIsa {
+			case ocsd.ISAJazelle:
 				mask = 0x1F
 				numBits = 5
-			} else if p.addrPktIsa == ocsd.ISAArm {
+			case ocsd.ISAArm:
 				mask = 0x07
 				numBits = 3
 			}
@@ -583,7 +588,7 @@ func (p *PktProc) extractAddress(offset int) (uint32, uint8) {
 }
 
 // pkt processing fns
-func (p *PktProc) pktISync() *common.Error {
+func (p *PktProc) pktISync() error {
 	var currByte uint8
 	pktIndex := len(p.currPacketData) - 1
 	bGotBytes := false
@@ -678,12 +683,12 @@ func (p *PktProc) pktISync() *common.Error {
 	return nil
 }
 
-func (p *PktProc) pktTrigger() *common.Error {
+func (p *PktProc) pktTrigger() error {
 	p.processState = stateSendPkt
 	return nil
 }
 
-func (p *PktProc) pktWPointUpdate() *common.Error {
+func (p *PktProc) pktWPointUpdate() error {
 	bDone := false
 	bBytesAvail := true
 	var currByte uint8
@@ -756,12 +761,12 @@ func (p *PktProc) pktWPointUpdate() *common.Error {
 	return nil
 }
 
-func (p *PktProc) pktIgnore() *common.Error {
+func (p *PktProc) pktIgnore() error {
 	p.processState = stateSendPkt
 	return nil
 }
 
-func (p *PktProc) pktCtxtID() *common.Error {
+func (p *PktProc) pktCtxtID() error {
 	pktIndex := len(p.currPacketData) - 1
 	if pktIndex == 0 {
 		p.numCtxtIDBytes = p.Config.CtxtIDBytes()
@@ -793,7 +798,7 @@ func (p *PktProc) pktCtxtID() *common.Error {
 	return nil
 }
 
-func (p *PktProc) pktVMID() *common.Error {
+func (p *PktProc) pktVMID() error {
 	if currByte, ok := p.readByteVal(); ok {
 		p.currPacket.Context.VMID = currByte
 		p.currPacket.Context.UpdatedV = true
@@ -802,7 +807,7 @@ func (p *PktProc) pktVMID() *common.Error {
 	return nil
 }
 
-func (p *PktProc) pktAtom() *common.Error {
+func (p *PktProc) pktAtom() error {
 	pHdr := p.currPacketData[0]
 	if !p.Config.EnaCycleAcc() {
 		p.currPacket.SetAtomFromPHdr(pHdr)
@@ -838,7 +843,7 @@ func (p *PktProc) pktAtom() *common.Error {
 	return nil
 }
 
-func (p *PktProc) pktTimeStamp() *common.Error {
+func (p *PktProc) pktTimeStamp() error {
 	var currByte uint8
 	pktIndex := len(p.currPacketData) - 1
 	bGotBytes := false
@@ -898,12 +903,12 @@ func (p *PktProc) pktTimeStamp() *common.Error {
 	return nil
 }
 
-func (p *PktProc) pktExceptionRet() *common.Error {
+func (p *PktProc) pktExceptionRet() error {
 	p.processState = stateSendPkt
 	return nil
 }
 
-func (p *PktProc) pktBranchAddr() *common.Error {
+func (p *PktProc) pktBranchAddr() error {
 	currByte := p.currPacketData[0]
 	bDone := false
 	bBytesAvail := true
@@ -1042,7 +1047,7 @@ func (p *PktProc) pktBranchAddr() *common.Error {
 	return nil
 }
 
-func (p *PktProc) pktReserved() *common.Error {
+func (p *PktProc) pktReserved() error {
 	p.processState = stateSendPkt
 	return nil
 }

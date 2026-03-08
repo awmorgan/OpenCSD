@@ -107,10 +107,6 @@ type PktProc struct {
 	syncStart   bool
 	isSync      bool
 	syncIndex   ocsd.TrcIndex
-
-	// pktErr is set by setBadSequenceError / setReservedHdrError and is checked
-	// in processStateLoop after each packet function.
-	pktErr *common.Error
 }
 
 // NewPktProc creates a new STM packet processor.
@@ -165,21 +161,9 @@ func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp,
 		}
 		fallthrough
 	case procDataState:
-		p.runDecodeAction()
-		if e := p.pktErr; e != nil {
-			p.pktErr = nil
-			p.LogError(e)
-			err = e
-			if (e.Code == ocsd.ErrBadPacketSeq || e.Code == ocsd.ErrInvalidPcktHdr) &&
-				(p.ComponentOpMode()&ocsd.OpflgPktprocErrBadPkts) == 0 {
-				resp = p.outputPacket()
-				if (p.ComponentOpMode() & ocsd.OpflgPktprocUnsyncOnBadPkts) != 0 {
-					p.procState = procWaitSync
-				}
-			} else {
-				resp = ocsd.RespFatalInvalidData
-			}
-			return resp, err, true
+		err = p.runDecodeAction()
+		if errResp, loopErr, errHandled := p.handleProcError(err); errHandled {
+			return errResp, loopErr, true
 		}
 		if p.procState != procSendPkt {
 			break
@@ -190,6 +174,28 @@ func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp,
 	}
 
 	return resp, nil, false
+}
+
+func (p *PktProc) handleProcError(err error) (resp ocsd.DatapathResp, outErr error, handled bool) {
+	if err == nil {
+		return ocsd.RespCont, nil, false
+	}
+
+	e, ok := err.(*common.Error)
+	if !ok {
+		return ocsd.RespFatalInvalidData, err, true
+	}
+
+	p.LogError(e)
+	if (e.Code == ocsd.ErrBadPacketSeq || e.Code == ocsd.ErrInvalidPcktHdr) &&
+		(p.ComponentOpMode()&ocsd.OpflgPktprocErrBadPkts) == 0 {
+		resp = p.outputPacket()
+		if (p.ComponentOpMode() & ocsd.OpflgPktprocUnsyncOnBadPkts) != 0 {
+			p.procState = procWaitSync
+		}
+		return resp, err, true
+	}
+	return ocsd.RespFatalInvalidData, err, true
 }
 
 func (p *PktProc) OnEOT() ocsd.DatapathResp {
@@ -235,24 +241,24 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 
 // setBadSequenceError records a bad-sequence error on the processor.
 // Callers must return immediately after calling this.
-func (p *PktProc) setBadSequenceError(msg string) {
+func (p *PktProc) setBadSequenceError(msg string) error {
 	p.currPacket.UpdateErrType(PktBadSequence)
 	trcID := uint8(0)
 	if p.Config != nil {
 		trcID = p.Config.TraceID()
 	}
-	p.pktErr = common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, p.packetIndex, trcID, msg)
+	return common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, p.packetIndex, trcID, msg)
 }
 
 // setReservedHdrError records a reserved-header error on the processor.
 // Callers must return immediately after calling this.
-func (p *PktProc) setReservedHdrError(msg string) {
+func (p *PktProc) setReservedHdrError(msg string) error {
 	p.currPacket.SetPacketType(PktReserved, false)
 	trcID := uint8(0)
 	if p.Config != nil {
 		trcID = p.Config.TraceID()
 	}
-	p.pktErr = common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, p.packetIndex, trcID, msg)
+	return common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, p.packetIndex, trcID, msg)
 }
 
 func (p *PktProc) initProcessorState() {
@@ -263,7 +269,6 @@ func (p *PktProc) initProcessorState() {
 	p.initNextPacket()
 	p.bWaitSyncSaveSuppressed = false
 	p.packetData = nil
-	p.pktErr = nil
 }
 
 func (p *PktProc) initNextPacket() {
@@ -275,91 +280,92 @@ func (p *PktProc) initNextPacket() {
 	p.currPacket.InitNextPacket()
 }
 
-func (p *PktProc) runDecodeAction() {
+func (p *PktProc) runDecodeAction() error {
 	switch p.currDecode {
 	case decodePktReserved:
-		p.PktReserved()
+		return p.PktReserved()
 	case decodePktNull:
-		p.PktNull()
+		return p.PktNull()
 	case decodePktNullTS:
-		p.PktNullTS()
+		return p.PktNullTS()
 	case decodePktM8:
-		p.PktM8()
+		return p.PktM8()
 	case decodePktMERR:
-		p.PktMERR()
+		return p.PktMERR()
 	case decodePktC8:
-		p.PktC8()
+		return p.PktC8()
 	case decodePktD4:
-		p.PktD4()
+		return p.PktD4()
 	case decodePktD8:
-		p.PktD8()
+		return p.PktD8()
 	case decodePktD16:
-		p.PktD16()
+		return p.PktD16()
 	case decodePktD32:
-		p.PktD32()
+		return p.PktD32()
 	case decodePktD64:
-		p.PktD64()
+		return p.PktD64()
 	case decodePktD4MTS:
-		p.PktD4MTS()
+		return p.PktD4MTS()
 	case decodePktD8MTS:
-		p.PktD8MTS()
+		return p.PktD8MTS()
 	case decodePktD16MTS:
-		p.PktD16MTS()
+		return p.PktD16MTS()
 	case decodePktD32MTS:
-		p.PktD32MTS()
+		return p.PktD32MTS()
 	case decodePktD64MTS:
-		p.PktD64MTS()
+		return p.PktD64MTS()
 	case decodePktFlagTS:
-		p.PktFlagTS()
+		return p.PktFlagTS()
 	case decodePktFExt:
-		p.PktFExt()
+		return p.PktFExt()
 	case decodePktReservedFn:
-		p.PktReservedFn()
+		return p.PktReservedFn()
 	case decodePktF0Ext:
-		p.PktF0Ext()
+		return p.PktF0Ext()
 	case decodePktGERR:
-		p.PktGERR()
+		return p.PktGERR()
 	case decodePktC16:
-		p.PktC16()
+		return p.PktC16()
 	case decodePktD4TS:
-		p.PktD4TS()
+		return p.PktD4TS()
 	case decodePktD8TS:
-		p.PktD8TS()
+		return p.PktD8TS()
 	case decodePktD16TS:
-		p.PktD16TS()
+		return p.PktD16TS()
 	case decodePktD32TS:
-		p.PktD32TS()
+		return p.PktD32TS()
 	case decodePktD64TS:
-		p.PktD64TS()
+		return p.PktD64TS()
 	case decodePktD4M:
-		p.PktD4M()
+		return p.PktD4M()
 	case decodePktD8M:
-		p.PktD8M()
+		return p.PktD8M()
 	case decodePktD16M:
-		p.PktD16M()
+		return p.PktD16M()
 	case decodePktD32M:
-		p.PktD32M()
+		return p.PktD32M()
 	case decodePktD64M:
-		p.PktD64M()
+		return p.PktD64M()
 	case decodePktFlag:
-		p.PktFlag()
+		return p.PktFlag()
 	case decodePktReservedF0n:
-		p.PktReservedF0n()
+		return p.PktReservedF0n()
 	case decodePktVersion:
-		p.PktVersion()
+		return p.PktVersion()
 	case decodePktTrigger:
-		p.PktTrigger()
+		return p.PktTrigger()
 	case decodePktTriggerTS:
-		p.PktTriggerTS()
+		return p.PktTriggerTS()
 	case decodePktFreq:
-		p.PktFreq()
+		return p.PktFreq()
 	case decodePktASync:
-		p.PktASync()
+		return p.PktASync()
 	case decodeExtractTS:
-		p.ExtractTS()
+		return p.ExtractTS()
 	default:
-		p.setBadSequenceError("STM decode action not set")
+		return p.setBadSequenceError("STM decode action not set")
 	}
+	return nil
 }
 
 func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {
@@ -415,29 +421,30 @@ func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {
 	p.sendPacket()
 }
 
-func (p *PktProc) PktReserved() {
+func (p *PktProc) PktReserved() error {
 	badOpcode := uint16(p.nibble)
 	p.currPacket.SetD16Payload(badOpcode)
-	p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
+	return p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
 }
 
-func (p *PktProc) PktNull() {
+func (p *PktProc) PktNull() error {
 	p.currPacket.SetPacketType(PktNull, false)
 	if p.bNeedsTS {
 		p.currDecode = decodeExtractTS
-		p.runDecodeAction()
+		return p.runDecodeAction()
 	} else {
 		p.sendPacket()
 	}
+	return nil
 }
 
-func (p *PktProc) PktNullTS() {
+func (p *PktProc) PktNullTS() error {
 	p.pktNeedsTS()
 	p.currDecode = decodePktNull
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktM8() {
+func (p *PktProc) PktM8() error {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktM8, false)
 	}
@@ -446,9 +453,10 @@ func (p *PktProc) PktM8() {
 		p.currPacket.SetMaster(p.val8)
 		p.sendPacket()
 	}
+	return nil
 }
 
-func (p *PktProc) PktMERR() {
+func (p *PktProc) PktMERR() error {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktMErr, false)
 	}
@@ -458,9 +466,10 @@ func (p *PktProc) PktMERR() {
 		p.currPacket.SetD8Payload(p.val8)
 		p.sendPacket()
 	}
+	return nil
 }
 
-func (p *PktProc) PktC8() {
+func (p *PktProc) PktC8() error {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktC8, false)
 	}
@@ -469,9 +478,10 @@ func (p *PktProc) PktC8() {
 		p.currPacket.SetChannel(uint16(p.val8), true)
 		p.sendPacket()
 	}
+	return nil
 }
 
-func (p *PktProc) PktD4() {
+func (p *PktProc) PktD4() error {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktD4, p.bIsMarker)
 		p.numDataNibbles = 2
@@ -481,15 +491,16 @@ func (p *PktProc) PktD4() {
 			p.currPacket.SetD4Payload(p.nibble)
 			if p.bNeedsTS {
 				p.currDecode = decodeExtractTS
-				p.runDecodeAction()
+				return p.runDecodeAction()
 			} else {
 				p.sendPacket()
 			}
 		}
 	}
+	return nil
 }
 
-func (p *PktProc) PktD8() {
+func (p *PktProc) PktD8() error {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktD8, p.bIsMarker)
 		p.numDataNibbles = 3
@@ -499,14 +510,15 @@ func (p *PktProc) PktD8() {
 		p.currPacket.SetD8Payload(p.val8)
 		if p.bNeedsTS {
 			p.currDecode = decodeExtractTS
-			p.runDecodeAction()
+			return p.runDecodeAction()
 		} else {
 			p.sendPacket()
 		}
 	}
+	return nil
 }
 
-func (p *PktProc) PktD16() {
+func (p *PktProc) PktD16() error {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktD16, p.bIsMarker)
 		p.numDataNibbles = 5
@@ -516,14 +528,15 @@ func (p *PktProc) PktD16() {
 		p.currPacket.SetD16Payload(p.val16)
 		if p.bNeedsTS {
 			p.currDecode = decodeExtractTS
-			p.runDecodeAction()
+			return p.runDecodeAction()
 		} else {
 			p.sendPacket()
 		}
 	}
+	return nil
 }
 
-func (p *PktProc) PktD32() {
+func (p *PktProc) PktD32() error {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktD32, p.bIsMarker)
 		p.numDataNibbles = 9
@@ -533,14 +546,15 @@ func (p *PktProc) PktD32() {
 		p.currPacket.SetD32Payload(p.val32)
 		if p.bNeedsTS {
 			p.currDecode = decodeExtractTS
-			p.runDecodeAction()
+			return p.runDecodeAction()
 		} else {
 			p.sendPacket()
 		}
 	}
+	return nil
 }
 
-func (p *PktProc) PktD64() {
+func (p *PktProc) PktD64() error {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktD64, p.bIsMarker)
 		p.numDataNibbles = 17
@@ -550,76 +564,79 @@ func (p *PktProc) PktD64() {
 		p.currPacket.SetD64Payload(p.val64)
 		if p.bNeedsTS {
 			p.currDecode = decodeExtractTS
-			p.runDecodeAction()
+			return p.runDecodeAction()
 		} else {
 			p.sendPacket()
 		}
 	}
+	return nil
 }
 
-func (p *PktProc) PktD4MTS() {
+func (p *PktProc) PktD4MTS() error {
 	p.pktNeedsTS()
 	p.bIsMarker = true
 	p.currDecode = decodePktD4
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktD8MTS() {
+func (p *PktProc) PktD8MTS() error {
 	p.pktNeedsTS()
 	p.bIsMarker = true
 	p.currDecode = decodePktD8
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktD16MTS() {
+func (p *PktProc) PktD16MTS() error {
 	p.pktNeedsTS()
 	p.bIsMarker = true
 	p.currDecode = decodePktD16
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktD32MTS() {
+func (p *PktProc) PktD32MTS() error {
 	p.pktNeedsTS()
 	p.bIsMarker = true
 	p.currDecode = decodePktD32
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktD64MTS() {
+func (p *PktProc) PktD64MTS() error {
 	p.pktNeedsTS()
 	p.bIsMarker = true
 	p.currDecode = decodePktD64
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktFlagTS() {
+func (p *PktProc) PktFlagTS() error {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktFlag, false)
 	p.currDecode = decodeExtractTS
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktFExt() {
+func (p *PktProc) PktFExt() error {
 	if p.readNibble() {
 		p.currDecode = p.op2N[p.nibble]
-		p.runDecodeAction()
+		return p.runDecodeAction()
 	}
+	return nil
 }
 
-func (p *PktProc) PktReservedFn() {
+func (p *PktProc) PktReservedFn() error {
 	badOpcode := uint16(0x00F) | (uint16(p.nibble) << 4)
 	p.currPacket.SetD16Payload(badOpcode)
-	p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
+	return p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
 }
 
-func (p *PktProc) PktF0Ext() {
+func (p *PktProc) PktF0Ext() error {
 	if p.readNibble() {
 		p.currDecode = p.op3N[p.nibble]
-		p.runDecodeAction()
+		return p.runDecodeAction()
 	}
+	return nil
 }
 
-func (p *PktProc) PktGERR() {
+func (p *PktProc) PktGERR() error {
 	if p.numNibbles == 2 {
 		p.currPacket.SetPacketType(PktGErr, false)
 	}
@@ -629,9 +646,10 @@ func (p *PktProc) PktGERR() {
 		p.currPacket.SetMaster(0)
 		p.sendPacket()
 	}
+	return nil
 }
 
-func (p *PktProc) PktC16() {
+func (p *PktProc) PktC16() error {
 	if p.numNibbles == 2 {
 		p.currPacket.SetPacketType(PktC16, false)
 	}
@@ -640,95 +658,97 @@ func (p *PktProc) PktC16() {
 		p.currPacket.SetChannel(p.val16, false)
 		p.sendPacket()
 	}
+	return nil
 }
 
-func (p *PktProc) PktD4TS() {
+func (p *PktProc) PktD4TS() error {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD4, false)
 	p.numDataNibbles = 3
 	p.currDecode = decodePktD4
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktD8TS() {
+func (p *PktProc) PktD8TS() error {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD8, false)
 	p.numDataNibbles = 4
 	p.currDecode = decodePktD8
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktD16TS() {
+func (p *PktProc) PktD16TS() error {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD16, false)
 	p.numDataNibbles = 6
 	p.currDecode = decodePktD16
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktD32TS() {
+func (p *PktProc) PktD32TS() error {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD32, false)
 	p.numDataNibbles = 10
 	p.currDecode = decodePktD32
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktD64TS() {
+func (p *PktProc) PktD64TS() error {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD64, false)
 	p.numDataNibbles = 18
 	p.currDecode = decodePktD64
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktD4M() {
+func (p *PktProc) PktD4M() error {
 	p.currPacket.SetPacketType(PktD4, true)
 	p.numDataNibbles = 3
 	p.currDecode = decodePktD4
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktD8M() {
+func (p *PktProc) PktD8M() error {
 	p.currPacket.SetPacketType(PktD8, true)
 	p.numDataNibbles = 4
 	p.currDecode = decodePktD8
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktD16M() {
+func (p *PktProc) PktD16M() error {
 	p.currPacket.SetPacketType(PktD16, true)
 	p.numDataNibbles = 6
 	p.currDecode = decodePktD16
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktD32M() {
+func (p *PktProc) PktD32M() error {
 	p.currPacket.SetPacketType(PktD32, true)
 	p.numDataNibbles = 10
 	p.currDecode = decodePktD32
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktD64M() {
+func (p *PktProc) PktD64M() error {
 	p.currPacket.SetPacketType(PktD64, true)
 	p.numDataNibbles = 18
 	p.currDecode = decodePktD64
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktFlag() {
+func (p *PktProc) PktFlag() error {
 	p.currPacket.SetPacketType(PktFlag, false)
 	p.sendPacket()
+	return nil
 }
 
-func (p *PktProc) PktReservedF0n() {
+func (p *PktProc) PktReservedF0n() error {
 	badOpcode := uint16(0x00F) | (uint16(p.nibble) << 8)
 	p.currPacket.SetD16Payload(badOpcode)
-	p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
+	return p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
 }
 
-func (p *PktProc) PktVersion() {
+func (p *PktProc) PktVersion() error {
 	if p.numNibbles == 3 {
 		p.currPacket.SetPacketType(PktVersion, false)
 	}
@@ -740,14 +760,14 @@ func (p *PktProc) PktVersion() {
 		case 4:
 			p.currPacket.OnVersionPkt(TSGrey)
 		default:
-			p.setBadSequenceError("STM VERSION packet : unrecognised version number.")
-			return
+			return p.setBadSequenceError("STM VERSION packet : unrecognised version number.")
 		}
 		p.sendPacket()
 	}
+	return nil
 }
 
-func (p *PktProc) PktTrigger() {
+func (p *PktProc) PktTrigger() error {
 	if p.numNibbles == 3 {
 		p.currPacket.SetPacketType(PktTrig, false)
 	}
@@ -756,20 +776,21 @@ func (p *PktProc) PktTrigger() {
 		p.currPacket.SetD8Payload(p.val8)
 		if p.bNeedsTS {
 			p.currDecode = decodeExtractTS
-			p.runDecodeAction()
+			return p.runDecodeAction()
 		} else {
 			p.sendPacket()
 		}
 	}
+	return nil
 }
 
-func (p *PktProc) PktTriggerTS() {
+func (p *PktProc) PktTriggerTS() error {
 	p.pktNeedsTS()
 	p.currDecode = decodePktTrigger
-	p.runDecodeAction()
+	return p.runDecodeAction()
 }
 
-func (p *PktProc) PktFreq() {
+func (p *PktProc) PktFreq() error {
 	if p.numNibbles == 3 {
 		p.currPacket.SetPacketType(PktFreq, false)
 		p.val32 = 0
@@ -779,9 +800,10 @@ func (p *PktProc) PktFreq() {
 		p.currPacket.SetD32Payload(p.val32)
 		p.sendPacket()
 	}
+	return nil
 }
 
-func (p *PktProc) PktASync() {
+func (p *PktProc) PktASync() error {
 	bCont := true
 	for bCont {
 		bCont = p.readNibble()
@@ -793,11 +815,11 @@ func (p *PktProc) PktASync() {
 				p.clearSyncCount()
 				p.sendPacket()
 			} else if !p.syncStart {
-				p.setBadSequenceError("STM: Invalid ASYNC sequence")
-				return
+				return p.setBadSequenceError("STM: Invalid ASYNC sequence")
 			}
 		}
 	}
+	return nil
 }
 
 func (p *PktProc) readNibble() bool {
@@ -830,7 +852,7 @@ func (p *PktProc) pktNeedsTS() {
 	p.tsReqSet = false
 }
 
-func (p *PktProc) ExtractTS() {
+func (p *PktProc) ExtractTS() error {
 	if !p.tsReqSet {
 		if p.readNibble() {
 			p.reqTSNibbles = p.nibble
@@ -841,8 +863,7 @@ func (p *PktProc) ExtractTS() {
 				p.reqTSNibbles = 16
 			}
 			if p.nibble == 0xF {
-				p.setBadSequenceError("STM: Invalid timestamp size 0xF")
-				return
+				return p.setBadSequenceError("STM: Invalid timestamp size 0xF")
 			}
 			p.tsReqSet = true
 		}
@@ -877,12 +898,12 @@ func (p *PktProc) ExtractTS() {
 			case TSNatBinary:
 				p.currPacket.SetTS(p.tsUpdateValue, newBits)
 			default:
-				p.setBadSequenceError("STM: unknown timestamp encoding")
-				return
+				return p.setBadSequenceError("STM: unknown timestamp encoding")
 			}
 			p.sendPacket()
 		}
 	}
+	return nil
 }
 
 func (p *PktProc) ExtractVal8(nibblesToVal uint8) {
