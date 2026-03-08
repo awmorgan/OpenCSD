@@ -72,9 +72,9 @@ type PktProc struct {
 
 	iTable [256]struct {
 		pktType PktType
-		pktFn   func()
+		pktFn   func() *common.Error
 	}
-	pIPktFn func()
+	pIPktFn func() *common.Error
 }
 
 func NewPktProc(instIDNum int) *PktProc {
@@ -147,13 +147,9 @@ func (p *PktProc) isSync() bool {
 	return p.currPacket.Type == PktNotSync
 }
 
-func (p *PktProc) throwMalformedPacketErr(msg string) {
+func (p *PktProc) malformedPacketErr(msg string) *common.Error {
 	p.currPacket.ErrType = PktBadSequence
-	panic(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, p.currPktIndex, p.chanIDCopy, msg))
-}
-
-func (p *PktProc) throwPacketHeaderErr(msg string) {
-	panic(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, p.currPktIndex, p.chanIDCopy, msg))
+	return common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, p.currPktIndex, p.chanIDCopy, msg)
 }
 
 func (p *PktProc) processData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, ocsd.DatapathResp) {
@@ -171,7 +167,7 @@ func (p *PktProc) processData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, o
 	p.blockIdx = index
 
 	for ((p.dataInProcessed < p.dataInLen) || (p.dataInProcessed == p.dataInLen && p.processState == stateSendPkt)) && ocsd.DataRespIsCont(resp) {
-		p.doProcessLoop(&resp, &currByte, &ok)
+		resp = p.doProcessLoop(&currByte, &ok)
 		if ocsd.DataRespIsFatal(resp) {
 			break
 		}
@@ -180,22 +176,19 @@ func (p *PktProc) processData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, o
 	return p.dataInProcessed, resp
 }
 
-func (p *PktProc) doProcessLoop(resp *ocsd.DatapathResp, currByte *uint8, ok *bool) {
-	defer func() {
-		if r := recover(); r != nil {
-			if err, isErr := r.(*common.Error); isErr {
-				p.LogError(err)
-				if err.Code == ocsd.ErrBadPacketSeq || err.Code == ocsd.ErrInvalidPcktHdr {
-					p.processState = stateSendPkt
-				} else {
-					*resp = ocsd.RespFatalInvalidData
-				}
-			} else {
-				*resp = ocsd.RespFatalSysErr
-				p.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrFail, p.currPktIndex, p.chanIDCopy, fmt.Sprintf("Unknown System Error decoding trace: %v", r)))
-			}
+func (p *PktProc) doProcessLoop(currByte *uint8, ok *bool) ocsd.DatapathResp {
+	resp := ocsd.RespCont
+	handleErr := func(err *common.Error) ocsd.DatapathResp {
+		if err == nil {
+			return ocsd.RespCont
 		}
-	}()
+		p.LogError(err)
+		if err.Code == ocsd.ErrBadPacketSeq || err.Code == ocsd.ErrInvalidPcktHdr {
+			p.processState = stateSendPkt
+			return ocsd.RespCont
+		}
+		return ocsd.RespFatalInvalidData
+	}
 
 	switch p.processState {
 	case stateWaitSync:
@@ -204,7 +197,7 @@ func (p *PktProc) doProcessLoop(resp *ocsd.DatapathResp, currByte *uint8, ok *bo
 			p.currPacket.Type = PktNotSync
 			p.bAsyncRawOp = p.PktRawMonI.HasAttachedAndEnabled()
 		}
-		*resp = p.waitASync()
+		resp = p.waitASync()
 
 	case stateProcHdr:
 		p.currPktIndex = p.blockIdx + ocsd.TrcIndex(p.dataInProcessed)
@@ -212,19 +205,23 @@ func (p *PktProc) doProcessLoop(resp *ocsd.DatapathResp, currByte *uint8, ok *bo
 			p.pIPktFn = p.iTable[*currByte].pktFn
 			p.currPacket.Type = p.iTable[*currByte].pktType
 		} else {
-			panic(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrPktInterpFail, p.currPktIndex, p.chanIDCopy, "Data Buffer Overrun"))
+			return handleErr(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrPktInterpFail, p.currPktIndex, p.chanIDCopy, "Data Buffer Overrun"))
 		}
 		p.processState = stateProcData
 		fallthrough
 
 	case stateProcData:
-		p.pIPktFn()
+		if err := p.pIPktFn(); err != nil {
+			return handleErr(err)
+		}
 
 	case stateSendPkt:
-		*resp = p.outputPacket()
+		resp = p.outputPacket()
 		p.initPacketState()
 		p.processState = stateProcHdr
 	}
+
+	return resp
 }
 
 func (p *PktProc) outputPacket() ocsd.DatapathResp {
@@ -393,7 +390,7 @@ func (p *PktProc) findAsync() asyncResult {
 	return asyncRes
 }
 
-func (p *PktProc) pktASync() {
+func (p *PktProc) pktASync() *common.Error {
 	if len(p.currPacketData) == 1 {
 		p.async0 = 1
 	}
@@ -401,12 +398,13 @@ func (p *PktProc) pktASync() {
 	case asyncResultAsync, asyncResultAsyncExtra0:
 		p.processState = stateSendPkt
 	case asyncResultThrow0, asyncResultNotAsync:
-		p.throwMalformedPacketErr("Bad Async packet")
+		return p.malformedPacketErr("Bad Async packet")
 	case asyncResultAsyncIncomplete:
 	}
+	return nil
 }
 
-func (p *PktProc) extractCycleCount(offset int) uint32 {
+func (p *PktProc) extractCycleCount(offset int) (uint32, *common.Error) {
 	bCont := true
 	cycleCount := uint32(0)
 	byIdx := 0
@@ -414,7 +412,7 @@ func (p *PktProc) extractCycleCount(offset int) uint32 {
 
 	for bCont {
 		if offset+byIdx >= len(p.currPacketData) {
-			p.throwMalformedPacketErr("Insufficient packet bytes for Cycle Count value.")
+			return 0, p.malformedPacketErr("Insufficient packet bytes for Cycle Count value.")
 		}
 		currByte := p.currPacketData[offset+byIdx]
 		if byIdx == 0 {
@@ -431,23 +429,23 @@ func (p *PktProc) extractCycleCount(offset int) uint32 {
 		byIdx++
 	}
 	p.gotCCBytes = byIdx
-	return cycleCount
+	return cycleCount, nil
 }
 
-func (p *PktProc) extractCtxtID(idx int) uint32 {
+func (p *PktProc) extractCtxtID(idx int) (uint32, *common.Error) {
 	ctxtID := uint32(0)
 	shift := 0
 	for i := 0; i < p.numCtxtIDBytes; i++ {
 		if idx+i >= len(p.currPacketData) {
-			p.throwMalformedPacketErr("Insufficient packet bytes for Context ID value.")
+			return 0, p.malformedPacketErr("Insufficient packet bytes for Context ID value.")
 		}
 		ctxtID |= uint32(p.currPacketData[idx+i]) << shift
 		shift += 8
 	}
-	return ctxtID
+	return ctxtID, nil
 }
 
-func (p *PktProc) extractTS() (uint64, uint8, int) {
+func (p *PktProc) extractTS() (uint64, uint8, int, *common.Error) {
 	bCont := true
 	tsIdx := 1
 	b64BitVal := p.Config.TSPkt64()
@@ -458,7 +456,7 @@ func (p *PktProc) extractTS() (uint64, uint8, int) {
 
 	for bCont {
 		if tsIdx >= len(p.currPacketData) {
-			p.throwMalformedPacketErr("Insufficient packet bytes for Timestamp value.")
+			return 0, 0, 0, p.malformedPacketErr("Insufficient packet bytes for Timestamp value.")
 		}
 		byteVal := p.currPacketData[tsIdx]
 		if b64BitVal {
@@ -485,7 +483,7 @@ func (p *PktProc) extractTS() (uint64, uint8, int) {
 		tsIdx++
 		shift += 7
 	}
-	return tsVal, tsUpdateBits, tsIdx
+	return tsVal, tsUpdateBits, tsIdx, nil
 }
 
 func (p *PktProc) extractAddress(offset int) (uint32, uint8) {
@@ -541,7 +539,7 @@ func (p *PktProc) extractAddress(offset int) (uint32, uint8) {
 }
 
 // pkt processing fns
-func (p *PktProc) pktISync() {
+func (p *PktProc) pktISync() *common.Error {
 	var currByte uint8
 	pktIndex := len(p.currPacketData) - 1
 	bGotBytes := false
@@ -614,26 +612,34 @@ func (p *PktProc) pktISync() {
 		p.currPacket.UpdateAddress(ocsd.VAddr(address), 32)
 
 		if p.needCycleCount {
-			cycleCount := p.extractCycleCount(optIdx)
+			cycleCount, err := p.extractCycleCount(optIdx)
+			if err != nil {
+				return err
+			}
 			p.currPacket.CycleCount = cycleCount
 			p.currPacket.CCValid = true
 			optIdx += p.gotCCBytes
 		}
 
 		if p.numCtxtIDBytes > 0 {
-			ctxtID := p.extractCtxtID(optIdx)
+			ctxtID, err := p.extractCtxtID(optIdx)
+			if err != nil {
+				return err
+			}
 			p.currPacket.Context.CtxtID = ctxtID
 			p.currPacket.Context.UpdatedC = true
 		}
 		p.processState = stateSendPkt
 	}
+	return nil
 }
 
-func (p *PktProc) pktTrigger() {
+func (p *PktProc) pktTrigger() *common.Error {
 	p.processState = stateSendPkt
+	return nil
 }
 
-func (p *PktProc) pktWPointUpdate() {
+func (p *PktProc) pktWPointUpdate() *common.Error {
 	bDone := false
 	bBytesAvail := true
 	var currByte uint8
@@ -703,13 +709,15 @@ func (p *PktProc) pktWPointUpdate() {
 		p.currPacket.UpdateAddress(ocsd.VAddr(addrVal), int(totalBits))
 		p.processState = stateSendPkt
 	}
+	return nil
 }
 
-func (p *PktProc) pktIgnore() {
+func (p *PktProc) pktIgnore() *common.Error {
 	p.processState = stateSendPkt
+	return nil
 }
 
-func (p *PktProc) pktCtxtID() {
+func (p *PktProc) pktCtxtID() *common.Error {
 	pktIndex := len(p.currPacketData) - 1
 	if pktIndex == 0 {
 		p.numCtxtIDBytes = p.Config.CtxtIDBytes()
@@ -729,23 +737,28 @@ func (p *PktProc) pktCtxtID() {
 
 	if bGotBytes {
 		if p.numCtxtIDBytes > 0 {
-			ctxtID := p.extractCtxtID(1)
+			ctxtID, err := p.extractCtxtID(1)
+			if err != nil {
+				return err
+			}
 			p.currPacket.Context.CtxtID = ctxtID
 			p.currPacket.Context.UpdatedC = true
 		}
 		p.processState = stateSendPkt
 	}
+	return nil
 }
 
-func (p *PktProc) pktVMID() {
+func (p *PktProc) pktVMID() *common.Error {
 	if currByte, ok := p.readByteVal(); ok {
 		p.currPacket.Context.VMID = currByte
 		p.currPacket.Context.UpdatedV = true
 		p.processState = stateSendPkt
 	}
+	return nil
 }
 
-func (p *PktProc) pktAtom() {
+func (p *PktProc) pktAtom() *common.Error {
 	pHdr := p.currPacketData[0]
 	if !p.Config.EnaCycleAcc() {
 		p.currPacket.SetAtomFromPHdr(pHdr)
@@ -768,16 +781,20 @@ func (p *PktProc) pktAtom() {
 		}
 
 		if bGotAllPktBytes {
-			cycleCount := p.extractCycleCount(0)
+			cycleCount, err := p.extractCycleCount(0)
+			if err != nil {
+				return err
+			}
 			p.currPacket.CycleCount = cycleCount
 			p.currPacket.CCValid = true
 			p.currPacket.SetCycleAccAtomFromPHdr(pHdr)
 			p.processState = stateSendPkt
 		}
 	}
+	return nil
 }
 
-func (p *PktProc) pktTimeStamp() {
+func (p *PktProc) pktTimeStamp() *common.Error {
 	var currByte uint8
 	pktIndex := len(p.currPacketData) - 1
 	bGotBytes := false
@@ -819,22 +836,30 @@ func (p *PktProc) pktTimeStamp() {
 	}
 
 	if bGotBytes {
-		tsVal, tsUpdateBits, tsEndIdx := p.extractTS()
+		tsVal, tsUpdateBits, tsEndIdx, err := p.extractTS()
+		if err != nil {
+			return err
+		}
 		if p.needCycleCount {
-			cycleCount := p.extractCycleCount(tsEndIdx)
+			cycleCount, err := p.extractCycleCount(tsEndIdx)
+			if err != nil {
+				return err
+			}
 			p.currPacket.CycleCount = cycleCount
 			p.currPacket.CCValid = true
 		}
 		p.currPacket.UpdateTimestamp(tsVal, tsUpdateBits)
 		p.processState = stateSendPkt
 	}
+	return nil
 }
 
-func (p *PktProc) pktExceptionRet() {
+func (p *PktProc) pktExceptionRet() *common.Error {
 	p.processState = stateSendPkt
+	return nil
 }
 
-func (p *PktProc) pktBranchAddr() {
+func (p *PktProc) pktBranchAddr() *common.Error {
 	currByte := p.currPacketData[0]
 	bDone := false
 	bBytesAvail := true
@@ -910,7 +935,7 @@ func (p *PktProc) pktBranchAddr() {
 				}
 				p.gotCCBytes++
 			} else {
-				p.throwMalformedPacketErr("sequencing error analysing branch packet")
+				return p.malformedPacketErr("sequencing error analysing branch packet")
 			}
 		}
 	}
@@ -961,16 +986,21 @@ func (p *PktProc) pktBranchAddr() {
 
 		if p.needCycleCount {
 			countIdx := p.numAddrBytes + p.numExcepBytes
-			cycleCount := p.extractCycleCount(countIdx)
+			cycleCount, err := p.extractCycleCount(countIdx)
+			if err != nil {
+				return err
+			}
 			p.currPacket.CycleCount = cycleCount
 			p.currPacket.CCValid = true
 		}
 		p.processState = stateSendPkt
 	}
+	return nil
 }
 
-func (p *PktProc) pktReserved() {
+func (p *PktProc) pktReserved() *common.Error {
 	p.processState = stateSendPkt
+	return nil
 }
 
 func (p *PktProc) buildIPacketTable() {
