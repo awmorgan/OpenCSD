@@ -240,32 +240,11 @@ func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, 
 }
 
 func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byte, numBytesProcessed *uint32) (resp ocsd.DatapathResp) {
-	defer func() {
-		if r := recover(); r != nil {
-			if e, ok := r.(*common.Error); ok {
-				fmt.Printf("RECOVERED COMMON.ERROR: %v\n", e)
-				d.collateDataPathResp(ocsd.RespFatalInvalidData)
-				if d.errorLogger != nil {
-					d.errorLogger.LogError(e)
-				}
-			} else {
-				// Sys err
-				fmt.Printf("RECOVERED PANIC: %v\n", r)
-				errObj := common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrFail, fmt.Sprintf("Panic %v", r))
-				d.collateDataPathResp(ocsd.RespFatalSysErr)
-				if d.errorLogger != nil {
-					d.errorLogger.LogError(errObj)
-				}
-			}
-			resp = d.highestResp
-		}
-	}()
-
 	if !d.firstData {
 		d.trcCurrIdx = index
 	} else {
 		if d.trcCurrIdx != index { // none continuous trace data
-			panic(common.NewErrorWithIdxMsg(ocsd.ErrSevError, ocsd.ErrDfrmtrNotconttrace, index, "Not continuous trace data"))
+			return d.processTraceDataError(common.NewErrorWithIdxMsg(ocsd.ErrSevError, ocsd.ErrDfrmtrNotconttrace, index, "Not continuous trace data"), ocsd.RespFatalInvalidData)
 		}
 	}
 
@@ -273,15 +252,23 @@ func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byt
 	d.inBlockBase = dataBlock
 	d.inBlockProcessed = 0
 	dataBlockSize := uint32(len(dataBlock))
+	if d.alignment == 0 {
+		errObj := common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrFail, "Deformatter not configured")
+		return d.processTraceDataError(errObj, ocsd.RespFatalSysErr)
+	}
 
 	if dataBlockSize%d.alignment != 0 {
-		panic(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, fmt.Sprintf("Input block incorrect size, must be %d byte multiple", d.alignment)))
+		return d.processTraceDataError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, fmt.Sprintf("Input block incorrect size, must be %d byte multiple", d.alignment)), ocsd.RespFatalInvalidData)
 	}
 
 	if d.checkForSync(dataBlockSize) {
 		bProcessing := true
 		for bProcessing {
-			bProcessing = d.extractFrame(dataBlockSize)
+			var errObj *common.Error
+			bProcessing, errObj = d.extractFrame(dataBlockSize)
+			if errObj != nil {
+				return d.processTraceDataError(errObj, ocsd.RespFatalInvalidData)
+			}
 			if bProcessing {
 				bProcessing = d.unpackFrame()
 			}
@@ -298,4 +285,12 @@ func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byt
 	*numBytesProcessed = d.inBlockProcessed
 	resp = d.highestResp
 	return
+}
+
+func (d *FrameDeformatter) processTraceDataError(errObj *common.Error, resp ocsd.DatapathResp) ocsd.DatapathResp {
+	d.collateDataPathResp(resp)
+	if errObj != nil && d.errorLogger != nil {
+		d.errorLogger.LogError(errObj)
+	}
+	return d.highestResp
 }

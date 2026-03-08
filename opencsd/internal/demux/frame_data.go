@@ -82,7 +82,7 @@ func (d *FrameDeformatter) checkForResetFSyncPatterns(fSyncBytes *uint32, dataBl
 	return err
 }
 
-func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) bool {
+func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) (bool, *common.Error) {
 	const FSYNC_PATTERN uint32 = 0x7FFFFFFF
 	const HSYNC_PATTERN uint16 = 0x7FFF
 	const FSYNC_START uint16 = 0xFFFF
@@ -92,7 +92,7 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) bool {
 	bufLeft := dataBlockSize - d.inBlockProcessed
 
 	if bufLeft == 0 {
-		return false
+		return false, nil
 	}
 
 	if d.cfgFlags&ocsd.DfrmtrFrameMemAlign != 0 {
@@ -103,12 +103,15 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) bool {
 				d.outputRawMonBytes(ocsd.OpData, d.trcCurrIdx, ocsd.FrmFsync, d.inBlockBase[d.inBlockProcessed:d.inBlockProcessed+fSyncBytes], 0)
 			}
 			if err != ocsd.OK {
-				panic(common.NewErrorWithIdxMsg(ocsd.ErrSevError, err, d.trcCurrIdx, "Incorrect FSYNC frame reset pattern"))
+				return false, common.NewErrorWithIdxMsg(ocsd.ErrSevError, err, d.trcCurrIdx, "Incorrect FSYNC frame reset pattern")
 			}
 			bufLeft -= fSyncBytes
 		}
 
 		if bufLeft > 0 {
+			if bufLeft < ocsd.DfrmtrFrameSize {
+				return false, common.NewErrorWithIdxMsg(ocsd.ErrSevError, ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx, "Insufficient bytes for aligned frame")
+			}
 			d.exFrmNBytes = ocsd.DfrmtrFrameSize
 			copy(d.exFrmData[:], d.inBlockBase[d.inBlockProcessed+fSyncBytes:d.inBlockProcessed+fSyncBytes+ocsd.DfrmtrFrameSize])
 			d.trcCurrIdxSof = d.trcCurrIdx + ocsd.TrcIndex(fSyncBytes)
@@ -123,7 +126,7 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) bool {
 		if hasFSyncs && d.exFrmNBytes == 0 {
 			if d.bFsyncStartEob {
 				if bufLeft >= 2 && binary.LittleEndian.Uint16(d.inBlockBase[dataPtrIdx:]) != HSYNC_PATTERN {
-					panic(common.NewErrorWithIdxMsg(ocsd.ErrSevError, ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx, "Bad FSYNC pattern before frame or invalid ID.(0x7F)"))
+					return false, common.NewErrorWithIdxMsg(ocsd.ErrSevError, ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx, "Bad FSYNC pattern before frame or invalid ID.(0x7F)")
 				} else if bufLeft >= 2 {
 					fSyncBytes += 2
 					bufLeft -= 2
@@ -148,7 +151,7 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) bool {
 			}
 		}
 
-		for d.exFrmNBytes < ocsd.DfrmtrFrameSize && bufLeft > 0 {
+		for d.exFrmNBytes < ocsd.DfrmtrFrameSize && bufLeft >= 2 {
 			if d.exFrmNBytes == 0 {
 				d.trcCurrIdxSof = d.trcCurrIdx + ocsd.TrcIndex(fSyncBytes)
 			}
@@ -162,10 +165,10 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) bool {
 				if hasHSyncs {
 					hSyncBytes += 2
 				} else {
-					panic(common.NewErrorWithIdxMsg(ocsd.ErrSevError, ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx, "Bad HSYNC in frame."))
+					return false, common.NewErrorWithIdxMsg(ocsd.ErrSevError, ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx, "Bad HSYNC in frame.")
 				}
 			} else if dataPairVal == FSYNC_START {
-				panic(common.NewErrorWithIdxMsg(ocsd.ErrSevError, ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx, "Bad FSYNC start in frame or invalid ID (0x7F)."))
+				return false, common.NewErrorWithIdxMsg(ocsd.ErrSevError, ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx, "Bad FSYNC start in frame or invalid ID (0x7F).")
 			} else {
 				d.exFrmNBytes += 2
 				exBytes += 2
@@ -173,6 +176,10 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) bool {
 
 			bufLeft -= 2
 			dataPtrIdx += 2
+		}
+
+		if bufLeft == 1 {
+			return false, common.NewErrorWithIdxMsg(ocsd.ErrSevError, ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx, "Odd trailing byte in frame stream")
 		}
 	}
 
@@ -187,7 +194,7 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) bool {
 
 	// In C++ it updates stats here, omitted for this Go port since DemuxStats isn't passed around yet
 
-	return d.exFrmNBytes == ocsd.DfrmtrFrameSize
+	return d.exFrmNBytes == ocsd.DfrmtrFrameSize, nil
 }
 
 func (d *FrameDeformatter) unpackFrame() bool {
