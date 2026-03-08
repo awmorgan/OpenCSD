@@ -119,7 +119,7 @@ func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp,
 		return resp, nil, true
 	case procHdr:
 		p.packetIndex = index + ocsd.TrcIndex(p.dataInUsed)
-		p.itmProcessHdr() // will set to procData or procSendPkt on a valid header.
+		p.ProcessHdr() // will set to procData or procSendPkt on a valid header.
 		if e := p.pktErr; e != nil {
 			p.pktErr = nil
 			p.LogError(e)
@@ -240,7 +240,7 @@ func (p *PktProc) readByte() (byte, bool) {
 	return 0, false
 }
 
-func (p *PktProc) itmProcessHdr() {
+func (p *PktProc) ProcessHdr() {
 	b, ok := p.readByte()
 	if !ok {
 		return
@@ -290,23 +290,23 @@ func (p *PktProc) itmProcessHdr() {
 func (p *PktProc) runDataDecodeState() {
 	switch p.decodeState {
 	case decodeData:
-		p.itmPktData()
+		p.PktData()
 	case decodeAsync:
-		p.itmPktAsync()
+		p.PktAsync()
 	case decodeLocalTS:
-		p.itmPktLocalTS()
+		p.PktLocalTS()
 	case decodeExtension:
-		p.itmPktExtension()
+		p.PktExtension()
 	case decodeGlobalTS1:
-		p.itmPktGlobalTS1()
+		p.PktGlobalTS1()
 	case decodeGlobalTS2:
-		p.itmPktGlobalTS2()
+		p.PktGlobalTS2()
 	default:
 		p.setBadSequenceError("ITM packet decode state not set")
 	}
 }
 
-func (p *PktProc) itmPktData() {
+func (p *PktProc) PktData() {
 	payloadBytesReq := int(p.headerByte & 0x3)
 	payloadBytesGot := len(p.packetData) - 1
 
@@ -375,7 +375,7 @@ func (p *PktProc) extractContVal64() uint64 {
 	return value
 }
 
-func (p *PktProc) itmPktLocalTS() {
+func (p *PktProc) PktLocalTS() {
 	const pktSizeLimit = 5
 	bGotContVal := false
 
@@ -401,7 +401,7 @@ func (p *PktProc) itmPktLocalTS() {
 	}
 }
 
-func (p *PktProc) itmPktGlobalTS1() {
+func (p *PktProc) PktGlobalTS1() {
 	const pktSizeLimit = 5
 	bGotContVal := p.readContBytes(pktSizeLimit)
 
@@ -419,7 +419,7 @@ func (p *PktProc) itmPktGlobalTS1() {
 	}
 }
 
-func (p *PktProc) itmPktGlobalTS2() {
+func (p *PktProc) PktGlobalTS2() {
 	const pktSizeLimit = 7
 	bGotContVal := p.readContBytes(pktSizeLimit)
 
@@ -436,7 +436,7 @@ func (p *PktProc) itmPktGlobalTS2() {
 	}
 }
 
-func (p *PktProc) itmPktExtension() {
+func (p *PktProc) PktExtension() {
 	const pktSizeLimit = 5
 	nBitLength := []uint8{2, 9, 16, 23, 31}
 	bGotContVal := false
@@ -496,7 +496,7 @@ func (p *PktProc) readAsyncSeq() (bFoundAsync bool, bError bool) {
 	return bFoundAsync, bError
 }
 
-func (p *PktProc) itmPktAsync() {
+func (p *PktProc) PktAsync() {
 	bFoundAsync, bError := p.readAsyncSeq()
 	if bFoundAsync {
 		p.procState = procSendPkt

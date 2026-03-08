@@ -278,85 +278,85 @@ func (p *PktProc) initNextPacket() {
 func (p *PktProc) runDecodeAction() {
 	switch p.currDecode {
 	case decodePktReserved:
-		p.stmPktReserved()
+		p.PktReserved()
 	case decodePktNull:
-		p.stmPktNull()
+		p.PktNull()
 	case decodePktNullTS:
-		p.stmPktNullTS()
+		p.PktNullTS()
 	case decodePktM8:
-		p.stmPktM8()
+		p.PktM8()
 	case decodePktMERR:
-		p.stmPktMERR()
+		p.PktMERR()
 	case decodePktC8:
-		p.stmPktC8()
+		p.PktC8()
 	case decodePktD4:
-		p.stmPktD4()
+		p.PktD4()
 	case decodePktD8:
-		p.stmPktD8()
+		p.PktD8()
 	case decodePktD16:
-		p.stmPktD16()
+		p.PktD16()
 	case decodePktD32:
-		p.stmPktD32()
+		p.PktD32()
 	case decodePktD64:
-		p.stmPktD64()
+		p.PktD64()
 	case decodePktD4MTS:
-		p.stmPktD4MTS()
+		p.PktD4MTS()
 	case decodePktD8MTS:
-		p.stmPktD8MTS()
+		p.PktD8MTS()
 	case decodePktD16MTS:
-		p.stmPktD16MTS()
+		p.PktD16MTS()
 	case decodePktD32MTS:
-		p.stmPktD32MTS()
+		p.PktD32MTS()
 	case decodePktD64MTS:
-		p.stmPktD64MTS()
+		p.PktD64MTS()
 	case decodePktFlagTS:
-		p.stmPktFlagTS()
+		p.PktFlagTS()
 	case decodePktFExt:
-		p.stmPktFExt()
+		p.PktFExt()
 	case decodePktReservedFn:
-		p.stmPktReservedFn()
+		p.PktReservedFn()
 	case decodePktF0Ext:
-		p.stmPktF0Ext()
+		p.PktF0Ext()
 	case decodePktGERR:
-		p.stmPktGERR()
+		p.PktGERR()
 	case decodePktC16:
-		p.stmPktC16()
+		p.PktC16()
 	case decodePktD4TS:
-		p.stmPktD4TS()
+		p.PktD4TS()
 	case decodePktD8TS:
-		p.stmPktD8TS()
+		p.PktD8TS()
 	case decodePktD16TS:
-		p.stmPktD16TS()
+		p.PktD16TS()
 	case decodePktD32TS:
-		p.stmPktD32TS()
+		p.PktD32TS()
 	case decodePktD64TS:
-		p.stmPktD64TS()
+		p.PktD64TS()
 	case decodePktD4M:
-		p.stmPktD4M()
+		p.PktD4M()
 	case decodePktD8M:
-		p.stmPktD8M()
+		p.PktD8M()
 	case decodePktD16M:
-		p.stmPktD16M()
+		p.PktD16M()
 	case decodePktD32M:
-		p.stmPktD32M()
+		p.PktD32M()
 	case decodePktD64M:
-		p.stmPktD64M()
+		p.PktD64M()
 	case decodePktFlag:
-		p.stmPktFlag()
+		p.PktFlag()
 	case decodePktReservedF0n:
-		p.stmPktReservedF0n()
+		p.PktReservedF0n()
 	case decodePktVersion:
-		p.stmPktVersion()
+		p.PktVersion()
 	case decodePktTrigger:
-		p.stmPktTrigger()
+		p.PktTrigger()
 	case decodePktTriggerTS:
-		p.stmPktTriggerTS()
+		p.PktTriggerTS()
 	case decodePktFreq:
-		p.stmPktFreq()
+		p.PktFreq()
 	case decodePktASync:
-		p.stmPktASync()
+		p.PktASync()
 	case decodeExtractTS:
-		p.stmExtractTS()
+		p.ExtractTS()
 	default:
 		p.setBadSequenceError("STM decode action not set")
 	}
@@ -415,13 +415,13 @@ func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {
 	p.sendPacket()
 }
 
-func (p *PktProc) stmPktReserved() {
+func (p *PktProc) PktReserved() {
 	badOpcode := uint16(p.nibble)
 	p.currPacket.SetD16Payload(badOpcode)
 	p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
 }
 
-func (p *PktProc) stmPktNull() {
+func (p *PktProc) PktNull() {
 	p.currPacket.SetPacketType(PktNull, false)
 	if p.bNeedsTS {
 		p.currDecode = decodeExtractTS
@@ -431,28 +431,28 @@ func (p *PktProc) stmPktNull() {
 	}
 }
 
-func (p *PktProc) stmPktNullTS() {
+func (p *PktProc) PktNullTS() {
 	p.pktNeedsTS()
 	p.currDecode = decodePktNull
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktM8() {
+func (p *PktProc) PktM8() {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktM8, false)
 	}
-	p.stmExtractVal8(3)
+	p.ExtractVal8(3)
 	if p.numNibbles == 3 {
 		p.currPacket.SetMaster(p.val8)
 		p.sendPacket()
 	}
 }
 
-func (p *PktProc) stmPktMERR() {
+func (p *PktProc) PktMERR() {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktMErr, false)
 	}
-	p.stmExtractVal8(3)
+	p.ExtractVal8(3)
 	if p.numNibbles == 3 {
 		p.currPacket.SetChannel(0, false)
 		p.currPacket.SetD8Payload(p.val8)
@@ -460,18 +460,18 @@ func (p *PktProc) stmPktMERR() {
 	}
 }
 
-func (p *PktProc) stmPktC8() {
+func (p *PktProc) PktC8() {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktC8, false)
 	}
-	p.stmExtractVal8(3)
+	p.ExtractVal8(3)
 	if p.numNibbles == 3 {
 		p.currPacket.SetChannel(uint16(p.val8), true)
 		p.sendPacket()
 	}
 }
 
-func (p *PktProc) stmPktD4() {
+func (p *PktProc) PktD4() {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktD4, p.bIsMarker)
 		p.numDataNibbles = 2
@@ -489,12 +489,12 @@ func (p *PktProc) stmPktD4() {
 	}
 }
 
-func (p *PktProc) stmPktD8() {
+func (p *PktProc) PktD8() {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktD8, p.bIsMarker)
 		p.numDataNibbles = 3
 	}
-	p.stmExtractVal8(p.numDataNibbles)
+	p.ExtractVal8(p.numDataNibbles)
 	if p.numNibbles == p.numDataNibbles {
 		p.currPacket.SetD8Payload(p.val8)
 		if p.bNeedsTS {
@@ -506,12 +506,12 @@ func (p *PktProc) stmPktD8() {
 	}
 }
 
-func (p *PktProc) stmPktD16() {
+func (p *PktProc) PktD16() {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktD16, p.bIsMarker)
 		p.numDataNibbles = 5
 	}
-	p.stmExtractVal16(p.numDataNibbles)
+	p.ExtractVal16(p.numDataNibbles)
 	if p.numNibbles == p.numDataNibbles {
 		p.currPacket.SetD16Payload(p.val16)
 		if p.bNeedsTS {
@@ -523,12 +523,12 @@ func (p *PktProc) stmPktD16() {
 	}
 }
 
-func (p *PktProc) stmPktD32() {
+func (p *PktProc) PktD32() {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktD32, p.bIsMarker)
 		p.numDataNibbles = 9
 	}
-	p.stmExtractVal32(p.numDataNibbles)
+	p.ExtractVal32(p.numDataNibbles)
 	if p.numNibbles == p.numDataNibbles {
 		p.currPacket.SetD32Payload(p.val32)
 		if p.bNeedsTS {
@@ -540,12 +540,12 @@ func (p *PktProc) stmPktD32() {
 	}
 }
 
-func (p *PktProc) stmPktD64() {
+func (p *PktProc) PktD64() {
 	if p.numNibbles == 1 {
 		p.currPacket.SetPacketType(PktD64, p.bIsMarker)
 		p.numDataNibbles = 17
 	}
-	p.stmExtractVal64(p.numDataNibbles)
+	p.ExtractVal64(p.numDataNibbles)
 	if p.numNibbles == p.numDataNibbles {
 		p.currPacket.SetD64Payload(p.val64)
 		if p.bNeedsTS {
@@ -557,73 +557,73 @@ func (p *PktProc) stmPktD64() {
 	}
 }
 
-func (p *PktProc) stmPktD4MTS() {
+func (p *PktProc) PktD4MTS() {
 	p.pktNeedsTS()
 	p.bIsMarker = true
 	p.currDecode = decodePktD4
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktD8MTS() {
+func (p *PktProc) PktD8MTS() {
 	p.pktNeedsTS()
 	p.bIsMarker = true
 	p.currDecode = decodePktD8
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktD16MTS() {
+func (p *PktProc) PktD16MTS() {
 	p.pktNeedsTS()
 	p.bIsMarker = true
 	p.currDecode = decodePktD16
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktD32MTS() {
+func (p *PktProc) PktD32MTS() {
 	p.pktNeedsTS()
 	p.bIsMarker = true
 	p.currDecode = decodePktD32
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktD64MTS() {
+func (p *PktProc) PktD64MTS() {
 	p.pktNeedsTS()
 	p.bIsMarker = true
 	p.currDecode = decodePktD64
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktFlagTS() {
+func (p *PktProc) PktFlagTS() {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktFlag, false)
 	p.currDecode = decodeExtractTS
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktFExt() {
+func (p *PktProc) PktFExt() {
 	if p.readNibble() {
 		p.currDecode = p.op2N[p.nibble]
 		p.runDecodeAction()
 	}
 }
 
-func (p *PktProc) stmPktReservedFn() {
+func (p *PktProc) PktReservedFn() {
 	badOpcode := uint16(0x00F) | (uint16(p.nibble) << 4)
 	p.currPacket.SetD16Payload(badOpcode)
 	p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
 }
 
-func (p *PktProc) stmPktF0Ext() {
+func (p *PktProc) PktF0Ext() {
 	if p.readNibble() {
 		p.currDecode = p.op3N[p.nibble]
 		p.runDecodeAction()
 	}
 }
 
-func (p *PktProc) stmPktGERR() {
+func (p *PktProc) PktGERR() {
 	if p.numNibbles == 2 {
 		p.currPacket.SetPacketType(PktGErr, false)
 	}
-	p.stmExtractVal8(4)
+	p.ExtractVal8(4)
 	if p.numNibbles == 4 {
 		p.currPacket.SetD8Payload(p.val8)
 		p.currPacket.SetMaster(0)
@@ -631,18 +631,18 @@ func (p *PktProc) stmPktGERR() {
 	}
 }
 
-func (p *PktProc) stmPktC16() {
+func (p *PktProc) PktC16() {
 	if p.numNibbles == 2 {
 		p.currPacket.SetPacketType(PktC16, false)
 	}
-	p.stmExtractVal16(6)
+	p.ExtractVal16(6)
 	if p.numNibbles == 6 {
 		p.currPacket.SetChannel(p.val16, false)
 		p.sendPacket()
 	}
 }
 
-func (p *PktProc) stmPktD4TS() {
+func (p *PktProc) PktD4TS() {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD4, false)
 	p.numDataNibbles = 3
@@ -650,7 +650,7 @@ func (p *PktProc) stmPktD4TS() {
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktD8TS() {
+func (p *PktProc) PktD8TS() {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD8, false)
 	p.numDataNibbles = 4
@@ -658,7 +658,7 @@ func (p *PktProc) stmPktD8TS() {
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktD16TS() {
+func (p *PktProc) PktD16TS() {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD16, false)
 	p.numDataNibbles = 6
@@ -666,7 +666,7 @@ func (p *PktProc) stmPktD16TS() {
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktD32TS() {
+func (p *PktProc) PktD32TS() {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD32, false)
 	p.numDataNibbles = 10
@@ -674,7 +674,7 @@ func (p *PktProc) stmPktD32TS() {
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktD64TS() {
+func (p *PktProc) PktD64TS() {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD64, false)
 	p.numDataNibbles = 18
@@ -682,53 +682,53 @@ func (p *PktProc) stmPktD64TS() {
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktD4M() {
+func (p *PktProc) PktD4M() {
 	p.currPacket.SetPacketType(PktD4, true)
 	p.numDataNibbles = 3
 	p.currDecode = decodePktD4
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktD8M() {
+func (p *PktProc) PktD8M() {
 	p.currPacket.SetPacketType(PktD8, true)
 	p.numDataNibbles = 4
 	p.currDecode = decodePktD8
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktD16M() {
+func (p *PktProc) PktD16M() {
 	p.currPacket.SetPacketType(PktD16, true)
 	p.numDataNibbles = 6
 	p.currDecode = decodePktD16
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktD32M() {
+func (p *PktProc) PktD32M() {
 	p.currPacket.SetPacketType(PktD32, true)
 	p.numDataNibbles = 10
 	p.currDecode = decodePktD32
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktD64M() {
+func (p *PktProc) PktD64M() {
 	p.currPacket.SetPacketType(PktD64, true)
 	p.numDataNibbles = 18
 	p.currDecode = decodePktD64
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktFlag() {
+func (p *PktProc) PktFlag() {
 	p.currPacket.SetPacketType(PktFlag, false)
 	p.sendPacket()
 }
 
-func (p *PktProc) stmPktReservedF0n() {
+func (p *PktProc) PktReservedF0n() {
 	badOpcode := uint16(0x00F) | (uint16(p.nibble) << 8)
 	p.currPacket.SetD16Payload(badOpcode)
 	p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
 }
 
-func (p *PktProc) stmPktVersion() {
+func (p *PktProc) PktVersion() {
 	if p.numNibbles == 3 {
 		p.currPacket.SetPacketType(PktVersion, false)
 	}
@@ -747,11 +747,11 @@ func (p *PktProc) stmPktVersion() {
 	}
 }
 
-func (p *PktProc) stmPktTrigger() {
+func (p *PktProc) PktTrigger() {
 	if p.numNibbles == 3 {
 		p.currPacket.SetPacketType(PktTrig, false)
 	}
-	p.stmExtractVal8(5)
+	p.ExtractVal8(5)
 	if p.numNibbles == 5 {
 		p.currPacket.SetD8Payload(p.val8)
 		if p.bNeedsTS {
@@ -763,25 +763,25 @@ func (p *PktProc) stmPktTrigger() {
 	}
 }
 
-func (p *PktProc) stmPktTriggerTS() {
+func (p *PktProc) PktTriggerTS() {
 	p.pktNeedsTS()
 	p.currDecode = decodePktTrigger
 	p.runDecodeAction()
 }
 
-func (p *PktProc) stmPktFreq() {
+func (p *PktProc) PktFreq() {
 	if p.numNibbles == 3 {
 		p.currPacket.SetPacketType(PktFreq, false)
 		p.val32 = 0
 	}
-	p.stmExtractVal32(11)
+	p.ExtractVal32(11)
 	if p.numNibbles == 11 {
 		p.currPacket.SetD32Payload(p.val32)
 		p.sendPacket()
 	}
 }
 
-func (p *PktProc) stmPktASync() {
+func (p *PktProc) PktASync() {
 	bCont := true
 	for bCont {
 		bCont = p.readNibble()
@@ -830,7 +830,7 @@ func (p *PktProc) pktNeedsTS() {
 	p.tsReqSet = false
 }
 
-func (p *PktProc) stmExtractTS() {
+func (p *PktProc) ExtractTS() {
 	if !p.tsReqSet {
 		if p.readNibble() {
 			p.reqTSNibbles = p.nibble
@@ -885,7 +885,7 @@ func (p *PktProc) stmExtractTS() {
 	}
 }
 
-func (p *PktProc) stmExtractVal8(nibblesToVal uint8) {
+func (p *PktProc) ExtractVal8(nibblesToVal uint8) {
 	bCont := true
 	for bCont && (p.numNibbles < nibblesToVal) {
 		bCont = p.readNibble()
@@ -896,7 +896,7 @@ func (p *PktProc) stmExtractVal8(nibblesToVal uint8) {
 	}
 }
 
-func (p *PktProc) stmExtractVal16(nibblesToVal uint8) {
+func (p *PktProc) ExtractVal16(nibblesToVal uint8) {
 	bCont := true
 	for bCont && (p.numNibbles < nibblesToVal) {
 		bCont = p.readNibble()
@@ -907,7 +907,7 @@ func (p *PktProc) stmExtractVal16(nibblesToVal uint8) {
 	}
 }
 
-func (p *PktProc) stmExtractVal32(nibblesToVal uint8) {
+func (p *PktProc) ExtractVal32(nibblesToVal uint8) {
 	bCont := true
 	for bCont && (p.numNibbles < nibblesToVal) {
 		bCont = p.readNibble()
@@ -918,7 +918,7 @@ func (p *PktProc) stmExtractVal32(nibblesToVal uint8) {
 	}
 }
 
-func (p *PktProc) stmExtractVal64(nibblesToVal uint8) {
+func (p *PktProc) ExtractVal64(nibblesToVal uint8) {
 	bCont := true
 	for bCont && (p.numNibbles < nibblesToVal) {
 		bCont = p.readNibble()
