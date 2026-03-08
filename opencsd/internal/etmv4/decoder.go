@@ -149,6 +149,12 @@ type PktDecode struct {
 	returnStack common.AddrReturnStack
 
 	unsyncEOTInfo ocsd.UnsyncInfo
+
+	// Expected start address for the next continuous range (C++ m_next_range_check).
+	nextRangeCheck struct {
+		nextStAddr ocsd.VAddr
+		valid      bool
+	}
 }
 
 // NewPktDecode creates a new ETMv4/ETE trace decoder
@@ -191,6 +197,7 @@ func (d *PktDecode) initDecoder() {
 	d.outElem = *common.NewGenElemStack()
 	d.returnStack = *common.NewAddrReturnStack()
 	d.unsyncEOTInfo = ocsd.UnsyncInitDecoder
+	d.nextRangeCheckClear()
 }
 
 func (d *PktDecode) OnProtocolConfig() ocsd.Err {
@@ -691,7 +698,20 @@ func (d *PktDecode) setInstrInfoInAddrISA(addr ocsd.VAddr, isa uint8) {
 }
 
 func (d *PktDecode) nextRangeCheckClear() {
-	// TODO stub
+	d.nextRangeCheck.valid = false
+}
+
+func (d *PktDecode) nextRangeCheckSet(addr ocsd.VAddr) {
+	d.nextRangeCheck.valid = true
+	d.nextRangeCheck.nextStAddr = addr
+}
+
+func (d *PktDecode) nextRangeCheckOK(addr ocsd.VAddr) bool {
+	if d.nextRangeCheck.valid {
+		return d.nextRangeCheck.nextStAddr == addr
+	}
+	// no prior range state to validate against
+	return true
 }
 
 func (d *PktDecode) getCurrMemSpace() ocsd.MemSpaceAcc {
@@ -965,6 +985,19 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, pElem *p0Elem) ocsd.Err {
 
 		d.setElemTraceRange(d.outElem.GetCurrElem(), addrRange, atom == ocsd.AtomE, pElem.rootIndex)
 
+		// Check for discontinuous ranges that can indicate an inconsistent/corrupt
+		// program image used for decode. Mirrors the C++ etmv4 decoder logic.
+		if !d.nextRangeCheckOK(addrRange.stAddr) {
+			return d.handleBadImageError(pElem.rootIndex, "Discontinuous ranges - Inconsistent program image for decode\n")
+		}
+		if atom == ocsd.AtomN {
+			// Branch not taken, next range is expected to continue at nextAddr.
+			d.nextRangeCheckSet(nextAddr)
+		} else {
+			// Taken branch breaks linear continuity expectation.
+			d.nextRangeCheckClear()
+		}
+
 		if ETE_ERET {
 			err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemExceptionRet)
 			if err != ocsd.OK {
@@ -973,6 +1006,7 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, pElem *p0Elem) ocsd.Err {
 		}
 	} else {
 		d.needAddr = true
+		d.nextRangeCheckClear()
 
 		if addrRange.stAddr != addrRange.enAddr {
 			d.setElemTraceRange(d.outElem.GetCurrElem(), addrRange, true, pElem.rootIndex)
