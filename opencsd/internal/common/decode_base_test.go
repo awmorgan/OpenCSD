@@ -18,6 +18,18 @@ type myTrcGenElemIn struct {
 	lastID    uint8
 }
 
+type testDecodeStrategy struct {
+	pktProcessed *bool
+}
+
+func (s *testDecodeStrategy) ProcessPacket() ocsd.DatapathResp {
+	*s.pktProcessed = true
+	return ocsd.RespCont
+}
+
+func (s *testDecodeStrategy) OnEOT() ocsd.DatapathResp { return ocsd.RespWarnCont }
+func (s *testDecodeStrategy) GetTraceID() uint8        { return 42 }
+
 func (m *myTrcGenElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
 	m.lastIndex = indexSOP
 	m.lastID = trcChanID
@@ -29,11 +41,7 @@ func TestPktDecodeBase(t *testing.T) {
 	pb.InitPktDecodeBase("testDecode")
 
 	var pktProcessed bool
-	pb.FnProcessPacket = func() ocsd.DatapathResp {
-		pktProcessed = true
-		return ocsd.RespCont
-	}
-	pb.FnGetTraceID = func() uint8 { return 42 }
+	pb.SetStrategy(&testDecodeStrategy{pktProcessed: &pktProcessed})
 
 	// Test uninit
 	resp := pb.PacketDataIn(ocsd.OpData, 0, &dummyPkt{1})
@@ -63,7 +71,6 @@ func TestPktDecodeBase(t *testing.T) {
 		t.Errorf("Expected invalid param for nil config")
 	}
 
-	pb.FnOnEOT = func() ocsd.DatapathResp { return ocsd.RespWarnCont }
 	resp = pb.PacketDataIn(ocsd.OpEOT, 0, nil)
 	if resp != ocsd.RespWarnCont {
 		t.Errorf("EOT propagation failed")
@@ -94,6 +101,18 @@ type myPktDataIn struct {
 	lastOp ocsd.DatapathOp
 }
 
+type testProcStrategy struct {
+	dataProcessed *bool
+	badPacket     bool
+}
+
+func (s *testProcStrategy) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) {
+	*s.dataProcessed = true
+	return uint32(len(dataBlock)), ocsd.RespCont
+}
+
+func (s *testProcStrategy) IsBadPacket() bool { return s.badPacket }
+
 func (p *myPktDataIn) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *dummyPkt) ocsd.DatapathResp {
 	p.lastOp = op
 	return ocsd.RespWait
@@ -104,10 +123,8 @@ func TestPktProcBase(t *testing.T) {
 	pb.InitPktProcBase("testProc")
 
 	var dataProcessed bool
-	pb.FnProcessData = func(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) {
-		dataProcessed = true
-		return uint32(len(dataBlock)), ocsd.RespCont
-	}
+	strategy := &testProcStrategy{dataProcessed: &dataProcessed}
+	pb.SetStrategy(strategy)
 
 	_, resp := pb.TraceDataIn(ocsd.OpData, 0, []byte{1, 2, 3})
 	if resp != ocsd.RespCont || !dataProcessed {
@@ -141,7 +158,7 @@ func TestPktProcBase(t *testing.T) {
 		t.Errorf("Stats failed")
 	}
 
-	pb.FnIsBadPacket = func() bool { return true }
+	strategy.badPacket = true
 	pb.SetComponentOpMode(ocsd.OpflgPktprocNofwdBadPkts)
 
 	outI.lastOp = ocsd.OpData // reset

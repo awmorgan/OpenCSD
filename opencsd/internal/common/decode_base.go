@@ -34,6 +34,31 @@ type PktRawDataMon[P any] interface {
 	RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *P, rawData []byte)
 }
 
+// PktDecodeStrategy defines the core strategy for packet decode processing.
+type PktDecodeStrategy[P any, Pc any] interface {
+	ProcessPacket() ocsd.DatapathResp
+}
+
+// Optional decode hooks.
+type PktDecodeEOTHook interface{ OnEOT() ocsd.DatapathResp }
+type PktDecodeResetHook interface{ OnReset() ocsd.DatapathResp }
+type PktDecodeFlushHook interface{ OnFlush() ocsd.DatapathResp }
+type PktDecodeProtocolConfigHook interface{ OnProtocolConfig() ocsd.Err }
+type PktDecodeTraceIDProvider interface{ GetTraceID() uint8 }
+type PktDecodeFirstInitHook interface{ OnFirstInitOK() }
+
+// PktProcStrategy defines the core strategy for packet processing.
+type PktProcStrategy[P any, Pt any, Pc any] interface {
+	ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp)
+}
+
+// Optional processor hooks.
+type PktProcEOTHook interface{ OnEOT() ocsd.DatapathResp }
+type PktProcResetHook interface{ OnReset() ocsd.DatapathResp }
+type PktProcFlushHook interface{ OnFlush() ocsd.DatapathResp }
+type PktProcProtocolConfigHook interface{ OnProtocolConfig() ocsd.Err }
+type PktProcBadPacketHook interface{ IsBadPacket() bool }
+
 // PktDecodeI represents TrcPktDecodeI.
 type PktDecodeI struct {
 	TraceComponent
@@ -50,14 +75,8 @@ type PktDecodeI struct {
 	usesMemAccess bool
 	usesIDecode   bool
 
-	// Functions to be implemented by derived structures
-	FnProcessPacket    func() ocsd.DatapathResp
-	FnOnEOT            func() ocsd.DatapathResp
-	FnOnReset          func() ocsd.DatapathResp
-	FnOnFlush          func() ocsd.DatapathResp
-	FnOnProtocolConfig func() ocsd.Err
-	FnGetTraceID       func() uint8
-	FnOnFirstInitOK    func()
+	traceIDProvider PktDecodeTraceIDProvider
+	onFirstInitOK   PktDecodeFirstInitHook
 }
 
 func (p *PktDecodeI) GetTraceElemOutAttachPt() *AttachPt[interfaces.TrcGenElemIn] {
@@ -94,23 +113,23 @@ func (p *PktDecodeI) CheckInit() bool {
 		} else {
 			p.decodeInitOK = true
 		}
-		if p.decodeInitOK && p.FnOnFirstInitOK != nil {
-			p.FnOnFirstInitOK()
+		if p.decodeInitOK && p.onFirstInitOK != nil {
+			p.onFirstInitOK.OnFirstInitOK()
 		}
 	}
 	return p.decodeInitOK
 }
 
 func (p *PktDecodeI) OutputTraceElement(elem *ocsd.TraceElement) ocsd.DatapathResp {
-	if p.TraceElemOut.HasAttachedAndEnabled() && p.FnGetTraceID != nil {
-		return p.TraceElemOut.First().TraceElemIn(p.IndexCurrPkt, p.FnGetTraceID(), elem)
+	if p.TraceElemOut.HasAttachedAndEnabled() && p.traceIDProvider != nil {
+		return p.TraceElemOut.First().TraceElemIn(p.IndexCurrPkt, p.traceIDProvider.GetTraceID(), elem)
 	}
 	return ocsd.RespFatalNotInit
 }
 
 func (p *PktDecodeI) OutputTraceElementIdx(idx ocsd.TrcIndex, elem *ocsd.TraceElement) ocsd.DatapathResp {
-	if p.TraceElemOut.HasAttachedAndEnabled() && p.FnGetTraceID != nil {
-		return p.TraceElemOut.First().TraceElemIn(idx, p.FnGetTraceID(), elem)
+	if p.TraceElemOut.HasAttachedAndEnabled() && p.traceIDProvider != nil {
+		return p.TraceElemOut.First().TraceElemIn(idx, p.traceIDProvider.GetTraceID(), elem)
 	}
 	return ocsd.RespFatalNotInit
 }
@@ -126,8 +145,8 @@ func (p *PktDecodeI) InstrDecodeCall(instrInfo *ocsd.InstrInfo) ocsd.Err {
 
 func (p *PktDecodeI) AccessMemory(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
 	if p.usesMemAccess {
-		if p.MemAccess.HasAttachedAndEnabled() && p.FnGetTraceID != nil {
-			return p.MemAccess.First().ReadTargetMemory(address, p.FnGetTraceID(), memSpace, reqBytes)
+		if p.MemAccess.HasAttachedAndEnabled() && p.traceIDProvider != nil {
+			return p.MemAccess.First().ReadTargetMemory(address, p.traceIDProvider.GetTraceID(), memSpace, reqBytes)
 		}
 	}
 	return 0, nil, ocsd.ErrDcdInterfaceUnused
@@ -137,8 +156,8 @@ func (p *PktDecodeI) InvalidateMemAccCache() ocsd.Err {
 	if !p.usesMemAccess {
 		return ocsd.ErrDcdInterfaceUnused
 	}
-	if p.MemAccess.HasAttachedAndEnabled() && p.FnGetTraceID != nil {
-		p.MemAccess.First().InvalidateMemAccCache(p.FnGetTraceID())
+	if p.MemAccess.HasAttachedAndEnabled() && p.traceIDProvider != nil {
+		p.MemAccess.First().InvalidateMemAccCache(p.traceIDProvider.GetTraceID())
 	}
 	return ocsd.OK
 }
@@ -148,10 +167,25 @@ type PktDecodeBase[P any, Pc any] struct {
 	PktDecodeI
 	Config       *Pc
 	CurrPacketIn *P
+	strategy     PktDecodeStrategy[P, Pc]
 }
 
 func (pb *PktDecodeBase[P, Pc]) InitPktDecodeBase(name string) {
 	pb.InitPktDecodeI(name)
+}
+
+func (pb *PktDecodeBase[P, Pc]) SetStrategy(strategy PktDecodeStrategy[P, Pc]) {
+	pb.strategy = strategy
+	if traceIDProvider, ok := any(strategy).(PktDecodeTraceIDProvider); ok {
+		pb.traceIDProvider = traceIDProvider
+	} else {
+		pb.traceIDProvider = nil
+	}
+	if firstInitHook, ok := any(strategy).(PktDecodeFirstInitHook); ok {
+		pb.onFirstInitOK = firstInitHook
+	} else {
+		pb.onFirstInitOK = nil
+	}
 }
 
 func (pb *PktDecodeBase[P, Pc]) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *P) ocsd.DatapathResp {
@@ -169,21 +203,21 @@ func (pb *PktDecodeBase[P, Pc]) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.T
 		} else {
 			pb.CurrPacketIn = pktIn
 			pb.IndexCurrPkt = indexSOP
-			if pb.FnProcessPacket != nil {
-				resp = pb.FnProcessPacket()
+			if pb.strategy != nil {
+				resp = pb.strategy.ProcessPacket()
 			}
 		}
 	case ocsd.OpEOT:
-		if pb.FnOnEOT != nil {
-			resp = pb.FnOnEOT()
+		if hook, ok := any(pb.strategy).(PktDecodeEOTHook); ok {
+			resp = hook.OnEOT()
 		}
 	case ocsd.OpFlush:
-		if pb.FnOnFlush != nil {
-			resp = pb.FnOnFlush()
+		if hook, ok := any(pb.strategy).(PktDecodeFlushHook); ok {
+			resp = hook.OnFlush()
 		}
 	case ocsd.OpReset:
-		if pb.FnOnReset != nil {
-			resp = pb.FnOnReset()
+		if hook, ok := any(pb.strategy).(PktDecodeResetHook); ok {
+			resp = hook.OnReset()
 		}
 	default:
 		pb.LogError(NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
@@ -195,8 +229,8 @@ func (pb *PktDecodeBase[P, Pc]) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.T
 func (pb *PktDecodeBase[P, Pc]) SetProtocolConfig(config *Pc) ocsd.Err {
 	if config != nil {
 		pb.Config = config
-		if pb.FnOnProtocolConfig != nil {
-			err := pb.FnOnProtocolConfig()
+		if hook, ok := any(pb.strategy).(PktDecodeProtocolConfigHook); ok {
+			err := hook.OnProtocolConfig()
 			if err == ocsd.OK {
 				pb.configInitOK = true
 			}
@@ -211,13 +245,6 @@ func (pb *PktDecodeBase[P, Pc]) SetProtocolConfig(config *Pc) ocsd.Err {
 // PktProcI represents TrcPktProcI.
 type PktProcI struct {
 	TraceComponent
-
-	FnProcessData      func(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp)
-	FnOnEOT            func() ocsd.DatapathResp
-	FnOnReset          func() ocsd.DatapathResp
-	FnOnFlush          func() ocsd.DatapathResp
-	FnOnProtocolConfig func() ocsd.Err
-	FnIsBadPacket      func() bool
 }
 
 func (p *PktProcI) InitPktProcI(name string) {
@@ -234,6 +261,7 @@ type PktProcBase[P any, Pt any, Pc any] struct {
 	Stats       ocsd.DecodeStats
 	statsInit   bool
 	isInit      bool
+	strategy    PktProcStrategy[P, Pt, Pc]
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) InitPktProcBase(name string) {
@@ -242,6 +270,10 @@ func (pb *PktProcBase[P, Pt, Pc]) InitPktProcBase(name string) {
 	pb.PktRawMonI = *NewAttachPt[PktRawDataMon[P]]()
 	pb.PktIndexerI = *NewAttachPt[TrcPktIndexer[Pt]]()
 	pb.ResetStats()
+}
+
+func (pb *PktProcBase[P, Pt, Pc]) SetStrategy(strategy PktProcStrategy[P, Pt, Pc]) {
+	pb.strategy = strategy
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) {
@@ -254,8 +286,8 @@ func (pb *PktProcBase[P, Pt, Pc]) TraceDataIn(op ocsd.DatapathOp, index ocsd.Trc
 			pb.LogError(NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor: Zero length data block error"))
 			resp = ocsd.RespFatalInvalidParam
 		} else {
-			if pb.FnProcessData != nil {
-				processed, resp = pb.FnProcessData(index, dataBlock)
+			if pb.strategy != nil {
+				processed, resp = pb.strategy.ProcessData(index, dataBlock)
 			}
 		}
 	case ocsd.OpEOT:
@@ -276,8 +308,10 @@ func (pb *PktProcBase[P, Pt, Pc]) ResetFn(index ocsd.TrcIndex) ocsd.DatapathResp
 	if pb.PktOutI.HasAttachedAndEnabled() {
 		resp = pb.PktOutI.First().PacketDataIn(ocsd.OpReset, index, nil)
 	}
-	if !ocsd.DataRespIsFatal(resp) && pb.FnOnReset != nil {
-		resp = pb.FnOnReset()
+	if !ocsd.DataRespIsFatal(resp) {
+		if hook, ok := any(pb.strategy).(PktProcResetHook); ok {
+			resp = hook.OnReset()
+		}
 	}
 	if pb.PktRawMonI.HasAttachedAndEnabled() {
 		pb.PktRawMonI.First().RawPacketDataMon(ocsd.OpReset, index, nil, nil)
@@ -292,8 +326,10 @@ func (pb *PktProcBase[P, Pt, Pc]) Flush() ocsd.DatapathResp {
 	}
 
 	respLocal := ocsd.RespCont
-	if ocsd.DataRespIsCont(resp) && pb.FnOnFlush != nil {
-		respLocal = pb.FnOnFlush()
+	if ocsd.DataRespIsCont(resp) {
+		if hook, ok := any(pb.strategy).(PktProcFlushHook); ok {
+			respLocal = hook.OnFlush()
+		}
 	}
 
 	if respLocal > resp {
@@ -304,8 +340,8 @@ func (pb *PktProcBase[P, Pt, Pc]) Flush() ocsd.DatapathResp {
 
 func (pb *PktProcBase[P, Pt, Pc]) EOT() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if pb.FnOnEOT != nil {
-		resp = pb.FnOnEOT()
+	if hook, ok := any(pb.strategy).(PktProcEOTHook); ok {
+		resp = hook.OnEOT()
 	}
 
 	if pb.PktOutI.HasAttachedAndEnabled() && !ocsd.DataRespIsFatal(resp) {
@@ -321,8 +357,10 @@ func (pb *PktProcBase[P, Pt, Pc]) EOT() ocsd.DatapathResp {
 func (pb *PktProcBase[P, Pt, Pc]) OutputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *P) ocsd.DatapathResp {
 	resp := ocsd.RespCont
 
-	if (pb.ComponentOpMode()&ocsd.OpflgPktprocNofwdBadPkts != 0) && pb.FnIsBadPacket != nil && pb.FnIsBadPacket() {
-		return resp
+	if (pb.ComponentOpMode() & ocsd.OpflgPktprocNofwdBadPkts) != 0 {
+		if hook, ok := any(pb.strategy).(PktProcBadPacketHook); ok && hook.IsBadPacket() {
+			return resp
+		}
 	}
 
 	if pb.PktOutI.HasAttachedAndEnabled() {
@@ -335,8 +373,10 @@ func (pb *PktProcBase[P, Pt, Pc]) OutputRawPacketToMonitor(indexSOP ocsd.TrcInde
 	if len(pData) == 0 {
 		return
 	}
-	if (pb.ComponentOpMode()&ocsd.OpflgPktprocNomonBadPkts != 0) && pb.FnIsBadPacket != nil && pb.FnIsBadPacket() {
-		return
+	if (pb.ComponentOpMode() & ocsd.OpflgPktprocNomonBadPkts) != 0 {
+		if hook, ok := any(pb.strategy).(PktProcBadPacketHook); ok && hook.IsBadPacket() {
+			return
+		}
 	}
 	if pb.PktRawMonI.HasAttachedAndEnabled() {
 		pb.PktRawMonI.First().RawPacketDataMon(ocsd.OpData, indexSOP, pkt, pData)
@@ -360,8 +400,8 @@ func (pb *PktProcBase[P, Pt, Pc]) OutputOnAllInterfaces(indexSOP ocsd.TrcIndex, 
 func (pb *PktProcBase[P, Pt, Pc]) SetProtocolConfig(config *Pc) ocsd.Err {
 	if config != nil {
 		pb.Config = config
-		if pb.FnOnProtocolConfig != nil {
-			return pb.FnOnProtocolConfig()
+		if hook, ok := any(pb.strategy).(PktProcProtocolConfigHook); ok {
+			return hook.OnProtocolConfig()
 		}
 		return ocsd.OK
 	}

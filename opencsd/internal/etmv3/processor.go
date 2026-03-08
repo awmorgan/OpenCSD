@@ -54,12 +54,7 @@ func NewPktProc(instID int) *PktProc {
 	p := &PktProc{}
 	p.PktProcBase = &common.PktProcBase[Packet, PktType, Config]{}
 	p.InitPktProcBase(fmt.Sprintf("%s_%d", "PKTP_ETMV3", instID))
-
-	p.FnProcessData = p.ProcessData
-	p.FnOnEOT = p.OnEOT
-	p.FnOnReset = p.OnReset
-	p.FnOnFlush = p.OnFlush
-	p.FnOnProtocolConfig = p.OnConfigure
+	p.SetStrategy(p)
 
 	// Initialise configuration
 	p.initProcessorState()
@@ -91,7 +86,7 @@ func (p *PktProc) initPacketState() {
 
 // Internal processor method signatures (impl is next)
 
-func (p *PktProc) OnConfigure() ocsd.Err {
+func (p *PktProc) OnProtocolConfig() ocsd.Err {
 	// Re-initialize state when config changes
 	p.initProcessorState()
 	return ocsd.OK // config structure handles validation properties directly

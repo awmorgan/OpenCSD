@@ -47,12 +47,7 @@ func NewPktDecode(instID int) *PktDecode {
 	}
 	d.PktDecodeBase = &common.PktDecodeBase[Packet, Config]{}
 	d.InitPktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV3", instID))
-
-	d.FnProcessPacket = d.ProcessPacket
-	d.FnOnEOT = d.OnEOT
-	d.FnOnReset = d.OnReset
-	d.FnOnFlush = d.OnFlush
-	d.FnOnProtocolConfig = d.OnProtocolConfig
+	d.SetStrategy(d)
 
 	d.initDecoder()
 	return d

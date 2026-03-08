@@ -261,14 +261,14 @@ func TestITMErrorCases(t *testing.T) {
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)
 	proc.TraceDataIn(ocsd.OpData, 0, sb.data)
 
-	// isBadPacket callback
-	proc.FnIsBadPacket()
+	// bad-packet hook
+	proc.IsBadPacket()
 
 	// Decoder missing config test
 	dec := NewPktDecode(0)
-	dec.FnOnProtocolConfig()
-	dec.FnOnFlush()
-	dec.FnOnReset()
+	dec.OnProtocolConfig()
+	dec.OnFlush()
+	dec.OnReset()
 }
 
 func TestITMPacketStringVariants(t *testing.T) {

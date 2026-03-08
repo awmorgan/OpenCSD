@@ -44,12 +44,7 @@ type PktProc struct {
 func NewPktProc(instID int) *PktProc {
 	p := &PktProc{}
 	p.InitPktProcBase("PKTP_ITM") // name
-	p.FnProcessData = p.processData
-	p.FnOnEOT = p.onEOT
-	p.FnOnReset = p.onReset
-	p.FnOnFlush = p.onFlush
-	p.FnOnProtocolConfig = p.onProtocolConfig
-	p.FnIsBadPacket = p.isBadPacket
+	p.SetStrategy(p)
 
 	p.SetSupportedOpModes(ocsd.OpflgPktprocCommon)
 	p.initProcessorState()
@@ -79,7 +74,7 @@ func (p *PktProc) dataToProcess() bool {
 	return (p.dataInUsed < p.dataInSize) || (p.procState == procSendPkt)
 }
 
-func (p *PktProc) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) {
+func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) {
 	resp := ocsd.RespCont
 	p.dataIn = dataBlock
 	p.dataInSize = uint32(len(dataBlock))
@@ -161,7 +156,7 @@ func (p *PktProc) traceID() uint8 {
 	return 0
 }
 
-func (p *PktProc) onEOT() ocsd.DatapathResp {
+func (p *PktProc) OnEOT() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 	if p.procState == procData {
 		p.currPacket.UpdateErrType(PktIncompleteEOT)
@@ -170,20 +165,20 @@ func (p *PktProc) onEOT() ocsd.DatapathResp {
 	return resp
 }
 
-func (p *PktProc) onReset() ocsd.DatapathResp {
+func (p *PktProc) OnReset() ocsd.DatapathResp {
 	p.initProcessorState()
 	return ocsd.RespCont
 }
 
-func (p *PktProc) onFlush() ocsd.DatapathResp {
+func (p *PktProc) OnFlush() ocsd.DatapathResp {
 	return ocsd.RespCont
 }
 
-func (p *PktProc) onProtocolConfig() ocsd.Err {
+func (p *PktProc) OnProtocolConfig() ocsd.Err {
 	return ocsd.OK
 }
 
-func (p *PktProc) isBadPacket() bool {
+func (p *PktProc) IsBadPacket() bool {
 	return p.currPacket.IsBadPacket()
 }
 

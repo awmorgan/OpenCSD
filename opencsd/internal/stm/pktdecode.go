@@ -41,19 +41,13 @@ type PktDecode struct {
 func NewPktDecode(instIDNum int) *PktDecode {
 	d := &PktDecode{}
 	d.InitPktDecodeBase(fmt.Sprintf("%s_%d", "DCD_STM", instIDNum))
-
-	d.FnProcessPacket = d.processPacket
-	d.FnOnEOT = d.onEOT
-	d.FnOnReset = d.onReset
-	d.FnOnFlush = d.onFlush
-	d.FnOnProtocolConfig = d.onProtocolConfig
-	d.FnGetTraceID = d.getTraceID
+	d.SetStrategy(d)
 
 	d.initDecoder()
 	return d
 }
 
-func (d *PktDecode) processPacket() ocsd.DatapathResp {
+func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 	bPktDone := false
 
@@ -78,23 +72,23 @@ func (d *PktDecode) processPacket() ocsd.DatapathResp {
 	return resp
 }
 
-func (d *PktDecode) onEOT() ocsd.DatapathResp {
+func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	d.outputElem.SetType(ocsd.GenElemEOTrace)
 	d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncEOT)
 	return d.OutputTraceElement(&d.outputElem)
 }
 
-func (d *PktDecode) onReset() ocsd.DatapathResp {
+func (d *PktDecode) OnReset() ocsd.DatapathResp {
 	d.unsyncInfo = common.UnsyncResetDecoder
 	d.resetDecoder()
 	return ocsd.RespCont
 }
 
-func (d *PktDecode) onFlush() ocsd.DatapathResp {
+func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 	return ocsd.RespCont
 }
 
-func (d *PktDecode) onProtocolConfig() ocsd.Err {
+func (d *PktDecode) OnProtocolConfig() ocsd.Err {
 	if d.Config == nil {
 		return ocsd.ErrNotInit
 	}
@@ -102,7 +96,7 @@ func (d *PktDecode) onProtocolConfig() ocsd.Err {
 	return ocsd.OK
 }
 
-func (d *PktDecode) getTraceID() uint8 {
+func (d *PktDecode) GetTraceID() uint8 {
 	return d.csID
 }
 

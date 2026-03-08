@@ -80,20 +80,14 @@ type PktProc struct {
 func NewPktProc(instIDNum int) *PktProc {
 	p := &PktProc{}
 	p.InitPktProcBase(fmt.Sprintf("%s_%d", "PKTP_PTM", instIDNum))
-
-	p.FnProcessData = p.processData
-	p.FnOnEOT = p.onEOT
-	p.FnOnReset = p.onReset
-	p.FnOnFlush = p.onFlush
-	p.FnOnProtocolConfig = p.onProtocolConfig
-	p.FnIsBadPacket = p.isBadPacket
+	p.SetStrategy(p)
 
 	p.initProcessorState()
 	p.buildIPacketTable()
 	return p
 }
 
-func (p *PktProc) onProtocolConfig() ocsd.Err {
+func (p *PktProc) OnProtocolConfig() ocsd.Err {
 	if p.Config != nil {
 		p.chanIDCopy = p.Config.TraceID()
 		return ocsd.OK
@@ -101,7 +95,7 @@ func (p *PktProc) onProtocolConfig() ocsd.Err {
 	return ocsd.ErrNotInit
 }
 
-func (p *PktProc) isBadPacket() bool {
+func (p *PktProc) IsBadPacket() bool {
 	return p.currPacket.IsBadPacket()
 }
 
@@ -152,7 +146,7 @@ func (p *PktProc) malformedPacketErr(msg string) *common.Error {
 	return common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, p.currPktIndex, p.chanIDCopy, msg)
 }
 
-func (p *PktProc) processData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, ocsd.DatapathResp) {
+func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, ocsd.DatapathResp) {
 	resp := ocsd.RespCont
 	var currByte uint8
 	var ok bool
@@ -230,7 +224,7 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 	return resp
 }
 
-func (p *PktProc) onEOT() ocsd.DatapathResp {
+func (p *PktProc) OnEOT() ocsd.DatapathResp {
 	if !p.CheckInit() {
 		return ocsd.RespFatalNotInit
 	}
@@ -243,7 +237,7 @@ func (p *PktProc) onEOT() ocsd.DatapathResp {
 	return resp
 }
 
-func (p *PktProc) onReset() ocsd.DatapathResp {
+func (p *PktProc) OnReset() ocsd.DatapathResp {
 	if !p.CheckInit() {
 		return ocsd.RespFatalNotInit
 	}
@@ -251,7 +245,7 @@ func (p *PktProc) onReset() ocsd.DatapathResp {
 	return ocsd.RespCont
 }
 
-func (p *PktProc) onFlush() ocsd.DatapathResp {
+func (p *PktProc) OnFlush() ocsd.DatapathResp {
 	if !p.CheckInit() {
 		return ocsd.RespFatalNotInit
 	}
