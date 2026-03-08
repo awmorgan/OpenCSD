@@ -449,7 +449,7 @@ func (p *TracePacket) ClearTraceInfo() {
 	p.TraceInfo = TraceInfo{}
 	p.CurrSpecDepth = 0
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		p.VAddrStack[i] = 0
 		p.VAddrISAStack[i] = 0
 	}
