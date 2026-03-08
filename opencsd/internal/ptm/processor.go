@@ -31,6 +31,23 @@ const (
 	asyncReq0      = 5
 )
 
+type decodeAction int
+
+const (
+	decodeReserved decodeAction = iota
+	decodeBranchAddr
+	decodeAtom
+	decodeASync
+	decodeISync
+	decodeWPointUpdate
+	decodeTrigger
+	decodeCtxtID
+	decodeVMID
+	decodeTimeStamp
+	decodeExceptionRet
+	decodeIgnore
+)
+
 type PktProc struct {
 	common.PktProcBase[Packet, PktType, Config]
 
@@ -72,9 +89,9 @@ type PktProc struct {
 
 	iTable [256]struct {
 		pktType PktType
-		pktFn   func() *common.Error
+		action  decodeAction
 	}
-	pIPktFn func() *common.Error
+	currDecode decodeAction
 }
 
 func NewPktProc(instIDNum int) *PktProc {
@@ -105,7 +122,7 @@ func (p *PktProc) initPacketState() {
 
 func (p *PktProc) initProcessorState() {
 	p.currPacket.Type = PktNotSync
-	p.pIPktFn = p.pktReserved
+	p.currDecode = decodeReserved
 	p.processState = stateWaitSync
 	p.async0 = 0
 	p.waitASyncSOPkt = false
@@ -200,7 +217,7 @@ func (p *PktProc) doProcessLoop(currByte *uint8, ok *bool) (ocsd.DatapathResp, e
 	case stateProcHdr:
 		p.currPktIndex = p.blockIdx + ocsd.TrcIndex(p.dataInProcessed)
 		if *currByte, *ok = p.readByteVal(); *ok {
-			p.pIPktFn = p.iTable[*currByte].pktFn
+			p.currDecode = p.iTable[*currByte].action
 			p.currPacket.Type = p.iTable[*currByte].pktType
 		} else {
 			return handleErr(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrPktInterpFail, p.currPktIndex, p.chanIDCopy, "Data Buffer Overrun"))
@@ -209,7 +226,7 @@ func (p *PktProc) doProcessLoop(currByte *uint8, ok *bool) (ocsd.DatapathResp, e
 		fallthrough
 
 	case stateProcData:
-		if err := p.pIPktFn(); err != nil {
+		if err := p.runDecodeAction(); err != nil {
 			return handleErr(err)
 		}
 
@@ -220,6 +237,35 @@ func (p *PktProc) doProcessLoop(currByte *uint8, ok *bool) (ocsd.DatapathResp, e
 	}
 
 	return resp, nil
+}
+
+func (p *PktProc) runDecodeAction() *common.Error {
+	switch p.currDecode {
+	case decodeBranchAddr:
+		return p.pktBranchAddr()
+	case decodeAtom:
+		return p.pktAtom()
+	case decodeASync:
+		return p.pktASync()
+	case decodeISync:
+		return p.pktISync()
+	case decodeWPointUpdate:
+		return p.pktWPointUpdate()
+	case decodeTrigger:
+		return p.pktTrigger()
+	case decodeCtxtID:
+		return p.pktCtxtID()
+	case decodeVMID:
+		return p.pktVMID()
+	case decodeTimeStamp:
+		return p.pktTimeStamp()
+	case decodeExceptionRet:
+		return p.pktExceptionRet()
+	case decodeIgnore:
+		return p.pktIgnore()
+	default:
+		return p.pktReserved()
+	}
 }
 
 func (p *PktProc) outputPacket() ocsd.DatapathResp {
@@ -1005,42 +1051,42 @@ func (p *PktProc) buildIPacketTable() {
 	for i := range 256 {
 		if (i & 0x01) == 0x01 {
 			p.iTable[i].pktType = PktBranchAddress
-			p.iTable[i].pktFn = p.pktBranchAddr
+			p.iTable[i].action = decodeBranchAddr
 		} else if (i & 0x81) == 0x80 {
 			p.iTable[i].pktType = PktAtom
-			p.iTable[i].pktFn = p.pktAtom
+			p.iTable[i].action = decodeAtom
 		} else {
 			p.iTable[i].pktType = PktReserved
-			p.iTable[i].pktFn = p.pktReserved
+			p.iTable[i].action = decodeReserved
 		}
 	}
 
 	p.iTable[0x00].pktType = PktASync
-	p.iTable[0x00].pktFn = p.pktASync
+	p.iTable[0x00].action = decodeASync
 
 	p.iTable[0x08].pktType = PktISync
-	p.iTable[0x08].pktFn = p.pktISync
+	p.iTable[0x08].action = decodeISync
 
 	p.iTable[0x72].pktType = PktWPointUpdate
-	p.iTable[0x72].pktFn = p.pktWPointUpdate
+	p.iTable[0x72].action = decodeWPointUpdate
 
 	p.iTable[0x0C].pktType = PktTrigger
-	p.iTable[0x0C].pktFn = p.pktTrigger
+	p.iTable[0x0C].action = decodeTrigger
 
 	p.iTable[0x6E].pktType = PktContextID
-	p.iTable[0x6E].pktFn = p.pktCtxtID
+	p.iTable[0x6E].action = decodeCtxtID
 
 	p.iTable[0x3C].pktType = PktVMID
-	p.iTable[0x3C].pktFn = p.pktVMID
+	p.iTable[0x3C].action = decodeVMID
 
 	p.iTable[0x42].pktType = PktTimestamp
-	p.iTable[0x42].pktFn = p.pktTimeStamp
+	p.iTable[0x42].action = decodeTimeStamp
 	p.iTable[0x46].pktType = PktTimestamp
-	p.iTable[0x46].pktFn = p.pktTimeStamp
+	p.iTable[0x46].action = decodeTimeStamp
 
 	p.iTable[0x76].pktType = PktExceptionRet
-	p.iTable[0x76].pktFn = p.pktExceptionRet
+	p.iTable[0x76].action = decodeExceptionRet
 
 	p.iTable[0x66].pktType = PktIgnore
-	p.iTable[0x66].pktFn = p.pktIgnore
+	p.iTable[0x66].action = decodeIgnore
 }

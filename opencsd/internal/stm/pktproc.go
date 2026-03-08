@@ -16,17 +16,63 @@ const (
 	procSendPkt
 )
 
+type decodeAction int
+
+const (
+	decodeNone decodeAction = iota
+	decodePktReserved
+	decodePktNull
+	decodePktNullTS
+	decodePktM8
+	decodePktMERR
+	decodePktC8
+	decodePktD4
+	decodePktD8
+	decodePktD16
+	decodePktD32
+	decodePktD64
+	decodePktD4MTS
+	decodePktD8MTS
+	decodePktD16MTS
+	decodePktD32MTS
+	decodePktD64MTS
+	decodePktFlagTS
+	decodePktFExt
+	decodePktReservedFn
+	decodePktF0Ext
+	decodePktGERR
+	decodePktC16
+	decodePktD4TS
+	decodePktD8TS
+	decodePktD16TS
+	decodePktD32TS
+	decodePktD64TS
+	decodePktD4M
+	decodePktD8M
+	decodePktD16M
+	decodePktD32M
+	decodePktD64M
+	decodePktFlag
+	decodePktReservedF0n
+	decodePktVersion
+	decodePktTrigger
+	decodePktTriggerTS
+	decodePktFreq
+	decodePktASync
+	decodeExtractTS
+)
+
 // PktProc converts the byte stream into basic STM trace packets.
 type PktProc struct {
 	common.PktProcBase[Packet, PktType, Config]
 
 	procState processState
 
-	op1N [0x10]func()
-	op2N [0x10]func()
-	op3N [0x10]func()
+	op1N [0x10]decodeAction
+	op2N [0x10]decodeAction
+	op3N [0x10]decodeAction
 
-	currPktFn func()
+	currDecode decodeAction
 
 	currPacket  Packet
 	bNeedsTS    bool
@@ -113,13 +159,13 @@ func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp,
 		p.packetIndex = index + ocsd.TrcIndex(p.dataInUsed)
 		if p.readNibble() {
 			p.procState = procDataState
-			p.currPktFn = p.op1N[p.nibble]
+			p.currDecode = p.op1N[p.nibble]
 		} else {
 			break
 		}
 		fallthrough
 	case procDataState:
-		p.currPktFn()
+		p.runDecodeAction()
 		if e := p.pktErr; e != nil {
 			p.pktErr = nil
 			p.LogError(e)
@@ -225,7 +271,95 @@ func (p *PktProc) initNextPacket() {
 	p.bIsMarker = false
 	p.numNibbles = 0
 	p.numDataNibbles = 0
+	p.currDecode = decodeNone
 	p.currPacket.InitNextPacket()
+}
+
+func (p *PktProc) runDecodeAction() {
+	switch p.currDecode {
+	case decodePktReserved:
+		p.stmPktReserved()
+	case decodePktNull:
+		p.stmPktNull()
+	case decodePktNullTS:
+		p.stmPktNullTS()
+	case decodePktM8:
+		p.stmPktM8()
+	case decodePktMERR:
+		p.stmPktMERR()
+	case decodePktC8:
+		p.stmPktC8()
+	case decodePktD4:
+		p.stmPktD4()
+	case decodePktD8:
+		p.stmPktD8()
+	case decodePktD16:
+		p.stmPktD16()
+	case decodePktD32:
+		p.stmPktD32()
+	case decodePktD64:
+		p.stmPktD64()
+	case decodePktD4MTS:
+		p.stmPktD4MTS()
+	case decodePktD8MTS:
+		p.stmPktD8MTS()
+	case decodePktD16MTS:
+		p.stmPktD16MTS()
+	case decodePktD32MTS:
+		p.stmPktD32MTS()
+	case decodePktD64MTS:
+		p.stmPktD64MTS()
+	case decodePktFlagTS:
+		p.stmPktFlagTS()
+	case decodePktFExt:
+		p.stmPktFExt()
+	case decodePktReservedFn:
+		p.stmPktReservedFn()
+	case decodePktF0Ext:
+		p.stmPktF0Ext()
+	case decodePktGERR:
+		p.stmPktGERR()
+	case decodePktC16:
+		p.stmPktC16()
+	case decodePktD4TS:
+		p.stmPktD4TS()
+	case decodePktD8TS:
+		p.stmPktD8TS()
+	case decodePktD16TS:
+		p.stmPktD16TS()
+	case decodePktD32TS:
+		p.stmPktD32TS()
+	case decodePktD64TS:
+		p.stmPktD64TS()
+	case decodePktD4M:
+		p.stmPktD4M()
+	case decodePktD8M:
+		p.stmPktD8M()
+	case decodePktD16M:
+		p.stmPktD16M()
+	case decodePktD32M:
+		p.stmPktD32M()
+	case decodePktD64M:
+		p.stmPktD64M()
+	case decodePktFlag:
+		p.stmPktFlag()
+	case decodePktReservedF0n:
+		p.stmPktReservedF0n()
+	case decodePktVersion:
+		p.stmPktVersion()
+	case decodePktTrigger:
+		p.stmPktTrigger()
+	case decodePktTriggerTS:
+		p.stmPktTriggerTS()
+	case decodePktFreq:
+		p.stmPktFreq()
+	case decodePktASync:
+		p.stmPktASync()
+	case decodeExtractTS:
+		p.stmExtractTS()
+	default:
+		p.setBadSequenceError("STM decode action not set")
+	}
 }
 
 func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {
@@ -290,8 +424,8 @@ func (p *PktProc) stmPktReserved() {
 func (p *PktProc) stmPktNull() {
 	p.currPacket.SetPacketType(PktNull, false)
 	if p.bNeedsTS {
-		p.currPktFn = p.stmExtractTS
-		p.currPktFn()
+		p.currDecode = decodeExtractTS
+		p.runDecodeAction()
 	} else {
 		p.sendPacket()
 	}
@@ -299,8 +433,8 @@ func (p *PktProc) stmPktNull() {
 
 func (p *PktProc) stmPktNullTS() {
 	p.pktNeedsTS()
-	p.currPktFn = p.stmPktNull
-	p.currPktFn()
+	p.currDecode = decodePktNull
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktM8() {
@@ -346,8 +480,8 @@ func (p *PktProc) stmPktD4() {
 		if p.readNibble() {
 			p.currPacket.SetD4Payload(p.nibble)
 			if p.bNeedsTS {
-				p.currPktFn = p.stmExtractTS
-				p.currPktFn()
+				p.currDecode = decodeExtractTS
+				p.runDecodeAction()
 			} else {
 				p.sendPacket()
 			}
@@ -364,8 +498,8 @@ func (p *PktProc) stmPktD8() {
 	if p.numNibbles == p.numDataNibbles {
 		p.currPacket.SetD8Payload(p.val8)
 		if p.bNeedsTS {
-			p.currPktFn = p.stmExtractTS
-			p.currPktFn()
+			p.currDecode = decodeExtractTS
+			p.runDecodeAction()
 		} else {
 			p.sendPacket()
 		}
@@ -381,8 +515,8 @@ func (p *PktProc) stmPktD16() {
 	if p.numNibbles == p.numDataNibbles {
 		p.currPacket.SetD16Payload(p.val16)
 		if p.bNeedsTS {
-			p.currPktFn = p.stmExtractTS
-			p.currPktFn()
+			p.currDecode = decodeExtractTS
+			p.runDecodeAction()
 		} else {
 			p.sendPacket()
 		}
@@ -398,8 +532,8 @@ func (p *PktProc) stmPktD32() {
 	if p.numNibbles == p.numDataNibbles {
 		p.currPacket.SetD32Payload(p.val32)
 		if p.bNeedsTS {
-			p.currPktFn = p.stmExtractTS
-			p.currPktFn()
+			p.currDecode = decodeExtractTS
+			p.runDecodeAction()
 		} else {
 			p.sendPacket()
 		}
@@ -415,8 +549,8 @@ func (p *PktProc) stmPktD64() {
 	if p.numNibbles == p.numDataNibbles {
 		p.currPacket.SetD64Payload(p.val64)
 		if p.bNeedsTS {
-			p.currPktFn = p.stmExtractTS
-			p.currPktFn()
+			p.currDecode = decodeExtractTS
+			p.runDecodeAction()
 		} else {
 			p.sendPacket()
 		}
@@ -426,49 +560,49 @@ func (p *PktProc) stmPktD64() {
 func (p *PktProc) stmPktD4MTS() {
 	p.pktNeedsTS()
 	p.bIsMarker = true
-	p.currPktFn = p.stmPktD4
-	p.currPktFn()
+	p.currDecode = decodePktD4
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktD8MTS() {
 	p.pktNeedsTS()
 	p.bIsMarker = true
-	p.currPktFn = p.stmPktD8
-	p.currPktFn()
+	p.currDecode = decodePktD8
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktD16MTS() {
 	p.pktNeedsTS()
 	p.bIsMarker = true
-	p.currPktFn = p.stmPktD16
-	p.currPktFn()
+	p.currDecode = decodePktD16
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktD32MTS() {
 	p.pktNeedsTS()
 	p.bIsMarker = true
-	p.currPktFn = p.stmPktD32
-	p.currPktFn()
+	p.currDecode = decodePktD32
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktD64MTS() {
 	p.pktNeedsTS()
 	p.bIsMarker = true
-	p.currPktFn = p.stmPktD64
-	p.currPktFn()
+	p.currDecode = decodePktD64
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktFlagTS() {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktFlag, false)
-	p.currPktFn = p.stmExtractTS
-	p.currPktFn()
+	p.currDecode = decodeExtractTS
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktFExt() {
 	if p.readNibble() {
-		p.currPktFn = p.op2N[p.nibble]
-		p.currPktFn()
+		p.currDecode = p.op2N[p.nibble]
+		p.runDecodeAction()
 	}
 }
 
@@ -480,8 +614,8 @@ func (p *PktProc) stmPktReservedFn() {
 
 func (p *PktProc) stmPktF0Ext() {
 	if p.readNibble() {
-		p.currPktFn = p.op3N[p.nibble]
-		p.currPktFn()
+		p.currDecode = p.op3N[p.nibble]
+		p.runDecodeAction()
 	}
 }
 
@@ -512,75 +646,75 @@ func (p *PktProc) stmPktD4TS() {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD4, false)
 	p.numDataNibbles = 3
-	p.currPktFn = p.stmPktD4
-	p.currPktFn()
+	p.currDecode = decodePktD4
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktD8TS() {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD8, false)
 	p.numDataNibbles = 4
-	p.currPktFn = p.stmPktD8
-	p.currPktFn()
+	p.currDecode = decodePktD8
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktD16TS() {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD16, false)
 	p.numDataNibbles = 6
-	p.currPktFn = p.stmPktD16
-	p.currPktFn()
+	p.currDecode = decodePktD16
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktD32TS() {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD32, false)
 	p.numDataNibbles = 10
-	p.currPktFn = p.stmPktD32
-	p.currPktFn()
+	p.currDecode = decodePktD32
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktD64TS() {
 	p.pktNeedsTS()
 	p.currPacket.SetPacketType(PktD64, false)
 	p.numDataNibbles = 18
-	p.currPktFn = p.stmPktD64
-	p.currPktFn()
+	p.currDecode = decodePktD64
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktD4M() {
 	p.currPacket.SetPacketType(PktD4, true)
 	p.numDataNibbles = 3
-	p.currPktFn = p.stmPktD4
-	p.currPktFn()
+	p.currDecode = decodePktD4
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktD8M() {
 	p.currPacket.SetPacketType(PktD8, true)
 	p.numDataNibbles = 4
-	p.currPktFn = p.stmPktD8
-	p.currPktFn()
+	p.currDecode = decodePktD8
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktD16M() {
 	p.currPacket.SetPacketType(PktD16, true)
 	p.numDataNibbles = 6
-	p.currPktFn = p.stmPktD16
-	p.currPktFn()
+	p.currDecode = decodePktD16
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktD32M() {
 	p.currPacket.SetPacketType(PktD32, true)
 	p.numDataNibbles = 10
-	p.currPktFn = p.stmPktD32
-	p.currPktFn()
+	p.currDecode = decodePktD32
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktD64M() {
 	p.currPacket.SetPacketType(PktD64, true)
 	p.numDataNibbles = 18
-	p.currPktFn = p.stmPktD64
-	p.currPktFn()
+	p.currDecode = decodePktD64
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktFlag() {
@@ -621,8 +755,8 @@ func (p *PktProc) stmPktTrigger() {
 	if p.numNibbles == 5 {
 		p.currPacket.SetD8Payload(p.val8)
 		if p.bNeedsTS {
-			p.currPktFn = p.stmExtractTS
-			p.currPktFn()
+			p.currDecode = decodeExtractTS
+			p.runDecodeAction()
 		} else {
 			p.sendPacket()
 		}
@@ -631,8 +765,8 @@ func (p *PktProc) stmPktTrigger() {
 
 func (p *PktProc) stmPktTriggerTS() {
 	p.pktNeedsTS()
-	p.currPktFn = p.stmPktTrigger
-	p.currPktFn()
+	p.currDecode = decodePktTrigger
+	p.runDecodeAction()
 }
 
 func (p *PktProc) stmPktFreq() {
@@ -809,49 +943,49 @@ func (p *PktProc) grayToBin(grayValue uint64) uint64 {
 
 func (p *PktProc) buildOpTables() {
 	for i := range 0x10 {
-		p.op1N[i] = p.stmPktReserved
-		p.op2N[i] = p.stmPktReservedFn
-		p.op3N[i] = p.stmPktReservedF0n
+		p.op1N[i] = decodePktReserved
+		p.op2N[i] = decodePktReservedFn
+		p.op3N[i] = decodePktReservedF0n
 	}
 
-	p.op1N[0x0] = p.stmPktNull
-	p.op1N[0x1] = p.stmPktM8
-	p.op1N[0x2] = p.stmPktMERR
-	p.op1N[0x3] = p.stmPktC8
-	p.op1N[0x4] = p.stmPktD8
-	p.op1N[0x5] = p.stmPktD16
-	p.op1N[0x6] = p.stmPktD32
-	p.op1N[0x7] = p.stmPktD64
-	p.op1N[0x8] = p.stmPktD8MTS
-	p.op1N[0x9] = p.stmPktD16MTS
-	p.op1N[0xA] = p.stmPktD32MTS
-	p.op1N[0xB] = p.stmPktD64MTS
-	p.op1N[0xC] = p.stmPktD4
-	p.op1N[0xD] = p.stmPktD4MTS
-	p.op1N[0xE] = p.stmPktFlagTS
-	p.op1N[0xF] = p.stmPktFExt
+	p.op1N[0x0] = decodePktNull
+	p.op1N[0x1] = decodePktM8
+	p.op1N[0x2] = decodePktMERR
+	p.op1N[0x3] = decodePktC8
+	p.op1N[0x4] = decodePktD8
+	p.op1N[0x5] = decodePktD16
+	p.op1N[0x6] = decodePktD32
+	p.op1N[0x7] = decodePktD64
+	p.op1N[0x8] = decodePktD8MTS
+	p.op1N[0x9] = decodePktD16MTS
+	p.op1N[0xA] = decodePktD32MTS
+	p.op1N[0xB] = decodePktD64MTS
+	p.op1N[0xC] = decodePktD4
+	p.op1N[0xD] = decodePktD4MTS
+	p.op1N[0xE] = decodePktFlagTS
+	p.op1N[0xF] = decodePktFExt
 
-	p.op2N[0x0] = p.stmPktF0Ext
-	p.op2N[0x2] = p.stmPktGERR
-	p.op2N[0x3] = p.stmPktC16
-	p.op2N[0x4] = p.stmPktD8TS
-	p.op2N[0x5] = p.stmPktD16TS
-	p.op2N[0x6] = p.stmPktD32TS
-	p.op2N[0x7] = p.stmPktD64TS
-	p.op2N[0x8] = p.stmPktD8M
-	p.op2N[0x9] = p.stmPktD16M
-	p.op2N[0xA] = p.stmPktD32M
-	p.op2N[0xB] = p.stmPktD64M
-	p.op2N[0xC] = p.stmPktD4TS
-	p.op2N[0xD] = p.stmPktD4M
-	p.op2N[0xE] = p.stmPktFlag
-	p.op2N[0xF] = p.stmPktASync
+	p.op2N[0x0] = decodePktF0Ext
+	p.op2N[0x2] = decodePktGERR
+	p.op2N[0x3] = decodePktC16
+	p.op2N[0x4] = decodePktD8TS
+	p.op2N[0x5] = decodePktD16TS
+	p.op2N[0x6] = decodePktD32TS
+	p.op2N[0x7] = decodePktD64TS
+	p.op2N[0x8] = decodePktD8M
+	p.op2N[0x9] = decodePktD16M
+	p.op2N[0xA] = decodePktD32M
+	p.op2N[0xB] = decodePktD64M
+	p.op2N[0xC] = decodePktD4TS
+	p.op2N[0xD] = decodePktD4M
+	p.op2N[0xE] = decodePktFlag
+	p.op2N[0xF] = decodePktASync
 
-	p.op3N[0x0] = p.stmPktVersion
-	p.op3N[0x1] = p.stmPktNullTS
-	p.op3N[0x6] = p.stmPktTrigger
-	p.op3N[0x7] = p.stmPktTriggerTS
-	p.op3N[0x8] = p.stmPktFreq
+	p.op3N[0x0] = decodePktVersion
+	p.op3N[0x1] = decodePktNullTS
+	p.op3N[0x6] = decodePktTrigger
+	p.op3N[0x7] = decodePktTriggerTS
+	p.op3N[0x8] = decodePktFreq
 }
 
 func (p *PktProc) checkSyncNibble() {

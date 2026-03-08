@@ -35,13 +35,35 @@ type TInfoPktProg struct {
 	CtrlBytes uint8
 }
 
-// pktHandler is a function that processes one byte of packet data.
-type pktHandler func(lastByte uint8)
+type decodeAction int
+
+const (
+	decodeiNotSync decodeAction = iota
+	decodeiPktReserved
+	decodeiPktExtension
+	decodeiPktTraceInfo
+	decodeiPktTimestamp
+	decodeiPktNoPayload
+	decodeiPktException
+	decodeiPktInvalidCfg
+	decodeiPktITE
+	decodeiPktCycleCntF123
+	decodeiPktSpeclRes
+	decodeiPktCondInstr
+	decodeiPktCondResult
+	decodeiPktContext
+	decodeiPktAddrCtxt
+	decodeiPktShortAddr
+	decodeiPktLongAddr
+	decodeiPktQ
+	decodeiAtom
+	decodeiPktASync
+)
 
 // tableEntry maps a header byte to a packet type and handler.
 type tableEntry struct {
 	pktType PktType
-	fn      pktHandler
+	action  decodeAction
 }
 
 // Processor parses byte streams for ETMv4 packets.
@@ -60,7 +82,7 @@ type Processor struct {
 	// packet data
 	currPacketData       []byte
 	currPacket           TracePacket
-	pktFn                pktHandler
+	currDecode           decodeAction
 	packetIndex          ocsd.TrcIndex
 	blockIndex           ocsd.TrcIndex
 	blockBytesProcessed  int
@@ -167,10 +189,10 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 			p.packetIndex = p.blockIndex + ocsd.TrcIndex(consumed)
 			if p.isSync {
 				nextByte := dataBlock[consumed]
-				p.pktFn = p.iTable[nextByte].fn
+				p.currDecode = p.iTable[nextByte].action
 				p.currPacket.Type = p.iTable[nextByte].pktType
 			} else {
-				p.pktFn = p.iNotSync
+				p.currDecode = decodeiNotSync
 				p.currPacket.Type = PktNotSync
 			}
 			p.processState = ProcData
@@ -182,9 +204,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				p.currPacketData = append(p.currPacketData, nextByte)
 				consumed++
 				p.blockBytesProcessed = consumed
-				if p.pktFn != nil {
-					p.pktFn(nextByte)
-				}
+				p.runDecodeAction(nextByte)
 			}
 
 		case SendPkt:
@@ -288,12 +308,57 @@ func (p *Processor) initPacketState() {
 func (p *Processor) initProcessorState() {
 	p.initStartState()
 	p.initPacketState()
-	p.pktFn = p.iNotSync
+	p.currDecode = decodeiNotSync
 	p.packetIndex = 0
 	p.isSync = false
 	p.firstTraceInfo = false
 	p.sentNotsyncPacket = false
 	p.processState = ProcHdr
+}
+
+func (p *Processor) runDecodeAction(lastByte uint8) {
+	switch p.currDecode {
+	case decodeiPktReserved:
+		p.iPktReserved(lastByte)
+	case decodeiPktExtension:
+		p.iPktExtension(lastByte)
+	case decodeiPktTraceInfo:
+		p.iPktTraceInfo(lastByte)
+	case decodeiPktTimestamp:
+		p.iPktTimestamp(lastByte)
+	case decodeiPktNoPayload:
+		p.iPktNoPayload(lastByte)
+	case decodeiPktException:
+		p.iPktException(lastByte)
+	case decodeiPktInvalidCfg:
+		p.iPktInvalidCfg(lastByte)
+	case decodeiPktITE:
+		p.iPktITE(lastByte)
+	case decodeiPktCycleCntF123:
+		p.iPktCycleCntF123(lastByte)
+	case decodeiPktSpeclRes:
+		p.iPktSpeclRes(lastByte)
+	case decodeiPktCondInstr:
+		p.iPktCondInstr(lastByte)
+	case decodeiPktCondResult:
+		p.iPktCondResult(lastByte)
+	case decodeiPktContext:
+		p.iPktContext(lastByte)
+	case decodeiPktAddrCtxt:
+		p.iPktAddrCtxt(lastByte)
+	case decodeiPktShortAddr:
+		p.iPktShortAddr(lastByte)
+	case decodeiPktLongAddr:
+		p.iPktLongAddr(lastByte)
+	case decodeiPktQ:
+		p.iPktQ(lastByte)
+	case decodeiAtom:
+		p.iAtom(lastByte)
+	case decodeiPktASync:
+		p.iPktASync(lastByte)
+	default:
+		p.iNotSync(lastByte)
+	}
 }
 
 func (p *Processor) outputPacket() ocsd.DatapathResp {
@@ -345,7 +410,7 @@ func (p *Processor) iNotSync(lastByte uint8) {
 		} else {
 			p.packetIndex = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
 		}
-		p.pktFn = p.iTable[lastByte].fn
+		p.currDecode = p.iTable[lastByte].action
 	} else if len(p.currPacketData) >= 8 {
 		p.dumpUnsyncedBytes = len(p.currPacketData)
 		p.processState = SendUnsynced
@@ -384,7 +449,7 @@ func (p *Processor) iPktInvalidCfg(lastByte uint8) {
 func (p *Processor) iPktExtension(lastByte uint8) {
 	if len(p.currPacketData) == 2 {
 		if !p.isSync && lastByte != 0x00 {
-			p.pktFn = p.iNotSync
+			p.currDecode = decodeiNotSync
 			p.currPacket.Type = PktNotSync
 			return
 		}
@@ -397,7 +462,7 @@ func (p *Processor) iPktExtension(lastByte uint8) {
 			p.processState = SendPkt
 		case 0x00:
 			p.currPacket.Type = PktAsync
-			p.pktFn = p.iPktASync
+			p.currDecode = decodeiPktASync
 		default:
 			p.currPacket.ErrType = p.currPacket.Type
 			p.currPacket.Type = PktBadSequence
@@ -409,7 +474,7 @@ func (p *Processor) iPktExtension(lastByte uint8) {
 func (p *Processor) iPktASync(lastByte uint8) {
 	if lastByte != 0x00 {
 		if !p.isSync && len(p.currPacketData) != 12 {
-			p.pktFn = p.iNotSync
+			p.currDecode = decodeiNotSync
 			p.currPacket.Type = PktNotSync
 			return
 		}
@@ -1326,76 +1391,76 @@ func (p *Processor) buildIPacketTable() {
 	// default to reserved
 	for i := range 256 {
 		p.iTable[i].pktType = PktReserved
-		p.iTable[i].fn = p.iPktReserved
+		p.iTable[i].action = decodeiPktReserved
 	}
 
 	p.iTable[0x00].pktType = PktExtension
-	p.iTable[0x00].fn = p.iPktExtension
+	p.iTable[0x00].action = decodeiPktExtension
 
 	p.iTable[0x01].pktType = PktTraceInfo
-	p.iTable[0x01].fn = p.iPktTraceInfo
+	p.iTable[0x01].action = decodeiPktTraceInfo
 
 	// timestamp b0000001x
 	p.iTable[0x02].pktType = PktTimestamp
-	p.iTable[0x02].fn = p.iPktTimestamp
+	p.iTable[0x02].action = decodeiPktTimestamp
 	p.iTable[0x03].pktType = PktTimestamp
-	p.iTable[0x03].fn = p.iPktTimestamp
+	p.iTable[0x03].action = decodeiPktTimestamp
 
 	p.iTable[0x04].pktType = PktTraceOn
-	p.iTable[0x04].fn = p.iPktNoPayload
+	p.iTable[0x04].action = decodeiPktNoPayload
 
 	// V8M func return (only valid in certain configs)
 	p.iTable[0x05].pktType = PktFuncRet
 	if p.config.CoreProf == ocsd.ProfileCortexM && ocsd.IsV8Arch(p.config.ArchVer) && p.config.FullVersion() >= 0x42 {
-		p.iTable[0x05].fn = p.iPktNoPayload
+		p.iTable[0x05].action = decodeiPktNoPayload
 	}
 
 	p.iTable[0x06].pktType = PktExcept
-	p.iTable[0x06].fn = p.iPktException
+	p.iTable[0x06].action = decodeiPktException
 
 	p.iTable[0x07].pktType = PktExceptRtn
 	if p.config.MajVersion() >= 0x5 {
-		p.iTable[0x07].fn = p.iPktInvalidCfg
+		p.iTable[0x07].action = decodeiPktInvalidCfg
 	} else {
-		p.iTable[0x07].fn = p.iPktNoPayload
+		p.iTable[0x07].action = decodeiPktNoPayload
 	}
 
 	// ETE TRANS/ITE packets
 	if p.config.MajVersion() >= 0x5 {
 		p.iTable[0x0A].pktType = ETE_PktTransSt
-		p.iTable[0x0A].fn = p.iPktNoPayload
+		p.iTable[0x0A].action = decodeiPktNoPayload
 		p.iTable[0x0B].pktType = ETE_PktTransCommit
-		p.iTable[0x0B].fn = p.iPktNoPayload
+		p.iTable[0x0B].action = decodeiPktNoPayload
 
 		if p.config.MinVersion() >= 0x3 {
 			p.iTable[0x09].pktType = ETE_PktITE
-			p.iTable[0x09].fn = p.iPktITE
+			p.iTable[0x09].action = decodeiPktITE
 		}
 	}
 
 	// cycle count F2/F1 - 0x0C-0x0F
 	for i := range 2 {
 		p.iTable[0x0C+i].pktType = PktCcntF2
-		p.iTable[0x0C+i].fn = p.iPktCycleCntF123
+		p.iTable[0x0C+i].action = decodeiPktCycleCntF123
 	}
 	for i := 2; i < 4; i++ {
 		p.iTable[0x0C+i].pktType = PktCcntF1
-		p.iTable[0x0C+i].fn = p.iPktCycleCntF123
+		p.iTable[0x0C+i].action = decodeiPktCycleCntF123
 	}
 
 	// cycle count F3 - 0x10-0x1F
 	for i := range 16 {
 		p.iTable[0x10+i].pktType = PktCcntF3
-		p.iTable[0x10+i].fn = p.iPktCycleCntF123
+		p.iTable[0x10+i].action = decodeiPktCycleCntF123
 	}
 
 	// NDSM 0x20-0x27
 	for i := range 8 {
 		p.iTable[0x20+i].pktType = PktNumDsMkr
 		if p.config.EnabledDataTrace() {
-			p.iTable[0x20+i].fn = p.iPktNoPayload
+			p.iTable[0x20+i].action = decodeiPktNoPayload
 		} else {
-			p.iTable[0x20+i].fn = p.iPktInvalidCfg
+			p.iTable[0x20+i].action = decodeiPktInvalidCfg
 		}
 	}
 
@@ -1403,38 +1468,38 @@ func (p *Processor) buildIPacketTable() {
 	for i := range 5 {
 		p.iTable[0x28+i].pktType = PktUnnumDsMkr
 		if p.config.EnabledDataTrace() {
-			p.iTable[0x28+i].fn = p.iPktNoPayload
+			p.iTable[0x28+i].action = decodeiPktNoPayload
 		} else {
-			p.iTable[0x28+i].fn = p.iPktInvalidCfg
+			p.iTable[0x28+i].action = decodeiPktInvalidCfg
 		}
 	}
 
 	// commit 0x2D
 	p.iTable[0x2D].pktType = PktCommit
-	p.iTable[0x2D].fn = p.iPktSpeclRes
+	p.iTable[0x2D].action = decodeiPktSpeclRes
 
 	// cancel F1 0x2E-0x2F
 	p.iTable[0x2E].pktType = PktCancelF1
-	p.iTable[0x2E].fn = p.iPktSpeclRes
+	p.iTable[0x2E].action = decodeiPktSpeclRes
 	p.iTable[0x2F].pktType = PktCancelF1Mispred
-	p.iTable[0x2F].fn = p.iPktSpeclRes
+	p.iTable[0x2F].action = decodeiPktSpeclRes
 
 	// mispredict 0x30-0x33
 	for i := range 4 {
 		p.iTable[0x30+i].pktType = PktMispredict
-		p.iTable[0x30+i].fn = p.iPktSpeclRes
+		p.iTable[0x30+i].action = decodeiPktSpeclRes
 	}
 
 	// cancel F2 0x34-0x37
 	for i := range 4 {
 		p.iTable[0x34+i].pktType = PktCancelF2
-		p.iTable[0x34+i].fn = p.iPktSpeclRes
+		p.iTable[0x34+i].action = decodeiPktSpeclRes
 	}
 
 	// cancel F3 0x38-0x3F
 	for i := range 8 {
 		p.iTable[0x38+i].pktType = PktCancelF3
-		p.iTable[0x38+i].fn = p.iPktSpeclRes
+		p.iTable[0x38+i].action = decodeiPktSpeclRes
 	}
 
 	bCondValid := p.config.HasCondTrace() && p.config.EnabledCondITrace() != CondTrDis
@@ -1443,27 +1508,27 @@ func (p *Processor) buildIPacketTable() {
 	for i := range 3 {
 		p.iTable[0x40+i].pktType = PktCondIF2
 		if bCondValid {
-			p.iTable[0x40+i].fn = p.iPktCondInstr
+			p.iTable[0x40+i].action = decodeiPktCondInstr
 		} else {
-			p.iTable[0x40+i].fn = p.iPktInvalidCfg
+			p.iTable[0x40+i].action = decodeiPktInvalidCfg
 		}
 	}
 
 	// cond flush 0x43
 	p.iTable[0x43].pktType = PktCondFlush
 	if bCondValid {
-		p.iTable[0x43].fn = p.iPktNoPayload
+		p.iTable[0x43].action = decodeiPktNoPayload
 	} else {
-		p.iTable[0x43].fn = p.iPktInvalidCfg
+		p.iTable[0x43].action = decodeiPktInvalidCfg
 	}
 
 	// cond res F4 0x44-0x46
 	for i := range 3 {
 		p.iTable[0x44+i].pktType = PktCondResF4
 		if bCondValid {
-			p.iTable[0x44+i].fn = p.iPktCondResult
+			p.iTable[0x44+i].action = decodeiPktCondResult
 		} else {
-			p.iTable[0x44+i].fn = p.iPktInvalidCfg
+			p.iTable[0x44+i].action = decodeiPktInvalidCfg
 		}
 	}
 
@@ -1471,17 +1536,17 @@ func (p *Processor) buildIPacketTable() {
 	for i := range 3 {
 		p.iTable[0x48+i].pktType = PktCondResF2
 		if bCondValid {
-			p.iTable[0x48+i].fn = p.iPktCondResult
+			p.iTable[0x48+i].action = decodeiPktCondResult
 		} else {
-			p.iTable[0x48+i].fn = p.iPktInvalidCfg
+			p.iTable[0x48+i].action = decodeiPktInvalidCfg
 		}
 	}
 	for i := range 3 {
 		p.iTable[0x4C+i].pktType = PktCondResF2
 		if bCondValid {
-			p.iTable[0x4C+i].fn = p.iPktCondResult
+			p.iTable[0x4C+i].action = decodeiPktCondResult
 		} else {
-			p.iTable[0x4C+i].fn = p.iPktInvalidCfg
+			p.iTable[0x4C+i].action = decodeiPktInvalidCfg
 		}
 	}
 
@@ -1489,9 +1554,9 @@ func (p *Processor) buildIPacketTable() {
 	for i := range 16 {
 		p.iTable[0x50+i].pktType = PktCondResF3
 		if bCondValid {
-			p.iTable[0x50+i].fn = p.iPktCondResult
+			p.iTable[0x50+i].action = decodeiPktCondResult
 		} else {
-			p.iTable[0x50+i].fn = p.iPktInvalidCfg
+			p.iTable[0x50+i].action = decodeiPktInvalidCfg
 		}
 	}
 
@@ -1499,95 +1564,95 @@ func (p *Processor) buildIPacketTable() {
 	for i := range 4 {
 		p.iTable[0x68+i].pktType = PktCondResF1
 		if bCondValid {
-			p.iTable[0x68+i].fn = p.iPktCondResult
+			p.iTable[0x68+i].action = decodeiPktCondResult
 		} else {
-			p.iTable[0x68+i].fn = p.iPktInvalidCfg
+			p.iTable[0x68+i].action = decodeiPktInvalidCfg
 		}
 	}
 
 	// cond I F1 0x6C
 	p.iTable[0x6C].pktType = PktCondIF1
 	if bCondValid {
-		p.iTable[0x6C].fn = p.iPktCondInstr
+		p.iTable[0x6C].action = decodeiPktCondInstr
 	} else {
-		p.iTable[0x6C].fn = p.iPktInvalidCfg
+		p.iTable[0x6C].action = decodeiPktInvalidCfg
 	}
 
 	// cond I F3 0x6D
 	p.iTable[0x6D].pktType = PktCondIF3
 	if bCondValid {
-		p.iTable[0x6D].fn = p.iPktCondInstr
+		p.iTable[0x6D].action = decodeiPktCondInstr
 	} else {
-		p.iTable[0x6D].fn = p.iPktInvalidCfg
+		p.iTable[0x6D].action = decodeiPktInvalidCfg
 	}
 
 	// cond res F1 extra 0x6E-0x6F
 	for i := range 2 {
 		p.iTable[0x6E+i].pktType = PktCondResF1
 		if bCondValid {
-			p.iTable[0x6E+i].fn = p.iPktCondResult
+			p.iTable[0x6E+i].action = decodeiPktCondResult
 		} else {
-			p.iTable[0x6E+i].fn = p.iPktInvalidCfg
+			p.iTable[0x6E+i].action = decodeiPktInvalidCfg
 		}
 	}
 
 	// ignore packet (ETM 4.3+) 0x70
 	if p.config.FullVersion() >= 0x43 {
 		p.iTable[0x70].pktType = PktIgnore
-		p.iTable[0x70].fn = p.iPktNoPayload
+		p.iTable[0x70].action = decodeiPktNoPayload
 	}
 
 	// event trace 0x71-0x7F
 	for i := range 15 {
 		p.iTable[0x71+i].pktType = PktEvent
-		p.iTable[0x71+i].fn = p.iPktNoPayload
+		p.iTable[0x71+i].action = decodeiPktNoPayload
 	}
 
 	// context 0x80-0x81
 	for i := range 2 {
 		p.iTable[0x80+i].pktType = PktCtxt
-		p.iTable[0x80+i].fn = p.iPktContext
+		p.iTable[0x80+i].action = decodeiPktContext
 	}
 
 	// addr with ctx 0x82-0x86
 	p.iTable[0x82].pktType = PktAddrCtxtL_32IS0
-	p.iTable[0x82].fn = p.iPktAddrCtxt
+	p.iTable[0x82].action = decodeiPktAddrCtxt
 	p.iTable[0x83].pktType = PktAddrCtxtL_32IS1
-	p.iTable[0x83].fn = p.iPktAddrCtxt
+	p.iTable[0x83].action = decodeiPktAddrCtxt
 	p.iTable[0x85].pktType = PktAddrCtxtL_64IS0
-	p.iTable[0x85].fn = p.iPktAddrCtxt
+	p.iTable[0x85].action = decodeiPktAddrCtxt
 	p.iTable[0x86].pktType = PktAddrCtxtL_64IS1
-	p.iTable[0x86].fn = p.iPktAddrCtxt
+	p.iTable[0x86].action = decodeiPktAddrCtxt
 
 	// ETE TS marker 0x88
 	if p.config.FullVersion() >= 0x46 {
 		p.iTable[0x88].pktType = ETE_PktTSMarker
-		p.iTable[0x88].fn = p.iPktNoPayload
+		p.iTable[0x88].action = decodeiPktNoPayload
 	}
 
 	// exact match addr 0x90-0x92
 	for i := range 3 {
 		p.iTable[0x90+i].pktType = PktAddrMatch
-		p.iTable[0x90+i].fn = p.iPktNoPayload
+		p.iTable[0x90+i].action = decodeiPktNoPayload
 	}
 
 	// short addr 0x95-0x96
 	p.iTable[0x95].pktType = PktAddrS_IS0
-	p.iTable[0x95].fn = p.iPktShortAddr
+	p.iTable[0x95].action = decodeiPktShortAddr
 	p.iTable[0x96].pktType = PktAddrS_IS1
-	p.iTable[0x96].fn = p.iPktShortAddr
+	p.iTable[0x96].action = decodeiPktShortAddr
 
 	// long addr 32 0x9A-0x9B
 	p.iTable[0x9A].pktType = PktAddrL_32IS0
-	p.iTable[0x9A].fn = p.iPktLongAddr
+	p.iTable[0x9A].action = decodeiPktLongAddr
 	p.iTable[0x9B].pktType = PktAddrL_32IS1
-	p.iTable[0x9B].fn = p.iPktLongAddr
+	p.iTable[0x9B].action = decodeiPktLongAddr
 
 	// long addr 64 0x9D-0x9E
 	p.iTable[0x9D].pktType = PktAddrL_64IS0
-	p.iTable[0x9D].fn = p.iPktLongAddr
+	p.iTable[0x9D].action = decodeiPktLongAddr
 	p.iTable[0x9E].pktType = PktAddrL_64IS1
-	p.iTable[0x9E].fn = p.iPktLongAddr
+	p.iTable[0x9E].action = decodeiPktLongAddr
 
 	// Q packets 0xA0-0xAF
 	for i := range 16 {
@@ -1597,7 +1662,7 @@ func (p *Processor) buildIPacketTable() {
 			// leave as reserved
 		default:
 			if p.config.HasQElem() {
-				p.iTable[0xA0+i].fn = p.iPktQ
+				p.iTable[0xA0+i].action = decodeiPktQ
 			}
 		}
 	}
@@ -1606,58 +1671,58 @@ func (p *Processor) buildIPacketTable() {
 	if p.config.FullVersion() >= 0x50 {
 		for i := range 3 {
 			p.iTable[0xB0+i].pktType = ETE_PktSrcAddrMatch
-			p.iTable[0xB0+i].fn = p.iPktNoPayload
+			p.iTable[0xB0+i].action = decodeiPktNoPayload
 		}
 		p.iTable[0xB4].pktType = ETE_PktSrcAddrS_IS0
-		p.iTable[0xB4].fn = p.iPktShortAddr
+		p.iTable[0xB4].action = decodeiPktShortAddr
 		p.iTable[0xB5].pktType = ETE_PktSrcAddrS_IS1
-		p.iTable[0xB5].fn = p.iPktShortAddr
+		p.iTable[0xB5].action = decodeiPktShortAddr
 		p.iTable[0xB6].pktType = ETE_PktSrcAddrL_32IS0
-		p.iTable[0xB6].fn = p.iPktLongAddr
+		p.iTable[0xB6].action = decodeiPktLongAddr
 		p.iTable[0xB7].pktType = ETE_PktSrcAddrL_32IS1
-		p.iTable[0xB7].fn = p.iPktLongAddr
+		p.iTable[0xB7].action = decodeiPktLongAddr
 		p.iTable[0xB8].pktType = ETE_PktSrcAddrL_64IS0
-		p.iTable[0xB8].fn = p.iPktLongAddr
+		p.iTable[0xB8].action = decodeiPktLongAddr
 		p.iTable[0xB9].pktType = ETE_PktSrcAddrL_64IS1
-		p.iTable[0xB9].fn = p.iPktLongAddr
+		p.iTable[0xB9].action = decodeiPktLongAddr
 	}
 
 	// atoms F6 0xC0-0xD4
 	for i := 0xC0; i <= 0xD4; i++ {
 		p.iTable[i].pktType = PktAtomF6
-		p.iTable[i].fn = p.iAtom
+		p.iTable[i].action = decodeiAtom
 	}
 	// atoms F5 0xD5-0xD7
 	for i := 0xD5; i <= 0xD7; i++ {
 		p.iTable[i].pktType = PktAtomF5
-		p.iTable[i].fn = p.iAtom
+		p.iTable[i].action = decodeiAtom
 	}
 	// atoms F2 0xD8-0xDB
 	for i := 0xD8; i <= 0xDB; i++ {
 		p.iTable[i].pktType = PktAtomF2
-		p.iTable[i].fn = p.iAtom
+		p.iTable[i].action = decodeiAtom
 	}
 	// atoms F4 0xDC-0xDF
 	for i := 0xDC; i <= 0xDF; i++ {
 		p.iTable[i].pktType = PktAtomF4
-		p.iTable[i].fn = p.iAtom
+		p.iTable[i].action = decodeiAtom
 	}
 	// atoms F6 0xE0-0xF4
 	for i := 0xE0; i <= 0xF4; i++ {
 		p.iTable[i].pktType = PktAtomF6
-		p.iTable[i].fn = p.iAtom
+		p.iTable[i].action = decodeiAtom
 	}
 	// atom F5 0xF5
 	p.iTable[0xF5].pktType = PktAtomF5
-	p.iTable[0xF5].fn = p.iAtom
+	p.iTable[0xF5].action = decodeiAtom
 	// atoms F1 0xF6-0xF7
 	for i := 0xF6; i <= 0xF7; i++ {
 		p.iTable[i].pktType = PktAtomF1
-		p.iTable[i].fn = p.iAtom
+		p.iTable[i].action = decodeiAtom
 	}
 	// atoms F3 0xF8-0xFF
 	for i := 0xF8; i <= 0xFF; i++ {
 		p.iTable[i].pktType = PktAtomF3
-		p.iTable[i].fn = p.iAtom
+		p.iTable[i].action = decodeiAtom
 	}
 }

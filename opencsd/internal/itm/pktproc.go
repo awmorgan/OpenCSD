@@ -14,6 +14,18 @@ const (
 	procSendPkt
 )
 
+type packetDecodeState int
+
+const (
+	decodeNone packetDecodeState = iota
+	decodeData
+	decodeAsync
+	decodeLocalTS
+	decodeExtension
+	decodeGlobalTS1
+	decodeGlobalTS2
+)
+
 // PktProc converts incoming byte stream into ITM packets
 type PktProc struct {
 	common.PktProcBase[Packet, PktType, Config]
@@ -33,7 +45,7 @@ type PktProc struct {
 	syncStart         bool
 	dumpUnsyncedBytes int
 
-	currPktFn func()
+	decodeState packetDecodeState
 
 	// pktErr is set by setBadSequenceError / setReservedHdrError and is checked
 	// in processStateLoop after each packet function.
@@ -63,6 +75,7 @@ func (p *PktProc) initProcessorState() {
 func (p *PktProc) initNextPacket() {
 	p.packetData = p.packetData[:0] // clear
 	p.currPacket.InitPacket()
+	p.decodeState = decodeNone
 }
 
 func (p *PktProc) setProcUnsynced() {
@@ -127,9 +140,7 @@ func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp,
 		}
 		fallthrough
 	case procData:
-		if p.currPktFn != nil {
-			p.currPktFn()
-		}
+		p.runDataDecodeState()
 		if e := p.pktErr; e != nil {
 			p.pktErr = nil
 			p.LogError(e)
@@ -242,37 +253,56 @@ func (p *PktProc) itmProcessHdr() {
 		} else {
 			p.currPacket.SetPacketType(PktSWIT)
 		}
-		p.currPktFn = p.itmPktData
+		p.decodeState = decodeData
 		p.procState = procData
 	} else if (b & 0x0F) == 0x00 {
 		if (b & 0xF0) == 0x00 {
 			p.currPacket.SetPacketType(PktAsync)
-			p.currPktFn = p.itmPktAsync
+			p.decodeState = decodeAsync
 			p.procState = procData
 		} else if (b & 0xF0) == 0x70 {
 			p.currPacket.SetPacketType(PktOverflow)
 			p.procState = procSendPkt
 		} else {
 			p.currPacket.SetPacketType(PktTSLocal)
-			p.currPktFn = p.itmPktLocalTS
+			p.decodeState = decodeLocalTS
 			p.procState = procData
 		}
 	} else if (b & 0x0B) == 0x08 {
 		p.currPacket.SetPacketType(PktExtension)
-		p.currPktFn = p.itmPktExtension
+		p.decodeState = decodeExtension
 		p.procState = procData
 	} else if (b & 0xDF) == 0x94 {
 		if (b & 0x20) == 0x00 {
 			p.currPacket.SetPacketType(PktTSGlobal1)
-			p.currPktFn = p.itmPktGlobalTS1
+			p.decodeState = decodeGlobalTS1
 		} else {
 			p.currPacket.SetPacketType(PktTSGlobal2)
-			p.currPktFn = p.itmPktGlobalTS2
+			p.decodeState = decodeGlobalTS2
 		}
 		p.procState = procData
 	} else {
 		p.setReservedHdrError("")
 		return
+	}
+}
+
+func (p *PktProc) runDataDecodeState() {
+	switch p.decodeState {
+	case decodeData:
+		p.itmPktData()
+	case decodeAsync:
+		p.itmPktAsync()
+	case decodeLocalTS:
+		p.itmPktLocalTS()
+	case decodeExtension:
+		p.itmPktExtension()
+	case decodeGlobalTS1:
+		p.itmPktGlobalTS1()
+	case decodeGlobalTS2:
+		p.itmPktGlobalTS2()
+	default:
+		p.setBadSequenceError("ITM packet decode state not set")
 	}
 }
 
