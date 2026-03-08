@@ -137,23 +137,23 @@ func (p *Processor) SetPktOut(cb interfaces.PktDataIn[TracePacket]) {
 }
 
 // TraceDataIn implements interfaces.TrcDataIn.
-func (p *Processor) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) {
+func (p *Processor) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
 	switch op {
 	case ocsd.OpData:
 		return p.processData(index, dataBlock)
 	case ocsd.OpEOT:
-		return 0, p.onEOT()
+		return 0, p.onEOT(), nil
 	case ocsd.OpReset:
-		return 0, p.onReset()
+		return 0, p.onReset(), nil
 	case ocsd.OpFlush:
-		return 0, p.onFlush()
+		return 0, p.onFlush(), nil
 	}
-	return 0, ocsd.RespCont
+	return 0, ocsd.RespCont, nil
 }
 
-func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) {
+func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
 	if !p.isInit {
-		return 0, ocsd.RespFatalNotInit
+		return 0, ocsd.RespFatalNotInit, nil
 	}
 
 	p.blockIndex = index
@@ -201,7 +201,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 			p.processState = ProcData
 
 		case ProcErr:
-			return uint32(consumed), resp
+			return uint32(consumed), resp, nil
 		}
 
 		if resp != ocsd.RespCont {
@@ -209,7 +209,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 		}
 	}
 
-	return uint32(consumed), resp
+	return uint32(consumed), resp, nil
 }
 
 func (p *Processor) onEOT() ocsd.DatapathResp {

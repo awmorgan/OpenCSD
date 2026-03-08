@@ -111,7 +111,7 @@ func (p *PktProc) OnEOT() ocsd.DatapathResp {
 	return resp
 }
 
-func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) {
+func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
 	p.bytesProcessed = 0
 	dataBlockSize := len(dataBlock)
@@ -143,7 +143,7 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, oc
 		resp = ocsd.RespFatalSysErr
 	}
 
-	return uint32(p.bytesProcessed), resp
+	return uint32(p.bytesProcessed), resp, nil
 }
 
 func (p *PktProc) waitForSync(dataBlock []byte) int {

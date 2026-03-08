@@ -9,8 +9,9 @@ import (
 // in the decode datapath.
 type TrcDataIn interface {
 	// TraceDataIn processes trace data.
-	// We use an idiomatic Go slice for the data block, returning number of bytes processed and resp code.
-	TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp)
+	// We use an idiomatic Go slice for the data block, returning
+	// number of bytes processed, datapath flow-control response, and a root-cause error.
+	TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error)
 }
 
 // TrcGenElemIn represents ITrcGenElemIn.

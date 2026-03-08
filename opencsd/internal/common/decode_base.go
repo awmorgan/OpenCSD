@@ -49,7 +49,7 @@ type PktDecodeFirstInitHook interface{ OnFirstInitOK() }
 
 // PktProcStrategy defines the core strategy for packet processing.
 type PktProcStrategy[P any, Pt any, Pc any] interface {
-	ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp)
+	ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error)
 }
 
 // Optional processor hooks.
@@ -276,9 +276,10 @@ func (pb *PktProcBase[P, Pt, Pc]) SetStrategy(strategy PktProcStrategy[P, Pt, Pc
 	pb.strategy = strategy
 }
 
-func (pb *PktProcBase[P, Pt, Pc]) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) {
+func (pb *PktProcBase[P, Pt, Pc]) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
 	var processed uint32 = 0
+	var err error
 
 	switch op {
 	case ocsd.OpData:
@@ -287,7 +288,7 @@ func (pb *PktProcBase[P, Pt, Pc]) TraceDataIn(op ocsd.DatapathOp, index ocsd.Trc
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			if pb.strategy != nil {
-				processed, resp = pb.strategy.ProcessData(index, dataBlock)
+				processed, resp, err = pb.strategy.ProcessData(index, dataBlock)
 			}
 		}
 	case ocsd.OpEOT:
@@ -300,7 +301,7 @@ func (pb *PktProcBase[P, Pt, Pc]) TraceDataIn(op ocsd.DatapathOp, index ocsd.Trc
 		pb.LogError(NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
 		resp = ocsd.RespFatalInvalidOp
 	}
-	return processed, resp
+	return processed, resp, err
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) ResetFn(index ocsd.TrcIndex) ocsd.DatapathResp {

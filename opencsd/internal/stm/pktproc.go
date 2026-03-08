@@ -79,26 +79,31 @@ func NewPktProc(instIDNum int) *PktProc {
 	return p
 }
 
-func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) {
+func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
+	var err error
 	p.dataIn = dataBlock
 	p.dataInSize = uint32(len(dataBlock))
 	p.dataInUsed = 0
 
 	for p.dataToProcess() && ocsd.DataRespIsCont(resp) {
-		errResp, handled := p.processStateLoop(index)
+		errResp, loopErr, handled := p.processStateLoop(index)
 		if handled {
 			resp = errResp
+			err = loopErr
 			if ocsd.DataRespIsFatal(resp) {
+				break
+			}
+			if err != nil {
 				break
 			}
 		}
 	}
 
-	return p.dataInUsed, resp
+	return p.dataInUsed, resp, err
 }
 
-func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp, handled bool) {
+func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp, err error, handled bool) {
 	resp = ocsd.RespCont
 
 	switch p.procState {
@@ -118,6 +123,7 @@ func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp,
 		if e := p.pktErr; e != nil {
 			p.pktErr = nil
 			p.LogError(e)
+			err = e
 			if (e.Code == ocsd.ErrBadPacketSeq || e.Code == ocsd.ErrInvalidPcktHdr) &&
 				(p.ComponentOpMode()&ocsd.OpflgPktprocErrBadPkts) == 0 {
 				resp = p.outputPacket()
@@ -127,7 +133,7 @@ func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp,
 			} else {
 				resp = ocsd.RespFatalInvalidData
 			}
-			return resp, true
+			return resp, err, true
 		}
 		if p.procState != procSendPkt {
 			break
@@ -137,7 +143,7 @@ func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp,
 		resp = p.outputPacket()
 	}
 
-	return resp, false
+	return resp, nil, false
 }
 
 func (p *PktProc) OnEOT() ocsd.DatapathResp {

@@ -323,6 +323,7 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 	start := time.Now()
 	var traceIndex uint32
 	dataPathResp := ocsd.RespCont
+	var dataPathErr error
 	buf := make([]byte, 1024)
 	pending := make([]byte, 0, 2048)
 	align := frameAlignment(tree)
@@ -337,8 +338,12 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 					break
 				}
 			}
-			used, resp := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
+			used, resp, dpErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
 			dataPathResp = resp
+			if dpErr != nil {
+				dataPathErr = dpErr
+				return
+			}
 			if used > 0 {
 				pending = pending[used:]
 				traceIndex += used
@@ -347,7 +352,7 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 				if genPrinter.NeedAckWait() {
 					genPrinter.AckWait()
 				}
-				_, dataPathResp = tree.TraceDataIn(ocsd.OpFlush, 0, nil)
+				_, dataPathResp, _ = tree.TraceDataIn(ocsd.OpFlush, 0, nil)
 				continue
 			}
 			if used == 0 {
@@ -408,6 +413,10 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 		pushPending()
 	}
 
+	if dataPathErr != nil {
+		return dataPathErr
+	}
+
 	if ocsd.DataRespIsFatal(dataPathResp) {
 		fmt.Fprintln(out, "Trace Packet Lister : Data Path fatal error")
 		if opts.ssVerbose {
@@ -416,10 +425,14 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 		return errors.New("fatal datapath error")
 	}
 
-	tree.TraceDataIn(ocsd.OpEOT, 0, nil)
+	if _, _, err := tree.TraceDataIn(ocsd.OpEOT, 0, nil); err != nil {
+		return err
+	}
 
 	if opts.multiSession {
-		tree.TraceDataIn(ocsd.OpReset, 0, nil)
+		if _, _, err := tree.TraceDataIn(ocsd.OpReset, 0, nil); err != nil {
+			return err
+		}
 	}
 
 	fmt.Fprintf(out, "Trace Packet Lister : Trace buffer done, processed %d bytes", traceIndex)

@@ -53,22 +53,22 @@ func (dt *DecodeTree) Destroy() {
 }
 
 // TraceDataIn handles incoming raw byte trace streams into the tree.
-func (dt *DecodeTree) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, ocsd.DatapathResp) {
+func (dt *DecodeTree) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, ocsd.DatapathResp, error) {
 	if dt.iDecoderRoot != nil {
-		amt, resp := dt.iDecoderRoot.TraceDataIn(op, index, data)
-		return amt, resp
+		amt, resp, err := dt.iDecoderRoot.TraceDataIn(op, index, data)
+		return amt, resp, err
 	}
 
 	// Unformatted single trace source fallback
 	if dt.treeType == ocsd.TrcSrcSingle {
 		for _, elem := range dt.decodeElements {
 			if elem.DataIn != nil {
-				amt, resp := elem.DataIn.TraceDataIn(op, index, data)
-				return amt, resp
+				amt, resp, err := elem.DataIn.TraceDataIn(op, index, data)
+				return amt, resp, err
 			}
 		}
 	}
-	return 0, ocsd.RespFatalNotInit
+	return 0, ocsd.RespFatalNotInit, nil
 }
 
 // CreateDecoder creates a trace processor within the tree for a generic trace config.

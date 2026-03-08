@@ -171,8 +171,18 @@ func (d *FrameDeformatter) outputRawMonBytes(op ocsd.DatapathOp, index ocsd.TrcI
 func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocsd.TrcIndex) ocsd.DatapathResp {
 	for id := range 128 {
 		if d.idStreams[id] != nil { // if attached
-			_, resp := d.idStreams[id].TraceDataIn(op, index, nil)
+			_, resp, err := d.idStreams[id].TraceDataIn(op, index, nil)
 			d.collateDataPathResp(resp)
+			if err != nil {
+				d.collateDataPathResp(ocsd.RespFatalInvalidData)
+				if d.errorLogger != nil {
+					if e, ok := err.(*common.Error); ok {
+						d.errorLogger.LogError(e)
+					} else {
+						d.errorLogger.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrFail, err.Error()))
+					}
+				}
+			}
 		}
 	}
 
@@ -210,7 +220,7 @@ func (d *FrameDeformatter) resetStateParams() {
 }
 
 // TraceDataIn implementation
-func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) {
+func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
 	resp := ocsd.RespFatalInvalidOp
 	d.initCollateDataPathResp()
 
@@ -218,6 +228,7 @@ func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, 
 	d.outUnpackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrUnpackedRawOut) != 0
 
 	var numBytesProcessed uint32
+	var err error
 
 	switch op {
 	case ocsd.OpReset:
@@ -236,7 +247,7 @@ func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, 
 		// Unsupported operations
 	}
 
-	return numBytesProcessed, resp
+	return numBytesProcessed, resp, err
 }
 
 func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byte, numBytesProcessed *uint32) (resp ocsd.DatapathResp) {

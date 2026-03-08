@@ -203,7 +203,7 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	if srcIsFrame {
 		pending := traceData
 		for len(pending) >= frameAlignment {
-			consumed, resp := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:frameAlignment])
+			consumed, resp, _ := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:frameAlignment])
 			if ocsd.DataRespIsFatal(resp) {
 				return nil, fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
 			}
@@ -215,7 +215,7 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		}
 
 		if len(pending) > 0 {
-			consumed, resp := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending)
+			consumed, resp, _ := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending)
 			if ocsd.DataRespIsFatal(resp) {
 				return nil, fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
 			}
@@ -226,7 +226,7 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	} else {
 		remaining := traceData
 		for len(remaining) > 0 {
-			consumed, resp := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
+			consumed, resp, _ := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
 			if ocsd.DataRespIsFatal(resp) {
 				return nil, fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
 			}
@@ -238,7 +238,7 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		}
 	}
 
-	_, resp := tree.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(traceIndex), nil)
+	_, resp, _ := tree.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(traceIndex), nil)
 	if ocsd.DataRespIsFatal(resp) {
 		return nil, fmt.Errorf("fatal datapath response on EOT")
 	}

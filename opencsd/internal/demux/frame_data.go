@@ -281,11 +281,21 @@ func (d *FrameDeformatter) outputFrame() bool {
 						d.outData[d.outProcessed].data[:d.outData[d.outProcessed].valid],
 						id)
 				}
-				bytesUsed, resp := pDataIn.TraceDataIn(ocsd.OpData,
+				bytesUsed, resp, err := pDataIn.TraceDataIn(ocsd.OpData,
 					d.outData[d.outProcessed].index+ocsd.TrcIndex(d.outData[d.outProcessed].used),
 					d.outData[d.outProcessed].data[d.outData[d.outProcessed].used:d.outData[d.outProcessed].valid])
 
 				d.collateDataPathResp(resp)
+				if err != nil {
+					d.collateDataPathResp(ocsd.RespFatalInvalidData)
+					if d.errorLogger != nil {
+						if e, ok := err.(*common.Error); ok {
+							d.errorLogger.LogError(e)
+						} else {
+							d.errorLogger.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrFail, err.Error()))
+						}
+					}
+				}
 
 				if !d.dataPathCont() {
 					contProcessing = false

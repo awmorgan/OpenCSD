@@ -194,14 +194,14 @@ func TestITMErrorCases(t *testing.T) {
 	sb.AddAsync()
 	sb.AddBytes(0x14) // reserved
 
-	_, resp := proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	_, resp, _ := proc.TraceDataIn(ocsd.OpData, 0, sb.data)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected non-fatal by default")
 	}
 
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)
 	proc.SetComponentOpMode(ocsd.OpflgPktprocErrBadPkts)
-	_, resp = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	_, resp, _ = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected fatal response for reserved header (Mode = %x, Resp = %v)", proc.ComponentOpMode(), resp)
 	}
@@ -211,7 +211,7 @@ func TestITMErrorCases(t *testing.T) {
 	sb.AddAsync()
 	sb.AddBytes(0x94, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00)
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)
-	_, resp = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	_, resp, _ = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected fatal response for GTS1 limit exceeded")
 	}
@@ -221,7 +221,7 @@ func TestITMErrorCases(t *testing.T) {
 	sb.AddAsync()
 	sb.AddBytes(0xB4, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00)
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)
-	_, resp = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	_, resp, _ = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected fatal response for GTS2 limit exceeded")
 	}
@@ -231,7 +231,7 @@ func TestITMErrorCases(t *testing.T) {
 	sb.AddAsync()
 	sb.AddBytes(0xC0, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00)
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)
-	_, resp = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	_, resp, _ = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected fatal response for LTS limit exceeded")
 	}
@@ -241,7 +241,7 @@ func TestITMErrorCases(t *testing.T) {
 	sb.AddAsync()
 	sb.AddBytes(0x08, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00)
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)
-	_, resp = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	_, resp, _ = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected fatal response for Extension limit exceeded")
 	}

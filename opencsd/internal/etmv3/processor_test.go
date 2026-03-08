@@ -665,7 +665,7 @@ func TestProcessor_Timestamp(t *testing.T) {
 func TestProcessor_ReservedHeader(t *testing.T) {
 	proc, _ := newSyncedProc(&Config{})
 	// 0x3E is reserved
-	_, resp := proc.TraceDataIn(ocsd.OpData, 6, []byte{0x3E})
+	_, resp, _ := proc.TraceDataIn(ocsd.OpData, 6, []byte{0x3E})
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Error("expected fatal error for reserved header")
 	}

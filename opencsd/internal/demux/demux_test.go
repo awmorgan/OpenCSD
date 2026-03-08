@@ -142,8 +142,8 @@ func (l *TestLogger) LogMessage(s ocsd.ErrSeverity, msg string) {
 
 type mockDataSink struct{}
 
-func (m *mockDataSink) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) {
-	return uint32(len(dataBlock)), ocsd.RespCont
+func (m *mockDataSink) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
+	return uint32(len(dataBlock)), ocsd.RespCont, nil
 }
 
 // Ensure mockDataSink implements TrcDataIn
@@ -151,14 +151,14 @@ var _ interfaces.TrcDataIn = (*mockDataSink)(nil)
 
 type mockDataSinkWait struct{}
 
-func (m *mockDataSinkWait) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) {
+func (m *mockDataSinkWait) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
 	if op != ocsd.OpData {
-		return 0, ocsd.RespCont
+		return 0, ocsd.RespCont, nil
 	}
 	if len(dataBlock) > 2 {
-		return 2, ocsd.RespWait
+		return 2, ocsd.RespWait, nil
 	}
-	return uint32(len(dataBlock)), ocsd.RespWait
+	return uint32(len(dataBlock)), ocsd.RespWait, nil
 }
 
 // Ensure mockDataSinkWait implements TrcDataIn
@@ -208,7 +208,7 @@ func (m *mockRawSink) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, f
 var globalSinkOut = &bytes.Buffer{}
 
 func resetDecoder(df *FrameDeformatter, t *testing.T) {
-	_, resp := df.TraceDataIn(ocsd.OpReset, 0, nil)
+	_, resp, _ := df.TraceDataIn(ocsd.OpReset, 0, nil)
 	if resp != ocsd.RespCont {
 		t.Errorf("Datapath error response on reset: %v", resp)
 	}
@@ -243,7 +243,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	// 1
 	resetDecoder(df, t)
 	buf := makeBufMemAlign()
-	processed, _ := df.TraceDataIn(ocsd.OpData, 0, buf)
+	processed, _, _ := df.TraceDataIn(ocsd.OpData, 0, buf)
 	if processed != uint32(len(buf)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf), processed)
 	}
@@ -251,7 +251,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	// 2
 	resetDecoder(df, t)
 	buf2 := makeBufMemAlign8Id()
-	processed, _ = df.TraceDataIn(ocsd.OpData, 0, buf2)
+	processed, _, _ = df.TraceDataIn(ocsd.OpData, 0, buf2)
 	if processed != uint32(len(buf2)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf2), processed)
 	}
@@ -260,7 +260,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	df.Configure(baseCfg | ocsd.DfrmtrResetOn4xFsync)
 	resetDecoder(df, t)
 	buf3 := makeBufMemAlignStRst()
-	processed, _ = df.TraceDataIn(ocsd.OpData, 0, buf3)
+	processed, _, _ = df.TraceDataIn(ocsd.OpData, 0, buf3)
 	if processed != uint32(len(buf3)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf3), processed)
 	}
@@ -268,7 +268,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	// 4
 	resetDecoder(df, t)
 	buf4 := makeBufMemAlignMidRst()
-	processed, _ = df.TraceDataIn(ocsd.OpData, 0, buf4)
+	processed, _, _ = df.TraceDataIn(ocsd.OpData, 0, buf4)
 	if processed != uint32(len(buf4)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf4), processed)
 	}
@@ -276,7 +276,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	// 5
 	resetDecoder(df, t)
 	buf5 := makeBufMemAlignEnRst()
-	processed, _ = df.TraceDataIn(ocsd.OpData, 0, buf5)
+	processed, _, _ = df.TraceDataIn(ocsd.OpData, 0, buf5)
 	if processed != uint32(len(buf5)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf5), processed)
 	}
@@ -447,15 +447,15 @@ func TestRunHSyncFSyncTest(t *testing.T) {
 	// 1
 	resetDecoder(df, t)
 	buf1 := makeBufHsyncFsync()
-	processed, _ := df.TraceDataIn(ocsd.OpData, 0, buf1)
+	processed, _, _ := df.TraceDataIn(ocsd.OpData, 0, buf1)
 	if processed != uint32(len(buf1)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf1), processed)
 	}
 
 	// 2 split
 	resetDecoder(df, t)
-	processed1, _ := df.TraceDataIn(ocsd.OpData, 0, buf1[:2])
-	processed2, _ := df.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(processed1), buf1[processed1:])
+	processed1, _, _ := df.TraceDataIn(ocsd.OpData, 0, buf1[:2])
+	processed2, _, _ := df.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(processed1), buf1[processed1:])
 	if processed1+processed2 != uint32(len(buf1)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf1), processed1+processed2)
 	}
@@ -463,7 +463,7 @@ func TestRunHSyncFSyncTest(t *testing.T) {
 	// 3 bad input
 	resetDecoder(df, t)
 	bufBad := makeBufBadData()
-	_, resp := df.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(len(buf1)), bufBad)
+	_, resp, _ := df.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(len(buf1)), bufBad)
 	if resp != ocsd.RespFatalInvalidData || errLog.lastErr != ocsd.ErrDfrmtrBadFhsync {
 		t.Errorf("Expected RespFatalInvalidData and ErrDfrmtrBadFhsync, got resp=%v err=%v", resp, errLog.lastErr)
 	}
@@ -479,7 +479,7 @@ func TestRunDemuxBadDataTest(t *testing.T) {
 
 	resetDecoder(df, t)
 	bufBad := makeBufBadData()
-	_, resp := df.TraceDataIn(ocsd.OpData, 0, bufBad)
+	_, resp, _ := df.TraceDataIn(ocsd.OpData, 0, bufBad)
 	if resp != ocsd.RespFatalInvalidData || errLog.lastErr != ocsd.ErrDfrmtrBadFhsync {
 		t.Errorf("Expected RespFatalInvalidData and ErrDfrmtrBadFhsync, got resp=%v err=%v", resp, errLog.lastErr)
 	}

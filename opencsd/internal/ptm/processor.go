@@ -146,14 +146,15 @@ func (p *PktProc) malformedPacketErr(msg string) *common.Error {
 	return common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, p.currPktIndex, p.chanIDCopy, msg)
 }
 
-func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, ocsd.DatapathResp) {
+func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
+	var err error
 	var currByte uint8
 	var ok bool
 
 	p.dataInProcessed = 0
 	if !p.CheckInit() {
-		return 0, ocsd.RespFatalNotInit
+		return 0, ocsd.RespFatalNotInit, nil
 	}
 
 	p.pDataIn = dataBlock
@@ -161,27 +162,30 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, o
 	p.blockIdx = index
 
 	for ((p.dataInProcessed < p.dataInLen) || (p.dataInProcessed == p.dataInLen && p.processState == stateSendPkt)) && ocsd.DataRespIsCont(resp) {
-		resp = p.doProcessLoop(&currByte, &ok)
+		resp, err = p.doProcessLoop(&currByte, &ok)
 		if ocsd.DataRespIsFatal(resp) {
+			break
+		}
+		if err != nil {
 			break
 		}
 	}
 
-	return p.dataInProcessed, resp
+	return p.dataInProcessed, resp, err
 }
 
-func (p *PktProc) doProcessLoop(currByte *uint8, ok *bool) ocsd.DatapathResp {
+func (p *PktProc) doProcessLoop(currByte *uint8, ok *bool) (ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
-	handleErr := func(err *common.Error) ocsd.DatapathResp {
+	handleErr := func(err *common.Error) (ocsd.DatapathResp, error) {
 		if err == nil {
-			return ocsd.RespCont
+			return ocsd.RespCont, nil
 		}
 		p.LogError(err)
 		if err.Code == ocsd.ErrBadPacketSeq || err.Code == ocsd.ErrInvalidPcktHdr {
 			p.processState = stateSendPkt
-			return ocsd.RespCont
+			return ocsd.RespCont, err
 		}
-		return ocsd.RespFatalInvalidData
+		return ocsd.RespFatalInvalidData, err
 	}
 
 	switch p.processState {
@@ -215,7 +219,7 @@ func (p *PktProc) doProcessLoop(currByte *uint8, ok *bool) ocsd.DatapathResp {
 		p.processState = stateProcHdr
 	}
 
-	return resp
+	return resp, nil
 }
 
 func (p *PktProc) outputPacket() ocsd.DatapathResp {

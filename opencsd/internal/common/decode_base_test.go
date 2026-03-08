@@ -106,9 +106,9 @@ type testProcStrategy struct {
 	badPacket     bool
 }
 
-func (s *testProcStrategy) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp) {
+func (s *testProcStrategy) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
 	*s.dataProcessed = true
-	return uint32(len(dataBlock)), ocsd.RespCont
+	return uint32(len(dataBlock)), ocsd.RespCont, nil
 }
 
 func (s *testProcStrategy) IsBadPacket() bool { return s.badPacket }
@@ -126,7 +126,10 @@ func TestPktProcBase(t *testing.T) {
 	strategy := &testProcStrategy{dataProcessed: &dataProcessed}
 	pb.SetStrategy(strategy)
 
-	_, resp := pb.TraceDataIn(ocsd.OpData, 0, []byte{1, 2, 3})
+	_, resp, err := pb.TraceDataIn(ocsd.OpData, 0, []byte{1, 2, 3})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 	if resp != ocsd.RespCont || !dataProcessed {
 		t.Errorf("TraceDataIn data processing failed")
 	}
@@ -134,12 +137,18 @@ func TestPktProcBase(t *testing.T) {
 	outI := &myPktDataIn{}
 	pb.PktOutI.Attach(outI)
 
-	_, resp = pb.TraceDataIn(ocsd.OpEOT, 0, nil)
+	_, resp, err = pb.TraceDataIn(ocsd.OpEOT, 0, nil)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 	if outI.lastOp != ocsd.OpEOT {
 		t.Errorf("EOT not passed downstream")
 	}
 
-	_, resp = pb.TraceDataIn(ocsd.OpReset, 0, nil)
+	_, resp, err = pb.TraceDataIn(ocsd.OpReset, 0, nil)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 	if outI.lastOp != ocsd.OpReset {
 		t.Errorf("Reset not passed downstream")
 	}
@@ -153,8 +162,8 @@ func TestPktProcBase(t *testing.T) {
 	pb.StatsAddTotalCount(100)
 	pb.StatsInit()
 
-	stats, err := pb.GetStatsBlock()
-	if err != ocsd.OK || stats.ChannelTotal != 100 {
+	stats, errCode := pb.GetStatsBlock()
+	if errCode != ocsd.OK || stats.ChannelTotal != 100 {
 		t.Errorf("Stats failed")
 	}
 
