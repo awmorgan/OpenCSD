@@ -189,7 +189,7 @@ func (m *mockRawSink) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, f
 		}
 	}
 
-	m.out.WriteString(fmt.Sprintf("Frame Data; Index %6d; %s", index, elemStr))
+	fmt.Fprintf(m.out, "Frame Data; Index %6d; %s", index, elemStr)
 
 	for i, b := range data {
 		if i > 0 {
