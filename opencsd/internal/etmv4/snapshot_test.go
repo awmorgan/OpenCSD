@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"opencsd/internal/common"
 	"opencsd/internal/dcdtree"
 	"opencsd/internal/etmv4"
 	"opencsd/internal/memacc"
@@ -26,6 +27,19 @@ type mapperAdapter struct {
 type etmv4RawPacketPrinter struct {
 	writer  io.Writer
 	traceID uint8
+}
+
+type testErrLogger struct {
+	lastErr *common.Error
+}
+
+func (l *testErrLogger) LogError(err *common.Error) {
+	l.lastErr = err
+}
+
+func (l *testErrLogger) LogMessage(sev ocsd.ErrSeverity, msg string) {
+	_ = sev
+	_ = msg
 }
 
 func (p *etmv4RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket, rawData []byte) {
@@ -62,6 +76,7 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 		name       string
 		sourceName string
 		traceIDs   []string
+		packetOnly bool // true for packet-level testing only (no full instruction decode)
 	}{
 		{name: "juno_r1_1", sourceName: "ETB_0", traceIDs: []string{"10", "11", "12", "13", "14", "15"}},
 		{name: "a57_single_step", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"10"}},
@@ -72,6 +87,7 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 		{name: "test-file-mem-offsets", sourceName: "ETB_0", traceIDs: []string{"16"}},
 		{name: "init-short-addr", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"0"}},
 		{name: "bugfix-exact-match", sourceName: "etr_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
+		{name: "a55-test-tpiu", sourceName: "DSTREAM_0", traceIDs: []string{"1"}, packetOnly: true},
 	}
 
 	for _, tc := range testCases {
@@ -84,7 +100,7 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 				goldenPath = filepath.Join("testdata", tc.name+".ppl.gz")
 			}
 
-			goOut, err := runSnapshotDecode(snapshotDir, tc.sourceName)
+			goOut, err := runSnapshotDecode(snapshotDir, tc.sourceName, tc.packetOnly)
 			if err != nil {
 				t.Fatalf("runSnapshotDecode failed: %v", err)
 			}
@@ -153,7 +169,7 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 	}
 }
 
-func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
+func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool) ([]byte, error) {
 	reader := snapshot.NewReader()
 	reader.SetSnapshotDir(snapshotDir)
 	if !reader.ReadSnapShot() {
@@ -177,15 +193,17 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	dataFormat := strings.ToLower(sourceTree.BufferInfo.DataFormat)
 	srcIsFrame := true
 	frameAlignment := 16
+	dstreamFormat := false
 	switch dataFormat {
 	case "source_data":
 		srcIsFrame = false
 	case "dstream_coresight":
 		frameAlignment = 4
+		dstreamFormat = true
 	}
 
 	formatterFlags := uint32(ocsd.DfrmtrFrameMemAlign)
-	if dataFormat == "dstream_coresight" {
+	if dstreamFormat {
 		formatterFlags = ocsd.DfrmtrHasFsyncs
 	}
 
@@ -197,6 +215,11 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	tree := dcdtree.CreateDecodeTree(srcType, formatterFlags)
 	if tree == nil {
 		return nil, fmt.Errorf("nil decode tree")
+	}
+
+	errLog := &testErrLogger{}
+	if df := tree.GetFrameDeformatter(); df != nil {
+		df.SetErrorLogger(errLog)
 	}
 
 	etmv4Decoders := 0
@@ -242,7 +265,12 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		cfg.ArchVer = ocsd.ArchV8
 		cfg.CoreProf = ocsd.ProfileCortexA
 
-		if err := tree.CreateDecoder(ocsd.BuiltinDcdETMV4I, int(ocsd.CreateFlgFullDecoder), cfg); err != ocsd.OK {
+		createFlags := ocsd.CreateFlgFullDecoder
+		if packetOnly {
+			createFlags = ocsd.CreateFlgPacketProc
+		}
+
+		if err := tree.CreateDecoder(ocsd.BuiltinDcdETMV4I, int(createFlags), cfg); err != ocsd.OK {
 			return nil, fmt.Errorf("create ETMv4 decoder for %s failed: %v", srcDevName, err)
 		}
 		etmv4Decoders++
@@ -301,13 +329,51 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	}
 
 	var traceIndex uint32
-	if srcIsFrame {
+	if dstreamFormat {
+		remaining := traceData
+		for len(remaining) > 0 {
+			payloadLen := len(remaining)
+			if payloadLen > 504 {
+				payloadLen = 504
+			}
+			payload := remaining[:payloadLen]
+
+			for len(payload) > 0 {
+				consumed, resp, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), payload)
+				if ocsd.DataRespIsFatal(resp) {
+					if errLog.lastErr != nil {
+						return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v (%s)", resp, traceIndex, ocsdErr, errLog.lastErr)
+					}
+					return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v", resp, traceIndex, ocsdErr)
+				}
+				if consumed == 0 {
+					return nil, fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
+				}
+				traceIndex += consumed
+				payload = payload[consumed:]
+			}
+
+			remaining = remaining[payloadLen:]
+			footerLen := 8
+			if len(remaining) < footerLen {
+				footerLen = len(remaining)
+			}
+			remaining = remaining[footerLen:]
+		}
+	} else if srcIsFrame {
 		pending := traceData
 		for len(pending) >= frameAlignment {
 			sendLen := len(pending) - (len(pending) % frameAlignment)
-			consumed, resp, _ := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
+			const maxChunk = 256
+			if sendLen > maxChunk {
+				sendLen = maxChunk - (maxChunk % frameAlignment)
+			}
+			consumed, resp, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
 			if ocsd.DataRespIsFatal(resp) {
-				return nil, fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
+				if errLog.lastErr != nil {
+					return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v (%s)", resp, traceIndex, ocsdErr, errLog.lastErr)
+				}
+				return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v", resp, traceIndex, ocsdErr)
 			}
 			if consumed == 0 {
 				return nil, fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
@@ -318,9 +384,12 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	} else {
 		remaining := traceData
 		for len(remaining) > 0 {
-			consumed, resp, _ := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
+			consumed, resp, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
 			if ocsd.DataRespIsFatal(resp) {
-				return nil, fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
+				if errLog.lastErr != nil {
+					return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v (%s)", resp, traceIndex, ocsdErr, errLog.lastErr)
+				}
+				return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v", resp, traceIndex, ocsdErr)
 			}
 			if consumed == 0 {
 				return nil, fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
@@ -443,11 +512,31 @@ func normalizeSnapshotLine(line string, includeGenElems bool) string {
 	if !ok {
 		return ""
 	}
+	left = normalizeIdxPrefix(left)
 	packetType := extractPacketType(strings.TrimSpace(right))
 	if packetType == "" {
 		return ""
 	}
 	return strings.TrimSpace(left) + "\t" + packetType
+}
+
+func normalizeIdxPrefix(left string) string {
+	trimmed := strings.TrimSpace(left)
+	if !strings.HasPrefix(trimmed, "Idx:") {
+		return trimmed
+	}
+
+	parts := strings.Split(trimmed, ";")
+	if len(parts) < 2 {
+		return trimmed
+	}
+	idxPart := strings.TrimSpace(parts[0])
+	idPart := strings.TrimSpace(parts[1])
+	if !strings.HasPrefix(idPart, "ID:") {
+		return trimmed
+	}
+
+	return fmt.Sprintf("%s; %s;", idxPart, idPart)
 }
 
 func extractPacketType(s string) string {

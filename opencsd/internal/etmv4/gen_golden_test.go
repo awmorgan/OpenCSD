@@ -20,6 +20,7 @@ func TestUpdateGolden(t *testing.T) {
 	cases := []struct {
 		name       string
 		sourceName string
+		packetOnly bool
 	}{
 		{name: "juno_r1_1", sourceName: "ETB_0"},
 		{name: "a57_single_step", sourceName: "CSTMC_TRACE_FIFO"},
@@ -30,6 +31,7 @@ func TestUpdateGolden(t *testing.T) {
 		{name: "test-file-mem-offsets", sourceName: "ETB_0"},
 		{name: "init-short-addr", sourceName: "CSTMC_TRACE_FIFO"},
 		{name: "bugfix-exact-match", sourceName: "etr_0"},
+		{name: "a55-test-tpiu", sourceName: "DSTREAM_0", packetOnly: true},
 	}
 
 	for _, tc := range cases {
@@ -39,7 +41,7 @@ func TestUpdateGolden(t *testing.T) {
 			continue
 		}
 		goldenPath := filepath.Join("testdata", tc.name+".ppl")
-		out, err := runSnapshotDecode(snapshotDir, tc.sourceName)
+		out, err := runSnapshotDecode(snapshotDir, tc.sourceName, tc.packetOnly)
 		if err != nil {
 			t.Errorf("runSnapshotDecode(%s): %v", tc.name, err)
 			continue
