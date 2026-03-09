@@ -477,6 +477,39 @@ func (d *PktDecode) decodePacket() ocsd.Err {
 			d.currSpecDepth++
 		}
 
+	// ETE timestamp marker
+	case ETE_PktTSMarker:
+		marker := ocsd.TraceMarkerPayload{
+			Type:  ocsd.ElemMarkerTS,
+			Value: 0,
+		}
+		d.pushP0ElemMarker(pkt.Type, d.IndexCurrPkt, marker)
+
+	// ETE transactional memory packets
+	case ETE_PktTransSt:
+		d.pushP0ElemParam(p0TransStart, d.config.CommTransP0(), pkt.Type, d.IndexCurrPkt, nil)
+		if d.config.CommTransP0() {
+			d.currSpecDepth++
+		}
+
+	case ETE_PktTransCommit:
+		d.pushP0ElemParam(p0TransCommit, false, pkt.Type, d.IndexCurrPkt, nil)
+
+	case ETE_PktTransFail:
+		d.pushP0ElemParam(p0TransFail, false, pkt.Type, d.IndexCurrPkt, nil)
+
+	// ETE PE reset (exception without address)
+	case ETE_PktPeReset:
+		d.pushP0ElemExcept(pkt.Type, d.IndexCurrPkt, false, pkt.ExceptionInfo.ExceptionType)
+
+	// ETE instrumentation packet
+	case ETE_PktITE:
+		ite := ocsd.TraceSWIte{
+			EL:    pkt.ITEPkt.EL,
+			Value: pkt.ITEPkt.Value,
+		}
+		d.pushP0ElemITE(pkt.Type, d.IndexCurrPkt, ite)
+
 	// event trace
 	case PktEvent:
 		params := []uint32{uint32(pkt.EventVal)}
@@ -1034,7 +1067,7 @@ func (d *PktDecode) processException(pElem *p0Elem) ocsd.Err {
 	pExceptElem := pElem
 	excepPktIndex := pExceptElem.rootIndex
 	branchTarget := pExceptElem.prevSame
-	ETE_resetPkt := false // reset packet not supported yet
+	ETE_resetPkt := pExceptElem.rootPkt == ETE_PktPeReset
 
 	var excepRetAddr ocsd.VAddr
 	var WPRes wpRes
@@ -1607,6 +1640,26 @@ func (d *PktDecode) pushP0ElemExcept(rootPkt PktType, rootIndex ocsd.TrcIndex, p
 	e.rootIndex = rootIndex
 	e.prevSame = prevSame
 	e.excepNum = excepNum
+	d.p0Stack = append(d.p0Stack, e)
+}
+
+func (d *PktDecode) pushP0ElemMarker(rootPkt PktType, rootIndex ocsd.TrcIndex, marker ocsd.TraceMarkerPayload) {
+	e := d.allocP0Elem()
+	e.p0Type = p0Marker
+	e.isP0 = false
+	e.rootPkt = rootPkt
+	e.rootIndex = rootIndex
+	e.marker = marker
+	d.p0Stack = append(d.p0Stack, e)
+}
+
+func (d *PktDecode) pushP0ElemITE(rootPkt PktType, rootIndex ocsd.TrcIndex, ite ocsd.TraceSWIte) {
+	e := d.allocP0Elem()
+	e.p0Type = p0ITE
+	e.isP0 = false
+	e.rootPkt = rootPkt
+	e.rootIndex = rootIndex
+	e.ite = ite
 	d.p0Stack = append(d.p0Stack, e)
 }
 
