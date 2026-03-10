@@ -477,6 +477,39 @@ func (d *PktDecode) decodePacket() ocsd.Err {
 			d.currSpecDepth++
 		}
 
+	// ETE timestamp marker compatibility alias
+	case PktTypeTS_MARKER:
+		marker := ocsd.TraceMarkerPayload{
+			Type:  ocsd.ElemMarkerTS,
+			Value: 0,
+		}
+		d.pushP0ElemMarker(pkt.Type, d.IndexCurrPkt, marker)
+
+	// ETE transactional memory packet compatibility aliases
+	case PktTypeTRANS_ST:
+		d.pushP0ElemParam(p0TransStart, d.config.CommTransP0(), pkt.Type, d.IndexCurrPkt, nil)
+		if d.config.CommTransP0() {
+			d.currSpecDepth++
+		}
+
+	case PktTypeTRANS_COMMIT:
+		d.pushP0ElemParam(p0TransCommit, false, pkt.Type, d.IndexCurrPkt, nil)
+
+	case PktTypeTRANS_FAIL:
+		d.pushP0ElemParam(p0TransFail, false, pkt.Type, d.IndexCurrPkt, nil)
+
+	// ETE PE reset (exception without address) compatibility alias
+	case PktTypePE_RESET:
+		d.pushP0ElemExcept(pkt.Type, d.IndexCurrPkt, false, pkt.ExceptionInfo.ExceptionType)
+
+	// ETE instrumentation packet compatibility alias
+	case PktTypeITE:
+		ite := ocsd.TraceSWIte{
+			EL:    pkt.ITEPkt.EL,
+			Value: pkt.ITEPkt.Value,
+		}
+		d.pushP0ElemITE(pkt.Type, d.IndexCurrPkt, ite)
+
 	// ETE timestamp marker
 	case ETE_PktTSMarker:
 		marker := ocsd.TraceMarkerPayload{

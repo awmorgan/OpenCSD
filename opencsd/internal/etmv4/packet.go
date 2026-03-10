@@ -128,6 +128,16 @@ const (
 	ETE_PktTransFail PktType = 0x401 // base type is exception packet.
 )
 
+var (
+	// Compatibility packet type aliases used by newer ETE call sites.
+	PktTypeITE          = ETE_PktITE
+	PktTypeTRANS_ST     = ETE_PktTransSt
+	PktTypeTRANS_COMMIT = ETE_PktTransCommit
+	PktTypeTRANS_FAIL   = ETE_PktTransFail
+	PktTypeTS_MARKER    = ETE_PktTSMarker
+	PktTypePE_RESET     = ETE_PktPeReset
+)
+
 // Info for TINFO packet.
 type TraceInfo struct {
 	CCEnabled    bool  // 1 if cycle count enabled

@@ -38,3 +38,12 @@ const (
 	ETE_PktPeReset   = etmv4.ETE_PktPeReset
 	ETE_PktTransFail = etmv4.ETE_PktTransFail
 )
+
+var (
+	PktTypeITE          = etmv4.PktTypeITE
+	PktTypeTRANS_ST     = etmv4.PktTypeTRANS_ST
+	PktTypeTRANS_COMMIT = etmv4.PktTypeTRANS_COMMIT
+	PktTypeTRANS_FAIL   = etmv4.PktTypeTRANS_FAIL
+	PktTypeTS_MARKER    = etmv4.PktTypeTS_MARKER
+	PktTypePE_RESET     = etmv4.PktTypePE_RESET
+)
