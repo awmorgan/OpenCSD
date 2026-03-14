@@ -297,6 +297,8 @@ func (p *Processor) initPacketState() {
 	p.currPacket.Valid.ExactMatchIdxValid = false
 
 	p.currPacket.Atom.Num = 0
+	p.currPacket.CondInstr = CondInstr{}
+	p.currPacket.CondResult = CondResult{}
 	p.currPacket.Context.Updated = false
 	p.currPacket.Context.UpdatedV = false
 	p.currPacket.Context.UpdatedC = false
@@ -1278,7 +1280,7 @@ func (p *Processor) extractCondResult(buf []byte, stIdx int, key *uint32, result
 		}
 		byteVal := buf[stIdx+idx]
 		if idx == 0 {
-			*result = byteVal
+			*result = byteVal & 0xF
 			*key = uint32((byteVal >> 4) & 0x7)
 			incr = 3
 		} else {
