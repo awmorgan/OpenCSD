@@ -211,7 +211,9 @@ func (p *PktProc) processHeaderByte(by uint8) {
 				p.currPacket.Type = PktBranchOrBypassEOT
 			} else {
 				p.onBranchAddress()
-				p.processState = sendPkt
+				if p.processState != procErr {
+					p.processState = sendPkt
+				}
 			}
 		}
 	} else if (by & 0x81) == 0x80 {
@@ -382,7 +384,9 @@ func (p *PktProc) processPayloadByte(by uint8) {
 		}
 		if packetDone {
 			p.onBranchAddress()
-			p.processState = sendPkt
+			if p.processState != procErr {
+				p.processState = sendPkt
+			}
 		}
 	case PktASync:
 		if by == 0x00 {
@@ -405,7 +409,9 @@ func (p *PktProc) processPayloadByte(by uint8) {
 		if !bTopBitSet || len(p.currPacketData) >= 6 {
 			p.currPktIdx = 1
 			p.currPacket.CycleCount = p.extractCycleCount()
-			p.processState = sendPkt
+			if p.processState != procErr {
+				p.processState = sendPkt
+			}
 		}
 	case PktISyncCycle:
 		if !p.isyncGotCC {
@@ -422,7 +428,7 @@ func (p *PktProc) processPayloadByte(by uint8) {
 			if p.Config.IsInstrTrace() {
 				p.bytesExpected = cycCountBytes + 6 + ctxtIDBytes
 			} else {
-				p.bytesExpected = 2 + ctxtIDBytes
+				p.bytesExpected = cycCountBytes + 2 + ctxtIDBytes
 			}
 			p.isyncInfoIdx = 1 + cycCountBytes + ctxtIDBytes
 		}
@@ -454,6 +460,9 @@ func (p *PktProc) processPayloadByte(by uint8) {
 				beVal := uint8(0)
 				updateBE := false
 				dataAddr := p.extractDataAddress(&bits, &updateBE, &beVal)
+				if p.processState == procErr {
+					break
+				}
 				p.currPacket.UpdateAddress(dataAddr, int(bits))
 				p.currPacket.Data.UpdateAddr = true
 				p.currPacket.Data.Addr = dataAddr
@@ -463,6 +472,9 @@ func (p *PktProc) processPayloadByte(by uint8) {
 				}
 			}
 			p.currPacket.Data.Value = p.extractDataValue(int((p.currPacketData[0] >> 2) & 0x3))
+			if p.processState == procErr {
+				break
+			}
 			p.currPacket.Data.UpdateDVal = true
 			p.processState = sendPkt
 		}
@@ -470,6 +482,9 @@ func (p *PktProc) processPayloadByte(by uint8) {
 		if p.bytesExpected == len(p.currPacketData) {
 			p.currPktIdx = 1
 			p.currPacket.Data.Value = p.extractDataValue(int((p.currPacketData[0] >> 2) & 0x3))
+			if p.processState == procErr {
+				break
+			}
 			p.currPacket.Data.UpdateDVal = true
 			p.currPacket.Data.OooTag = (p.currPacketData[0] >> 5) & 0x3
 			p.processState = sendPkt
@@ -485,6 +500,9 @@ func (p *PktProc) processPayloadByte(by uint8) {
 				updateBE := false
 				p.currPktIdx = 1
 				dataAddr := p.extractDataAddress(&bits, &updateBE, &beVal)
+				if p.processState == procErr {
+					break
+				}
 				p.currPacket.UpdateAddress(dataAddr, int(bits))
 				p.currPacket.Data.UpdateAddr = true
 				p.currPacket.Data.Addr = dataAddr
@@ -499,6 +517,9 @@ func (p *PktProc) processPayloadByte(by uint8) {
 		if p.bytesExpected == len(p.currPacketData) {
 			p.currPktIdx = 1
 			p.currPacket.Context.CtxtID = p.extractCtxtID()
+			if p.processState == procErr {
+				break
+			}
 			p.currPacket.Context.UpdatedC = true
 			p.processState = sendPkt
 		}
@@ -510,6 +531,9 @@ func (p *PktProc) processPayloadByte(by uint8) {
 			tsBits := uint8(0)
 			p.currPktIdx = 1
 			tsVal := p.extractTimestamp(&tsBits)
+			if p.processState == procErr {
+				break
+			}
 			p.currPacket.UpdateTimestamp(tsVal, tsBits)
 			p.processState = sendPkt
 		}
@@ -575,7 +599,9 @@ func (p *PktProc) extractBrAddrPkt(nBitsOut *int) uint64 {
 	byte5AddrUpdate := false
 
 	for CBit && bytecount < 4 {
-		p.checkPktLimits()
+		if !p.checkPktLimits() {
+			return 0
+		}
 		addrbyte = p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
 		CBit = (addrbyte & 0x80) != 0
@@ -601,7 +627,9 @@ func (p *PktProc) extractBrAddrPkt(nBitsOut *int) uint64 {
 	}
 
 	if CBit {
-		p.checkPktLimits()
+		if !p.checkPktLimits() {
+			return 0
+		}
 		addrbyte = p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
 
@@ -709,7 +737,9 @@ func (p *PktProc) extractCycleCount() uint32 {
 	bCond := true
 
 	for bCond {
-		p.checkPktLimits()
+		if !p.checkPktLimits() {
+			return 0
+		}
 		currByte := p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
 
@@ -727,10 +757,12 @@ func (p *PktProc) extractCycleCount() uint32 {
 	return cycleCount
 }
 
-func (p *PktProc) checkPktLimits() {
+func (p *PktProc) checkPktLimits() bool {
 	if p.currPktIdx >= len(p.currPacketData) {
 		p.throwMalformedPacketErr("Malformed Packet - oversized packet.")
+		return false
 	}
+	return true
 }
 
 func (p *PktProc) extractCtxtID() uint32 {
@@ -742,7 +774,7 @@ func (p *PktProc) extractCtxtID() uint32 {
 		return 0
 	}
 
-	for i := range ctxtBytes {
+	for i := 0; i < int(ctxtBytes); i++ {
 		bByte := p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
 		val |= uint32(bByte) << (i * 8)
@@ -759,17 +791,25 @@ func (p *PktProc) onISyncPacket() {
 	// 1. Extract cycle count (if present) - same as C++
 	if p.currPacket.Type == PktISyncCycle {
 		p.currPacket.CycleCount = p.extractCycleCount()
+		if p.processState == procErr {
+			return
+		}
 		p.currPacket.ISyncInfo.HasCycleCount = true
 	}
 
 	// 2. Extract context ID BEFORE info byte (C++ order)
 	if p.Config.CtxtIDBytes() > 0 {
 		p.currPacket.Context.CtxtID = p.extractCtxtID()
+		if p.processState == procErr {
+			return
+		}
 		p.currPacket.Context.UpdatedC = true
 	}
 
 	// 3. Extract info byte
-	p.checkPktLimits()
+	if !p.checkPktLimits() {
+		return
+	}
 	infoByte := p.currPacketData[p.currPktIdx]
 	p.currPktIdx++
 
@@ -794,7 +834,9 @@ func (p *PktProc) onISyncPacket() {
 		}
 
 		for i := 0; i < addrBytes; i++ {
-			p.checkPktLimits()
+			if !p.checkPktLimits() {
+				return
+			}
 			instrAddr |= uint32(p.currPacketData[p.currPktIdx]) << (i * 8)
 			p.currPktIdx++
 		}
@@ -851,9 +893,11 @@ func (p *PktProc) onISyncPacket() {
 func (p *PktProc) extractDataAddress(bits *uint8, updateBE *bool, beVal *uint8) uint64 {
 	addr := uint64(0)
 	nBits := 0
-	shiftAddr := 0
 
 	for {
+		if !p.checkPktLimits() {
+			return 0
+		}
 		b := p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
 
@@ -879,10 +923,6 @@ func (p *PktProc) extractDataAddress(bits *uint8, updateBE *bool, beVal *uint8) 
 		}
 	}
 	*bits = uint8(nBits)
-	if shiftAddr > 0 {
-		addr <<= shiftAddr
-		*bits += uint8(shiftAddr)
-	}
 	return addr
 }
 
@@ -896,6 +936,9 @@ func (p *PktProc) extractDataValue(sizeCode int) uint32 {
 	}
 
 	for i := 0; i < bytes; i++ {
+		if !p.checkPktLimits() {
+			return 0
+		}
 		b := p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
 		val |= uint32(b) << (i * 8)
@@ -924,7 +967,9 @@ func (p *PktProc) extractTimestamp(tsBits *uint8) uint64 {
 	nBits := uint8(0)
 
 	for tsCurrBytes < tsMaxBytes && bCont {
-		p.checkPktLimits()
+		if !p.checkPktLimits() {
+			return 0
+		}
 		currByte := p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
 
