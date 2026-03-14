@@ -597,3 +597,25 @@ func TestMapper_ErrorAndCacheEdgePaths(t *testing.T) {
 		t.Errorf("Expected ErrMemNacc on cache miss/out-of-range read, got %v", err)
 	}
 }
+
+func TestCacheReadBytesFromCache_ClampsPageBaseToAccessorStart(t *testing.T) {
+	accBuf := NewBufferAccessor(0x1004, []byte{0x11, 0x22, 0x33, 0x44, 0x55})
+	accBuf.SetMemSpace(ocsd.MemSpaceEL1N)
+
+	cache := NewCache()
+	cache.EnableCaching(true)
+
+	numBytes := uint32(4)
+	readBuf := make([]byte, 4)
+	err := cache.ReadBytesFromCache(accBuf, 0x1004, ocsd.MemSpaceEL1N, 0x10, &numBytes, readBuf)
+	if err != ocsd.OK {
+		t.Fatalf("Expected cache read OK for non-page-aligned accessor start, got %v", err)
+	}
+
+	expected := []byte{0x11, 0x22, 0x33, 0x44}
+	for i := range expected {
+		if readBuf[i] != expected[i] {
+			t.Fatalf("byte %d: expected 0x%02X, got 0x%02X", i, expected[i], readBuf[i])
+		}
+	}
+}

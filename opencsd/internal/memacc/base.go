@@ -267,6 +267,10 @@ func (c *Cache) ReadBytesFromCache(acc Accessor, address ocsd.VAddr, memSpace oc
 	// Prepare for read from accessor
 	// Normalize address to page boundary for aligned caching
 	pageBase := address & ^ocsd.VAddr(c.pageSize-1)
+	accStart, _ := acc.GetRange()
+	if pageBase < accStart {
+		pageBase = accStart
+	}
 
 	// How many bytes can we read from this accessor?
 	avail := acc.BytesInRange(pageBase, uint32(c.pageSize))
