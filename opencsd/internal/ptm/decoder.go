@@ -34,39 +34,39 @@ type peAddrState struct {
 	valid     bool
 }
 
-type atoms struct {
+type PtmAtoms struct {
 	atom      ocsd.PktAtom
 	rootIndex ocsd.TrcIndex
 }
 
-func (a *atoms) init(atom ocsd.PktAtom, rootIndex ocsd.TrcIndex) {
+func (a *PtmAtoms) init(atom ocsd.PktAtom, rootIndex ocsd.TrcIndex) {
 	a.atom = atom
 	a.rootIndex = rootIndex
 }
 
-func (a *atoms) getCurrAtomVal() ocsd.AtmVal {
+func (a *PtmAtoms) getCurrAtomVal() ocsd.AtmVal {
 	if (a.atom.EnBits & 0x1) != 0 {
 		return ocsd.AtomE
 	}
 	return ocsd.AtomN
 }
 
-func (a *atoms) numAtoms() int {
+func (a *PtmAtoms) numAtoms() int {
 	return int(a.atom.Num)
 }
 
-func (a *atoms) pktIndex() ocsd.TrcIndex {
+func (a *PtmAtoms) pktIndex() ocsd.TrcIndex {
 	return a.rootIndex
 }
 
-func (a *atoms) clearAtom() {
+func (a *PtmAtoms) clearAtom() {
 	if a.atom.Num > 0 {
 		a.atom.Num--
 		a.atom.EnBits >>= 1
 	}
 }
 
-func (a *atoms) clearAll() {
+func (a *PtmAtoms) clearAll() {
 	a.atom.Num = 0
 }
 
@@ -85,7 +85,7 @@ type PktDecode struct {
 	naccAddr       ocsd.VAddr
 	iSyncPeCtxt    bool
 
-	atoms       atoms
+	atoms       PtmAtoms
 	returnStack common.AddrReturnStack
 	outputElem  ocsd.TraceElement
 }

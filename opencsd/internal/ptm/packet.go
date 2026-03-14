@@ -65,7 +65,7 @@ type Packet struct {
 	PrevISA ocsd.ISA
 
 	AddrBits  int
-	AddrValid int
+	AddrValid bool
 	AddrVal   ocsd.VAddr
 
 	Context Context
@@ -104,7 +104,7 @@ func (p *Packet) ResetState() {
 	p.Context.CurrHyp = false
 	p.Context.CurrNS = false
 
-	p.AddrValid = 0
+	p.AddrValid = false
 	p.AddrVal = 0
 
 	p.PrevISA = ocsd.ISAUnknown
@@ -120,9 +120,31 @@ func (p *Packet) UpdateAddress(partAddrVal ocsd.VAddr, updateBits int) {
 	p.AddrBits = updateBits
 	p.AddrVal &^= validMask
 	p.AddrVal |= (partAddrVal & validMask)
-	if updateBits > p.AddrValid {
-		p.AddrValid = updateBits
-	}
+	p.AddrValid = true
+}
+
+func (p *Packet) UpdateContextID(ctxtID uint32) {
+	p.Context.CtxtID = ctxtID
+	p.Context.UpdatedC = true
+}
+
+func (p *Packet) UpdateVMID(vmid uint8) {
+	p.Context.VMID = vmid
+	p.Context.UpdatedV = true
+}
+
+func (p *Packet) UpdateISA(currISA ocsd.ISA) {
+	p.PrevISA = p.CurrISA
+	p.CurrISA = currISA
+}
+
+func (p *Packet) SetException(exType ocsd.ArmV7Exception, exNum uint16, currNS bool, currHyp bool) {
+	p.Context.CurrNS = currNS
+	p.Context.CurrHyp = currHyp
+	p.Context.Updated = true
+	p.Exception.Present = true
+	p.Exception.Type = exType
+	p.Exception.Number = exNum
 }
 
 func (p *Packet) UpdateTimestamp(tsVal uint64, updateBits uint8) {
@@ -230,7 +252,7 @@ func (p *Packet) getAtomStr() string {
 
 func (p *Packet) getBranchAddressStr() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Addr=0x%x; ", p.AddrVal)) // simplified for now
+	sb.WriteString(fmt.Sprintf("Addr=0x%08x; ", uint32(p.AddrVal)))
 
 	if p.CurrISA != p.PrevISA {
 		sb.WriteString(p.getISAStr())
@@ -304,8 +326,6 @@ func (p *Packet) getISyncStr() string {
 
 	if p.Context.CurrHyp {
 		sb.WriteString("Hyp; ")
-	} else {
-		sb.WriteString(" ")
 	}
 
 	if p.Context.UpdatedC {

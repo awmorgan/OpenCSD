@@ -1043,7 +1043,7 @@ func newTestDec(hitAfter int) (*PktDecode, *testTrcElemIn) {
 
 // TestAtomDataMethods exercises all atomData struct methods directly.
 func TestAtomDataMethods(t *testing.T) {
-	var a atoms
+	var a PtmAtoms
 
 	a.init(ocsd.PktAtom{Num: 3, EnBits: 0x5}, 42) // binary 101 -> E,N,E
 	if a.numAtoms() != 3 {

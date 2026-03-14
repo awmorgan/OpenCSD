@@ -619,8 +619,7 @@ func (p *PktProc) pktISync() error {
 						isa = ocsd.ISAThumb2
 					}
 				}
-				p.currPacket.PrevISA = p.currPacket.CurrISA
-				p.currPacket.CurrISA = isa
+				p.currPacket.UpdateISA(isa)
 
 				if reason != 0 {
 					p.needCycleCount = p.Config.EnaCycleAcc()
@@ -675,8 +674,7 @@ func (p *PktProc) pktISync() error {
 			if err != nil {
 				return err
 			}
-			p.currPacket.Context.CtxtID = ctxtID
-			p.currPacket.Context.UpdatedC = true
+			p.currPacket.UpdateContextID(ctxtID)
 		}
 		p.processState = stateSendPkt
 	}
@@ -751,8 +749,7 @@ func (p *PktProc) pktWPointUpdate() error {
 				p.addrPktIsa = ocsd.ISATee
 			}
 		}
-		p.currPacket.PrevISA = p.currPacket.CurrISA
-		p.currPacket.CurrISA = p.addrPktIsa
+		p.currPacket.UpdateISA(p.addrPktIsa)
 
 		addrVal, totalBits := p.extractAddress(1)
 		p.currPacket.UpdateAddress(ocsd.VAddr(addrVal), int(totalBits))
@@ -790,8 +787,7 @@ func (p *PktProc) pktCtxtID() error {
 			if err != nil {
 				return err
 			}
-			p.currPacket.Context.CtxtID = ctxtID
-			p.currPacket.Context.UpdatedC = true
+			p.currPacket.UpdateContextID(ctxtID)
 		}
 		p.processState = stateSendPkt
 	}
@@ -800,8 +796,7 @@ func (p *PktProc) pktCtxtID() error {
 
 func (p *PktProc) pktVMID() error {
 	if currByte, ok := p.readByteVal(); ok {
-		p.currPacket.Context.VMID = currByte
-		p.currPacket.Context.UpdatedV = true
+		p.currPacket.UpdateVMID(currByte)
 		p.processState = stateSendPkt
 	}
 	return nil
@@ -1001,8 +996,7 @@ func (p *PktProc) pktBranchAddr() error {
 				p.addrPktIsa = ocsd.ISATee
 			}
 		}
-		p.currPacket.PrevISA = p.currPacket.CurrISA
-		p.currPacket.CurrISA = p.addrPktIsa
+		p.currPacket.UpdateISA(p.addrPktIsa)
 
 		addrVal, totalBits := p.extractAddress(0)
 		p.currPacket.UpdateAddress(ocsd.VAddr(addrVal), int(totalBits))
@@ -1012,10 +1006,11 @@ func (p *PktProc) pktBranchAddr() error {
 			ENum := uint16(E1>>1) & 0xF
 			excep := ocsd.ExcpReserved
 
-			p.currPacket.Context.CurrNS = (E1 & 0x1) != 0
+			currNS := (E1 & 0x1) != 0
+			currHyp := false
 			if p.numExcepBytes > 1 {
 				E2 := p.currPacketData[p.numAddrBytes+1]
-				p.currPacket.Context.CurrHyp = ((E2 >> 5) & 0x1) != 0
+				currHyp = ((E2 >> 5) & 0x1) != 0
 				ENum |= uint16(E2&0x1F) << 4
 			}
 
@@ -1028,9 +1023,7 @@ func (p *PktProc) pktBranchAddr() error {
 				}
 				excep = v7ARExceptions[ENum]
 			}
-			p.currPacket.Exception.Present = true
-			p.currPacket.Exception.Type = excep
-			p.currPacket.Exception.Number = ENum
+			p.currPacket.SetException(excep, ENum, currNS, currHyp)
 		}
 
 		if p.needCycleCount {
