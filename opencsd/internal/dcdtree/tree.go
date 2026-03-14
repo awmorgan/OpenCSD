@@ -96,7 +96,7 @@ func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config 
 	}
 
 	var pktIn interfaces.TrcDataIn
-	var handle any
+	var handle interfaces.TrcTypedBase
 
 	if (createFlags & ocsd.CreateFlgFullDecoder) != 0 {
 		var err2 ocsd.Err

@@ -700,7 +700,7 @@ func NewDecoderManager() *DecoderManager {
 	return &DecoderManager{}
 }
 
-func (m *DecoderManager) CreatePktProc(instID int, config any) any {
+func (m *DecoderManager) CreatePktProc(instID int, config any) interfaces.TrcTypedBase {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil
@@ -710,7 +710,7 @@ func (m *DecoderManager) CreatePktProc(instID int, config any) any {
 	return proc
 }
 
-func (m *DecoderManager) CreatePktDecode(instID int, config any) any {
+func (m *DecoderManager) CreatePktDecode(instID int, config any) interfaces.TrcTypedBase {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil
@@ -720,7 +720,7 @@ func (m *DecoderManager) CreatePktDecode(instID int, config any) any {
 	return dec
 }
 
-func (m *DecoderManager) CreateDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
+func (m *DecoderManager) CreateDecoder(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {
 	procAny := m.CreatePktProc(instID, config)
 	if procAny == nil {
 		return nil, nil, ocsd.ErrInvalidParamType
