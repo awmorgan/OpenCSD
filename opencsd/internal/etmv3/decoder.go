@@ -426,7 +426,7 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 	packetIn := d.CurrPacketIn
 	bUpdatePEContext := false
 
-	if packetIn.Exception.Cancel {
+	if packetIn.ExceptionCancel {
 		d.outputElemList.CancelPendElem()
 	} else {
 		d.outputElemList.CommitAllPendElem()

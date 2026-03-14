@@ -188,12 +188,12 @@ func TestDecoderBranchVariations(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpData, 0, pkt1)
 
 	pkt1.Exception.Present = true
-	pkt1.Exception.Cancel = true
+	pkt1.ExceptionCancel = true
 	pkt1.Context.UpdatedC = true
 	pkt1.Context.CurrNS = true
 	dec.PacketDataIn(ocsd.OpData, 1, pkt1)
 
-	pkt1.Exception.Cancel = false
+	pkt1.ExceptionCancel = false
 	pkt1.Context.CurrNS = false
 	dec.PacketDataIn(ocsd.OpData, 2, pkt1)
 

@@ -18,8 +18,8 @@ type Config struct {
 
 // Register bit constants
 const (
-	ctrlDataVal  uint32 = 0x4
-	ctrlDataAddr uint32 = 0x8
+	ctrlDataAddr uint32 = 0x4
+	ctrlDataVal  uint32 = 0x8
 	ctrlCycleAcc uint32 = 0x1000
 	ctrlDataOnly uint32 = 0x100000
 	ctrlTsEna    uint32 = 0x1 << 28

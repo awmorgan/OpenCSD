@@ -608,7 +608,7 @@ func (p *PktProc) extractBrAddrPkt(nBitsOut *int) uint64 {
 		if (addrbyte & 0x80) != 0 {
 			excep_num := (addrbyte >> 3) & 0x7
 			p.currPacket.UpdateISA(ocsd.ISAArm)
-			p.currPacket.SetException(exceptionTypeARMdeprecated[excep_num], uint16(excep_num), (addrbyte&0x40) != 0, p.Config.IsV7MArch(), 0, 0)
+			p.currPacket.SetException(exceptionTypeARMdeprecated[excep_num], uint16(excep_num))
 		} else {
 			if (addrbyte & 0x40) == 0x40 {
 				p.extractExceptionData()
@@ -682,13 +682,13 @@ func (p *PktProc) extractExceptionData() {
 		if (b & 0x40) == 0x40 {
 			// Exception Byte (bit 6 = 1)
 			exNum := uint16((b >> 1) & 0x0F)
-			cancel := (b & 0x20) != 0
 			// AltISA is on bit 6, handled by extractExceptionData caller or here?
 			// C++ UpdateAltISA((dataByte & 0x40) != 0)
 			p.currPacket.Context.CurrAltIsa = true // bit 6 is 1
 			ns := (b & 0x01) != 0
 			p.currPacket.Context.CurrNS = ns
-			p.currPacket.SetException(ocsd.ExcpNoException, exNum, cancel, false, 0, 0)
+			cancel := (b & 0x20) != 0
+			p.currPacket.SetExceptionWithCancel(ocsd.ExcpNoException, exNum, cancel)
 		} else {
 			// Context Information Byte (bit 6 = 0)
 			p.currPacket.Context.CurrNS = (b & 0x20) != 0

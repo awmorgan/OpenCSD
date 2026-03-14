@@ -50,7 +50,7 @@ func (pt PktType) String() string {
 	case PktNoError:
 		return "PktNoError"
 	case PktNotSync:
-		return "I_NOT_SYNC"
+		return "NOTSYNC"
 	case PktIncompleteEOT:
 		return "PktIncompleteEOT"
 	case PktBranchAddress:
@@ -105,24 +105,21 @@ func (pt PktType) String() string {
 }
 
 type Excep struct {
-	Type     ocsd.ArmV7Exception
-	Number   uint16
-	Present  bool
-	Cancel   bool
-	CmType   bool
-	CmResume uint8
-	CmIrqN   uint16
+	Type    ocsd.ArmV7Exception
+	Number  uint16
+	Present bool
 }
 
 type Context struct {
-	CurrAltIsa bool   //!< current Alt ISA flag for Tee / T32 (used if not in present packet)
-	CurrNS     bool   //!< current NS flag  (used if not in present packet)
-	CurrHyp    bool   //!< current Hyp flag  (used if not in present packet)
-	Updated    bool   //!< context flags updated
-	UpdatedC   bool   //!< updated CtxtID
-	UpdatedV   bool   //!< updated VMID
-	CtxtID     uint32 //!< Context ID
-	VMID       uint8  //!< VMID
+	CurrAltIsa      bool   //!< current Alt ISA flag for Tee / T32 (used if not in present packet)
+	CurrNS          bool   //!< current NS flag  (used if not in present packet)
+	CurrHyp         bool   //!< current Hyp flag  (used if not in present packet)
+	Updated         bool   //!< context flags updated
+	ExceptionCancel bool   //!< cancel bit from ETMv3 exception branch address byte
+	UpdatedC        bool   //!< updated CtxtID
+	UpdatedV        bool   //!< updated VMID
+	CtxtID          uint32 //!< Context ID
+	VMID            uint8  //!< VMID
 }
 
 type Data struct {
@@ -154,9 +151,10 @@ type Packet struct {
 	ISyncInfo ISyncInfo //!< i-sync info
 	Exception Excep     //!< exception info
 
-	Atom       ocsd.PktAtom //!< atom elements - non zero number indicates valid atom count
-	PHdrFmt    uint8        //!< if atom elements, associated phdr format
-	CycleCount uint32       //!< cycle count associated with this packet
+	ExceptionCancel bool         //!< cancel bit from ETMv3 exception branch address byte
+	Atom            ocsd.PktAtom //!< atom elements - non zero number indicates valid atom count
+	PHdrFmt         uint8        //!< if atom elements, associated phdr format
+	CycleCount      uint32       //!< cycle count associated with this packet
 
 	Timestamp    uint64 //!< current timestamp value
 	TsUpdateBits uint8  //!< bits of ts updated this packet (if TS packet)
@@ -176,6 +174,7 @@ func (p *Packet) Clear() {
 	p.Context.UpdatedV = false
 	p.Exception = Excep{}
 	p.ISyncInfo = ISyncInfo{}
+	p.ExceptionCancel = false
 	p.Atom = ocsd.PktAtom{}
 	p.PHdrFmt = 0
 	p.CycleCount = 0
@@ -219,14 +218,15 @@ func (p *Packet) UpdateTimestamp(tsVal uint64, updateBits uint8) {
 	p.TsUpdateBits = updateBits
 }
 
-func (p *Packet) SetException(exType ocsd.ArmV7Exception, num uint16, cancel, cmType bool, irqN uint16, resume uint8) {
+func (p *Packet) SetException(exType ocsd.ArmV7Exception, num uint16) {
 	p.Exception.Type = exType
 	p.Exception.Number = num
 	p.Exception.Present = true
-	p.Exception.Cancel = cancel
-	p.Exception.CmType = cmType
-	p.Exception.CmIrqN = irqN
-	p.Exception.CmResume = resume
+}
+
+func (p *Packet) SetExceptionWithCancel(exType ocsd.ArmV7Exception, num uint16, cancel bool) {
+	p.SetException(exType, num)
+	p.ExceptionCancel = cancel
 }
 
 func (p *Packet) UpdateISA(isa ocsd.ISA) {
@@ -336,6 +336,53 @@ func (p *Packet) String() string {
 		s += fmt.Sprintf(" Addr: 0x%x", p.Addr)
 	} else if p.Type == PktBranchAddress {
 		s += fmt.Sprintf(" Addr: 0x%x", p.Addr)
+	}
+	return s
+}
+
+func (p *Packet) GetISAStr() string {
+	switch p.CurrISA {
+	case ocsd.ISAArm:
+		return "ARM(32)"
+	case ocsd.ISAThumb2:
+		return "Thumb"
+	case ocsd.ISAJazelle:
+		return "Jazelle"
+	case ocsd.ISATee:
+		return "ThumbEE"
+	default:
+		return "Unknown"
+	}
+}
+
+func (p *Packet) GetISyncStr() string {
+	switch p.ISyncInfo.Reason {
+	case ocsd.ISyncPeriodic:
+		return "Periodic"
+	case ocsd.ISyncTraceEnable:
+		return "Trace Enable"
+	case ocsd.ISyncTraceRestartAfterOverflow:
+		return "Restart Overflow"
+	case ocsd.ISyncDebugExit:
+		return "Debug Exit"
+	default:
+		return "Unknown"
+	}
+}
+
+func (p *Packet) GetAtomStr() string {
+	if p.Atom.Num == 0 {
+		return ""
+	}
+	s := ""
+	bitpattern := p.Atom.EnBits
+	for i := 0; i < int(p.Atom.Num); i++ {
+		if (bitpattern & 1) == 1 {
+			s += "E"
+		} else {
+			s += "N"
+		}
+		bitpattern >>= 1
 	}
 	return s
 }

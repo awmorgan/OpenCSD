@@ -31,7 +31,7 @@ func TestPacket(t *testing.T) {
 		t.Errorf("addr mismatch %x", p.Addr)
 	}
 
-	p.SetException(ocsd.ExcpFIQ, 4, true, false, 0, 1)
+	p.SetException(ocsd.ExcpFIQ, 4)
 	if p.Exception.Type != ocsd.ExcpFIQ {
 		t.Error("exception type mismatch")
 	}
@@ -51,7 +51,7 @@ func TestPacket(t *testing.T) {
 	_ = p.String()
 
 	p.Type = PktNotSync
-	if p.Type.String() != "I_NOT_SYNC" {
+	if p.Type.String() != "NOTSYNC" {
 		t.Error("stringer mismatch")
 	}
 	p.Type = PktType(99)

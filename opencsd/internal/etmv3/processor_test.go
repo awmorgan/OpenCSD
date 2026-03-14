@@ -72,7 +72,7 @@ func TestExtractException_ExcepByteNoCancel(t *testing.T) {
 	if !brPkt.Exception.Present {
 		t.Error("exception should be present")
 	}
-	if brPkt.Exception.Cancel {
+	if brPkt.ExceptionCancel {
 		t.Error("cancel should be false")
 	}
 }
@@ -96,7 +96,7 @@ func TestExtractException_ExcepByteWithCancel(t *testing.T) {
 	if !brPkt.Exception.Present {
 		t.Error("exception should be present")
 	}
-	if !brPkt.Exception.Cancel {
+	if !brPkt.ExceptionCancel {
 		t.Error("cancel should be true for byte 0x60")
 	}
 }
@@ -158,7 +158,7 @@ func TestExtractException_ExcepNumNonZero(t *testing.T) {
 	if !brPkt.Context.CurrNS {
 		t.Error("expected NS=true (bit0 set in 0x7F)")
 	}
-	if !brPkt.Exception.Cancel {
+	if !brPkt.ExceptionCancel {
 		t.Error("cancel should be true for byte 0x7F (bit5=1)")
 	}
 }

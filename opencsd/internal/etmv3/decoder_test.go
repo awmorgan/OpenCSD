@@ -181,7 +181,7 @@ func TestProcessBranchAddr_CancelPendElem(t *testing.T) {
 	brPkt.ResetState()
 	brPkt.Type = PktBranchAddress
 	brPkt.Addr = 0x5000
-	brPkt.Exception.Cancel = true
+	brPkt.ExceptionCancel = true
 	dec.PacketDataIn(ocsd.OpData, 3, brPkt)
 
 	// Elements shouldn't have grown (the pending elem was cancelled)
