@@ -996,6 +996,29 @@ func (d *PktDecode) traceInstrToWP(rangeOut *instrRange, res *wpRes, traceToAddr
 			} else if d.instrInfo.Type != ocsd.InstrOther {
 				*res = wpFound
 			}
+		} else if bytesRead == 2 && d.instrInfo.Isa == ocsd.ISAThumb2 {
+			// Fallback for 16-bit Thumb instructions at a memory region boundary.
+			val := uint16(memData[0]) | uint16(memData[1])<<8
+			if (val & 0xF800) < 0xE800 { // valid 16-bit Thumb encoding
+				d.instrInfo.Opcode = uint32(val)
+				err = d.InstrDecodeCall(&d.instrInfo)
+				if err != ocsd.OK {
+					break
+				}
+
+				d.instrInfo.InstrAddr += ocsd.VAddr(d.instrInfo.InstrSize)
+				rangeOut.numInstr++
+
+				if traceToAddrNext {
+					if d.instrInfo.InstrAddr == nextAddrMatch {
+						*res = wpFound
+					}
+				} else if d.instrInfo.Type != ocsd.InstrOther {
+					*res = wpFound
+				}
+			} else {
+				*res = wpNacc
+			}
 		} else {
 			*res = wpNacc
 		}
@@ -1399,6 +1422,26 @@ func (d *PktDecode) processQElement(pElem *p0Elem) ocsd.Err {
 			if isBranch {
 				break
 			}
+		} else if bytesRead == 2 && d.instrInfo.Isa == ocsd.ISAThumb2 {
+			// Fallback for 16-bit Thumb instructions at a memory region boundary.
+			val := uint16(memData[0]) | uint16(memData[1])<<8
+			if (val & 0xF800) < 0xE800 { // valid 16-bit Thumb encoding
+				d.instrInfo.Opcode = uint32(val)
+				eDec := d.InstrDecodeCall(&d.instrInfo)
+				if eDec != ocsd.OK {
+					break
+				}
+
+				d.instrInfo.InstrAddr += ocsd.VAddr(d.instrInfo.InstrSize)
+				addrRange.numInstr++
+
+				isBranch = (d.instrInfo.Type == ocsd.InstrBr) || (d.instrInfo.Type == ocsd.InstrBrIndirect)
+				if isBranch {
+					break
+				}
+			} else {
+				break
+			}
 		} else {
 			break
 		}
@@ -1445,27 +1488,29 @@ func (d *PktDecode) cancelElements() ocsd.Err {
 			if len(d.p0Stack) == 0 {
 				p0StackDone = true
 			} else {
-				pElem := d.p0Stack[0]
+				// get the newest element (end of slice)
+				lastIdx := len(d.p0Stack) - 1
+				pElem := d.p0Stack[lastIdx]
 				if pElem.isP0 {
 					if pElem.p0Type == p0Atom {
 						d.elemRes.P0Cancel -= pElem.cancelNewest(d.elemRes.P0Cancel)
 						if pElem.isEmpty() {
-							d.poppedElems = append(d.poppedElems, d.p0Stack[0])
-							d.p0Stack = d.p0Stack[1:]
+							d.poppedElems = append(d.poppedElems, d.p0Stack[lastIdx])
+							d.p0Stack = d.p0Stack[:lastIdx]
 						}
 					} else {
 						d.elemRes.P0Cancel--
-						d.poppedElems = append(d.poppedElems, d.p0Stack[0])
-						d.p0Stack = d.p0Stack[1:]
+						d.poppedElems = append(d.poppedElems, d.p0Stack[lastIdx])
+						d.p0Stack = d.p0Stack[:lastIdx]
 					}
 				} else {
 					switch pElem.p0Type {
 					case p0Event, p0TS, p0CC, p0TSCC, p0Marker, p0ITE:
 						temp = append(temp, pElem)
-						d.p0Stack = d.p0Stack[1:]
+						d.p0Stack = d.p0Stack[:lastIdx]
 					default:
-						d.poppedElems = append(d.poppedElems, d.p0Stack[0])
-						d.p0Stack = d.p0Stack[1:]
+						d.poppedElems = append(d.poppedElems, d.p0Stack[lastIdx])
+						d.p0Stack = d.p0Stack[:lastIdx]
 					}
 				}
 				if len(d.p0Stack) == 0 {
@@ -1480,8 +1525,9 @@ func (d *PktDecode) cancelElements() ocsd.Err {
 		}
 	}
 
+	// Restore saved elements back to the newest end in original order.
 	for i := len(temp) - 1; i >= 0; i-- {
-		d.p0Stack = append([]*p0Elem{temp[i]}, d.p0Stack...)
+		d.p0Stack = append(d.p0Stack, temp[i])
 	}
 
 	d.currSpecDepth -= numCancelReq - d.elemRes.P0Cancel
@@ -1493,29 +1539,23 @@ func (d *PktDecode) mispredictAtom() ocsd.Err {
 	bFoundAtom := false
 	bDone := false
 
-	var newStack []*p0Elem
-	for i := 0; i < len(d.p0Stack) && !bDone; i++ {
+	// Iterate from newest (end) to oldest, mirroring C++ front() iteration.
+	for i := len(d.p0Stack) - 1; i >= 0 && !bDone; i-- {
 		pElem := d.p0Stack[i]
 		if pElem.p0Type == p0Atom {
 			pElem.mispredictNewest()
 			bFoundAtom = true
 			bDone = true
-			newStack = append(newStack, pElem)
 		} else if pElem.p0Type == p0Addr {
-			// discard
+			// discard address elements between mispredict and the atom
 			d.poppedElems = append(d.poppedElems, pElem)
+			d.p0Stack = append(d.p0Stack[:i], d.p0Stack[i+1:]...)
 		} else if pElem.p0Type == p0UnseenUncommitted {
+			// mispredict in one of the uncommitted elements before sync - disregard
 			bDone = true
 			bFoundAtom = true
-			newStack = append(newStack, pElem)
-		} else {
-			newStack = append(newStack, pElem)
 		}
-	}
-	if !bDone {
-		d.p0Stack = newStack
-	} else {
-		d.p0Stack = append(newStack, d.p0Stack[len(newStack):]...)
+		// for any other type: continue scanning toward older elements
 	}
 
 	if !bFoundAtom {
@@ -1529,7 +1569,8 @@ func (d *PktDecode) discardElements() ocsd.Err {
 	var err ocsd.Err = ocsd.OK
 
 	for len(d.p0Stack) > 0 && err == ocsd.OK {
-		pElem := d.p0Stack[len(d.p0Stack)-1] // back
+		// Process oldest element first, mirroring C++ back() on a newest-first deque.
+		pElem := d.p0Stack[0]
 
 		if pElem.p0Type == p0Marker {
 			err = d.processMarkerElem(pElem)
@@ -1539,7 +1580,7 @@ func (d *PktDecode) discardElements() ocsd.Err {
 			err = d.processTSCCEventElem(pElem)
 		}
 		d.poppedElems = append(d.poppedElems, pElem)
-		d.p0Stack = d.p0Stack[:len(d.p0Stack)-1]
+		d.p0Stack = d.p0Stack[1:]
 	}
 
 	d.clearElemRes()
