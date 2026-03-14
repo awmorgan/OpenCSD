@@ -1017,7 +1017,7 @@ func (p *PktProc) pktBranchAddr() error {
 			if ENum <= 0xF {
 				v7ARExceptions := []ocsd.ArmV7Exception{
 					ocsd.ExcpNoException, ocsd.ExcpDebugHalt, ocsd.ExcpSMC, ocsd.ExcpHyp,
-					ocsd.ExcpAsyncDAbort, ocsd.ExcpThumbEECheckFail, ocsd.ExcpReserved, ocsd.ExcpReserved,
+					ocsd.ExcpAsyncDAbort, ocsd.ExcpJazelle, ocsd.ExcpReserved, ocsd.ExcpReserved,
 					ocsd.ExcpReset, ocsd.ExcpUndef, ocsd.ExcpSVC, ocsd.ExcpPrefAbort,
 					ocsd.ExcpSyncDataAbort, ocsd.ExcpGeneric, ocsd.ExcpIRQ, ocsd.ExcpFIQ,
 				}
