@@ -61,11 +61,10 @@ func (dt *DecodeTree) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, data 
 
 	// Unformatted single trace source fallback
 	if dt.treeType == ocsd.TrcSrcSingle {
-		for _, elem := range dt.decodeElements {
-			if elem.DataIn != nil {
-				amt, resp, err := elem.DataIn.TraceDataIn(op, index, data)
-				return amt, resp, err
-			}
+		elem := dt.decodeElements[0]
+		if elem != nil && elem.DataIn != nil {
+			amt, resp, err := elem.DataIn.TraceDataIn(op, index, data)
+			return amt, resp, err
 		}
 	}
 	return 0, ocsd.RespFatalNotInit, nil

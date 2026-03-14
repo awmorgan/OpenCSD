@@ -3,10 +3,12 @@ package dcdtree
 import (
 	"opencsd/internal/interfaces"
 	"opencsd/internal/ocsd"
+	"sync"
 )
 
 // DecoderRegister manages decoder protocol factories for the library.
 type DecoderRegister struct {
+	mu           sync.RWMutex
 	decoderMngrs map[string]interfaces.DecoderMngr
 	typedMngrs   map[ocsd.TraceProtocol]interfaces.DecoderMngr
 	nextCustomID ocsd.TraceProtocol
@@ -33,6 +35,8 @@ func (r *DecoderRegister) RegisterDecoderTypeByName(name string, mngr interfaces
 	if mngr == nil {
 		return ocsd.ErrInvalidParamVal
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if _, exists := r.decoderMngrs[name]; exists {
 		return ocsd.ErrDcdregNameRepeat
 	}
@@ -45,6 +49,8 @@ func (r *DecoderRegister) RegisterDecoderTypeByName(name string, mngr interfaces
 
 // GetDecoderMngrByName retrieves a decoder factory by its registered name string.
 func (r *DecoderRegister) GetDecoderMngrByName(name string) (interfaces.DecoderMngr, ocsd.Err) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	if mngr, exists := r.decoderMngrs[name]; exists {
 		return mngr, ocsd.OK
 	}
@@ -53,6 +59,8 @@ func (r *DecoderRegister) GetDecoderMngrByName(name string) (interfaces.DecoderM
 
 // GetDecoderMngrByType retrieves a decoder factory by its protocol enum value.
 func (r *DecoderRegister) GetDecoderMngrByType(dcdType ocsd.TraceProtocol) (interfaces.DecoderMngr, ocsd.Err) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	if mngr, exists := r.typedMngrs[dcdType]; exists {
 		return mngr, ocsd.OK
 	}

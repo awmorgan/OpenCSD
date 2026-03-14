@@ -435,6 +435,34 @@ func TestDemuxEdgeCases(t *testing.T) {
 	df.TraceDataIn(ocsd.OpData, 6, fsyncEOBBufEnd) // Triggers line 146 & 130
 }
 
+func TestMemAlignAcceptsUnalignedChunks(t *testing.T) {
+	df := NewFrameDeformatter()
+	df.Configure(baseCfg)
+	df.SetIDStream(0x10, &mockDataSink{})
+
+	buf := makeBufMemAlign()
+	chunks := []int{3, 5, 7, 9, 8}
+	start := 0
+	idx := ocsd.TrcIndex(0)
+
+	for _, chunkLen := range chunks {
+		end := start + chunkLen
+		processed, resp, _ := df.TraceDataIn(ocsd.OpData, idx, buf[start:end])
+		if processed != uint32(chunkLen) {
+			t.Fatalf("expected to consume full chunk (%d), got %d", chunkLen, processed)
+		}
+		if !ocsd.DataRespIsCont(resp) {
+			t.Fatalf("unexpected non-cont response for chunk len %d: %v", chunkLen, resp)
+		}
+		start = end
+		idx += ocsd.TrcIndex(chunkLen)
+	}
+
+	if start != len(buf) {
+		t.Fatalf("test did not consume full source buffer: %d/%d", start, len(buf))
+	}
+}
+
 func TestRunHSyncFSyncTest(t *testing.T) {
 	df := NewFrameDeformatter()
 	cfg := (baseCfg & ^uint32(ocsd.DfrmtrFrameMemAlign)) | ocsd.DfrmtrHasHsyncs | ocsd.DfrmtrHasFsyncs
