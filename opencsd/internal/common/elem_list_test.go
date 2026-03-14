@@ -70,6 +70,45 @@ func TestGenElemList(t *testing.T) {
 	}
 }
 
+func TestGenElemListPendLastPartialWindow(t *testing.T) {
+	list := NewGenElemList()
+	sendAttached := NewAttachPt[interfaces.TrcGenElemIn]()
+	dummy := &dummySendIf{}
+	sendAttached.Attach(dummy)
+
+	list.InitSendIf(sendAttached)
+	list.InitCSID(12)
+
+	for i := range 3 {
+		elem := list.GetNextElem(ocsd.TrcIndex(i))
+		elem.SetType(ocsd.GenElemInstrRange)
+	}
+
+	list.PendLastNElem(1)
+	if list.NumPendElem() != 1 {
+		t.Fatalf("expected 1 pending element, got %d", list.NumPendElem())
+	}
+	if !list.ElemToSend() {
+		t.Fatal("expected committed elements to remain sendable")
+	}
+
+	list.SendElements()
+	if dummy.sentCount != 2 {
+		t.Fatalf("expected 2 sent elements, got %d", dummy.sentCount)
+	}
+	if list.GetNumElem() != 1 || list.NumPendElem() != 1 {
+		t.Fatalf("expected 1 pending element left, got num=%d pend=%d", list.GetNumElem(), list.NumPendElem())
+	}
+
+	list.CancelPendElem()
+	if list.GetNumElem() != 0 || list.NumPendElem() != 0 {
+		t.Fatalf("expected empty list after cancel, got num=%d pend=%d", list.GetNumElem(), list.NumPendElem())
+	}
+	if dummy.sentCount != 2 {
+		t.Fatalf("expected cancel to avoid extra sends, got %d", dummy.sentCount)
+	}
+}
+
 func TestGenElemStack(t *testing.T) {
 	stack := NewGenElemStack()
 	sendAttached := NewAttachPt[interfaces.TrcGenElemIn]()

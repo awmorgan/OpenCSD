@@ -131,6 +131,7 @@ func (cf *CodeFollower) DecodeSingleOpCode() ocsd.Err {
 func (cf *CodeFollower) initFollowerState() bool {
 	cf.bHasNxt = false
 	cf.naccErr = false
+	cf.instructs = 0
 	cf.enAddr = cf.stAddr
 	cf.nextAddr = cf.stAddr
 
