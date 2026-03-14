@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"opencsd/internal/common"
+	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
 
@@ -163,6 +164,32 @@ func (d *PktDecode) OnProtocolConfig() ocsd.Err {
 }
 
 func (d *PktDecode) OnEOT() ocsd.DatapathResp {
+	resp := ocsd.RespCont
+
+	for ocsd.DataRespIsCont(resp) && (d.processStateIsCont() || d.memNaccPending || d.atoms.numAtoms() > 0) {
+		if d.processStateIsCont() {
+			resp = d.contProcess()
+			continue
+		}
+
+		if d.atoms.numAtoms() > 0 {
+			if d.currPeState.valid {
+				resp = d.processAtom()
+			} else {
+				d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevWarn, ocsd.ErrBadPacketSeq, d.atoms.pktIndex(), d.csID, "Dropped atom packet(s) at EOT while PE state is invalid."))
+				d.atoms.clearAll()
+				resp = ocsd.RespWarnCont
+			}
+			continue
+		}
+
+		d.checkPendingNacc(&resp)
+	}
+
+	if !ocsd.DataRespIsCont(resp) {
+		return resp
+	}
+
 	d.outputElem.SetType(ocsd.GenElemEOTrace)
 	d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncEOT)
 	return d.OutputTraceElement(&d.outputElem)
@@ -290,6 +317,9 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 		if d.currPeState.valid {
 			d.atoms.init(pkt.Atom, d.IndexCurrPkt)
 			resp = d.processAtom()
+		} else {
+			d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevWarn, ocsd.ErrBadPacketSeq, d.IndexCurrPkt, d.csID, "Dropped atom packet while PE state is invalid; waiting for branch address or I-Sync."))
+			resp = ocsd.RespWarnCont
 		}
 	case PktTimestamp:
 		d.outputElem.SetType(ocsd.GenElemTimestamp)
@@ -486,7 +516,7 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 		case ocsd.InstrBrIndirect:
 			if A == ocsd.AtomE {
 				d.currPeState.valid = false
-				if d.returnStack.IsActive() && d.CurrPacketIn.Type == PktAtom {
+				if d.returnStack.IsActive() && d.CurrPacketIn.Type == PktAtom && (d.instrInfo.SubType == ocsd.SInstrV8Ret || d.instrInfo.SubType == ocsd.SInstrV7ImpliedRet) {
 					var nextIsa ocsd.ISA
 					d.instrInfo.InstrAddr = d.returnStack.Pop(&nextIsa)
 					d.instrInfo.NextIsa = nextIsa
@@ -551,8 +581,28 @@ func (d *PktDecode) traceInstrToWP(bWPFound *bool, traceWPOp waypointTraceOp, ne
 			break
 		}
 
-		if bytesRead == 4 {
-			opcode := uint32(memData[0]) | uint32(memData[1])<<8 | uint32(memData[2])<<16 | uint32(memData[3])<<24
+		canDecode := bytesRead == 4
+		if !canDecode && d.instrInfo.Isa == ocsd.ISAThumb2 && bytesRead >= 2 {
+			instHW := uint16(memData[0]) | uint16(memData[1])<<8
+			if !idec.IsWideThumb(instHW) {
+				canDecode = true
+			}
+		}
+
+		if canDecode {
+			opcode := uint32(0)
+			if bytesRead >= 1 {
+				opcode |= uint32(memData[0])
+			}
+			if bytesRead >= 2 {
+				opcode |= uint32(memData[1]) << 8
+			}
+			if bytesRead >= 3 {
+				opcode |= uint32(memData[2]) << 16
+			}
+			if bytesRead >= 4 {
+				opcode |= uint32(memData[3]) << 24
+			}
 			d.instrInfo.Opcode = opcode
 			err = d.InstrDecodeCall(&d.instrInfo)
 			if err != ocsd.OK {
