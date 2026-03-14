@@ -13,7 +13,7 @@ func TestINIParser(t *testing.T) {
 # Another comment
 [snapshot]
 version=1.0
-description=Test Snapshot
+description=Test Snapshot ; inline note
 
 [device_list]
 cpu_0=cpu_0.ini
@@ -27,6 +27,9 @@ metadata=trace.ini
 
 	if iniFile.GetSection("snapshot")["version"] != "1.0" {
 		t.Errorf("expected version 1.0, got %s", iniFile.GetSection("snapshot")["version"])
+	}
+	if iniFile.GetSection("snapshot")["description"] != "Test Snapshot" {
+		t.Errorf("expected inline comment to be stripped from description")
 	}
 	if iniFile.GetSection("device_list")["cpu_0"] != "cpu_0.ini" {
 		t.Errorf("expected cpu_0.ini")
@@ -163,6 +166,41 @@ func TestParseUint(t *testing.T) {
 	if v := parseUint("16"); v != 16 {
 		t.Errorf("expected 16, got %d", v)
 	}
+	if v := parseUint("010"); v != 8 {
+		t.Errorf("expected octal 010 to parse as 8, got %d", v)
+	}
+}
+
+func TestParseDeviceList_DefaultVersion_0_1(t *testing.T) {
+	iniData := `
+[device_list]
+cpu_0=cpu_0.ini
+`
+
+	devs, err := ParseDeviceList(strings.NewReader(iniData))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if devs.SnapshotInfo.Version != "0.1" {
+		t.Fatalf("expected default version 0.1, got %q", devs.SnapshotInfo.Version)
+	}
+}
+
+func TestParseDeviceList_DefaultVersion_0_0(t *testing.T) {
+	iniData := `
+[trace]
+metadata=trace.ini
+`
+
+	devs, err := ParseDeviceList(strings.NewReader(iniData))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if devs.SnapshotInfo.Version != "0.0" {
+		t.Fatalf("expected default version 0.0, got %q", devs.SnapshotInfo.Version)
+	}
 }
 
 func TestExtractSourceTree_NoCore(t *testing.T) {
@@ -293,4 +331,96 @@ metadata=missing_trace.ini
 	reader.logInfo("test log info")
 	reader.Verbose = false
 	reader.logInfo("should not log")
+}
+
+func TestReader_DefaultTraceININame(t *testing.T) {
+	tempDir := t.TempDir()
+
+	err := os.WriteFile(filepath.Join(tempDir, "snapshot.ini"), []byte(`
+[snapshot]
+version=1.0
+[device_list]
+cpu_0=cpu_0.ini
+`), 0644)
+	if err != nil {
+		t.Fatalf("failed to create snapshot.ini: %v", err)
+	}
+
+	err = os.WriteFile(filepath.Join(tempDir, "cpu_0.ini"), []byte(`
+[device]
+name=cpu_0
+`), 0644)
+	if err != nil {
+		t.Fatalf("failed to create cpu_0.ini: %v", err)
+	}
+
+	err = os.WriteFile(filepath.Join(tempDir, "trace.ini"), []byte(`
+[trace_buffers]
+buffers=buffer1
+[buffer1]
+name=ETB
+file=trace.bin
+[source_buffers]
+ETM_0=ETB
+[core_trace_sources]
+ETM_0=cpu_0
+`), 0644)
+	if err != nil {
+		t.Fatalf("failed to create trace.ini: %v", err)
+	}
+
+	reader := NewReader()
+	reader.SetSnapshotDir(tempDir)
+	if ok := reader.ReadSnapShot(); !ok {
+		t.Fatalf("expected success")
+	}
+
+	if reader.ParsedTrace == nil {
+		t.Fatalf("expected parsed trace from default trace.ini")
+	}
+}
+
+func TestReader_LegacyDeviceFiles(t *testing.T) {
+	tempDir := t.TempDir()
+
+	err := os.WriteFile(filepath.Join(tempDir, "snapshot.ini"), []byte(`
+[snapshot]
+version=0.0
+description=legacy snapshot
+`), 0644)
+	if err != nil {
+		t.Fatalf("failed to create snapshot.ini: %v", err)
+	}
+
+	err = os.WriteFile(filepath.Join(tempDir, "device_0.ini"), []byte(`
+[device]
+name=cpu_legacy_0
+`), 0644)
+	if err != nil {
+		t.Fatalf("failed to create device_0.ini: %v", err)
+	}
+
+	err = os.WriteFile(filepath.Join(tempDir, "device_1.ini"), []byte(`
+[device]
+name=cpu_legacy_1
+`), 0644)
+	if err != nil {
+		t.Fatalf("failed to create device_1.ini: %v", err)
+	}
+
+	reader := NewReader()
+	reader.SetSnapshotDir(tempDir)
+	if ok := reader.ReadSnapShot(); !ok {
+		t.Fatalf("expected success")
+	}
+
+	if len(reader.ParsedDeviceList) != 2 {
+		t.Fatalf("expected 2 legacy devices, got %d", len(reader.ParsedDeviceList))
+	}
+	if _, ok := reader.ParsedDeviceList["cpu_legacy_0"]; !ok {
+		t.Fatalf("expected cpu_legacy_0 to be loaded")
+	}
+	if _, ok := reader.ParsedDeviceList["cpu_legacy_1"]; !ok {
+		t.Fatalf("expected cpu_legacy_1 to be loaded")
+	}
 }

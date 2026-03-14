@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"io"
 	"strings"
+	"unicode"
 )
 
 // IniFile represents a parsed INI file.
@@ -52,11 +53,7 @@ func ParseIni(r io.Reader) *IniFile {
 		parts := strings.SplitN(line, "=", 2)
 		if len(parts) == 2 {
 			key := strings.TrimSpace(parts[0])
-			val := strings.TrimSpace(parts[1])
-
-			// OpenCSD C++ trims trailing comments? The original code splits by `=` then trims.
-			// Values might have inline comments? Usually no inline comments in OpenCSD snapshot ini.
-			// However let's just strip surrounding quotes if any exist (though OpenCSD usually doesn't need it).
+			val := strings.TrimSpace(stripInlineComment(parts[1]))
 
 			ini.Sections[currentSection][key] = val
 		}
@@ -68,4 +65,36 @@ func ParseIni(r io.Reader) *IniFile {
 // GetSection returns the key-value map for a given section, or nil if not found
 func (ini *IniFile) GetSection(sectionName string) map[string]string {
 	return ini.Sections[sectionName]
+}
+
+func stripInlineComment(value string) string {
+	chars := []rune(value)
+	inSingleQuote := false
+	inDoubleQuote := false
+
+	for i, ch := range chars {
+		switch ch {
+		case '\'':
+			if !inDoubleQuote {
+				inSingleQuote = !inSingleQuote
+			}
+		case '"':
+			if !inSingleQuote {
+				inDoubleQuote = !inDoubleQuote
+			}
+		case ';', '#':
+			if inSingleQuote || inDoubleQuote {
+				continue
+			}
+			if i == 0 {
+				return ""
+			}
+			prev := chars[i-1]
+			if unicode.IsSpace(prev) {
+				return string(chars[:i])
+			}
+		}
+	}
+
+	return value
 }

@@ -76,6 +76,14 @@ func ParseDeviceList(input io.Reader) (*ParsedDevices, error) {
 		maps.Copy(parsed.DeviceList, devListSec)
 	}
 
+	if parsed.SnapshotInfo.Version == "" {
+		if _, hasDeviceList := ini.Sections[DeviceListSectionName]; hasDeviceList {
+			parsed.SnapshotInfo.Version = "0.1"
+		} else {
+			parsed.SnapshotInfo.Version = "0.0"
+		}
+	}
+
 	if traceSec, ok := ini.Sections[TraceSectionName]; ok {
 		parsed.TraceMetaDataName = traceSec[MetadataKey]
 	}
@@ -167,11 +175,6 @@ func ExtractSourceTree(bufferName string, metadata *ParsedTrace, bufferData *Tra
 }
 
 func parseUint(s string) uint64 {
-	// Handle 0x prefix manually if base is 0, ParseUint handles it but expects to be cleanly formatted
-	if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
-		v, _ := strconv.ParseUint(s[2:], 16, 64)
-		return v
-	}
-	v, _ := strconv.ParseUint(s, 10, 64)
+	v, _ := strconv.ParseUint(strings.TrimSpace(s), 0, 64)
 	return v
 }

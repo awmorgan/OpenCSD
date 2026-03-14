@@ -7,6 +7,7 @@ import (
 )
 
 const SnapshotINIFilename = "snapshot.ini"
+const TraceINIFilename = "trace.ini"
 
 // Reader reads a snapshot directory
 type Reader struct {
@@ -46,6 +47,9 @@ func (r *Reader) SnapshotReadOK() bool {
 func (r *Reader) ReadSnapShot() bool {
 	r.snapshotFound = false
 	r.readOK = false
+	r.ParsedDeviceList = make(map[string]*ParsedDevice)
+	r.ParsedTrace = nil
+	r.SourceTrees = make(map[string]*TraceBufferSourceTree)
 
 	iniPath := filepath.Join(r.SnapshotPath, SnapshotINIFilename)
 	file, err := os.Open(iniPath)
@@ -65,26 +69,21 @@ func (r *Reader) ReadSnapShot() bool {
 
 	// Parse devices
 	for devName, iniFileName := range devList.DeviceList {
-		devIniPath := filepath.Join(r.SnapshotPath, iniFileName)
-		devFile, err := os.Open(devIniPath)
-		if err != nil {
-			r.logError(fmt.Sprintf("Failed to open device ini %s: %v", devIniPath, err))
-			continue
-		}
+		r.loadDevice(devName, iniFileName)
+	}
 
-		parsedDev, err := ParseSingleDevice(devFile)
-		devFile.Close()
-		if err != nil {
-			r.logError(fmt.Sprintf("Failed to parse device %s: %v", devName, err))
-			continue
-		}
-
-		r.ParsedDeviceList[devName] = parsedDev
+	if len(devList.DeviceList) == 0 {
+		r.loadLegacyDevices()
 	}
 
 	// Parse trace metadata
-	if devList.TraceMetaDataName != "" {
-		traceIniPath := filepath.Join(r.SnapshotPath, devList.TraceMetaDataName)
+	traceMetaName := devList.TraceMetaDataName
+	if traceMetaName == "" {
+		traceMetaName = TraceINIFilename
+	}
+
+	if traceMetaName != "" {
+		traceIniPath := filepath.Join(r.SnapshotPath, traceMetaName)
 		traceFile, err := os.Open(traceIniPath)
 		if err != nil {
 			r.logError(fmt.Sprintf("Failed to open trace metadata %s: %v", traceIniPath, err))
@@ -109,6 +108,40 @@ func (r *Reader) ReadSnapShot() bool {
 
 	r.readOK = true
 	return true
+}
+
+func (r *Reader) loadDevice(devName string, iniFileName string) {
+	devIniPath := filepath.Join(r.SnapshotPath, iniFileName)
+	devFile, err := os.Open(devIniPath)
+	if err != nil {
+		r.logError(fmt.Sprintf("Failed to open device ini %s: %v", devIniPath, err))
+		return
+	}
+
+	parsedDev, err := ParseSingleDevice(devFile)
+	devFile.Close()
+	if err != nil {
+		r.logError(fmt.Sprintf("Failed to parse device %s: %v", devName, err))
+		return
+	}
+
+	if parsedDev.DeviceName != "" {
+		r.ParsedDeviceList[parsedDev.DeviceName] = parsedDev
+		return
+	}
+
+	r.ParsedDeviceList[devName] = parsedDev
+}
+
+func (r *Reader) loadLegacyDevices() {
+	for deviceIdx := 0; ; deviceIdx++ {
+		legacyIniFileName := fmt.Sprintf("device_%d.ini", deviceIdx)
+		legacyIniPath := filepath.Join(r.SnapshotPath, legacyIniFileName)
+		if _, err := os.Stat(legacyIniPath); err != nil {
+			break
+		}
+		r.loadDevice(fmt.Sprintf("device_%d", deviceIdx), legacyIniFileName)
+	}
 }
 
 func (r *Reader) logError(msg string) {
