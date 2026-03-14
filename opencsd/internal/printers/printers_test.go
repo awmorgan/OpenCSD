@@ -125,7 +125,7 @@ func TestRawFramePrinter(t *testing.T) {
 			index:   42,
 			elem:    ocsd.FrmPacked,
 			data:    []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x12, 0x34},
-			exptStr: "Frame Data; Index     42;    RAW_PACKED; 00 11 22 33 44 55 66 77 88 99 aa bb cc dd ee ff \n12 34 \n",
+			exptStr: "Frame Data; Index     42;    RAW_PACKED; 00 11 22 33 44 55 66 77 88 99 aa bb cc dd ee ff \n" + strings.Repeat(" ", 41) + "12 34 \n",
 		},
 	}
 
