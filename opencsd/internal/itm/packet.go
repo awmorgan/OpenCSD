@@ -92,7 +92,7 @@ func (p *Packet) SetValue(val uint32, valSzBytes uint8) {
 // SetExtValue sets the extended value (size is always 5).
 func (p *Packet) SetExtValue(extVal uint64) {
 	p.Value = uint32(extVal & 0xFFFFFFFF)
-	p.ValExt = uint8((extVal >> 32) & 0x0F)
+	p.ValExt = uint8((extVal >> 32) & 0xFF)
 	p.ValSz = 5
 }
 

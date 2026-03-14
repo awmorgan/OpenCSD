@@ -155,7 +155,7 @@ func (p *PktProc) handleProcError(err error) (resp ocsd.DatapathResp, outErr err
 		if (p.ComponentOpMode() & ocsd.OpflgPktprocUnsyncOnBadPkts) != 0 {
 			p.procState = procWaitSync
 		}
-		return resp, err, true
+		return resp, nil, true
 	}
 	return ocsd.RespFatalInvalidData, err, true
 }
