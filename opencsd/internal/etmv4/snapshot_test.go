@@ -260,6 +260,18 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool) ([]byte,
 		cfg.RegConfigr = uint32(parseHexOrDec(val))
 		val, _ = dev.GetRegValue("TRCTRACEIDR")
 		cfg.RegTraceidr = uint32(parseHexOrDec(val))
+		val, _ = dev.GetRegValue("TRCVIPCSSCTLR")
+		cfg.RegVipcssctlr = uint32(parseHexOrDec(val))
+		val, _ = dev.GetRegValue("TRCVINSTCCTLR")
+		cfg.RegVinstcctlr = uint32(parseHexOrDec(val))
+		val, _ = dev.GetRegValue("TRCVIIECTLR")
+		cfg.RegViiectlr = uint32(parseHexOrDec(val))
+		val, _ = dev.GetRegValue("TRCVISSCTLR")
+		cfg.RegVissctlr = uint32(parseHexOrDec(val))
+		val, _ = dev.GetRegValue("TRCVIPCIECTLR")
+		cfg.RegVipciectlr = uint32(parseHexOrDec(val))
+		val, _ = dev.GetRegValue("TRCVSEQR")
+		cfg.RegVseqr = uint32(parseHexOrDec(val))
 
 		// Core architecture profile
 		cfg.ArchVer = ocsd.ArchV8

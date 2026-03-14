@@ -2,6 +2,8 @@ package etmv4
 
 import (
 	"testing"
+
+	"opencsd/internal/ocsd"
 )
 
 // ensure Stringer is working
@@ -89,5 +91,70 @@ func TestPktTypeString(t *testing.T) {
 				t.Errorf("PktType.String() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestTracePacketVAddrHistoryIncludesValidBits(t *testing.T) {
+	p := &TracePacket{}
+
+	p.VAddr = ocsd.VAddr(0x1000)
+	p.VAddrValidBits = 32
+	p.VAddrISA = 0
+	p.PushVAddr()
+
+	p.VAddr = ocsd.VAddr(0x1100)
+	p.VAddrValidBits = 17
+	p.VAddrISA = 1
+	p.PushVAddr()
+
+	p.PopVAddrIdx(1)
+
+	if p.VAddr != ocsd.VAddr(0x1000) {
+		t.Fatalf("expected VAddr=0x1000, got 0x%x", uint64(p.VAddr))
+	}
+	if p.VAddrValidBits != 32 {
+		t.Fatalf("expected VAddrValidBits=32, got %d", p.VAddrValidBits)
+	}
+	if p.VAddrISA != 0 {
+		t.Fatalf("expected VAddrISA=0, got %d", p.VAddrISA)
+	}
+	if !p.Valid.VAddrValid {
+		t.Fatalf("expected Valid.VAddrValid=true")
+	}
+}
+
+func TestTracePacketHelpers(t *testing.T) {
+	p := &TracePacket{}
+	p.Atom.EnBits = 0b0101
+	p.Atom.Num = 4
+
+	if got := p.getAtomStr(); got != "ENEN" {
+		t.Fatalf("expected atom sequence ENEN, got %q", got)
+	}
+
+	p.Valid.Context = true
+	p.Context.Updated = true
+	p.Context.SF = true
+	p.Context.EL = 2
+	p.Context.NSE = true
+	p.Context.NS = false
+	p.Context.UpdatedC = true
+	p.Context.CtxtID = 0x1234
+	p.Context.UpdatedV = true
+	p.Context.VMID = 0xABCD
+
+	ctxt := p.contextStr()
+	if ctxt == "" {
+		t.Fatalf("expected non-empty context string")
+	}
+
+	p.VAddrISA = 1
+	if got := p.getISAStr(); got != "ISA=AArch64" {
+		t.Fatalf("expected ISA=AArch64, got %q", got)
+	}
+
+	p.Context.SF = false
+	if got := p.getISAStr(); got != "ISA=Thumb2" {
+		t.Fatalf("expected ISA=Thumb2, got %q", got)
 	}
 }

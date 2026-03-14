@@ -291,8 +291,10 @@ func (p *Processor) initPacketState() {
 	p.currPacket.ErrHdrVal = 0
 
 	p.currPacket.Valid.CycleCount = false
+	p.currPacket.Valid.CCExactMatch = false
 	p.currPacket.Valid.CommitElem = false
 	p.currPacket.Valid.CancelElem = false
+	p.currPacket.Valid.ExactMatchIdxValid = false
 
 	p.currPacket.Atom.Num = 0
 	p.currPacket.Context.Updated = false
@@ -422,6 +424,7 @@ func (p *Processor) iPktNoPayload(lastByte uint8) {
 	switch p.currPacket.Type {
 	case PktAddrMatch, ETE_PktSrcAddrMatch:
 		p.currPacket.AddrExactMatchIdx = lastByte & 0x3
+		p.currPacket.Valid.ExactMatchIdxValid = true
 		p.currPacket.PopVAddrIdx(p.currPacket.AddrExactMatchIdx)
 		p.currPacket.PushVAddr()
 	case PktEvent:
@@ -552,6 +555,7 @@ func (p *Processor) iPktTraceInfo(lastByte uint8) {
 			p.currPacket.TraceInfo.P0Load = (fieldVal & (1 << 4)) != 0
 			p.currPacket.TraceInfo.P0Store = (fieldVal & (1 << 5)) != 0
 			p.currPacket.TraceInfo.InTransState = (fieldVal & (1 << 6)) != 0
+			p.currPacket.Valid.TInfo = true
 		}
 		if presSect&uint8(TInfoKeySect) != 0 && idx < len(p.currPacketData) {
 			var fieldVal uint32
@@ -571,6 +575,7 @@ func (p *Processor) iPktTraceInfo(lastByte uint8) {
 			n := p.extractContField(p.currPacketData, idx, &fieldVal, 5)
 			idx += n
 			p.currPacket.CCThreshold = fieldVal
+			p.currPacket.Valid.CCThreshold = true
 		}
 		// window section - unsupported in current ETE, consume but ignore.
 		if presSect&uint8(TInfoWndwSect) != 0 && idx < len(p.currPacketData) {
@@ -695,6 +700,7 @@ func (p *Processor) iPktCycleCntF123(lastByte uint8) {
 				p.currPacket.CommitElements = (uint32(lastByte>>2) & 0x3) + 1
 			}
 			p.currPacket.CycleCount = p.currPacket.CCThreshold + uint32(lastByte&0x3)
+			p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
 			p.processState = SendPkt
 
 		case PktCcntF1:
@@ -713,6 +719,7 @@ func (p *Processor) iPktCycleCntF123(lastByte uint8) {
 		}
 	} else if format == PktCcntF2 && len(p.currPacketData) == 2 {
 		p.currPacket.CycleCount = p.currPacket.CCThreshold + uint32(lastByte&0xF)
+		p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
 		if !p.config.CommitOpt1() {
 			commitOffset := 1
 			if p.ccF2MaxSpecCommit {
@@ -741,8 +748,10 @@ func (p *Processor) iPktCycleCntF123(lastByte uint8) {
 		if p.hasCount {
 			p.extractContField(p.currPacketData, idx, &fieldVal, 3)
 			p.currPacket.CycleCount = fieldVal + p.currPacket.CCThreshold
+			p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
 		} else {
 			p.currPacket.CycleCount = 0
+			p.currPacket.Valid.CCExactMatch = false
 		}
 		p.processState = SendPkt
 	}
@@ -915,12 +924,16 @@ func (p *Processor) iPktAddrCtxt(lastByte uint8) {
 				n := p.extract64BitLongAddr(p.currPacketData, stIdx, p.addrIS, &val64)
 				stIdx += n
 				p.currPacket.VAddr = ocsd.VAddr(val64)
+				p.currPacket.VAddrValidBits = 64
 				p.currPacket.VAddrISA = p.addrIS
 			} else {
 				var val32 uint32
 				n := p.extract32BitLongAddr(p.currPacketData, stIdx, p.addrIS, &val32)
 				stIdx += n
 				p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, val32)
+				if p.currPacket.VAddrValidBits < 32 {
+					p.currPacket.VAddrValidBits = 32
+				}
 				p.currPacket.VAddrISA = p.addrIS
 			}
 			p.currPacket.PushVAddr()
@@ -945,7 +958,7 @@ func (p *Processor) iPktShortAddr(lastByte uint8) {
 		var addrVal uint32
 		var bits int
 		p.extractShortAddrFromBuf(p.currPacketData, 1, p.addrIS, &addrVal, &bits)
-		p.currPacket.VAddr = p.updateShortAddress(p.currPacket.VAddr, addrVal, p.addrIS, bits)
+		p.currPacket.VAddr, p.currPacket.VAddrValidBits = p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, addrVal, p.addrIS, bits)
 		p.currPacket.VAddrISA = p.addrIS
 		p.currPacket.PushVAddr()
 		p.processState = SendPkt
@@ -977,10 +990,14 @@ func (p *Processor) iPktLongAddr(lastByte uint8) {
 			var val64 uint64
 			p.extract64BitLongAddr(p.currPacketData, stIdx, p.addrIS, &val64)
 			p.currPacket.VAddr = ocsd.VAddr(val64)
+			p.currPacket.VAddrValidBits = 64
 		} else {
 			var val32 uint32
 			p.extract32BitLongAddr(p.currPacketData, stIdx, p.addrIS, &val32)
 			p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, val32)
+			if p.currPacket.VAddrValidBits < 32 {
+				p.currPacket.VAddrValidBits = 32
+			}
 		}
 		p.currPacket.VAddrISA = p.addrIS
 		p.currPacket.PushVAddr()
@@ -1058,21 +1075,24 @@ func (p *Processor) iPktQ(lastByte uint8) {
 		if p.addrMatch {
 			p.currPacket.QPkt.AddrMatch = true
 			p.currPacket.AddrExactMatchIdx = p.qE
+			p.currPacket.Valid.ExactMatchIdxValid = true
 		} else if len(p.currPacketData) > 1 {
 			if p.addrShort {
 				var qAddr uint32
 				var bits int
 				n := p.extractShortAddrFromBuf(p.currPacketData, idx, p.addrIS, &qAddr, &bits)
 				idx += n
-				p.currPacket.VAddr = p.updateShortAddress(p.currPacket.VAddr, qAddr, p.addrIS, bits)
+				p.currPacket.VAddr, p.currPacket.VAddrValidBits = p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, qAddr, p.addrIS, bits)
 				p.currPacket.VAddrISA = p.addrIS
 			} else {
 				var qAddr uint32
 				n := p.extract32BitLongAddr(p.currPacketData, idx, p.addrIS, &qAddr)
 				idx += n
 				p.currPacket.VAddr = ocsd.VAddr(qAddr)
+				p.currPacket.VAddrValidBits = 32
 				p.currPacket.VAddrISA = p.addrIS
 			}
+			p.currPacket.Valid.VAddrValid = p.currPacket.VAddrValidBits > 0
 		}
 
 		if p.qType != 0xF {
@@ -1344,9 +1364,18 @@ func (p *Processor) extractShortAddrFromBuf(buf []byte, stIdx int, IS uint8, val
 }
 
 // updateShortAddress updates a VAddr with a short address value (clears lower bits, sets new ones).
-func (p *Processor) updateShortAddress(existing ocsd.VAddr, addrVal uint32, IS uint8, bits int) ocsd.VAddr {
+func (p *Processor) updateShortAddress(existing ocsd.VAddr, existingValidBits uint8, addrVal uint32, IS uint8, bits int) (ocsd.VAddr, uint8) {
 	mask := ocsd.VAddr((uint64(1) << bits) - 1)
-	return (existing &^ mask) | ocsd.VAddr(addrVal)
+	updated := (existing &^ mask) | ocsd.VAddr(addrVal)
+	updatedValidBits := existingValidBits
+	if bits > int(updatedValidBits) {
+		if bits > ocsd.MaxVABitsize {
+			updatedValidBits = ocsd.MaxVABitsize
+		} else {
+			updatedValidBits = uint8(bits)
+		}
+	}
+	return updated, updatedValidBits
 }
 
 // extract64BitLongAddr extracts an 8-byte 64-bit long address.

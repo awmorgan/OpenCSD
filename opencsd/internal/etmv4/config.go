@@ -38,19 +38,25 @@ const (
 )
 
 type Config struct {
-	RegIdr0     uint32
-	RegIdr1     uint32
-	RegIdr2     uint32
-	RegIdr8     uint32
-	RegIdr9     uint32
-	RegIdr10    uint32
-	RegIdr11    uint32
-	RegIdr12    uint32
-	RegIdr13    uint32
-	RegConfigr  uint32
-	RegTraceidr uint32
-	ArchVer     ocsd.ArchVersion
-	CoreProf    ocsd.CoreProfile
+	RegIdr0       uint32
+	RegIdr1       uint32
+	RegIdr2       uint32
+	RegIdr8       uint32
+	RegIdr9       uint32
+	RegIdr10      uint32
+	RegIdr11      uint32
+	RegIdr12      uint32
+	RegIdr13      uint32
+	RegConfigr    uint32
+	RegTraceidr   uint32
+	RegVipcssctlr uint32
+	RegVinstcctlr uint32
+	RegViiectlr   uint32
+	RegVissctlr   uint32
+	RegVipciectlr uint32
+	RegVseqr      uint32
+	ArchVer       ocsd.ArchVersion
+	CoreProf      ocsd.CoreProfile
 }
 
 func (c *Config) LSasInstP0() bool {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -376,11 +377,14 @@ func sanitizePPL(s string, traceIDs []string) string {
 	}
 
 	type parsedLine struct {
-		line string
-		id   string
+		line  string
+		id    string
+		idx   int
+		order int
 	}
 
 	parsed := make([]parsedLine, 0, len(lines)-start)
+	ord := 0
 	for _, line := range lines[start:] {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -395,9 +399,24 @@ func sanitizePPL(s string, traceIDs []string) string {
 			if !ok {
 				continue
 			}
-			parsed = append(parsed, parsedLine{line: normalized, id: idVal})
+			idxVal, ok := extractLineIdx(idxLine)
+			if !ok {
+				continue
+			}
+			parsed = append(parsed, parsedLine{line: normalized, id: idVal, idx: idxVal, order: ord})
+			ord++
 		}
 	}
+
+	sort.SliceStable(parsed, func(i, j int) bool {
+		if parsed[i].idx != parsed[j].idx {
+			return parsed[i].idx < parsed[j].idx
+		}
+		if parsed[i].id != parsed[j].id {
+			return parsed[i].id < parsed[j].id
+		}
+		return parsed[i].order < parsed[j].order
+	})
 
 	if len(idSet) == 0 {
 		out := make([]string, 0, len(parsed))
@@ -521,4 +540,20 @@ func extractLineID(line string) (string, bool) {
 		return "", false
 	}
 	return strings.ToLower(strings.TrimSpace(before)), true
+}
+
+func extractLineIdx(line string) (int, bool) {
+	_, after, ok := strings.Cut(line, "Idx:")
+	if !ok {
+		return 0, false
+	}
+	before, _, ok := strings.Cut(after, ";")
+	if !ok {
+		return 0, false
+	}
+	idx, err := strconv.Atoi(strings.TrimSpace(before))
+	if err != nil {
+		return 0, false
+	}
+	return idx, true
 }

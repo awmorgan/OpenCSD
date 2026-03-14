@@ -2,6 +2,7 @@ package etmv4
 
 import (
 	"fmt"
+	"strings"
 
 	"opencsd/internal/ocsd"
 )
@@ -209,16 +210,19 @@ type ITEPkt struct {
 }
 
 type Valid struct {
-	Context       bool
-	Timestamp     bool
-	CycleCount    bool
-	CCThreshold   bool
-	TInfo         bool
-	TraceOnReason bool
-	CommitElem    bool
-	CancelElem    bool
-	CondInstr     bool
-	CondResult    bool
+	Context            bool
+	VAddrValid         bool
+	Timestamp          bool
+	CycleCount         bool
+	CCExactMatch       bool
+	CCThreshold        bool
+	TInfo              bool
+	TraceOnReason      bool
+	ExactMatchIdxValid bool
+	CommitElem         bool
+	CancelElem         bool
+	CondInstr          bool
+	CondResult         bool
 }
 
 // Trace packet element.
@@ -228,11 +232,13 @@ type TracePacket struct {
 	ErrHdrVal uint8
 
 	// intra-packet data - valid across packets.
-	VAddr         ocsd.VAddr
-	VAddrISA      uint8
-	VAddrStack    [3]ocsd.VAddr
-	VAddrISAStack [3]uint8
-	Context       Context
+	VAddr               ocsd.VAddr
+	VAddrISA            uint8
+	VAddrValidBits      uint8
+	VAddrStack          [3]ocsd.VAddr
+	VAddrValidBitsStack [3]uint8
+	VAddrISAStack       [3]uint8
+	Context             Context
 
 	Timestamp     uint64
 	TSBitsChanged uint8
@@ -437,16 +443,22 @@ func (p *TracePacket) PushVAddr() {
 	p.VAddrStack[2] = p.VAddrStack[1]
 	p.VAddrStack[1] = p.VAddrStack[0]
 	p.VAddrStack[0] = p.VAddr
+	p.VAddrValidBitsStack[2] = p.VAddrValidBitsStack[1]
+	p.VAddrValidBitsStack[1] = p.VAddrValidBitsStack[0]
+	p.VAddrValidBitsStack[0] = p.VAddrValidBits
 	p.VAddrISAStack[2] = p.VAddrISAStack[1]
 	p.VAddrISAStack[1] = p.VAddrISAStack[0]
 	p.VAddrISAStack[0] = p.VAddrISA
+	p.Valid.VAddrValid = p.VAddrValidBits > 0
 }
 
 // PopVAddrIdx retrieves an address from the history stack
 func (p *TracePacket) PopVAddrIdx(idx uint8) {
 	if idx < 3 {
 		p.VAddr = p.VAddrStack[idx]
+		p.VAddrValidBits = p.VAddrValidBitsStack[idx]
 		p.VAddrISA = p.VAddrISAStack[idx]
+		p.Valid.VAddrValid = p.VAddrValidBits > 0
 	}
 }
 
@@ -455,14 +467,85 @@ func (p *TracePacket) ClearTraceInfo() {
 	p.Valid.Timestamp = false
 	p.Valid.TInfo = false
 	p.Valid.CCThreshold = false
+	p.Valid.VAddrValid = false
+	p.Valid.ExactMatchIdxValid = false
 
 	p.TraceInfo = TraceInfo{}
 	p.CurrSpecDepth = 0
 
 	for i := range 3 {
 		p.VAddrStack[i] = 0
+		p.VAddrValidBitsStack[i] = ocsd.MaxVABitsize
 		p.VAddrISAStack[i] = 0
 	}
 	p.VAddr = p.VAddrStack[0]
+	p.VAddrValidBits = p.VAddrValidBitsStack[0]
 	p.VAddrISA = p.VAddrISAStack[0]
+	p.Valid.VAddrValid = p.VAddrValidBits > 0
+}
+
+func (p *TracePacket) getAtomStr() string {
+	var sb strings.Builder
+	bitPattern := p.Atom.EnBits
+	for i := 0; i < int(p.Atom.Num); i++ {
+		if (bitPattern & 0x1) != 0 {
+			sb.WriteByte('E')
+		} else {
+			sb.WriteByte('N')
+		}
+		bitPattern >>= 1
+	}
+	return sb.String()
+}
+
+func (p *TracePacket) contextStr() string {
+	if !p.Valid.Context {
+		return ""
+	}
+
+	if !p.Context.Updated {
+		return "Ctxt: Same"
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Ctxt: ")
+	if p.Context.SF {
+		sb.WriteString("AArch64,")
+	} else {
+		sb.WriteString("AArch32,")
+	}
+	sb.WriteString(fmt.Sprintf("EL%d, ", p.Context.EL))
+
+	if p.Context.NSE {
+		if p.Context.NS {
+			sb.WriteString("Realm; ")
+		} else {
+			sb.WriteString("Root; ")
+		}
+	} else {
+		if p.Context.NS {
+			sb.WriteString("NS; ")
+		} else {
+			sb.WriteString("S; ")
+		}
+	}
+
+	if p.Context.UpdatedC {
+		sb.WriteString(fmt.Sprintf("CID=0x%08x; ", p.Context.CtxtID))
+	}
+	if p.Context.UpdatedV {
+		sb.WriteString(fmt.Sprintf("VMID=0x%08x; ", p.Context.VMID))
+	}
+
+	return sb.String()
+}
+
+func (p *TracePacket) getISAStr() string {
+	if p.Context.SF {
+		return "ISA=AArch64"
+	}
+	if p.VAddrISA == 1 {
+		return "ISA=Thumb2"
+	}
+	return "ISA=ARM"
 }
