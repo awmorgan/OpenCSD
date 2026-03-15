@@ -64,9 +64,10 @@ type Packet struct {
 	CurrISA ocsd.ISA
 	PrevISA ocsd.ISA
 
-	AddrBits  int
-	AddrValid bool
-	AddrVal   ocsd.VAddr
+	AddrBits      int
+	AddrValid     bool
+	AddrValidBits int
+	AddrVal       ocsd.VAddr
 
 	Context Context
 	Atom    ocsd.PktAtom
@@ -104,7 +105,9 @@ func (p *Packet) ResetState() {
 	p.Context.CurrHyp = false
 	p.Context.CurrNS = false
 
+	p.AddrBits = 0
 	p.AddrValid = false
+	p.AddrValidBits = 0
 	p.AddrVal = 0
 
 	p.PrevISA = ocsd.ISAUnknown
@@ -116,11 +119,14 @@ func (p *Packet) ResetState() {
 }
 
 func (p *Packet) UpdateAddress(partAddrVal ocsd.VAddr, updateBits int) {
-	validMask := (ocsd.VAddr(1) << updateBits) - 1
+	validMask := ocsd.VAddr(maskBits64(updateBits))
 	p.AddrBits = updateBits
 	p.AddrVal &^= validMask
 	p.AddrVal |= (partAddrVal & validMask)
-	p.AddrValid = true
+	p.AddrValid = updateBits > 0
+	if updateBits > p.AddrValidBits {
+		p.AddrValidBits = updateBits
+	}
 }
 
 func (p *Packet) UpdateContextID(ctxtID uint32) {
@@ -148,7 +154,7 @@ func (p *Packet) SetException(exType ocsd.ArmV7Exception, exNum uint16, currNS b
 }
 
 func (p *Packet) UpdateTimestamp(tsVal uint64, updateBits uint8) {
-	validMask := (uint64(1) << updateBits) - 1
+	validMask := maskBits64(int(updateBits))
 	p.Timestamp &^= validMask
 	p.Timestamp |= (tsVal & validMask)
 	p.TSUpdateBits = updateBits
@@ -252,7 +258,9 @@ func (p *Packet) getAtomStr() string {
 
 func (p *Packet) getBranchAddressStr() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Addr=0x%08x; ", uint32(p.AddrVal)))
+	sb.WriteString("Addr=")
+	sb.WriteString(formatTraceValueHex(32, p.AddrValidBits, uint64(p.AddrVal), p.AddrBits))
+	sb.WriteString("; ")
 
 	if p.CurrISA != p.PrevISA {
 		sb.WriteString(p.getISAStr())
@@ -343,7 +351,9 @@ func (p *Packet) getISyncStr() string {
 
 func (p *Packet) getTSStr() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("TS=0x%x(%d); ", p.Timestamp, p.Timestamp))
+	sb.WriteString("TS=")
+	sb.WriteString(formatTraceValueHex(64, 64, p.Timestamp, int(p.TSUpdateBits)))
+	fmt.Fprintf(&sb, "(%d); ", p.Timestamp)
 	if p.CCValid {
 		sb.WriteString(p.getCycleCountStr())
 	}
@@ -391,4 +401,51 @@ func packetTypeName(t PktType) (string, string) {
 	default:
 		return "UNKNOWN", "Unknown packet type"
 	}
+}
+
+func maskBits64(bits int) uint64 {
+	if bits <= 0 {
+		return 0
+	}
+	if bits >= 64 {
+		return ^uint64(0)
+	}
+	return (uint64(1) << bits) - 1
+}
+
+func formatTraceValueHex(totalBits int, validBits int, value uint64, updateBits int) string {
+	if totalBits < 4 {
+		totalBits = 4
+	}
+	if totalBits > 64 {
+		totalBits = 64
+	}
+	if validBits < 0 {
+		validBits = 0
+	}
+	if validBits > totalBits {
+		validBits = totalBits
+	}
+
+	numHexChars := (totalBits + 3) / 4
+	validChars := 0
+	if validBits > 0 {
+		validChars = (validBits + 3) / 4
+	}
+
+	var sb strings.Builder
+	sb.WriteString("0x")
+	for i := validChars; i < numHexChars; i++ {
+		sb.WriteByte('?')
+	}
+	if validChars > 0 {
+		sb.WriteString(fmt.Sprintf("%0*X", validChars, value&maskBits64(validBits)))
+	}
+	if validBits < totalBits {
+		sb.WriteString(fmt.Sprintf(" (%d:0)", validBits-1))
+	}
+	if updateBits > 0 {
+		sb.WriteString(fmt.Sprintf(" ~[0x%X]", value&maskBits64(updateBits)))
+	}
+	return sb.String()
 }

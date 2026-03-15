@@ -1,6 +1,7 @@
 package ptm
 
 import (
+	"strings"
 	"testing"
 
 	"opencsd/internal/common"
@@ -942,6 +943,26 @@ func TestPtmPacketString(t *testing.T) {
 	pkt.Exception.Present = false
 	pkt.CCValid = false
 	_ = pkt.String()
+
+	// Partial branch address formatting should preserve valid bits and packet update bits.
+	pkt.ResetState()
+	pkt.Type = PktBranchAddress
+	pkt.CurrISA = ocsd.ISAArm
+	pkt.PrevISA = ocsd.ISAArm
+	pkt.UpdateAddress(0x137e, 13)
+	branchStr := pkt.String()
+	if !strings.Contains(branchStr, "Addr=0x????137E (12:0) ~[0x137E]; ") {
+		t.Fatalf("expected partial branch address formatting, got %q", branchStr)
+	}
+
+	// Timestamp formatting should include the packet update mask suffix.
+	pkt.ResetState()
+	pkt.Type = PktTimestamp
+	pkt.UpdateTimestamp(0x58e90bb867, 64)
+	tsStr := pkt.String()
+	if !strings.Contains(tsStr, "TS=0x00000058E90BB867 ~[0x58E90BB867](381866981479); ") {
+		t.Fatalf("expected timestamp formatting with update bits, got %q", tsStr)
+	}
 }
 
 // --- Processor edge cases ---
