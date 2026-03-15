@@ -52,18 +52,6 @@ func (m *CoreArchProfileMap) initMap() {
 	m.coreMap["Cortex-M3"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM}
 	m.coreMap["Cortex-M0+"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM}
 	m.coreMap["Cortex-M0"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM}
-
-	// Custom fallback architectures
-	m.coreMap["ARMv7-A"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA}
-	m.coreMap["ARMv7-R"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexR}
-	m.coreMap["ARMv7-M"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM}
-	m.coreMap["ARMv8-A"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA}
-	m.coreMap["ARMv8.x-A"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA} // Added from header
-	m.coreMap["ARMv8-R"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexR}
-	m.coreMap["ARMv8-M"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexM}
-	m.coreMap["ARM-AA64"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA} // Added from header
-	m.coreMap["ARM-aa64"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA} // Added from header
-	m.coreMap["ARMv9-A"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA}
 }
 
 // GetArchProfile returns the architecture profile for a given core name.
@@ -71,5 +59,107 @@ func (m *CoreArchProfileMap) GetArchProfile(coreName string) (ocsd.ArchProfile, 
 	if val, ok := m.coreMap[coreName]; ok {
 		return val, true
 	}
+
+	if val, ok := getPatternMatchCoreName(coreName); ok {
+		return val, true
+	}
+
 	return ocsd.ArchProfile{Arch: ocsd.ArchUnknown, Profile: ocsd.ProfileUnknown}, false
+}
+
+func getPatternMatchCoreName(coreName string) (ocsd.ArchProfile, bool) {
+	ap := ocsd.ArchProfile{Arch: ocsd.ArchUnknown, Profile: ocsd.ProfileUnknown}
+
+	if len(coreName) >= 5 && coreName[:4] == "ARMv" {
+		if len(coreName) <= 4 {
+			return ap, false
+		}
+
+		majver := int(coreName[4] - '0')
+		minver := 0
+		dotoffset := 0
+
+		dotPos := -1
+		for i := 0; i < len(coreName); i++ {
+			if coreName[i] == '.' {
+				dotPos = i
+				break
+			}
+		}
+
+		if dotPos == 5 {
+			if len(coreName) <= 6 {
+				return ap, false
+			}
+			minver = int(coreName[6] - '0')
+			dotoffset = 2
+		} else if dotPos != -1 {
+			return ap, false
+		}
+
+		if majver == 7 {
+			ap.Arch = ocsd.ArchV7
+		} else if majver >= 8 {
+			ap.Arch = ocsd.ArchAA64
+			if majver == 8 {
+				if minver < 3 {
+					ap.Arch = ocsd.ArchV8
+				} else if minver == 3 {
+					ap.Arch = ocsd.ArchV8r3
+				}
+			}
+		} else {
+			return ap, false
+		}
+
+		dashPos := -1
+		for i := 4; i < len(coreName); i++ {
+			if coreName[i] == '-' {
+				dashPos = i
+				break
+			}
+		}
+
+		if dashPos != 5+dotoffset {
+			ap.Arch = ocsd.ArchUnknown
+			return ap, false
+		}
+
+		profileIdx := 6 + dotoffset
+		if profileIdx >= len(coreName) {
+			ap.Arch = ocsd.ArchUnknown
+			return ap, false
+		}
+
+		switch coreName[profileIdx] {
+		case 'A':
+			ap.Profile = ocsd.ProfileCortexA
+		case 'R':
+			ap.Profile = ocsd.ProfileCortexR
+		case 'M':
+			ap.Profile = ocsd.ProfileCortexM
+		default:
+			ap.Arch = ocsd.ArchUnknown
+			return ap, false
+		}
+
+		return ap, true
+	}
+
+	if len(coreName) >= 8 && coreName[:4] == "ARM-" {
+		if coreName[4:8] == "aa64" || coreName[4:8] == "AA64" {
+			ap.Arch = ocsd.ArchAA64
+			ap.Profile = ocsd.ProfileCortexA
+			if len(coreName) > 9 && coreName[8] == '-' {
+				if coreName[9] == 'R' {
+					ap.Profile = ocsd.ProfileCortexR
+				} else if coreName[9] == 'M' {
+					ap.Profile = ocsd.ProfileCortexM
+				}
+			}
+			return ap, true
+		}
+	}
+
+	return ap, false
 }
