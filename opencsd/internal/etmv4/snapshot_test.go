@@ -33,6 +33,12 @@ type testErrLogger struct {
 	lastErr *common.Error
 }
 
+type etmv4DecodeOptions struct {
+	suppressRawPackets bool
+	extraOpFlags       uint32
+	instrRangeLimit    uint32
+}
+
 func (l *testErrLogger) LogError(_ ocsd.HandleErrLog, err *common.Error) {
 	l.lastErr = err
 }
@@ -73,12 +79,17 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name       string
-		sourceName string
-		traceIDs   []string
-		packetOnly bool // true for packet-level testing only (no full instruction decode)
+		name         string
+		snapshotName string
+		sourceName   string
+		traceIDs     []string
+		packetOnly   bool // true for packet-level testing only (no full instruction decode)
+		opts         etmv4DecodeOptions
 	}{
 		{name: "juno_r1_1", sourceName: "ETB_0", traceIDs: []string{"10", "11", "12", "13", "14", "15"}},
+		{name: "juno_r1_1_rangelimit", snapshotName: "juno_r1_1", sourceName: "ETB_0", traceIDs: []string{"10", "11", "12", "13", "14", "15"}, opts: etmv4DecodeOptions{instrRangeLimit: 100}},
+		{name: "juno_r1_1_badopcode", snapshotName: "juno_r1_1", sourceName: "ETB_0", traceIDs: []string{"10", "11", "12", "13", "14", "15"}, opts: etmv4DecodeOptions{extraOpFlags: ocsd.OpflgPktdecAA64OpcodeChk}},
+		{name: "juno_r1_1_badopcode_flag", snapshotName: "juno_r1_1", sourceName: "ETB_0", traceIDs: []string{"10", "11", "12", "13", "14", "15"}, opts: etmv4DecodeOptions{extraOpFlags: ocsd.OpflgPktdecAA64OpcodeChk}},
 		{name: "a57_single_step", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"10"}},
 		{name: "armv8_1m_branches", sourceName: "etr_0", traceIDs: []string{"0"}},
 		{name: "juno-uname-001", sourceName: "ETB_0", traceIDs: []string{"10"}},
@@ -88,19 +99,25 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 		{name: "init-short-addr", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"0"}},
 		{name: "bugfix-exact-match", sourceName: "etr_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
 		{name: "a55-test-tpiu", sourceName: "DSTREAM_0", traceIDs: []string{"1"}, packetOnly: true},
+		{name: "mem_buff_demo", snapshotName: "juno_r1_1", sourceName: "ETB_0", traceIDs: []string{"10"}, opts: etmv4DecodeOptions{suppressRawPackets: true}},
+		{name: "mem_buff_demo_cb", snapshotName: "juno_r1_1", sourceName: "ETB_0", traceIDs: []string{"10"}, opts: etmv4DecodeOptions{suppressRawPackets: true}},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			snapshotDir := filepath.Join("testdata", tc.name)
+			snapshotName := tc.name
+			if tc.snapshotName != "" {
+				snapshotName = tc.snapshotName
+			}
+			snapshotDir := filepath.Join("testdata", snapshotName)
 			goldenPath := filepath.Join("testdata", tc.name+".ppl")
 			if _, err := os.Stat(goldenPath); os.IsNotExist(err) {
 				goldenPath = filepath.Join("testdata", tc.name+".ppl.gz")
 			}
 
-			goOut, err := runSnapshotDecode(snapshotDir, tc.sourceName, tc.packetOnly)
+			goOut, err := runSnapshotDecode(snapshotDir, tc.sourceName, tc.packetOnly, tc.opts)
 			if err != nil {
 				t.Fatalf("runSnapshotDecode failed: %v", err)
 			}
@@ -169,7 +186,7 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 	}
 }
 
-func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool) ([]byte, error) {
+func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etmv4DecodeOptions) ([]byte, error) {
 	reader := snapshot.NewReader()
 	reader.SetSnapshotDir(snapshotDir)
 	if !reader.ReadSnapShot() {
@@ -292,6 +309,31 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool) ([]byte,
 		return nil, fmt.Errorf("no ETMv4 decoders found for source %s", resolvedSourceName)
 	}
 
+	if opts.extraOpFlags != 0 || opts.instrRangeLimit > 0 {
+		tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
+			if elem == nil {
+				return
+			}
+			if opts.extraOpFlags != 0 {
+				if opComp, ok := elem.DecoderHandle.(interface {
+					SetComponentOpMode(uint32) ocsd.Err
+					ComponentOpMode() uint32
+					SupportedOpModes() uint32
+				}); ok {
+					flags := opts.extraOpFlags & opComp.SupportedOpModes()
+					if flags != 0 {
+						_ = opComp.SetComponentOpMode(opComp.ComponentOpMode() | flags)
+					}
+				}
+			}
+			if opts.instrRangeLimit > 0 {
+				if dcd, ok := elem.DecoderHandle.(*etmv4.PktDecode); ok {
+					dcd.SetInstrRangeLimit(opts.instrRangeLimit)
+				}
+			}
+		})
+	}
+
 	mapper := memacc.NewGlobalMapper()
 	tree.SetMemAccessI(&mapperAdapter{mapper: mapper})
 
@@ -324,15 +366,17 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool) ([]byte,
 	var out bytes.Buffer
 	printer := printers.NewGenericElementPrinter(&out)
 	tree.SetGenTraceElemOutI(printer)
-	tree.ForEachElement(func(csID uint8, elem *dcdtree.DecodeTreeElement) {
-		proc, ok := elem.DataIn.(*etmv4.Processor)
-		if !ok || proc == nil {
-			return
-		}
-		if proc.PktRawMonI != nil {
-			_ = proc.PktRawMonI.ReplaceFirst(&etmv4RawPacketPrinter{writer: &out, traceID: csID})
-		}
-	})
+	if !opts.suppressRawPackets {
+		tree.ForEachElement(func(csID uint8, elem *dcdtree.DecodeTreeElement) {
+			proc, ok := elem.DataIn.(*etmv4.Processor)
+			if !ok || proc == nil {
+				return
+			}
+			if proc.PktRawMonI != nil {
+				_ = proc.PktRawMonI.ReplaceFirst(&etmv4RawPacketPrinter{writer: &out, traceID: csID})
+			}
+		})
+	}
 
 	binFile := filepath.Join(snapshotDir, sourceTree.BufferInfo.DataFileName)
 	traceData, err := os.ReadFile(binFile)

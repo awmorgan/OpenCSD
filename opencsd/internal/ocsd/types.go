@@ -393,6 +393,7 @@ const (
 	OpflgChkRangeContinue    = 0x00001000
 	OpflgNUncondChkNoThumb   = 0x00002000
 	OpflgPktdecSrcAddrNAtoms = 0x00010000
+	OpflgPktdecAA64OpcodeChk = 0x00020000
 
 	OpflgPktdecCommon = OpflgPktdecErrorBadPkts | OpflgPktdecHaltBadPkts | OpflgNUncondDirBrChk | OpflgStrictNUncondBrChk | OpflgChkRangeContinue | OpflgNUncondChkNoThumb
 )

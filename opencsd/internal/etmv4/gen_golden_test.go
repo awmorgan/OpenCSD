@@ -41,7 +41,7 @@ func TestUpdateGolden(t *testing.T) {
 			continue
 		}
 		goldenPath := filepath.Join("testdata", tc.name+".ppl")
-		out, err := runSnapshotDecode(snapshotDir, tc.sourceName, tc.packetOnly)
+		out, err := runSnapshotDecode(snapshotDir, tc.sourceName, tc.packetOnly, etmv4DecodeOptions{})
 		if err != nil {
 			t.Errorf("runSnapshotDecode(%s): %v", tc.name, err)
 			continue

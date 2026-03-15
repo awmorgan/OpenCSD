@@ -2,6 +2,9 @@ package etmv4
 
 import (
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 
 	"opencsd/internal/common"
 	"opencsd/internal/interfaces"
@@ -149,7 +152,11 @@ type PktDecode struct {
 	returnStack common.AddrReturnStack
 
 	unsyncEOTInfo    ocsd.UnsyncInfo
+	unsyncPktIdx     ocsd.TrcIndex
 	eteFirstTSMarker bool
+
+	instrRangeLimit uint32
+	aa64BadOpcode   bool
 
 	// Expected start address for the next continuous range (C++ m_next_range_check).
 	nextRangeCheck struct {
@@ -163,7 +170,7 @@ func NewPktDecode(instIDNum int) *PktDecode {
 	d := &PktDecode{}
 	d.InitPktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV4", instIDNum))
 	d.SetStrategy(d)
-	d.SetSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms)
+	d.SetSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms | ocsd.OpflgPktdecAA64OpcodeChk)
 
 	d.initDecoder()
 	return d
@@ -203,6 +210,7 @@ func (d *PktDecode) initDecoder() {
 	}
 	d.returnStack = *common.NewAddrReturnStack()
 	d.unsyncEOTInfo = ocsd.UnsyncInitDecoder
+	d.unsyncPktIdx = ocsd.BadTrcIndex
 	d.eteFirstTSMarker = false
 	d.nextRangeCheckClear()
 }
@@ -235,7 +243,37 @@ func (d *PktDecode) OnProtocolConfig() ocsd.Err {
 	d.instrInfo.PeType.Profile = d.config.CoreProf
 	d.instrInfo.TrackItBlock = 1
 	d.instrInfo.ThumbItConditions = 0
+
+	if v, ok := os.LookupEnv("OPENCSD_INSTR_RANGE_LIMIT"); ok {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			if parsed, err := strconv.ParseUint(v, 0, 32); err == nil {
+				d.instrRangeLimit = uint32(parsed)
+			}
+		}
+	}
+
+	if v, ok := os.LookupEnv("OPENCSD_ERR_ON_AA64_BAD_OPCODE"); ok {
+		v = strings.ToLower(strings.TrimSpace(v))
+		d.aa64BadOpcode = v == "1" || v == "true" || v == "yes" || v == "on"
+	}
+
+	d.syncAA64OpcodeCheckMode()
 	return ocsd.OK
+}
+
+func (d *PktDecode) SetInstrRangeLimit(limit uint32) {
+	d.instrRangeLimit = limit
+}
+
+func (d *PktDecode) syncAA64OpcodeCheckMode() {
+	enabled := d.aa64BadOpcode || (d.ComponentOpMode()&ocsd.OpflgPktdecAA64OpcodeChk) != 0
+	if !d.GetInstrDecodeAttachPt().HasAttachedAndEnabled() {
+		return
+	}
+	if setter, ok := d.GetInstrDecodeAttachPt().First().(interface{ SetAA64ErrOnBadOpcode(bool) }); ok {
+		setter.SetAA64ErrOnBadOpcode(enabled)
+	}
 }
 
 func (d *PktDecode) commitElemOnEOT() ocsd.Err {
@@ -328,6 +366,7 @@ func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 	var err ocsd.Err
+	d.syncAA64OpcodeCheckMode()
 
 	pkt := d.CurrPacketIn
 	pktDone := false
@@ -428,7 +467,15 @@ func (d *PktDecode) resolveElements() ocsd.DatapathResp {
 
 			if err != ocsd.OK {
 				if d.currState == noSync {
-					resp = ocsd.RespErrCont
+					emitResp := d.emitNoSyncAtUnsyncIdx()
+					if emitResp == ocsd.RespFatalSysErr {
+						resp = emitResp
+					} else {
+						if d.currState == noSync {
+							d.currState = waitSync
+						}
+						resp = ocsd.RespErrCont
+					}
 				} else {
 					resp = ocsd.RespFatalInvalidData
 				}
@@ -1050,6 +1097,9 @@ func (d *PktDecode) traceInstrToWP(rangeOut *instrRange, res *wpRes, traceToAddr
 
 			d.instrInfo.InstrAddr += ocsd.VAddr(d.instrInfo.InstrSize)
 			rangeOut.numInstr++
+			if d.instrRangeLimit > 0 && rangeOut.numInstr > d.instrRangeLimit {
+				return ocsd.ErrIRangeLimitOverrun
+			}
 
 			if traceToAddrNext {
 				if d.instrInfo.InstrAddr == nextAddrMatch {
@@ -1070,6 +1120,9 @@ func (d *PktDecode) traceInstrToWP(rangeOut *instrRange, res *wpRes, traceToAddr
 
 				d.instrInfo.InstrAddr += ocsd.VAddr(d.instrInfo.InstrSize)
 				rangeOut.numInstr++
+				if d.instrRangeLimit > 0 && rangeOut.numInstr > d.instrRangeLimit {
+					return ocsd.ErrIRangeLimitOverrun
+				}
 
 				if traceToAddrNext {
 					if d.instrInfo.InstrAddr == nextAddrMatch {
@@ -1695,6 +1748,7 @@ func (d *PktDecode) handlePacketSeqErr(err ocsd.Err, idx ocsd.TrcIndex, reason s
 	d.resetDecoderState()
 	d.currState = noSync
 	d.unsyncEOTInfo = ocsd.UnsyncBadPacket
+	d.unsyncPktIdx = idx
 	return err
 }
 
@@ -1703,6 +1757,7 @@ func (d *PktDecode) handleBadPacket(idx ocsd.TrcIndex, reason string) {
 	d.resetDecoderState()
 	d.currState = noSync
 	d.unsyncEOTInfo = ocsd.UnsyncBadPacket
+	d.unsyncPktIdx = idx
 }
 
 func (d *PktDecode) handleBadImageError(idx ocsd.TrcIndex, reason string) ocsd.Err {
@@ -1731,6 +1786,7 @@ func (d *PktDecode) resetDecoderState() {
 	d.p0Stack = nil
 	d.poppedElems = nil
 	d.unsyncEOTInfo = ocsd.UnsyncResetDecoder
+	d.unsyncPktIdx = ocsd.BadTrcIndex
 	d.eteFirstTSMarker = false
 	d.nextRangeCheckClear()
 
@@ -1756,6 +1812,22 @@ func (d *PktDecode) calcISA(is64bit bool, is uint8) ocsd.ISA {
 		return ocsd.ISAThumb2
 	}
 	return ocsd.ISAArm
+}
+
+func (d *PktDecode) emitNoSyncAtUnsyncIdx() ocsd.DatapathResp {
+	idx := d.unsyncPktIdx
+	if idx == ocsd.BadTrcIndex {
+		return ocsd.RespCont
+	}
+	d.unsyncPktIdx = ocsd.BadTrcIndex
+	if err := d.outElem.ResetElemStack(); err != ocsd.OK {
+		return ocsd.RespFatalSysErr
+	}
+	if err := d.outElem.AddElemType(idx, ocsd.GenElemNoSync); err != ocsd.OK {
+		return ocsd.RespFatalSysErr
+	}
+	d.outElem.GetCurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
+	return d.outElem.SendElements()
 }
 
 // ========================

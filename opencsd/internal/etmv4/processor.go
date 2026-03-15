@@ -224,7 +224,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 			return uint32(consumed), resp, nil
 		}
 
-		if resp != ocsd.RespCont {
+		if !ocsd.DataRespIsCont(resp) {
 			break
 		}
 	}
