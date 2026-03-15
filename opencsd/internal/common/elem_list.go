@@ -116,15 +116,14 @@ func (l *GenElemList) ElemToSend() bool {
 }
 
 func (l *GenElemList) SendElements() ocsd.DatapathResp {
+	if l.sendIf == nil || !l.sendIf.HasAttachedAndEnabled() {
+		return ocsd.RespFatalNotInit
+	}
 	resp := ocsd.RespCont
 	for l.ElemToSend() && ocsd.DataRespIsCont(resp) {
 		idx := l.firstIdx
 		pPtr := &l.elemArray[idx]
-
-		if l.sendIf != nil && l.sendIf.HasAttachedAndEnabled() {
-			resp = l.sendIf.First().TraceElemIn(pPtr.TrcPktIdx, l.csID, pPtr.PElem)
-		}
-
+		resp = l.sendIf.First().TraceElemIn(pPtr.TrcPktIdx, l.csID, pPtr.PElem)
 		l.firstIdx = l.getAdjustedIdx(l.firstIdx + 1)
 		l.numUsed--
 	}
@@ -139,22 +138,28 @@ type GenElemStack struct {
 	sendElemIdx int
 	csID        uint8
 	sendIf      *AttachPt[interfaces.TrcGenElemIn]
-	isInit      bool
+	bIsInit     bool
 }
 
 // NewGenElemStack creates a new trace element stack.
 func NewGenElemStack() *GenElemStack {
 	s := &GenElemStack{
-		elemArray:   make([]ElemPtr, 4),
-		elemToSend:  0,
-		currElemIdx: 0,
-		sendElemIdx: 0,
+		elemArray: make([]ElemPtr, 4),
 	}
 	for i := range s.elemArray {
 		s.elemArray[i].PElem = ocsd.NewTraceElement()
 	}
-	s.isInit = true
 	return s
+}
+
+// isInit lazily checks that the stack is fully set up (matches C++ OcsdGenElemStack::isInit).
+func (s *GenElemStack) isInit() bool {
+	if !s.bIsInit {
+		if len(s.elemArray) > 0 && s.sendIf != nil {
+			s.bIsInit = true
+		}
+	}
+	return s.bIsInit
 }
 
 func (s *GenElemStack) InitSendIf(sendIf *AttachPt[interfaces.TrcGenElemIn]) {
@@ -170,6 +175,9 @@ func (s *GenElemStack) GetCurrElem() *ocsd.TraceElement {
 }
 
 func (s *GenElemStack) ResetElemStack() ocsd.Err {
+	if !s.isInit() {
+		return ocsd.ErrNotInit
+	}
 	s.resetIndexes()
 	return ocsd.OK
 }
@@ -230,13 +238,13 @@ func (s *GenElemStack) NumElemToSend() int {
 }
 
 func (s *GenElemStack) SendElements() ocsd.DatapathResp {
+	if !s.isInit() {
+		return ocsd.RespFatalNotInit
+	}
 	resp := ocsd.RespCont
 	for s.elemToSend > 0 && ocsd.DataRespIsCont(resp) {
 		pPtr := &s.elemArray[s.sendElemIdx]
-		if s.sendIf != nil && s.sendIf.HasAttachedAndEnabled() {
-			resp = s.sendIf.First().TraceElemIn(pPtr.TrcPktIdx, s.csID, pPtr.PElem)
-		}
-
+		resp = s.sendIf.First().TraceElemIn(pPtr.TrcPktIdx, s.csID, pPtr.PElem)
 		s.elemToSend--
 		s.sendElemIdx++
 	}
