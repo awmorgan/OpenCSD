@@ -425,8 +425,12 @@ func (pb *PktProcBase[P, Pt, Pc]) GetStatsBlock() (*ocsd.DecodeStats, ocsd.Err) 
 	return &pb.Stats, ocsd.OK
 }
 
+func (pb *PktProcBase[P, Pt, Pc]) HasRawMon() bool {
+	return pb.PktRawMonI.HasAttachedAndEnabled()
+}
+
 func (pb *PktProcBase[P, Pt, Pc]) ResetStats() {
-	pb.Stats.Version = 0
+	pb.Stats.Version = ocsd.VerNum
 	pb.Stats.Revision = ocsd.StatsRevision
 	pb.Stats.ChannelTotal = 0
 	pb.Stats.ChannelUnsynced = 0

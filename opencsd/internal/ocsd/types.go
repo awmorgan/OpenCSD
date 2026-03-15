@@ -548,3 +548,11 @@ type DecodeStats struct {
 }
 
 const StatsRevision = 0x1
+
+// Library version constants, matching OCSD_VER_MAJOR/MINOR/PATCH and OCSD_VER_NUM in ocsd_if_version.h.
+const (
+	VerMajor = 0x1
+	VerMinor = 0x8
+	VerPatch = 0x0
+	VerNum   = (VerMajor << 16) | (VerMinor << 8) | VerPatch // 0x010800
+)
