@@ -107,9 +107,10 @@ func TestExtractException_ExcepByteWithCancel(t *testing.T) {
 // so CurrAltIsa set in the context byte path will be overwritten. We just verify NS and Hyp.
 func TestExtractException_ContextByte(t *testing.T) {
 	proc, sink := newSyncedProc(&Config{})
-	// After 5-byte addr, branchNeedsEx=true; byte[5]=0x38 → context byte
-	// 0x38: NS=(bit5=0x20)=1→true, Hyp=(bit4=0x10)=1→true, AltISA=(bit3=0x08)=1
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x38})
+	// After 5-byte addr, branchNeedsEx=true.
+	// Exception byte 0x80 indicates continuation; byte1 0x30 carries context flags:
+	// Hyp=(bit5)=1, NS from byte0 bit0=0.
+	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x80, 0x30})
 
 	var brPkt *Packet
 	for i := range sink.packets {
@@ -124,12 +125,11 @@ func TestExtractException_ContextByte(t *testing.T) {
 	// The context byte sets NS and Hyp (visible in the packet context before extractBrAddrPkt overwrites)
 	// In practice: extractExceptionData runs first, sets the context fields,
 	// then extractBrAddrPkt sets CurrAltIsa=false in the non-altbranch else path.
-	// NS and Hyp should be visible:
-	if !brPkt.Context.CurrNS {
-		t.Error("CurrNS should be true (byte 0x38 bit5=1)")
+	if brPkt.Context.CurrNS {
+		t.Error("CurrNS should be false (from exception byte0 bit0=0)")
 	}
 	if !brPkt.Context.CurrHyp {
-		t.Error("CurrHyp should be true (byte 0x38 bit4=1)")
+		t.Error("CurrHyp should be true (byte1 bit5=1)")
 	}
 	// CurrAltIsa is overwritten to false by extractBrAddrPkt (non-altBranch path), so don't assert it
 }
@@ -540,6 +540,67 @@ func TestISync_JazelleISA(t *testing.T) {
 	}
 }
 
+// TestISync_LSiP_UsesBranchAddressDecode verifies LSIP compressed address uses
+// branch-address extraction semantics (matching C++), not plain LEB128 decoding.
+func TestISync_LSiP_UsesBranchAddressDecode(t *testing.T) {
+	proc, sink := newSyncedProc(&Config{})
+
+	// ISync header(0x08), info byte with LSIP flag (0x80),
+	// 4-byte I-addr where final addr byte has bit7=1 to continue into LSIP bytes.
+	// Then LSIP byte(0x03) terminates LSIP sequence.
+	// For ARM ISA, extractBrAddrPkt decodes 0x03 to low bits 0x4 (not 0x3),
+	// overlaid onto the current instruction address.
+	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x08, 0x80, 0x00, 0x00, 0x00, 0x80, 0x03})
+
+	var iSyncPkt *Packet
+	for i := range sink.packets {
+		if sink.packets[i].Type == PktISync {
+			iSyncPkt = &sink.packets[i]
+			break
+		}
+	}
+	if iSyncPkt == nil {
+		t.Fatal("expected PktISync packet")
+	}
+	if !iSyncPkt.ISyncInfo.HasLSipAddr {
+		t.Fatal("expected ISync to include LSIP address")
+	}
+	if iSyncPkt.Data.Addr != 0x80000004 {
+		t.Errorf("expected LSIP-derived data addr 0x80000004, got 0x%X", iSyncPkt.Data.Addr)
+	}
+}
+
+// TestExtractException_V7MExtendedNum verifies 2-byte Cortex-M exception number decoding.
+func TestExtractException_V7MExtendedNum(t *testing.T) {
+	config := &Config{ArchVer: ocsd.ArchV7, CoreProf: ocsd.ProfileCortexM}
+	proc, sink := newSyncedProc(config)
+
+	// 5-byte branch with exception continuation, then:
+	// ex byte0 = 0x92 -> cont=1, ex low nibble=9
+	// ex byte1 = 0x01 -> ex high bits=1 => exception number 0x19 (Cortex-M IRQn class)
+	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x92, 0x01})
+
+	var brPkt *Packet
+	for i := range sink.packets {
+		if sink.packets[i].Type == PktBranchAddress {
+			brPkt = &sink.packets[i]
+			break
+		}
+	}
+	if brPkt == nil {
+		t.Fatal("expected PktBranchAddress packet")
+	}
+	if !brPkt.Exception.Present {
+		t.Fatal("expected exception to be present")
+	}
+	if brPkt.Exception.Number != 0x19 {
+		t.Fatalf("expected exception number 0x19, got 0x%X", brPkt.Exception.Number)
+	}
+	if brPkt.Exception.Type != ocsd.ExcpCMIRQn {
+		t.Fatalf("expected Cortex-M IRQn exception type, got %v", brPkt.Exception.Type)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // waitForSync: 13+ zero bytes triggers PktNotSync via setBytesPartPkt path
 // ---------------------------------------------------------------------------
@@ -610,8 +671,8 @@ func TestAltBranch_BranchNeedsExAlreadySet(t *testing.T) {
 	proc, sink := newSyncedProc(config)
 
 	// AltBranch: header 0xC1 (bit0=1 branch, bit6=1 branchNeedsEx, bit7=1 more addr)
-	// Payload 0x40: bit7=0 → bTopBitSet=false; branchNeedsEx=true → packetDone
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0xC1, 0x40})
+	// Payload 0x00: bit7=0 → packetDone, and no extra exception data continuation required.
+	proc.TraceDataIn(ocsd.OpData, 6, []byte{0xC1, 0x00})
 
 	found := false
 	for _, p := range sink.packets {

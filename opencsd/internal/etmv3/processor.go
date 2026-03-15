@@ -428,7 +428,7 @@ func (p *PktProc) processPayloadByte(by uint8) {
 			if p.Config.IsInstrTrace() {
 				p.bytesExpected = cycCountBytes + 6 + ctxtIDBytes
 			} else {
-				p.bytesExpected = cycCountBytes + 2 + ctxtIDBytes
+				p.bytesExpected = 2 + ctxtIDBytes
 			}
 			p.isyncInfoIdx = 1 + cycCountBytes + ctxtIDBytes
 		}
@@ -698,36 +698,131 @@ var exceptionTypeARMdeprecated = []ocsd.ArmV7Exception{
 	ocsd.ExcpDebugHalt,
 }
 
+var exceptionTypesStd = []ocsd.ArmV7Exception{
+	ocsd.ExcpNoException,
+	ocsd.ExcpDebugHalt,
+	ocsd.ExcpSMC,
+	ocsd.ExcpHyp,
+	ocsd.ExcpAsyncDAbort,
+	ocsd.ExcpJazelle,
+	ocsd.ExcpReserved,
+	ocsd.ExcpReserved,
+	ocsd.ExcpReset,
+	ocsd.ExcpUndef,
+	ocsd.ExcpSVC,
+	ocsd.ExcpPrefAbort,
+	ocsd.ExcpSyncDataAbort,
+	ocsd.ExcpGeneric,
+	ocsd.ExcpIRQ,
+	ocsd.ExcpFIQ,
+}
+
+var exceptionTypesCM = []ocsd.ArmV7Exception{
+	ocsd.ExcpNoException,
+	ocsd.ExcpCMIRQn,
+	ocsd.ExcpCMIRQn,
+	ocsd.ExcpCMIRQn,
+	ocsd.ExcpCMIRQn,
+	ocsd.ExcpCMIRQn,
+	ocsd.ExcpCMIRQn,
+	ocsd.ExcpCMIRQn,
+	ocsd.ExcpCMIRQn,
+	ocsd.ExcpCMUsageFault,
+	ocsd.ExcpCMNMI,
+	ocsd.ExcpSVC,
+	ocsd.ExcpCMDebugMonitor,
+	ocsd.ExcpCMMemManage,
+	ocsd.ExcpCMPendSV,
+	ocsd.ExcpCMSysTick,
+	ocsd.ExcpReserved,
+	ocsd.ExcpReset,
+	ocsd.ExcpReserved,
+	ocsd.ExcpCMHardFault,
+	ocsd.ExcpReserved,
+	ocsd.ExcpCMBusFault,
+	ocsd.ExcpReserved,
+	ocsd.ExcpReserved,
+}
+
 func (p *PktProc) extractExceptionData() {
 	if !p.branchNeedsEx {
 		return
 	}
 
-	for p.currPktIdx < len(p.currPacketData) {
-		b := p.currPacketData[p.currPktIdx]
+	if !p.checkPktLimits() {
+		return
+	}
+
+	dataByte := p.currPacketData[p.currPktIdx]
+	p.currPktIdx++
+
+	p.currPacket.Context.CurrNS = (dataByte & 0x1) != 0
+	exceptionNum := uint16((dataByte >> 1) & 0xF)
+	cancelPrevInstr := (dataByte & 0x20) != 0
+	p.currPacket.Context.CurrAltIsa = (dataByte & 0x40) != 0
+	p.currPacket.Context.Updated = true
+
+	resume := 0
+	irqN := 0
+	byte2 := false
+
+	if (dataByte & 0x80) != 0 {
+		if !p.checkPktLimits() {
+			return
+		}
+		dataByte = p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
 
-		if (b & 0x40) == 0x40 {
-			// Exception Byte (bit 6 = 1)
-			exNum := uint16((b >> 1) & 0x0F)
-			// AltISA is on bit 6, handled by extractExceptionData caller or here?
-			// C++ UpdateAltISA((dataByte & 0x40) != 0)
-			p.currPacket.Context.CurrAltIsa = true // bit 6 is 1
-			ns := (b & 0x01) != 0
-			p.currPacket.Context.CurrNS = ns
-			cancel := (b & 0x20) != 0
-			p.currPacket.SetExceptionWithCancel(ocsd.ExcpNoException, exNum, cancel)
+		if (dataByte & 0x40) != 0 {
+			byte2 = true
 		} else {
-			// Context Information Byte (bit 6 = 0)
-			p.currPacket.Context.CurrNS = (b & 0x20) != 0
-			p.currPacket.Context.CurrHyp = (b & 0x10) != 0
-			p.currPacket.Context.CurrAltIsa = (b & 0x08) != 0
+			if p.Config.IsV7MArch() {
+				exceptionNum |= uint16(dataByte&0x1F) << 4
+			}
+			p.currPacket.Context.CurrHyp = (dataByte & 0x20) != 0
 			p.currPacket.Context.Updated = true
+
+			if (dataByte & 0x80) != 0 {
+				if !p.checkPktLimits() {
+					return
+				}
+				dataByte = p.currPacketData[p.currPktIdx]
+				p.currPktIdx++
+				byte2 = true
+			}
 		}
-		if (b & 0x80) != 0x80 {
-			break
+
+		if byte2 {
+			resume = int(dataByte & 0xF)
 		}
 	}
+
+	excepType := ocsd.ExcpReserved
+	if p.Config.IsV7MArch() {
+		exceptionNum &= 0x1FF
+		if int(exceptionNum) < len(exceptionTypesCM) {
+			excepType = exceptionTypesCM[exceptionNum]
+		} else {
+			excepType = ocsd.ExcpCMIRQn
+		}
+
+		if excepType == ocsd.ExcpCMIRQn {
+			if exceptionNum > 0x018 {
+				irqN = int(exceptionNum - 0x10)
+			} else if exceptionNum == 0x008 {
+				irqN = 0
+			} else {
+				irqN = int(exceptionNum)
+			}
+		}
+	} else {
+		exceptionNum &= 0xF
+		excepType = exceptionTypesStd[exceptionNum]
+	}
+
+	p.currPacket.SetExceptionWithCancel(excepType, exceptionNum, cancelPrevInstr)
+	_ = resume
+	_ = irqN
 }
 
 func (p *PktProc) extractCycleCount() uint32 {
@@ -784,12 +879,14 @@ func (p *PktProc) extractCtxtID() uint32 {
 
 func (p *PktProc) onISyncPacket() {
 	var instrAddr uint32
+	var lsiPAddr uint32
+	var lsiPBits int
 	var j, t, altISA uint8
 
 	p.currPktIdx = 1
 
 	// 1. Extract cycle count (if present) - same as C++
-	if p.currPacket.Type == PktISyncCycle {
+	if p.isyncGotCC {
 		p.currPacket.CycleCount = p.extractCycleCount()
 		if p.processState == procErr {
 			return
@@ -826,14 +923,7 @@ func (p *PktProc) onISyncPacket() {
 
 	// 4. Extract address and determine ISA
 	if p.Config.IsInstrTrace() {
-		addrBytes := 4
-		if p.Config.IsV7MArch() && (j != 0) {
-			// Jazelle on V7M uses alternate format
-			addrBytes = 0
-			p.currPacket.CurrISA = ocsd.ISAThumb2
-		}
-
-		for i := 0; i < addrBytes; i++ {
+		for i := range 4 {
 			if !p.checkPktLimits() {
 				return
 			}
@@ -841,44 +931,32 @@ func (p *PktProc) onISyncPacket() {
 			p.currPktIdx++
 		}
 
-		if addrBytes > 0 {
-			t = uint8(instrAddr & 0x1) // extract T bit
-			instrAddr &= 0xFFFFFFFE    // remove T bit from address (bit 0)
-			p.currPacket.UpdateAddress(uint64(instrAddr), 32)
+		t = uint8(instrAddr & 0x1)
+		instrAddr &= 0xFFFFFFFE
+		p.currPacket.UpdateAddress(uint64(instrAddr), 32)
 
-			// Determine ISA from J, T, AltISA (matches C++ exactly)
-			currISA := ocsd.ISAArm
-			if j != 0 {
-				currISA = ocsd.ISAJazelle
-			} else if t != 0 {
-				if altISA != 0 {
-					currISA = ocsd.ISATee
-				} else {
-					currISA = ocsd.ISAThumb2
-				}
+		currISA := ocsd.ISAArm
+		if j != 0 {
+			currISA = ocsd.ISAJazelle
+		} else if t != 0 {
+			if altISA != 0 {
+				currISA = ocsd.ISATee
+			} else {
+				currISA = ocsd.ISAThumb2
 			}
-			p.currPacket.CurrISA = currISA
-			p.currPacket.Context.CurrAltIsa = altISA != 0
 		}
+		p.currPacket.UpdateISA(currISA)
 
-		// 5. LSiP address (variable-length continuation-encoded)
+		// 5. LSiP address
 		if p.isyncGetLSiP {
-			lsiPBits := 0
-			lsiPAddr := uint32(0)
-			for p.currPktIdx < len(p.currPacketData) {
-				b := p.currPacketData[p.currPktIdx]
-				p.currPktIdx++
-				lsiPAddr |= uint32(b&0x7F) << lsiPBits
-				lsiPBits += 7
-				if (b & 0x80) == 0 {
-					break
-				}
+			lsiPAddr = uint32(p.extractBrAddrPkt(&lsiPBits))
+			if p.processState == procErr {
+				return
 			}
-			// Store: set data addr to instr addr, then overlay LSiP bits
 			p.currPacket.Data.Addr = uint64(instrAddr)
 			p.currPacket.Data.UpdateAddr = true
 			if lsiPBits > 0 {
-				mask := uint64((1 << lsiPBits) - 1)
+				mask := uint64((uint64(1) << uint(lsiPBits)) - 1)
 				p.currPacket.Data.Addr = (p.currPacket.Data.Addr & ^mask) | (uint64(lsiPAddr) & mask)
 			}
 			p.currPacket.ISyncInfo.HasLSipAddr = true
