@@ -148,7 +148,8 @@ type PktDecode struct {
 	// Return stack, etc...
 	returnStack common.AddrReturnStack
 
-	unsyncEOTInfo ocsd.UnsyncInfo
+	unsyncEOTInfo    ocsd.UnsyncInfo
+	eteFirstTSMarker bool
 
 	// Expected start address for the next continuous range (C++ m_next_range_check).
 	nextRangeCheck struct {
@@ -197,6 +198,7 @@ func (d *PktDecode) initDecoder() {
 	d.outElem = *common.NewGenElemStack()
 	d.returnStack = *common.NewAddrReturnStack()
 	d.unsyncEOTInfo = ocsd.UnsyncInitDecoder
+	d.eteFirstTSMarker = false
 	d.nextRangeCheckClear()
 }
 
@@ -216,6 +218,18 @@ func (d *PktDecode) OnProtocolConfig() ocsd.Err {
 	if d.config.EnabledRetStack() {
 		d.returnStack.SetActive(true)
 	}
+
+	// Match C++ static instruction decode configuration.
+	d.instrInfo.DsbDmbWaypoints = 0
+	if d.config.WfiwfeBranch() {
+		d.instrInfo.WfiWfeBranch = 1
+	} else {
+		d.instrInfo.WfiWfeBranch = 0
+	}
+	d.instrInfo.PeType.Arch = d.config.ArchVer
+	d.instrInfo.PeType.Profile = d.config.CoreProf
+	d.instrInfo.TrackItBlock = 1
+	d.instrInfo.ThumbItConditions = 0
 	return ocsd.OK
 }
 
@@ -300,7 +314,10 @@ func (d *PktDecode) OnReset() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) OnFlush() ocsd.DatapathResp {
-	return ocsd.RespCont
+	if d.currState == resolveElem {
+		return d.resolveElements()
+	}
+	return d.outElem.SendElements()
 }
 
 func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
@@ -474,6 +491,13 @@ func (d *PktDecode) decodePacket() ocsd.Err {
 		bV7MProfile := (d.config.ArchVer == ocsd.ArchV7) && (d.config.CoreProf == ocsd.ProfileCortexM)
 		d.pushP0ElemParam(p0ExcepRet, bV7MProfile, pkt.Type, d.IndexCurrPkt, nil)
 		if bV7MProfile {
+			d.currSpecDepth++
+		}
+
+	case PktFuncRet:
+		// P0 element iff V8-M profile, otherwise ignored.
+		if ocsd.IsV8Arch(d.config.ArchVer) && d.config.CoreProf == ocsd.ProfileCortexM {
+			d.pushP0ElemParam(p0FuncRet, true, pkt.Type, d.IndexCurrPkt, nil)
 			d.currSpecDepth++
 		}
 
@@ -873,7 +897,7 @@ func (d *PktDecode) returnStackPop() ocsd.Err {
 }
 
 func (d *PktDecode) processTSCCEventElem(pElem *p0Elem) ocsd.Err {
-	bPermitTS := !d.config.EteHasTSMarker() || true // m_ete_first_ts_marker omitted for now
+	bPermitTS := !d.config.EteHasTSMarker() || d.eteFirstTSMarker
 	var err ocsd.Err = ocsd.OK
 
 	switch pElem.p0Type {
@@ -908,6 +932,10 @@ func (d *PktDecode) processTSCCEventElem(pElem *p0Elem) ocsd.Err {
 }
 
 func (d *PktDecode) processMarkerElem(pElem *p0Elem) ocsd.Err {
+	if d.config.EteHasTSMarker() && pElem.marker.Type == ocsd.ElemMarkerTS {
+		d.eteFirstTSMarker = true
+	}
+
 	err := d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemSyncMarker)
 	if err == ocsd.OK {
 		d.outElem.GetCurrElem().Payload.SyncMarker = pElem.marker
