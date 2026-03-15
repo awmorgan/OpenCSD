@@ -46,6 +46,11 @@ func (m *GlobalMapper) EnableCaching(enable bool) ocsd.Err {
 	return ocsd.OK
 }
 
+// SetCacheSizes updates mapper cache page sizing limits.
+func (m *GlobalMapper) SetCacheSizes(pageSize uint16, numPages int, errOnLimit bool) ocsd.Err {
+	return m.cache.SetCacheSizes(pageSize, numPages, errOnLimit)
+}
+
 func (m *GlobalMapper) ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, numBytes *uint32, pBuffer []byte) ocsd.Err {
 	prevAcc := m.accCurr
 	found := m.findAccessor(address, memSpace, trcID)

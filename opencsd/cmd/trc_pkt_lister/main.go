@@ -59,6 +59,12 @@ type packetPrinter interface {
 	SetMute(bool)
 }
 
+type opModeComponent interface {
+	SetComponentOpMode(opFlags uint32) ocsd.Err
+	ComponentOpMode() uint32
+	SupportedOpModes() uint32
+}
+
 type memAccAdapter struct {
 	mapper memacc.Mapper
 }
@@ -258,8 +264,25 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 	}
 
 	configureFrameDemux(tree, out, opts)
+	applyAdditionalFlags(tree, opts.additionalFlags)
 
 	mapper := memacc.NewGlobalMapper()
+	if opts.memCacheDisable {
+		_ = mapper.EnableCaching(false)
+	} else {
+		_ = mapper.EnableCaching(true)
+		if opts.memCachePageSize != 0 || opts.memCachePageNum != 0 {
+			pageSize := opts.memCachePageSize
+			if pageSize == 0 {
+				pageSize = memacc.DefaultPageSize
+			}
+			numPages := opts.memCachePageNum
+			if numPages == 0 {
+				numPages = uint32(memacc.DefaultNumPages)
+			}
+			_ = mapper.SetCacheSizes(uint16(pageSize), int(numPages), false)
+		}
+	}
 	tree.SetMemAccessI(&memAccAdapter{mapper: mapper})
 	mapped := mapMemoryRanges(mapper, opts.ssDir, reader)
 
@@ -278,6 +301,9 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 	if opts.decode {
 		tree.SetGenTraceElemOutI(genAdapter)
 		fmt.Fprintln(out, "Trace Packet Lister : Set trace element decode printer")
+		if opts.testWaits > 0 {
+			genPrinter.SetTestWaits(opts.testWaits)
+		}
 		if opts.profile {
 			genPrinter.SetMute(true)
 			genPrinter.SetCollectStats()
@@ -467,6 +493,35 @@ func frameAlignment(tree *dcdtree.DecodeTree) int {
 		return 4
 	}
 	return 16
+}
+
+func applyAdditionalFlags(tree *dcdtree.DecodeTree, flags uint32) {
+	if tree == nil || flags == 0 {
+		return
+	}
+
+	apply := func(component any) {
+		opComp, ok := component.(opModeComponent)
+		if !ok || opComp == nil {
+			return
+		}
+		supported := opComp.SupportedOpModes()
+		applyFlags := flags & supported
+		if applyFlags == 0 {
+			return
+		}
+		_ = opComp.SetComponentOpMode(opComp.ComponentOpMode() | applyFlags)
+	}
+
+	tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
+		if elem == nil {
+			return
+		}
+		apply(elem.DecoderHandle)
+		if elem.DataIn != elem.DecoderHandle {
+			apply(elem.DataIn)
+		}
+	})
 }
 
 func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options) int {
@@ -723,7 +778,7 @@ func parseOptions(args []string) (options, error) {
 		case "-halt_err":
 			opts.additionalFlags |= ocsd.OpflgPktdecHaltBadPkts
 		case "-aa64_opcode_chk", "-src_addr_n":
-			// Accepted for compatibility; no-op for currently ported protocol set.
+			// Accepted for compatibility; protocol-specific checks are not yet wired in Go.
 		case "-test_waits":
 			i++
 			if i >= len(args) {

@@ -171,6 +171,55 @@ func (p *Packet) IsBadPacket() bool {
 	return p.Type >= PktBadSequence
 }
 
+func (p *Packet) pktTypeName(pktType PktType) string {
+	switch pktType {
+	case PktReserved:
+		return "RESERVED"
+	case PktNotSync:
+		return "NOTSYNC"
+	case PktIncompleteEOT:
+		return "INCOMPLETE_EOT"
+	case PktNoErrType:
+		return "NO_ERR_TYPE"
+	case PktBadSequence:
+		return "BAD_SEQUENCE"
+	case PktAsync:
+		return "ASYNC"
+	case PktVersion:
+		return "VERSION"
+	case PktFreq:
+		return "FREQ"
+	case PktNull:
+		return "NULL"
+	case PktTrig:
+		return "TRIG"
+	case PktGErr:
+		return "GERR"
+	case PktMErr:
+		return "MERR"
+	case PktM8:
+		return "M8"
+	case PktC8:
+		return "C8"
+	case PktC16:
+		return "C16"
+	case PktFlag:
+		return "FLAG"
+	case PktD4:
+		return "D4"
+	case PktD8:
+		return "D8"
+	case PktD16:
+		return "D16"
+	case PktD32:
+		return "D32"
+	case PktD64:
+		return "D64"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 func (p *Packet) String() string {
 	var name, desc string
 	addMarkerTS := false
@@ -244,22 +293,7 @@ func (p *Packet) String() string {
 
 	switch p.Type {
 	case PktIncompleteEOT, PktBadSequence:
-		// simple mapping for the erratic error type
-		var errName string
-		switch p.ErrType {
-		// Just map the basic ones that might have caused bad sequence, not strict since it's just formatting
-		case PktD8:
-			errName = "D8"
-		case PktD16:
-			errName = "D16"
-		case PktD32:
-			errName = "D32"
-		case PktD64:
-			errName = "D64"
-		default:
-			errName = fmt.Sprintf("%v", p.ErrType)
-		}
-		str += fmt.Sprintf("[%s]", errName)
+		str += fmt.Sprintf("[%s]", p.pktTypeName(p.ErrType))
 	case PktVersion:
 		str += fmt.Sprintf("; Ver=%d", p.Payload.D8)
 	case PktFreq:
