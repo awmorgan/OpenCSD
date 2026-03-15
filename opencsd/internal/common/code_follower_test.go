@@ -54,6 +54,9 @@ func TestCodeFollower(t *testing.T) {
 	if err != ocsd.OK || !cf.HasNextAddr() {
 		t.Errorf("FollowSingleAtom failed")
 	}
+	if !cf.HasRange() {
+		t.Errorf("Expected valid range after successful follow")
+	}
 
 	if cf.GetNumInstructs() != 1 {
 		t.Errorf("Expected 1 instruction")
@@ -85,8 +88,24 @@ func TestCodeFollower(t *testing.T) {
 	if err != ocsd.ErrMemNacc || !cf.IsNaccErr() || !cf.HasError() {
 		t.Errorf("MemNacc error not tracked properly")
 	}
+	if cf.GetNaccAddr() != 0x2000 {
+		t.Errorf("Expected nacc addr 0x2000, got 0x%X", cf.GetNaccAddr())
+	}
+	if cf.GetMemSpace() != ocsd.MemSpaceAny {
+		t.Errorf("Expected memory space to be preserved")
+	}
+
+	cf.SetDSBDMBasWP()
+	if cf.GetInstrInfo().DsbDmbWaypoints != 1 {
+		t.Errorf("Expected DSB/DMB waypoint mode to be enabled")
+	}
+
 	cf.ClearError()
 	if cf.HasError() {
 		t.Errorf("ClearError failed")
+	}
+	cf.ClearNacc()
+	if cf.IsNaccErr() {
+		t.Errorf("ClearNacc failed")
 	}
 }

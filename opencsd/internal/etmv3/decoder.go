@@ -725,7 +725,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 				}
 
 				if errCF == ocsd.ErrMemNacc {
-					naccAddr := uint64(d.codeFollower.GetNextAddr())
+					naccAddr := uint64(d.codeFollower.GetNaccAddr())
 					if d.outputElemList.GetNumElem() > 0 && d.outputElemList.GetElemType(d.outputElemList.GetNumElem()-1) == ocsd.GenElemInstrRange {
 						d.queuePendingNacc(naccAddr, memSpace)
 					} else {

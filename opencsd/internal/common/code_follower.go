@@ -13,6 +13,7 @@ type CodeFollower struct {
 	stAddr    ocsd.VAddr
 	enAddr    ocsd.VAddr
 	nextAddr  ocsd.VAddr
+	naccAddr  ocsd.VAddr
 	memSpace  ocsd.MemSpaceAcc
 	csTraceID uint8
 	arch      ocsd.ArchProfile
@@ -29,6 +30,7 @@ func NewCodeFollower() *CodeFollower {
 		stAddr:    ocsd.VAddr(ocsd.VAMask),
 		enAddr:    ocsd.VAddr(ocsd.VAMask),
 		nextAddr:  ocsd.VAddr(ocsd.VAMask),
+		naccAddr:  ocsd.VAddr(ocsd.VAMask),
 		bHasNxt:   false,
 		naccErr:   false,
 		instructs: 0,
@@ -61,12 +63,20 @@ func (cf *CodeFollower) SetISA(isa ocsd.ISA) {
 	cf.instrInfo.Isa = isa
 }
 
+func (cf *CodeFollower) SetDSBDMBasWP() {
+	cf.instrInfo.DsbDmbWaypoints = 1
+}
+
 func (cf *CodeFollower) HasNextInstr() bool {
 	return cf.bHasNxt
 }
 
 func (cf *CodeFollower) HasNextAddr() bool {
 	return cf.bHasNxt
+}
+
+func (cf *CodeFollower) HasRange() bool {
+	return cf.stAddr < cf.enAddr
 }
 
 func (cf *CodeFollower) IsNaccErr() bool {
@@ -81,12 +91,44 @@ func (cf *CodeFollower) ClearError() {
 	cf.naccErr = false
 }
 
+func (cf *CodeFollower) ClearNacc() {
+	cf.naccErr = false
+}
+
 func (cf *CodeFollower) GetNextAddr() ocsd.VAddr {
 	return cf.nextAddr
 }
 
 func (cf *CodeFollower) GetNumInstructs() uint32 {
 	return cf.instructs
+}
+
+func (cf *CodeFollower) GetInstrType() ocsd.InstrType {
+	return cf.instrInfo.Type
+}
+
+func (cf *CodeFollower) GetInstrSubType() ocsd.InstrSubtype {
+	return cf.instrInfo.SubType
+}
+
+func (cf *CodeFollower) IsCondInstr() bool {
+	return cf.instrInfo.IsConditional == 1
+}
+
+func (cf *CodeFollower) IsLink() bool {
+	return cf.instrInfo.IsLink == 1
+}
+
+func (cf *CodeFollower) ISAChanged() bool {
+	return cf.instrInfo.Isa != cf.instrInfo.NextIsa
+}
+
+func (cf *CodeFollower) NextISA() ocsd.ISA {
+	return cf.instrInfo.NextIsa
+}
+
+func (cf *CodeFollower) GetInstrSize() uint8 {
+	return cf.instrInfo.InstrSize
 }
 
 func (cf *CodeFollower) GetInstrInfo() *ocsd.InstrInfo {
@@ -99,6 +141,14 @@ func (cf *CodeFollower) RangeSt() ocsd.VAddr {
 
 func (cf *CodeFollower) RangeEn() ocsd.VAddr {
 	return cf.enAddr
+}
+
+func (cf *CodeFollower) GetNaccAddr() ocsd.VAddr {
+	return cf.naccAddr
+}
+
+func (cf *CodeFollower) GetMemSpace() ocsd.MemSpaceAcc {
+	return cf.memSpace
 }
 
 // DecodeSingleOpCode decodes a single opcode at instrInfo.InstrAddr.
@@ -124,6 +174,8 @@ func (cf *CodeFollower) DecodeSingleOpCode() ocsd.Err {
 
 	// Memory unavailable
 	cf.naccErr = true
+	cf.naccAddr = cf.instrInfo.InstrAddr
+	cf.bHasNxt = false
 	cf.nextAddr = cf.instrInfo.InstrAddr
 	return ocsd.ErrMemNacc
 }
@@ -134,6 +186,7 @@ func (cf *CodeFollower) initFollowerState() bool {
 	cf.instructs = 0
 	cf.enAddr = cf.stAddr
 	cf.nextAddr = cf.stAddr
+	cf.naccAddr = cf.stAddr
 
 	cf.valid = cf.memAccess != nil && cf.idDecode != nil &&
 		cf.memAccess.HasAttachedAndEnabled() && cf.idDecode.HasAttachedAndEnabled()
@@ -152,7 +205,12 @@ func (cf *CodeFollower) FollowSingleAtom(addrStart ocsd.VAddr, atom ocsd.AtmVal)
 	err := cf.DecodeSingleOpCode()
 
 	if err != ocsd.OK {
-		cf.naccErr = err == ocsd.ErrMemNacc
+		if err == ocsd.ErrMemNacc {
+			cf.naccErr = true
+			cf.naccAddr = cf.instrInfo.InstrAddr
+			cf.nextAddr = cf.instrInfo.InstrAddr
+			cf.bHasNxt = false
+		}
 		return err
 	}
 
