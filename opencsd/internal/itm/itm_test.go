@@ -274,8 +274,25 @@ func TestITMErrorCases(t *testing.T) {
 func TestITMPacketStringVariants(t *testing.T) {
 	pkt := &Packet{}
 	pkt.InitPacket()
-	if pkt.String() != "NOTSYNC:ITM not synchronised" {
+	if pkt.String() != "RESERVED:Reserved packet header" {
 		t.Errorf("Unexpected string: %s", pkt.String())
+	}
+
+	pkt.SetValue(0xFFFFFFFF, 1)
+	if pkt.Value != 0xFF || pkt.ValSz != 1 {
+		t.Fatalf("SetValue 8-bit masking failed: value=0x%X size=%d", pkt.Value, pkt.ValSz)
+	}
+	pkt.SetValue(0x12345678, 2)
+	if pkt.Value != 0x5678 || pkt.ValSz != 2 {
+		t.Fatalf("SetValue 16-bit masking failed: value=0x%X size=%d", pkt.Value, pkt.ValSz)
+	}
+	pkt.SetValue(0xABCDEF12, 3)
+	if pkt.Value != 0xCDEF12 || pkt.ValSz != 3 {
+		t.Fatalf("SetValue 24-bit masking failed: value=0x%X size=%d", pkt.Value, pkt.ValSz)
+	}
+	pkt.SetValue(0x12345678, 0)
+	if pkt.Value != 0x12345678 || pkt.ValSz != 4 {
+		t.Fatalf("SetValue size clamp failed: value=0x%X size=%d", pkt.Value, pkt.ValSz)
 	}
 
 	pkt.SetPacketType(PktDWT)

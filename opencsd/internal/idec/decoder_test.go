@@ -251,6 +251,9 @@ func TestDecoder_HelperClassificationAndDestinations(t *testing.T) {
 	if !InstARMIsUDF(0xe7f000f0) || !InstThumbIsUDF(0xde000000) || !InstThumbIsUDF(0xf7f0a000) || !InstA64IsUDF(0x00000000) {
 		t.Fatalf("expected known UDF opcodes to classify as UDF")
 	}
+	if !InstA64IsUDF(0x00100000) || !InstA64IsUDF(0xffe00000) || InstA64IsUDF(0x8b000000) {
+		t.Fatalf("unexpected A64 UDF range classification")
+	}
 
 	if InstThumbIsIT(0xbf000000) != 0 {
 		t.Fatalf("unexpected IT block decoding")

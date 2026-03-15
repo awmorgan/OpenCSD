@@ -742,5 +742,8 @@ func InstThumbIsUDF(inst uint32) bool {
 }
 
 func InstA64IsUDF(inst uint32) bool {
-	return inst == 0x00000000
+	// No A64 encodings are formally allocated as permanently undefined,
+	// but OpenCSD treats the low and high 21-bit regions as undefined.
+	return (inst&0xffe00000) == 0x00000000 ||
+		(inst&0xffe00000) == 0xffe00000
 }

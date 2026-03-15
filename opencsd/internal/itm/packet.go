@@ -59,7 +59,7 @@ type Packet struct {
 
 // InitPacket initializes packet to clean state.
 func (p *Packet) InitPacket() {
-	p.Type = PktNotSync
+	p.Type = PktReserved
 	p.SrcID = 0
 	p.Value = 0
 	p.ValSz = 0
@@ -85,8 +85,13 @@ func (p *Packet) SetSrcID(srcID uint8) {
 
 // SetValue sets the packet payload value.
 func (p *Packet) SetValue(val uint32, valSzBytes uint8) {
-	p.Value = val
+	masks := []uint32{0xFF, 0xFFFF, 0xFFFFFF, 0xFFFFFFFF}
+
 	p.ValSz = valSzBytes
+	if p.ValSz < 1 || p.ValSz > 4 {
+		p.ValSz = 4
+	}
+	p.Value = val & masks[p.ValSz-1]
 }
 
 // SetExtValue sets the extended value (size is always 5).
