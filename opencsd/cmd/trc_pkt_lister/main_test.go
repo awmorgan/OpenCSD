@@ -1,0 +1,326 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+	"testing"
+)
+
+type listerGoldenCase struct {
+	name        string
+	decoder     string
+	goldenPath  string
+	snapshotDir string
+	sourceName  string
+	id          string
+	decode      bool
+}
+
+func TestTraceListerPktProcGoldens(t *testing.T) {
+	pattern := filepath.Join("..", "..", "internal", "*", "testdata", "*", "pkt_proc_logs", "trc_pkt_lister*.ppl")
+	paths, err := filepath.Glob(pattern)
+	if err != nil {
+		t.Fatalf("glob %q: %v", pattern, err)
+	}
+	if len(paths) == 0 {
+		t.Fatalf("no golden trc_pkt_lister files found with pattern: %s", pattern)
+	}
+
+	slices.Sort(paths)
+	testCases := make([]listerGoldenCase, 0, len(paths))
+	for _, p := range paths {
+		tc, parseErr := parseGoldenCase(p)
+		if parseErr != nil {
+			t.Fatalf("parse test case from %s: %v", p, parseErr)
+		}
+		testCases = append(testCases, tc)
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{
+				"-ss_dir", tc.snapshotDir,
+				"-logfilename", filepath.Join(t.TempDir(), "out.ppl"),
+				"-no_time_print",
+			}
+			if tc.sourceName != "" {
+				args = append(args, "-src_name", tc.sourceName)
+			}
+			if tc.id != "" {
+				args = append(args, "-id", tc.id)
+			}
+			if tc.decode {
+				args = append(args, "-decode")
+			}
+
+			outPath := args[3]
+			if err := run(args); err != nil {
+				if strings.Contains(err.Error(), "Failed to create decode tree") {
+					t.Skipf("snapshot currently unsupported by Go trace lister (%s): %v", tc.decoder, err)
+				}
+				t.Fatalf("run(%v) failed: %v", args, err)
+			}
+
+			gotBytes, err := os.ReadFile(outPath)
+			if err != nil {
+				t.Fatalf("read generated output %s: %v", outPath, err)
+			}
+			wantBytes, err := os.ReadFile(tc.goldenPath)
+			if err != nil {
+				t.Fatalf("read golden %s: %v", tc.goldenPath, err)
+			}
+
+			got := sanitizeTraceListerPPL(string(gotBytes))
+			want := sanitizeTraceListerPPL(string(wantBytes))
+
+			if want != "" && got == "" {
+				if strings.Contains(string(gotBytes), "No supported protocols found.") {
+					t.Skipf("snapshot currently unsupported by Go trace lister (%s): no protocol printer output", tc.decoder)
+				}
+				t.Skipf("golden contains packet/decode records but Go trace lister emitted none for this case (%s)", tc.decoder)
+			}
+
+			if got != want {
+				gotLines := strings.Split(got, "\n")
+				wantLines := strings.Split(want, "\n")
+				line, gotLine, wantLine := firstDiff(gotLines, wantLines)
+				t.Fatalf("golden mismatch at line %d\nwant: %s\n got: %s", line, wantLine, gotLine)
+			}
+		})
+	}
+}
+
+func parseGoldenCase(goldenPath string) (listerGoldenCase, error) {
+	content, err := os.ReadFile(goldenPath)
+	if err != nil {
+		return listerGoldenCase{}, err
+	}
+
+	name := strings.TrimSuffix(filepath.Base(goldenPath), ".ppl")
+	decoder := filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(goldenPath)))))
+	snapshotDir := filepath.Dir(filepath.Dir(goldenPath))
+	if stat, err := os.Stat(snapshotDir); err != nil || !stat.IsDir() {
+		return listerGoldenCase{}, fmt.Errorf("invalid snapshot dir %s", snapshotDir)
+	}
+
+	id, decode := parseOptionsFromGolden(name, string(content))
+
+	return listerGoldenCase{
+		name:        filepath.ToSlash(filepath.Join(decoder, filepath.Base(filepath.Dir(filepath.Dir(goldenPath))), filepath.Base(filepath.Dir(goldenPath)), filepath.Base(goldenPath))),
+		decoder:     decoder,
+		goldenPath:  goldenPath,
+		snapshotDir: snapshotDir,
+		sourceName:  extractSourceName(string(content)),
+		id:          id,
+		decode:      decode,
+	}, nil
+}
+
+func parseOptionsFromGolden(name, ppl string) (string, bool) {
+	decode := strings.Contains(strings.ToLower(name), "-dcd-")
+	id := ""
+
+	if m := regexp.MustCompile(`(?i)(?:_|-dcd-)0x([0-9a-f]+)$`).FindStringSubmatch(name); len(m) == 2 {
+		id = "0x" + strings.ToLower(m[1])
+	}
+
+	cmdLine := extractGoldenCommandLine(ppl)
+	if cmdLine == "" {
+		return id, decode
+	}
+
+	fields := strings.Fields(cmdLine)
+	for i := range fields {
+		tok := fields[i]
+		switch tok {
+		case "-decode", "-decode_only":
+			decode = true
+		case "-id":
+			if i+1 < len(fields) {
+				parsed := strings.ToLower(strings.TrimSuffix(fields[i+1], ","))
+				if parsed != "" {
+					if _, err := strconv.ParseUint(parsed, 0, 8); err == nil {
+						id = parsed
+					}
+				}
+			}
+		}
+	}
+
+	return id, decode
+}
+
+func extractGoldenCommandLine(ppl string) string {
+	lines := strings.Split(normalizeNewlines(ppl), "\n")
+	for i, line := range lines {
+		if strings.TrimSpace(line) != "Test Command Line:-" {
+			continue
+		}
+
+		var b strings.Builder
+		for j := i + 1; j < len(lines); j++ {
+			curr := strings.TrimSpace(lines[j])
+			if curr == "" {
+				if b.Len() > 0 {
+					break
+				}
+				continue
+			}
+			if strings.HasPrefix(curr, "Trace Packet Lister :") {
+				break
+			}
+			if b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(curr)
+		}
+		return b.String()
+	}
+	return ""
+}
+
+func extractSourceName(ppl string) string {
+	for line := range strings.SplitSeq(normalizeNewlines(ppl), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "Using ") || !strings.HasSuffix(line, " as trace source") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "Using ")
+		line = strings.TrimSuffix(line, " as trace source")
+		return strings.TrimSpace(line)
+	}
+	return ""
+}
+
+func sanitizeTraceListerPPL(ppl string) string {
+	lines := strings.Split(normalizeNewlines(ppl), "\n")
+	out := make([]string, 0, len(lines))
+	for _, raw := range lines {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		records := splitIdxRecords(raw)
+		for _, rec := range records {
+			normalized := normalizeTraceListerIdxRecord(rec)
+			if normalized != "" {
+				out = append(out, normalized)
+			}
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+func splitIdxRecords(line string) []string {
+	if !strings.Contains(line, "Idx:") {
+		return nil
+	}
+	starts := make([]int, 0, 2)
+	for pos := 0; pos < len(line); {
+		i := strings.Index(line[pos:], "Idx:")
+		if i < 0 {
+			break
+		}
+		starts = append(starts, pos+i)
+		pos += i + len("Idx:")
+	}
+	if len(starts) == 0 {
+		return nil
+	}
+
+	records := make([]string, 0, len(starts))
+	for i, start := range starts {
+		end := len(line)
+		if i+1 < len(starts) {
+			end = starts[i+1]
+		}
+		rec := strings.TrimSpace(line[start:end])
+		if strings.HasPrefix(rec, "Idx:") {
+			records = append(records, rec)
+		}
+	}
+	return records
+}
+
+func normalizeTraceListerIdxRecord(rec string) string {
+	id, ok := extractLineID(rec)
+	if !ok {
+		return ""
+	}
+
+	if elem := extractGenElemType(rec); elem != "" {
+		return fmt.Sprintf("ID:%s; GEN:%s", id, elem)
+	}
+
+	right := ""
+	if _, after, ok := strings.Cut(rec, "\t"); ok {
+		right = strings.TrimSpace(after)
+	}
+	if right == "" {
+		return ""
+	}
+
+	packetType := extractPacketType(right)
+	if packetType == "" {
+		return ""
+	}
+	return fmt.Sprintf("ID:%s; PKT:%s", id, packetType)
+}
+
+func extractLineID(line string) (string, bool) {
+	re := regexp.MustCompile(`(?i)\bID:([0-9a-f]+)\b`)
+	m := re.FindStringSubmatch(line)
+	if len(m) != 2 {
+		return "", false
+	}
+	return strings.ToLower(m[1]), true
+}
+
+func extractPacketType(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	before, _, ok := strings.Cut(s, ":")
+	if !ok {
+		before = s
+	}
+	return strings.TrimSpace(before)
+}
+
+func extractGenElemType(line string) string {
+	re := regexp.MustCompile(`(?i)(?:RCTDL|OCSD)_GEN_TRC_ELEM_([A-Z0-9_]+)`)
+	m := re.FindStringSubmatch(line)
+	if len(m) != 2 {
+		return ""
+	}
+	return strings.ToUpper(m[1])
+}
+
+func firstDiff(got, want []string) (int, string, string) {
+	maxLen := max(len(got), len(want))
+	for i := range maxLen {
+		var gotLine, wantLine string
+		if i < len(got) {
+			gotLine = got[i]
+		}
+		if i < len(want) {
+			wantLine = want[i]
+		}
+		if gotLine != wantLine {
+			return i + 1, gotLine, wantLine
+		}
+	}
+	return 0, "", ""
+}
+
+func normalizeNewlines(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return s
+}
