@@ -344,10 +344,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool) ([]byte,
 	if dstreamFormat {
 		remaining := traceData
 		for len(remaining) > 0 {
-			payloadLen := len(remaining)
-			if payloadLen > 504 {
-				payloadLen = 504
-			}
+			payloadLen := min(len(remaining), 504)
 			payload := remaining[:payloadLen]
 
 			for len(payload) > 0 {
@@ -366,10 +363,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool) ([]byte,
 			}
 
 			remaining = remaining[payloadLen:]
-			footerLen := 8
-			if len(remaining) < footerLen {
-				footerLen = len(remaining)
-			}
+			footerLen := min(len(remaining), 8)
 			remaining = remaining[footerLen:]
 		}
 	} else if srcIsFrame {

@@ -2,6 +2,7 @@ package etmv3
 
 import (
 	"fmt"
+	"strings"
 
 	"opencsd/internal/ocsd"
 )
@@ -374,15 +375,15 @@ func (p *Packet) GetAtomStr() string {
 	if p.Atom.Num == 0 {
 		return ""
 	}
-	s := ""
+	var s strings.Builder
 	bitpattern := p.Atom.EnBits
 	for i := 0; i < int(p.Atom.Num); i++ {
 		if (bitpattern & 1) == 1 {
-			s += "E"
+			s.WriteString("E")
 		} else {
-			s += "N"
+			s.WriteString("N")
 		}
 		bitpattern >>= 1
 	}
-	return s
+	return s.String()
 }

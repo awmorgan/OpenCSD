@@ -5,7 +5,7 @@ import "opencsd/internal/ocsd"
 // TrcTypedBase is the common typed base for decoder manager-created objects.
 // It mirrors the role of C++ ITrcTypedBase while preserving Go type assertions
 // at call sites.
-type TrcTypedBase interface{}
+type TrcTypedBase any
 
 // DecoderMngr is the interface for a protocol trace decoder factory.
 // It creates packet processors and decoders for a specific trace protocol.
