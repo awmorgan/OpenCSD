@@ -47,33 +47,41 @@ func (m *mapperAdapter) InvalidateMemAccCache(csTraceID uint8) {
 	m.mapper.InvalidateMemAccCache(csTraceID)
 }
 
+type eteDecodeOptions struct {
+	multiSession bool
+	srcAddrN     bool
+}
+
+type eteGoldenTestCase struct {
+	name        string
+	goldenPath  string
+	snapshotDir string
+	sourceName  string
+	options     eteDecodeOptions
+}
+
+type opModeComponent interface {
+	SetComponentOpMode(opFlags uint32) ocsd.Err
+	ComponentOpMode() uint32
+	SupportedOpModes() uint32
+}
+
 func TestETESnapshotsAgainstGolden(t *testing.T) {
 	t.Parallel()
 
-	entries, err := os.ReadDir("testdata")
+	testCases, err := discoverETEGoldenTestCases("testdata")
 	if err != nil {
-		t.Fatalf("read testdata: %v", err)
+		t.Fatalf("discover golden test cases: %v", err)
 	}
 
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		golden := filepath.Join("testdata", name+".ppl")
-		if _, err := os.Stat(golden); err != nil {
-			continue
-		}
-
-		t.Run(name, func(t *testing.T) {
-			wantBytes, err := os.ReadFile(golden)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			wantBytes, err := os.ReadFile(tc.goldenPath)
 			if err != nil {
-				t.Fatalf("read golden %s: %v", golden, err)
+				t.Fatalf("read golden %s: %v", tc.goldenPath, err)
 			}
 
-			sourceName := extractSourceNameFromGolden(string(wantBytes))
-			snapshotDir := filepath.Join("testdata", name)
-			gotBytes, err := runETESnapshotDecode(snapshotDir, sourceName)
+			gotBytes, err := runETESnapshotDecode(tc.snapshotDir, tc.sourceName, tc.options)
 			if err != nil {
 				t.Fatalf("runETESnapshotDecode failed: %v", err)
 			}
@@ -117,7 +125,7 @@ func TestSanitizePPLEmbeddedIdxRecords(t *testing.T) {
 	}
 }
 
-func runETESnapshotDecode(snapshotDir, requestedSource string) ([]byte, error) {
+func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOptions) ([]byte, error) {
 	reader := snapshot.NewReader()
 	reader.SetSnapshotDir(snapshotDir)
 	if !reader.ReadSnapShot() {
@@ -219,6 +227,8 @@ func runETESnapshotDecode(snapshotDir, requestedSource string) ([]byte, error) {
 		return nil, fmt.Errorf("no ETE decoders found for source %s", bufferName)
 	}
 
+	applyOpModeFlags(tree, eteOpFlags(opts))
+
 	mapper := memacc.NewGlobalMapper()
 	tree.SetMemAccessI(&mapperAdapter{mapper: mapper})
 
@@ -261,45 +271,29 @@ func runETESnapshotDecode(snapshotDir, requestedSource string) ([]byte, error) {
 		}
 	})
 
-	binFile := filepath.Join(snapshotDir, sourceTree.BufferInfo.DataFileName)
-	traceData, err := os.ReadFile(binFile)
-	if err != nil {
-		return nil, fmt.Errorf("read trace buffer %s: %w", binFile, err)
+	buffers := eteSnapshotBuffers(reader.ParsedTrace, bufferName, opts.multiSession)
+	if len(buffers) == 0 {
+		return nil, fmt.Errorf("no trace buffers found for source %s", bufferName)
 	}
 
-	var traceIndex uint32
-	if srcIsFrame {
-		pending := traceData
-		for len(pending) >= frameAlignment {
-			sendLen := len(pending) - (len(pending) % frameAlignment)
-			consumed, resp, _ := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
-			if ocsd.DataRespIsFatal(resp) {
-				return nil, fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
-			}
-			if consumed == 0 {
-				return nil, fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
-			}
-			traceIndex += consumed
-			pending = pending[consumed:]
+	for i, bufInfo := range buffers {
+		srcTree, ok := reader.SourceTrees[bufInfo.BufferName]
+		if !ok || srcTree == nil || srcTree.BufferInfo == nil {
+			continue
 		}
-	} else {
-		remaining := traceData
-		for len(remaining) > 0 {
-			consumed, resp, _ := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
-			if ocsd.DataRespIsFatal(resp) {
-				return nil, fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
-			}
-			if consumed == 0 {
-				return nil, fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
-			}
-			traceIndex += consumed
-			remaining = remaining[consumed:]
+		binFile := filepath.Join(snapshotDir, srcTree.BufferInfo.DataFileName)
+		traceData, err := os.ReadFile(binFile)
+		if err != nil {
+			return nil, fmt.Errorf("read trace buffer %s: %w", binFile, err)
 		}
-	}
-
-	_, resp, _ := tree.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(traceIndex), nil)
-	if ocsd.DataRespIsFatal(resp) {
-		return nil, fmt.Errorf("fatal datapath response on EOT")
+		if err := decodeETETraceBuffer(tree, traceData, srcIsFrame, frameAlignment); err != nil {
+			return nil, err
+		}
+		if opts.multiSession && i+1 < len(buffers) {
+			if _, _, err2 := tree.TraceDataIn(ocsd.OpReset, 0, nil); err2 != nil {
+				return nil, fmt.Errorf("OpReset after buffer %s: %w", bufInfo.BufferName, err2)
+			}
+		}
 	}
 
 	return out.Bytes(), nil
@@ -521,4 +515,179 @@ func firstDiff(gotLines, wantLines []string) (line int, gotLine, wantLine string
 		}
 	}
 	return 0, "", ""
+}
+
+func decodeETETraceBuffer(tree *dcdtree.DecodeTree, traceData []byte, srcIsFrame bool, alignment int) error {
+	var traceIndex uint32
+	if srcIsFrame {
+		pending := traceData
+		for len(pending) >= alignment {
+			sendLen := len(pending) - (len(pending) % alignment)
+			consumed, resp, _ := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
+			if ocsd.DataRespIsFatal(resp) {
+				return fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
+			}
+			if consumed == 0 {
+				return fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
+			}
+			traceIndex += consumed
+			pending = pending[consumed:]
+		}
+	} else {
+		remaining := traceData
+		for len(remaining) > 0 {
+			consumed, resp, _ := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
+			if ocsd.DataRespIsFatal(resp) {
+				return fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
+			}
+			if consumed == 0 {
+				return fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
+			}
+			traceIndex += consumed
+			remaining = remaining[consumed:]
+		}
+	}
+	_, resp, _ := tree.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(traceIndex), nil)
+	if ocsd.DataRespIsFatal(resp) {
+		return fmt.Errorf("fatal datapath response on EOT")
+	}
+	return nil
+}
+
+func eteSnapshotBuffers(trace *snapshot.ParsedTrace, primaryBuffer string, multiSession bool) []snapshot.TraceBufferInfo {
+	if trace == nil || len(trace.TraceBuffers) == 0 {
+		return nil
+	}
+
+	byName := make(map[string]snapshot.TraceBufferInfo, len(trace.TraceBuffers))
+	for _, info := range trace.TraceBuffers {
+		if strings.TrimSpace(info.BufferName) == "" {
+			continue
+		}
+		byName[info.BufferName] = info
+	}
+
+	if !multiSession {
+		if info, ok := byName[primaryBuffer]; ok {
+			return []snapshot.TraceBufferInfo{info}
+		}
+		return nil
+	}
+
+	ordered := make([]snapshot.TraceBufferInfo, 0, len(byName))
+	if info, ok := byName[primaryBuffer]; ok {
+		ordered = append(ordered, info)
+	}
+	for _, info := range trace.TraceBuffers {
+		if info.BufferName == primaryBuffer || strings.TrimSpace(info.BufferName) == "" {
+			continue
+		}
+		ordered = append(ordered, info)
+	}
+	return ordered
+}
+
+func eteOpFlags(opts eteDecodeOptions) uint32 {
+	var flags uint32
+	if opts.srcAddrN {
+		flags |= ocsd.OpflgPktdecSrcAddrNAtoms
+	}
+	return flags
+}
+
+func applyOpModeFlags(tree *dcdtree.DecodeTree, flags uint32) {
+	if tree == nil || flags == 0 {
+		return
+	}
+	apply := func(component any) {
+		opComp, ok := component.(opModeComponent)
+		if !ok || opComp == nil {
+			return
+		}
+		applyFlags := flags & opComp.SupportedOpModes()
+		if applyFlags == 0 {
+			return
+		}
+		_ = opComp.SetComponentOpMode(opComp.ComponentOpMode() | applyFlags)
+	}
+	tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
+		if elem == nil {
+			return
+		}
+		apply(elem.DecoderHandle)
+		if elem.DataIn != elem.DecoderHandle {
+			apply(elem.DataIn)
+		}
+	})
+}
+
+func discoverETEGoldenTestCases(testdataDir string) ([]eteGoldenTestCase, error) {
+	entries, err := os.ReadDir(testdataDir)
+	if err != nil {
+		return nil, err
+	}
+	var cases []eteGoldenTestCase
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".ppl") {
+			continue
+		}
+		goldenPath := filepath.Join(testdataDir, e.Name())
+		snapshotName, opts, err := extractETECommandLine(goldenPath)
+		if err != nil {
+			continue
+		}
+		snapshotDir := filepath.Join(testdataDir, snapshotName)
+		if _, err := os.Stat(snapshotDir); err != nil {
+			continue
+		}
+		goldenContent, err := os.ReadFile(goldenPath)
+		if err != nil {
+			continue
+		}
+		caseName := strings.TrimSuffix(e.Name(), ".ppl")
+		sourceName := extractSourceNameFromGolden(string(goldenContent))
+		cases = append(cases, eteGoldenTestCase{
+			name:        caseName,
+			goldenPath:  goldenPath,
+			snapshotDir: snapshotDir,
+			sourceName:  sourceName,
+			options:     opts,
+		})
+	}
+	return cases, nil
+}
+
+func extractETECommandLine(pplPath string) (snapshotName string, opts eteDecodeOptions, err error) {
+	data, err := os.ReadFile(pplPath)
+	if err != nil {
+		return "", eteDecodeOptions{}, err
+	}
+	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+	cmdLineStart := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "Test Command Line:-" {
+			cmdLineStart = i + 1
+			break
+		}
+	}
+	if cmdLineStart < 0 || cmdLineStart >= len(lines) {
+		return "", eteDecodeOptions{}, fmt.Errorf("no command line found in %s", pplPath)
+	}
+	tokens := strings.Fields(lines[cmdLineStart])
+	for i, tok := range tokens {
+		switch strings.ToLower(tok) {
+		case "-ss_dir":
+			if i+1 < len(tokens) {
+				snapshotName = filepath.Base(tokens[i+1])
+			}
+		case "-multi_session":
+			opts.multiSession = true
+		case "-src_addr_n":
+			opts.srcAddrN = true
+		}
+	}
+	if snapshotName == "" {
+		return "", eteDecodeOptions{}, fmt.Errorf("no -ss_dir in command line of %s", pplPath)
+	}
+	return snapshotName, opts, nil
 }

@@ -777,8 +777,10 @@ func parseOptions(args []string) (options, error) {
 			opts.additionalFlags |= ocsd.OpflgChkRangeContinue
 		case "-halt_err":
 			opts.additionalFlags |= ocsd.OpflgPktdecHaltBadPkts
-		case "-aa64_opcode_chk", "-src_addr_n":
-			// Accepted for compatibility; protocol-specific checks are not yet wired in Go.
+		case "-src_addr_n":
+			opts.additionalFlags |= ocsd.OpflgPktdecSrcAddrNAtoms
+		case "-aa64_opcode_chk":
+			// Accepted for compatibility; not yet wired in Go.
 		case "-test_waits":
 			i++
 			if i >= len(args) {

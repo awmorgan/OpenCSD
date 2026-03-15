@@ -163,6 +163,7 @@ func NewPktDecode(instIDNum int) *PktDecode {
 	d := &PktDecode{}
 	d.InitPktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV4", instIDNum))
 	d.SetStrategy(d)
+	d.SetSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms)
 
 	d.initDecoder()
 	return d
@@ -196,6 +197,10 @@ func (d *PktDecode) initDecoder() {
 	d.p0Stack = nil
 	d.poppedElems = nil
 	d.outElem = *common.NewGenElemStack()
+	d.outElem.InitSendIf(d.GetTraceElemOutAttachPt())
+	if d.config != nil {
+		d.outElem.InitCSID(d.config.TraceID())
+	}
 	d.returnStack = *common.NewAddrReturnStack()
 	d.unsyncEOTInfo = ocsd.UnsyncInitDecoder
 	d.eteFirstTSMarker = false
@@ -308,8 +313,8 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) OnReset() ocsd.DatapathResp {
-	d.unsyncEOTInfo = ocsd.UnsyncResetDecoder
 	d.initDecoder()
+	d.unsyncEOTInfo = ocsd.UnsyncResetDecoder
 	return ocsd.RespCont
 }
 
@@ -1311,7 +1316,7 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) ocsd.Err {
 	srcAddr := pElem.addrVal
 	currAddr := d.instrInfo.InstrAddr
 	var outRange instrRange
-	bSplitRangeOnN := false
+	bSplitRangeOnN := (d.ComponentOpMode() & ocsd.OpflgPktdecSrcAddrNAtoms) != 0
 
 	bytesReq := uint32(4)
 	bytesRead, memData, errMem := d.AccessMemory(srcAddr, d.getCurrMemSpace(), bytesReq)
@@ -1371,6 +1376,17 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) ocsd.Err {
 					}
 					instr.InstrAddr += ocsd.VAddr(instr.InstrSize)
 					outRange.numInstr++
+					if bSplitRangeOnN && instr.InstrAddr < outRange.enAddr && instr.Type != ocsd.InstrOther {
+						midRange := outRange
+						midRange.enAddr = instr.InstrAddr
+						err = d.outElem.AddElem(pElem.rootIndex)
+						if err != ocsd.OK {
+							return err
+						}
+						d.setElemTraceRangeInstr(d.outElem.GetCurrElem(), midRange, false, pElem.rootIndex, &instr)
+						outRange.stAddr = midRange.enAddr
+						outRange.numInstr = 0
+					}
 				} else {
 					bMemAccErr = true
 					err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemAddrNacc)

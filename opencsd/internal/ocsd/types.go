@@ -386,12 +386,13 @@ const (
 // Packet Decoder Operation Control Flags
 
 const (
-	OpflgPktdecErrorBadPkts = 0x00000100
-	OpflgPktdecHaltBadPkts  = 0x00000200
-	OpflgNUncondDirBrChk    = 0x00000400
-	OpflgStrictNUncondBrChk = 0x00000800
-	OpflgChkRangeContinue   = 0x00001000
-	OpflgNUncondChkNoThumb  = 0x00002000
+	OpflgPktdecErrorBadPkts  = 0x00000100
+	OpflgPktdecHaltBadPkts   = 0x00000200
+	OpflgNUncondDirBrChk     = 0x00000400
+	OpflgStrictNUncondBrChk  = 0x00000800
+	OpflgChkRangeContinue    = 0x00001000
+	OpflgNUncondChkNoThumb   = 0x00002000
+	OpflgPktdecSrcAddrNAtoms = 0x00010000
 
 	OpflgPktdecCommon = OpflgPktdecErrorBadPkts | OpflgPktdecHaltBadPkts | OpflgNUncondDirBrChk | OpflgStrictNUncondBrChk | OpflgChkRangeContinue | OpflgNUncondChkNoThumb
 )
