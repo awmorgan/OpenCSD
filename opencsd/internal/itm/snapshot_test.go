@@ -139,9 +139,10 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	dataFormat := strings.ToLower(sourceTree.BufferInfo.DataFormat)
 	srcIsFrame := true
 	frameAlignment := 16
-	if dataFormat == "source_data" {
+	switch dataFormat {
+	case "source_data":
 		srcIsFrame = false
-	} else if dataFormat == "dstream_coresight" {
+	case "dstream_coresight":
 		frameAlignment = 4
 	}
 
