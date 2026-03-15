@@ -232,6 +232,10 @@ func TestDemuxInit(t *testing.T) {
 	if err := df.Configure(ocsd.DfrmtrFrameMemAlign | ocsd.DfrmtrHasFsyncs); err != ocsd.ErrInvalidParamVal {
 		t.Errorf("Expected OCSD_ERR_INVALID_PARAM_VAL for bad combo flag config, got %v", err)
 	}
+
+	if err := df.OutputFilterIDs([]uint8{128}, true); err != ocsd.ErrInvalidID {
+		t.Errorf("Expected OCSD_ERR_INVALID_ID for ID 128, got %v", err)
+	}
 }
 
 func TestRunMemAlignTest(t *testing.T) {

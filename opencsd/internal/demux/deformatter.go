@@ -122,7 +122,7 @@ func (d *FrameDeformatter) GetConfigFlags() uint32 {
 
 func (d *FrameDeformatter) OutputFilterIDs(idList []uint8, enable bool) ocsd.Err {
 	for _, id := range idList {
-		if id > 128 {
+		if id >= 128 {
 			return ocsd.ErrInvalidID
 		}
 		// m_IDStreams[id].set_enabled(enable) is handled in attach pt but for here we use a simple routing if absent

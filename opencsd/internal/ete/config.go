@@ -49,11 +49,9 @@ func (c *Config) ToETMv4Config() *etmv4.Config {
 	out.RegIdr12 = 0
 	out.RegIdr13 = 0
 
-	if c.RegDevArch != 0 {
-		maj := (c.RegDevArch >> 12) & 0xF
-		min := (c.RegDevArch >> 16) & 0xF
-		out.RegIdr1 = (out.RegIdr1 &^ uint32(0xFF0)) | (maj << 8) | (min << 4)
-	}
+	maj := (c.RegDevArch >> 12) & 0xF
+	min := (c.RegDevArch >> 16) & 0xF
+	out.RegIdr1 = (out.RegIdr1 &^ uint32(0xFF0)) | (maj << 8) | (min << 4)
 
 	return &out
 }

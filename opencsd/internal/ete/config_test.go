@@ -57,3 +57,22 @@ func TestToETMv4Config_MapsDevArchVersionAndZerosETMOnlyRegs(t *testing.T) {
 		t.Fatalf("unexpected maj/min from RegDevArch: maj=%d min=%d", maj, min)
 	}
 }
+
+func TestToETMv4Config_DevArchZeroClearsMajMinOverride(t *testing.T) {
+	cfg := NewConfig()
+
+	// Seed non-zero maj/min in IDR1 to ensure DevArch override takes effect.
+	cfg.RegIdr1 = 0x00000FF0
+	cfg.RegDevArch = 0
+
+	v4 := cfg.ToETMv4Config()
+	if v4 == nil {
+		t.Fatalf("ToETMv4Config returned nil")
+	}
+
+	maj := (v4.RegIdr1 >> 8) & 0xF
+	min := (v4.RegIdr1 >> 4) & 0xF
+	if maj != 0 || min != 0 {
+		t.Fatalf("expected maj/min to be cleared from zero RegDevArch, got maj=%d min=%d", maj, min)
+	}
+}
