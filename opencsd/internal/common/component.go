@@ -2,6 +2,7 @@ package common
 
 import (
 	"opencsd/internal/ocsd"
+	"reflect"
 )
 
 // TraceErrorLog represents ITraceErrorLog.
@@ -11,6 +12,14 @@ type TraceErrorLog interface {
 	LogError(filterLevel ocsd.ErrSeverity, msg string)
 	// LogMessage logs a standard message.
 	LogMessage(filterLevel ocsd.ErrSeverity, msg string)
+}
+
+type traceErrorLogVerbosity interface {
+	GetErrorLogVerbosity() ocsd.ErrSeverity
+}
+
+type traceErrorLogRegistrar interface {
+	RegisterErrorSource(componentName string) ocsd.HandleErrLog
 }
 
 // ComponentAttachNotifier is the notification interface for attachment.
@@ -68,14 +77,37 @@ func (a *AttachPt[T]) ReplaceFirst(comp T) ocsd.Err {
 	if a.hasAttached {
 		_ = a.Detach()
 	}
+	if isNilAttachment(comp) {
+		return ocsd.OK
+	}
 	return a.Attach(comp)
 }
 
 // DetachAll detaches all components.
 func (a *AttachPt[T]) DetachAll() {
 	if a.hasAttached {
-		_ = a.Detach()
+		var empty T
+		a.comp = empty
+		a.hasAttached = false
 	}
+	if a.notifier != nil {
+		a.notifier.AttachNotify(0)
+	}
+}
+
+// Next returns the next attached interface.
+// This single-attach-point implementation always returns the zero value.
+func (a *AttachPt[T]) Next() T {
+	var empty T
+	return empty
+}
+
+// NumAttached returns the number of attached interfaces.
+func (a *AttachPt[T]) NumAttached() int {
+	if isNilAttachment(a.comp) {
+		return 0
+	}
+	return 1
 }
 
 // First returns the current attached interface.
@@ -120,6 +152,7 @@ type TraceComponent struct {
 	opFlags          uint32
 	supportedOpFlags uint32
 	errorLogger      AttachPt[TraceErrorLog]
+	errLogHandle     ocsd.HandleErrLog
 	errVerbosity     ocsd.ErrSeverity
 	assocComp        *TraceComponent
 }
@@ -128,8 +161,10 @@ type TraceComponent struct {
 // so it can be safely embedded and initialized in place.
 func (tc *TraceComponent) InitTraceComponent(name string) {
 	tc.name = name
-	tc.errVerbosity = ocsd.ErrSevError
+	tc.errLogHandle = ocsd.HandleErrLog(ocsd.InvalidHandle)
+	tc.errVerbosity = ocsd.ErrSevNone
 	tc.errorLogger.enabled = true
+	tc.errorLogger.SetNotifier(tc)
 }
 
 // ComponentName returns the component's name.
@@ -149,11 +184,7 @@ func (tc *TraceComponent) ErrorLogAttachPt() *AttachPt[TraceErrorLog] {
 
 // SetComponentOpMode sets the operational mode for the component.
 func (tc *TraceComponent) SetComponentOpMode(opFlags uint32) ocsd.Err {
-	// If flags contain unsupported flags, return an error.
-	if (opFlags & ^tc.supportedOpFlags) != 0 {
-		return ocsd.ErrInvalidParamVal
-	}
-	tc.opFlags = opFlags
+	tc.opFlags = opFlags & tc.supportedOpFlags
 	return ocsd.OK
 }
 
@@ -189,7 +220,7 @@ func (tc *TraceComponent) LogDefMessage(msg string) {
 
 // LogError logs an error if an error logger is attached.
 func (tc *TraceComponent) LogError(err *Error) {
-	if tc.errorLogger.HasAttachedAndEnabled() {
+	if tc.errorLogger.HasAttachedAndEnabled() && tc.IsLoggingErrorLevel(err.Sev) {
 		// Create an error message directly or pass it to error logger.
 		// Since our TraceErrorLog interface takes severity and message, we pass those.
 		tc.errorLogger.First().LogError(err.Sev, err.Error())
@@ -216,4 +247,37 @@ func (tc *TraceComponent) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
 // SetErrorLogLevel sets the verbosity of error logging.
 func (tc *TraceComponent) SetErrorLogLevel(level ocsd.ErrSeverity) {
 	tc.errVerbosity = level
+}
+
+// AttachNotify is called whenever the error logger attach point changes.
+func (tc *TraceComponent) AttachNotify(numAttached int) {
+	if numAttached > 0 {
+		logger := tc.errorLogger.First()
+		if logger == nil {
+			return
+		}
+		if registrar, ok := logger.(traceErrorLogRegistrar); ok {
+			tc.errLogHandle = registrar.RegisterErrorSource(tc.name)
+		} else {
+			tc.errLogHandle = 0
+		}
+		if verbosity, ok := logger.(traceErrorLogVerbosity); ok {
+			tc.errVerbosity = verbosity.GetErrorLogVerbosity()
+		}
+	} else {
+		tc.errLogHandle = ocsd.HandleErrLog(ocsd.InvalidHandle)
+	}
+}
+
+func isNilAttachment[T any](comp T) bool {
+	v := reflect.ValueOf(comp)
+	if !v.IsValid() {
+		return true
+	}
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
+	}
 }

@@ -98,9 +98,30 @@ func TestAttachPt(t *testing.T) {
 	}
 
 	notifier.called = false
+	pt.DetachAll()
+	if !notifier.called || notifier.numAttached != 0 {
+		t.Errorf("expected detach-all notification when already empty")
+	}
+
+	notifier.called = false
 	pt.Attach(logger)
 	if !notifier.called || notifier.numAttached != 1 {
 		t.Errorf("expected numAttached 1")
+	}
+
+	if pt.NumAttached() != 1 {
+		t.Errorf("expected NumAttached 1")
+	}
+
+	err = pt.ReplaceFirst(nil)
+	if err != ocsd.OK {
+		t.Errorf("expected OK replacing with nil")
+	}
+	if pt.HasAttached() {
+		t.Errorf("expected no attachment after ReplaceFirst(nil)")
+	}
+	if pt.NumAttached() != 0 {
+		t.Errorf("expected NumAttached 0 after ReplaceFirst(nil)")
 	}
 
 	// Test disable
@@ -116,6 +137,10 @@ func TestAttachPt(t *testing.T) {
 func TestTraceComponent(t *testing.T) {
 	tc := &TraceComponent{}
 	tc.InitTraceComponent("TestComp")
+
+	if tc.ErrorLogLevel() != ocsd.ErrSevNone {
+		t.Errorf("expected default error log level to be ErrSevNone")
+	}
 
 	if tc.ComponentName() != "TestComp" {
 		t.Errorf("expected name TestComp, got %s", tc.ComponentName())
@@ -136,8 +161,11 @@ func TestTraceComponent(t *testing.T) {
 	}
 
 	err = tc.SetComponentOpMode(0x10)
-	if err != ocsd.ErrInvalidParamVal {
-		t.Errorf("expected ErrInvalidParamVal for unsupported flag")
+	if err != ocsd.OK {
+		t.Errorf("expected OK for unsupported-flag mask behavior")
+	}
+	if tc.ComponentOpMode() != 0x00 {
+		t.Errorf("expected unsupported flags to be masked out")
 	}
 
 	assoc := &TraceComponent{}
