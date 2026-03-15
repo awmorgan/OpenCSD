@@ -447,6 +447,12 @@ func TestEdgeCasesAndUtilities(t *testing.T) {
 	if GetMemSpaceString(ocsd.MemSpaceEL1N) != "EL1N" {
 		t.Errorf("GetMemSpaceString mismatch")
 	}
+	if GetMemSpaceString(ocsd.MemSpaceEL2) != "EL2N" {
+		t.Errorf("GetMemSpaceString mismatch for EL2")
+	}
+	if GetMemSpaceString(ocsd.MemSpaceN) != "Any NS" {
+		t.Errorf("GetMemSpaceString mismatch for non-secure aggregate")
+	}
 	if GetMemSpaceString(ocsd.MemSpaceNone) != "None" {
 		t.Errorf("GetMemSpaceString mismatch")
 	}
@@ -511,8 +517,8 @@ func TestAlternativeCallback(t *testing.T) {
 	}
 
 	// test when not in range or space
-	if cbAcc.ReadBytes(0, ocsd.MemSpaceNone, 0, 4, readBuf) != 0 {
-		t.Errorf("Should not read bytes")
+	if cbAcc.ReadBytes(0, ocsd.MemSpaceNone, 0, 4, readBuf) != 4 {
+		t.Errorf("Callback accessor should delegate without local memspace filtering")
 	}
 
 	// test InitAccessor
@@ -571,8 +577,8 @@ func TestMapper_ErrorAndCacheEdgePaths(t *testing.T) {
 	if accBuf.ReadBytes(0x10, ocsd.MemSpaceEL1N, 0, 4, readBuf) != 0 {
 		t.Errorf("Should not read")
 	}
-	if accBuf.ReadBytes(0, ocsd.MemSpaceEL2, 0, 4, readBuf) != 0 {
-		t.Errorf("Should not read")
+	if accBuf.ReadBytes(0, ocsd.MemSpaceEL2, 0, 4, readBuf) != 4 {
+		t.Errorf("Buffer accessor should ignore memspace filtering")
 	}
 
 	// 6. Test ReadTargetMemory over-read error
@@ -593,8 +599,11 @@ func TestMapper_ErrorAndCacheEdgePaths(t *testing.T) {
 	mapper.accCurr = accBuf // set back to valid buffer
 	numBytes = 4
 	err = mapper.cache.ReadBytesFromCache(accBuf, 0x1000, ocsd.MemSpaceEL1N, 0x10, &numBytes, readBuf) // out of bounds
-	if err != ocsd.ErrMemNacc {
-		t.Errorf("Expected ErrMemNacc on cache miss/out-of-range read, got %v", err)
+	if err != ocsd.OK {
+		t.Errorf("Expected OK on cache miss/out-of-range read, got %v", err)
+	}
+	if numBytes != 0 {
+		t.Errorf("Expected 0 bytes for cache miss/out-of-range read, got %d", numBytes)
 	}
 }
 
@@ -617,5 +626,75 @@ func TestCacheReadBytesFromCache_ClampsPageBaseToAccessorStart(t *testing.T) {
 		if readBuf[i] != expected[i] {
 			t.Fatalf("byte %d: expected 0x%02X, got 0x%02X", i, expected[i], readBuf[i])
 		}
+	}
+}
+
+func TestBufferAccessorReadBytesIgnoresMemSpace(t *testing.T) {
+	acc := NewBufferAccessor(0x1000, []byte{0x11, 0x22, 0x33, 0x44})
+	acc.SetMemSpace(ocsd.MemSpaceEL1N)
+
+	buf := make([]byte, 4)
+	read := acc.ReadBytes(0x1000, ocsd.MemSpaceEL3, 0, 4, buf)
+	if read != 4 {
+		t.Fatalf("expected 4 bytes, got %d", read)
+	}
+	if binary.LittleEndian.Uint32(buf) != 0x44332211 {
+		t.Fatalf("unexpected data: %x", buf)
+	}
+}
+
+func TestCallbackAccessorReadBytesDelegatesWithoutPrefilter(t *testing.T) {
+	cbAcc := NewCallbackAccessor(0x1000, 0x1FFF, ocsd.MemSpaceEL1N)
+	called := false
+	cbAcc.SetCBIfFn(func(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, byteBuffer []byte) uint32 {
+		called = true
+		copy(byteBuffer, []byte{0xAB, 0xCD})
+		return 2
+	}, nil)
+
+	buf := make([]byte, 2)
+	read := cbAcc.ReadBytes(0x2000, ocsd.MemSpaceEL3, 0, 2, buf)
+	if !called {
+		t.Fatalf("expected callback to be invoked")
+	}
+	if read != 2 {
+		t.Fatalf("expected 2 bytes, got %d", read)
+	}
+	if buf[0] != 0xAB || buf[1] != 0xCD {
+		t.Fatalf("unexpected callback data: %x", buf)
+	}
+}
+
+func TestPrioritizationSwitchesFromAnyToSpecific(t *testing.T) {
+	mapper := NewGlobalMapper()
+
+	dataAny := make([]byte, 0x1000)
+	for i := range dataAny {
+		dataAny[i] = 0xAA
+	}
+	accAny := NewBufferAccessor(0, dataAny)
+	accAny.SetMemSpace(ocsd.MemSpaceAny)
+	mapper.AddAccessor(accAny, 0)
+
+	dataSpec := make([]byte, 0x1000)
+	for i := range dataSpec {
+		dataSpec[i] = 0x55
+	}
+	accSpec := NewBufferAccessor(0, dataSpec)
+	accSpec.SetMemSpace(ocsd.MemSpaceEL1N)
+	mapper.accessors = append(mapper.accessors, accSpec)
+
+	numBytes := uint32(1)
+	buf := make([]byte, 1)
+
+	mapper.ReadTargetMemory(0x0, 0, ocsd.MemSpaceEL3, &numBytes, buf)
+	if buf[0] != 0xAA {
+		t.Fatalf("expected Any accessor on first read, got 0x%X", buf[0])
+	}
+
+	numBytes = 1
+	mapper.ReadTargetMemory(0x0, 0, ocsd.MemSpaceEL1N, &numBytes, buf)
+	if buf[0] != 0x55 {
+		t.Fatalf("expected specific accessor after Any cached current, got 0x%X", buf[0])
 	}
 }

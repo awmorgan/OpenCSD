@@ -26,10 +26,6 @@ func NewCallbackAccessor(startAddr ocsd.VAddr, endAddr ocsd.VAddr, memSpace ocsd
 
 // ReadBytes implements the Accessor interface.
 func (c *CallbackAccessor) ReadBytes(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, byteBuffer []byte) uint32 {
-	if !c.AddrInRange(address) || !c.InMemSpace(memSpace) {
-		return 0
-	}
-
 	if c.CBIDFn != nil {
 		return c.CBIDFn(c.Ctx, address, memSpace, trcID, reqBytes, byteBuffer)
 	} else if c.CBFn != nil {

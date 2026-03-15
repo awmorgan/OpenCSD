@@ -30,3 +30,28 @@ func TestTraceElementString_ExceptionRetAddressFormatting(t *testing.T) {
 		t.Fatalf("expected %q in %q", want, s)
 	}
 }
+
+func TestTraceElementString_AddrNaccMemSpaceFormatting(t *testing.T) {
+	tests := []struct {
+		name  string
+		space MemSpaceAcc
+		want  string
+	}{
+		{name: "EL2", space: MemSpaceEL2, want: "Memspace [0x4:EL2N]"},
+		{name: "N", space: MemSpaceN, want: "Memspace [0x6:Any NS]"},
+		{name: "Combo", space: MemSpaceEL1S | MemSpaceEL2, want: "Memspace [0x5:EL1S,EL2N]"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := NewTraceElementWithType(GenElemAddrNacc)
+			e.StAddr = 0x1000
+			e.SetExceptionNum(uint32(tt.space))
+
+			s := e.String()
+			if !strings.Contains(s, tt.want) {
+				t.Fatalf("expected %q in %q", tt.want, s)
+			}
+		})
+	}
+}

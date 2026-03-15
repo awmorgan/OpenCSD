@@ -26,7 +26,7 @@ func NewBufferAccessor(startAddr ocsd.VAddr, buffer []byte) *BufferAccessor {
 
 // ReadBytes implements the Accessor interface.
 func (b *BufferAccessor) ReadBytes(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, byteBuffer []byte) uint32 {
-	if !b.AddrInRange(address) || !b.InMemSpace(memSpace) {
+	if !b.AddrInRange(address) {
 		return 0
 	}
 

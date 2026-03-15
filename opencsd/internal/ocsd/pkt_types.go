@@ -1,5 +1,36 @@
 package ocsd
 
+// PktVASize represents the virtual address width tracked in a packet.
+type PktVASize int
+
+const (
+	VA32Bit PktVASize = 0
+	VA64Bit PktVASize = 1
+)
+
+// PktVAddr mirrors ocsd_pkt_vaddr.
+type PktVAddr struct {
+	Size      PktVASize
+	Val       VAddr
+	PktBits   uint8
+	ValidBits uint8
+}
+
+// PktByteSzVal mirrors ocsd_pkt_byte_sz_val.
+type PktByteSzVal struct {
+	Val        uint32
+	SizeBytes  uint8
+	ValidBytes uint8
+}
+
+// PktAtmType describes how an atom packet is encoded.
+type PktAtmType int
+
+const (
+	AtomPattern PktAtmType = 0
+	AtomRepeat  PktAtmType = 1
+)
+
 // AtmVal represents atom evaluation
 type AtmVal int
 

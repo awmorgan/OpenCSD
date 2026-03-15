@@ -464,6 +464,65 @@ var markerTypeStr = map[TraceSyncMarker]string{
 	ElemMarkerTS: "Timestamp marker",
 }
 
+func traceElemMemSpaceString(memSpace MemSpaceAcc) string {
+	switch memSpace {
+	case MemSpaceNone:
+		return "None"
+	case MemSpaceEL1S:
+		return "EL1S"
+	case MemSpaceEL1N:
+		return "EL1N"
+	case MemSpaceEL2:
+		return "EL2N"
+	case MemSpaceEL3:
+		return "EL3"
+	case MemSpaceEL2S:
+		return "EL2S"
+	case MemSpaceEL1R:
+		return "EL1R"
+	case MemSpaceEL2R:
+		return "EL2R"
+	case MemSpaceRoot:
+		return "Root"
+	case MemSpaceS:
+		return "Any S"
+	case MemSpaceN:
+		return "Any NS"
+	case MemSpaceR:
+		return "Any R"
+	case MemSpaceAny:
+		return "Any"
+	default:
+		var parts []string
+		msBits := uint8(memSpace)
+		if msBits&uint8(MemSpaceEL1S) != 0 {
+			parts = append(parts, "EL1S")
+		}
+		if msBits&uint8(MemSpaceEL1N) != 0 {
+			parts = append(parts, "EL1N")
+		}
+		if msBits&uint8(MemSpaceEL2) != 0 {
+			parts = append(parts, "EL2N")
+		}
+		if msBits&uint8(MemSpaceEL3) != 0 {
+			parts = append(parts, "EL3")
+		}
+		if msBits&uint8(MemSpaceEL2S) != 0 {
+			parts = append(parts, "EL2S")
+		}
+		if msBits&uint8(MemSpaceEL1R) != 0 {
+			parts = append(parts, "EL1R")
+		}
+		if msBits&uint8(MemSpaceEL2R) != 0 {
+			parts = append(parts, "EL2R")
+		}
+		if msBits&uint8(MemSpaceRoot) != 0 {
+			parts = append(parts, "Root")
+		}
+		return strings.Join(parts, ",")
+	}
+}
+
 // String implements OcsdTraceElement::toString
 func (e *TraceElement) String() string {
 	var sb strings.Builder
@@ -499,35 +558,7 @@ func (e *TraceElement) String() string {
 		}
 
 	case GenElemAddrNacc:
-		var strEx string
-		switch MemSpaceAcc(e.Payload.ExceptionNum) {
-		case MemSpaceEL1S:
-			strEx = "EL1S"
-		case MemSpaceEL1N:
-			strEx = "EL1N"
-		case MemSpaceEL2:
-			strEx = "EL2"
-		case MemSpaceEL3:
-			strEx = "EL3"
-		case MemSpaceEL2S:
-			strEx = "EL2S"
-		case MemSpaceEL1R:
-			strEx = "EL1R"
-		case MemSpaceEL2R:
-			strEx = "EL2R"
-		case MemSpaceRoot:
-			strEx = "Root"
-		case MemSpaceS:
-			strEx = "Any S"
-		case MemSpaceN:
-			strEx = "Any NS"
-		case MemSpaceR:
-			strEx = "Any R"
-		case MemSpaceAny:
-			strEx = "Any"
-		case MemSpaceNone:
-			strEx = "None"
-		}
+		strEx := traceElemMemSpaceString(MemSpaceAcc(e.Payload.ExceptionNum))
 		sb.WriteString(fmt.Sprintf(" 0x%x; Memspace [0x%x:%s] ", e.StAddr, e.Payload.ExceptionNum, strEx))
 
 	case GenElemIRangeNopath:

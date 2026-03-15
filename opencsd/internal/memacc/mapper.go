@@ -47,22 +47,10 @@ func (m *GlobalMapper) EnableCaching(enable bool) ocsd.Err {
 }
 
 func (m *GlobalMapper) ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, numBytes *uint32, pBuffer []byte) ocsd.Err {
-	found := false
-
-	// Try current accessor first
-	if m.accCurr != nil && m.accCurr.AddrInRange(address) && m.accCurr.InMemSpace(memSpace) {
-		found = true
-	} else {
-		// Optimization: if we are going to look for a better one, we should always do the prioritized search
-		// even if m.accCurr matched, because a more specific one might have been added.
-		// However, for performance, we usually try the current first.
-		// Given the user request "prioritize specific over Any", let's ensure we always find the BEST match.
-		if m.findAccessor(address, memSpace, trcID) {
-			found = true
-			if m.cache.Enabled() {
-				m.cache.InvalidateByTraceID(trcID)
-			}
-		}
+	prevAcc := m.accCurr
+	found := m.findAccessor(address, memSpace, trcID)
+	if found && m.cache.Enabled() && prevAcc != nil && prevAcc != m.accCurr {
+		m.cache.InvalidateByTraceID(trcID)
 	}
 
 	if !found {
