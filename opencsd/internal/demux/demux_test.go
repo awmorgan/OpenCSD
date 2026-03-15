@@ -131,14 +131,16 @@ type TestLogger struct {
 	lastErr ocsd.Err
 }
 
-func (l *TestLogger) LogError(err *common.Error) {
+func (l *TestLogger) LogError(_ ocsd.HandleErrLog, err *common.Error) {
 	if err != nil {
 		l.lastErr = err.Code
 	}
 }
 
-func (l *TestLogger) LogMessage(s ocsd.ErrSeverity, msg string) {
-}
+func (l *TestLogger) LogMessage(_ ocsd.HandleErrLog, _ ocsd.ErrSeverity, _ string) {}
+
+func (l *TestLogger) GetLastError() *common.Error          { return nil }
+func (l *TestLogger) GetLastIDError(_ uint8) *common.Error { return nil }
 
 type mockDataSink struct{}
 

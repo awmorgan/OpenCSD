@@ -85,6 +85,14 @@ type HandleErrLog uint32
 
 const InvalidHandle uint32 = 0xFFFFFFFF
 
+// Generic error log handles, matching ITraceErrorLog::generic_handles in C++.
+const (
+	HandleGenErr                   HandleErrLog = 0 // generic handle for error messages
+	HandleGenWarn                  HandleErrLog = 1 // generic handle for warning messages
+	HandleGenInfo                  HandleErrLog = 2 // generic handle for info messages
+	HandleFirstRegisteredComponent HandleErrLog = 3 // first valid handle for registered components
+)
+
 // ErrSeverity used to indicate the severity of an error or logger verbosity
 type ErrSeverity uint32
 

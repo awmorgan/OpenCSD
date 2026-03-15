@@ -33,14 +33,14 @@ type testErrLogger struct {
 	lastErr *common.Error
 }
 
-func (l *testErrLogger) LogError(err *common.Error) {
+func (l *testErrLogger) LogError(_ ocsd.HandleErrLog, err *common.Error) {
 	l.lastErr = err
 }
 
-func (l *testErrLogger) LogMessage(sev ocsd.ErrSeverity, msg string) {
-	_ = sev
-	_ = msg
-}
+func (l *testErrLogger) LogMessage(_ ocsd.HandleErrLog, _ ocsd.ErrSeverity, _ string) {}
+
+func (l *testErrLogger) GetLastError() *common.Error          { return nil }
+func (l *testErrLogger) GetLastIDError(_ uint8) *common.Error { return nil }
 
 func (p *etmv4RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket, rawData []byte) {
 	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {

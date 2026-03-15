@@ -18,9 +18,16 @@ type Error struct {
 }
 
 // ErrorLogger represents the ITraceErrorLog interface.
+// handle identifies the error source (use ocsd.HandleGenErr / HandleGenWarn / HandleGenInfo
+// for callers that are not registered as a named error source).
 type ErrorLogger interface {
-	LogError(err *Error)
-	LogMessage(sev ocsd.ErrSeverity, msg string)
+	LogError(handle ocsd.HandleErrLog, err *Error)
+	LogMessage(handle ocsd.HandleErrLog, sev ocsd.ErrSeverity, msg string)
+	// GetLastError returns the most recently logged error, or nil if none.
+	GetLastError() *Error
+	// GetLastIDError returns the most recently logged error for the given
+	// CoreSight trace source channel ID, or nil if none.
+	GetLastIDError(chanID uint8) *Error
 }
 
 func NewError(sev ocsd.ErrSeverity, code ocsd.Err) *Error {

@@ -36,14 +36,14 @@ type snapshotErrorLogger struct {
 	reader *Reader
 }
 
-func (l *snapshotErrorLogger) LogError(err *common.Error) {
+func (l *snapshotErrorLogger) LogError(_ ocsd.HandleErrLog, err *common.Error) {
 	if l == nil || l.reader == nil || err == nil {
 		return
 	}
 	l.reader.logError(err.Error())
 }
 
-func (l *snapshotErrorLogger) LogMessage(sev ocsd.ErrSeverity, msg string) {
+func (l *snapshotErrorLogger) LogMessage(_ ocsd.HandleErrLog, sev ocsd.ErrSeverity, msg string) {
 	if l == nil || l.reader == nil {
 		return
 	}
@@ -53,6 +53,9 @@ func (l *snapshotErrorLogger) LogMessage(sev ocsd.ErrSeverity, msg string) {
 	}
 	l.reader.logInfo(msg)
 }
+
+func (l *snapshotErrorLogger) GetLastError() *common.Error          { return nil }
+func (l *snapshotErrorLogger) GetLastIDError(_ uint8) *common.Error { return nil }
 
 var dumpSpaceMap = map[string]ocsd.MemSpaceAcc{
 	"":           ocsd.MemSpaceAny,

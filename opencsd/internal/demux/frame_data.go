@@ -290,9 +290,9 @@ func (d *FrameDeformatter) outputFrame() bool {
 					d.collateDataPathResp(ocsd.RespFatalInvalidData)
 					if d.errorLogger != nil {
 						if e, ok := err.(*common.Error); ok {
-							d.errorLogger.LogError(e)
+							d.errorLogger.LogError(ocsd.HandleGenErr, e)
 						} else {
-							d.errorLogger.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrFail, err.Error()))
+							d.errorLogger.LogError(ocsd.HandleGenErr, common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrFail, err.Error()))
 						}
 					}
 				}

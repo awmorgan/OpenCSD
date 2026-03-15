@@ -97,7 +97,7 @@ func (d *FrameDeformatter) Configure(flags uint32) ocsd.Err {
 	if err != ocsd.OK {
 		if d.errorLogger != nil {
 			errObj := common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Invalid Config Flags")
-			d.errorLogger.LogError(errObj)
+			d.errorLogger.LogError(ocsd.HandleGenErr, errObj)
 		}
 	} else {
 		// alignment is the multiple of bytes the buffer size must be.
@@ -180,9 +180,9 @@ func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocs
 				d.collateDataPathResp(ocsd.RespFatalInvalidData)
 				if d.errorLogger != nil {
 					if e, ok := err.(*common.Error); ok {
-						d.errorLogger.LogError(e)
+						d.errorLogger.LogError(ocsd.HandleGenErr, e)
 					} else {
-						d.errorLogger.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrFail, err.Error()))
+						d.errorLogger.LogError(ocsd.HandleGenErr, common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrFail, err.Error()))
 					}
 				}
 			}
@@ -349,7 +349,7 @@ func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBloc
 func (d *FrameDeformatter) processTraceDataError(errObj *common.Error, resp ocsd.DatapathResp) ocsd.DatapathResp {
 	d.collateDataPathResp(resp)
 	if errObj != nil && d.errorLogger != nil {
-		d.errorLogger.LogError(errObj)
+		d.errorLogger.LogError(ocsd.HandleGenErr, errObj)
 	}
 	return d.highestResp
 }

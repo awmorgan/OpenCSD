@@ -35,7 +35,7 @@ func (p *ItemPrinter) ItemPrintLine(msg string) {
 		fmt.Fprint(p.writer, msg)
 	}
 	if p.errLog != nil {
-		p.errLog.LogMessage(ocsd.ErrSevInfo, msg)
+		p.errLog.LogMessage(ocsd.HandleGenInfo, ocsd.ErrSevInfo, msg)
 	}
 }
 

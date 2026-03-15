@@ -13,10 +13,12 @@ type mockLogger struct {
 	bytes.Buffer
 }
 
-func (m *mockLogger) LogError(err *common.Error) {}
-func (m *mockLogger) LogMessage(sev ocsd.ErrSeverity, msg string) {
+func (m *mockLogger) LogError(_ ocsd.HandleErrLog, _ *common.Error) {}
+func (m *mockLogger) LogMessage(_ ocsd.HandleErrLog, _ ocsd.ErrSeverity, msg string) {
 	m.WriteString(msg)
 }
+func (m *mockLogger) GetLastError() *common.Error          { return nil }
+func (m *mockLogger) GetLastIDError(_ uint8) *common.Error { return nil }
 
 func TestItemPrinter(t *testing.T) {
 	var buf bytes.Buffer
