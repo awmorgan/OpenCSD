@@ -842,9 +842,9 @@ func (p *Processor) extractAndSetContextInfo(buf []byte, stIdx int) {
 	infoByte := buf[stIdx]
 	p.currPacket.Context.Updated = true
 	p.currPacket.Context.EL = infoByte & 0x3
-	p.currPacket.Context.SF = (infoByte>>5)&0x1 != 0
-	p.currPacket.Context.NS = (infoByte>>4)&0x1 != 0
 	p.currPacket.Context.NSE = (infoByte>>3)&0x1 != 0
+	p.currPacket.Context.SF = (infoByte>>4)&0x1 != 0
+	p.currPacket.Context.NS = (infoByte>>5)&0x1 != 0
 
 	nVMIDBytes := 0
 	nCtxtIDBytes := 0

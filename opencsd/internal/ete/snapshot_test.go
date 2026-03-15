@@ -78,8 +78,9 @@ func TestETESnapshotsAgainstGolden(t *testing.T) {
 				t.Fatalf("runETESnapshotDecode failed: %v", err)
 			}
 
-			got := sanitizePPL(string(gotBytes))
-			want := sanitizePPL(string(wantBytes))
+			includeGenElems := strings.Contains(string(wantBytes), "OCSD_GEN_TRC_ELEM_")
+			got := sanitizePPL(string(gotBytes), includeGenElems)
+			want := sanitizePPL(string(wantBytes), includeGenElems)
 
 			if got != want {
 				gotLines := strings.Split(got, "\n")
@@ -103,7 +104,7 @@ func TestSanitizePPLEmbeddedIdxRecords(t *testing.T) {
 		"", // trailing newline
 	}, "\n")
 
-	got := sanitizePPL(input)
+	got := sanitizePPL(input, false)
 	want := strings.Join([]string{
 		"ID:10;\tI_TRACE_ON",
 		"ID:10;\tI_ADDR_OR_ATOM",
@@ -323,7 +324,7 @@ func parseHexOrDec(s string) uint64 {
 	return v
 }
 
-func sanitizePPL(s string) string {
+func sanitizePPL(s string, keepGenElems bool) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.ReplaceAll(s, "\r", "\n")
 	lines := strings.Split(s, "\n")
@@ -345,7 +346,7 @@ func sanitizePPL(s string) string {
 		}
 
 		for _, idxLine := range splitIdxRecords(line) {
-			normalized := normalizeSnapshotLine(idxLine)
+			normalized := normalizeSnapshotLine(idxLine, keepGenElems)
 			if normalized == "" {
 				continue
 			}
@@ -387,8 +388,17 @@ func splitIdxRecords(line string) []string {
 
 var iPacketTokenRE = regexp.MustCompile(`\bI_[A-Z0-9_]+\b`)
 
-func normalizeSnapshotLine(line string) string {
+func normalizeSnapshotLine(line string, keepGenElems bool) string {
 	if strings.Contains(line, "OCSD_GEN_TRC_ELEM_") {
+		if keepGenElems {
+			return line
+		}
+		return ""
+	}
+	// When comparing gen elems, skip raw packet lines to avoid ordering
+	// fragility from mixing indexed gen-elem output with unindexed packet output.
+	// Raw packet parity is still exercised when keepGenElems=false.
+	if keepGenElems {
 		return ""
 	}
 

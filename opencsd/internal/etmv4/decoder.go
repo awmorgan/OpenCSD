@@ -494,12 +494,41 @@ func (d *PktDecode) decodePacket() ocsd.Err {
 			d.currSpecDepth++
 		}
 
+	case PktQ:
+		e := d.allocP0Elem()
+		e.p0Type = p0Q
+		e.isP0 = true
+		e.rootPkt = pkt.Type
+		e.rootIndex = d.IndexCurrPkt
+		e.qCount = int(pkt.QPkt.QCount)
+		if pkt.QPkt.AddrPresent {
+			e.qHasAddr = true
+			e.addrVal = pkt.VAddr
+			e.addrIS = pkt.VAddrISA
+			d.currSpecDepth++
+		} else {
+			d.elemPendingAddr = true
+		}
+		d.p0Stack = append(d.p0Stack, e)
+
 	case PktFuncRet:
 		// P0 element iff V8-M profile, otherwise ignored.
 		if ocsd.IsV8Arch(d.config.ArchVer) && d.config.CoreProf == ocsd.ProfileCortexM {
 			d.pushP0ElemParam(p0FuncRet, true, pkt.Type, d.IndexCurrPkt, nil)
 			d.currSpecDepth++
 		}
+
+	case PktBadSequence:
+		d.handleBadPacket(d.IndexCurrPkt, "Bad byte sequence in packet.")
+
+	case PktBadTraceMode:
+		d.handleBadPacket(d.IndexCurrPkt, "Invalid packet type for trace mode.")
+
+	case PktReserved:
+		d.handleBadPacket(d.IndexCurrPkt, "Reserved packet header")
+
+	case PktReservedCfg:
+		d.handleBadPacket(d.IndexCurrPkt, "Reserved packet header for current configuration")
 
 	// ETE timestamp marker compatibility alias
 	case PktTypeTS_MARKER:
@@ -917,14 +946,14 @@ func (d *PktDecode) processTSCCEventElem(pElem *p0Elem) ocsd.Err {
 	case p0CC:
 		err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemCycleCount)
 		if err == ocsd.OK {
-			d.outElem.GetCurrElem().CycleCount = pElem.params[0]
+			d.outElem.GetCurrElem().SetCycleCount(pElem.params[0])
 		}
 	case p0TSCC:
 		if bPermitTS {
 			err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemTimestamp)
 			if err == ocsd.OK {
 				d.outElem.GetCurrElem().Timestamp = uint64(pElem.params[0]) | (uint64(pElem.params[1]) << 32)
-				d.outElem.GetCurrElem().CycleCount = pElem.params[2]
+				d.outElem.GetCurrElem().SetCycleCount(pElem.params[2])
 			}
 		}
 	}
@@ -1648,17 +1677,59 @@ func (d *PktDecode) doTraceInfoPacket() {
 func (d *PktDecode) handlePacketSeqErr(err ocsd.Err, idx ocsd.TrcIndex, reason string) ocsd.Err {
 	d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, err, idx, d.GetTraceID(), reason))
 	d.resetDecoderState()
+	d.currState = noSync
+	d.unsyncEOTInfo = ocsd.UnsyncBadPacket
 	return err
+}
+
+func (d *PktDecode) handleBadPacket(idx ocsd.TrcIndex, reason string) {
+	d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevWarn, ocsd.ErrBadDecodePkt, idx, d.GetTraceID(), reason))
+	d.resetDecoderState()
+	d.currState = noSync
+	d.unsyncEOTInfo = ocsd.UnsyncBadPacket
 }
 
 func (d *PktDecode) handleBadImageError(idx ocsd.TrcIndex, reason string) ocsd.Err {
 	d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadDecodeImage, idx, d.GetTraceID(), reason))
 	d.resetDecoderState()
+	d.currState = noSync
+	d.unsyncEOTInfo = ocsd.UnsyncBadImage
 	return ocsd.ErrBadDecodeImage
 }
 
 func (d *PktDecode) resetDecoderState() {
-	d.initDecoder()
+	if d.config != nil {
+		d.maxSpecDepth = int(d.config.MaxSpecDepth())
+	} else {
+		d.maxSpecDepth = 0
+	}
+	d.currSpecDepth = 0
+	d.needCtxt = true
+	d.needAddr = true
+	d.extPendExcepAddr = false
+	d.elemPendingAddr = false
+	d.prevOverflow = false
+	d.timestamp = 0
+	d.ccThreshold = 0
+	d.clearElemRes()
+	d.p0Stack = nil
+	d.poppedElems = nil
+	d.unsyncEOTInfo = ocsd.UnsyncResetDecoder
+	d.eteFirstTSMarker = false
+	d.nextRangeCheckClear()
+
+	if d.outElem.ResetElemStack() != ocsd.OK {
+		d.outElem = *common.NewGenElemStack()
+		if d.config != nil {
+			d.outElem.InitCSID(d.config.TraceID())
+		}
+		d.outElem.InitSendIf(d.GetTraceElemOutAttachPt())
+	}
+
+	d.returnStack = *common.NewAddrReturnStack()
+	if d.config != nil && d.config.EnabledRetStack() {
+		d.returnStack.SetActive(true)
+	}
 }
 
 func (d *PktDecode) calcISA(is64bit bool, is uint8) ocsd.ISA {
