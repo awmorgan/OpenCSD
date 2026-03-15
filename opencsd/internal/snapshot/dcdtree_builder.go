@@ -17,6 +17,9 @@ import (
 	"strings"
 )
 
+// archProfileMap is a package-level cache of the core architecture map (shared, read-only after init).
+var archProfileMap = common.NewCoreArchProfileMap()
+
 type mapperAdapter struct {
 	mapper memacc.Mapper
 }
@@ -73,10 +76,16 @@ var dumpSpaceMap = map[string]ocsd.MemSpaceAcc{
 	"EL1S":       ocsd.MemSpaceEL1S,
 	"EL1N":       ocsd.MemSpaceEL1N,
 	"EL2":        ocsd.MemSpaceEL2,
+	"EL2N":       ocsd.MemSpaceEL2, // alias: non-secure EL2
 	"EL3":        ocsd.MemSpaceEL3,
 	"EL2S":       ocsd.MemSpaceEL2S,
 	"EL1R":       ocsd.MemSpaceEL1R,
 	"EL2R":       ocsd.MemSpaceEL2R,
+	// Legacy aliases matching the C++ space_map
+	"H":  ocsd.MemSpaceEL2,  // hypervisor – EL2 NS
+	"P":  ocsd.MemSpaceEL1N, // privileged – EL1 NS
+	"NP": ocsd.MemSpaceEL1N, // non-secure privileged – EL1 NS
+	"SP": ocsd.MemSpaceEL1S, // secure privileged – EL1 S
 }
 
 func mapDumpMemSpace(space string) ocsd.MemSpaceAcc {
@@ -148,34 +157,30 @@ func (b *CreateDcdTreeFromSnapShot) CreateDecodeTree(sourceName string, bPacketP
 			df.SetErrorLogger(&snapshotErrorLogger{reader: b.reader})
 		}
 
-		if err := b.setupMemoryAccessors(); err != nil {
-			b.reader.logError(fmt.Sprintf("Failed to set up memory accessors: %v", err))
+		// Create a memory accessor mapper in full-decoder mode only.
+		var mapper memacc.Mapper
+		if !bPacketProcOnly {
+			mapper = memacc.NewGlobalMapper()
+			b.dcdTree.SetMemAccessI(&mapperAdapter{mapper: mapper})
 		}
 
 		numDecodersCreated := 0
 
 		for srcName, coreName := range tree.SourceCoreAssoc {
-			var devSrc *ParsedDevice
-			for _, dev := range b.reader.ParsedDeviceList {
-				if dev.DeviceName == srcName {
-					devSrc = dev
-					break
-				}
-			}
+			// Direct map lookup — ParsedDeviceList is keyed by device name.
+			devSrc := b.reader.ParsedDeviceList[srcName]
 
 			if devSrc != nil {
 				if coreName != "<none>" && coreName != "" {
-					var coreDev *ParsedDevice
-					for _, dev := range b.reader.ParsedDeviceList {
-						if dev.DeviceName == coreName {
-							coreDev = dev
-							break
-						}
-					}
+					coreDev := b.reader.ParsedDeviceList[coreName]
 					if coreDev != nil {
-						err := b.createPEDecoder(coreDev.DeviceTypeName, devSrc, coreDev)
+						err := b.createPEDecoder(coreDev.DeviceTypeName, devSrc, coreName)
 						if err == nil {
 							numDecodersCreated++
+							// Process dump files for this core device in full-decoder mode only.
+							if !bPacketProcOnly && len(coreDev.DumpDefs) > 0 {
+								b.addCoreDumpMemory(mapper, coreDev)
+							}
 						} else {
 							b.reader.logError(fmt.Sprintf("Failed to create PEDecoder for source %s: %v", srcName, err))
 						}
@@ -207,16 +212,28 @@ func (b *CreateDcdTreeFromSnapShot) CreateDecodeTree(sourceName string, bPacketP
 	}
 }
 
-func (b *CreateDcdTreeFromSnapShot) createPEDecoder(coreName string, devSrc *ParsedDevice, coreDev *ParsedDevice) error {
-	devTypeName := devSrc.DeviceTypeName
+// getCoreProfile maps a core device type name (e.g. "Cortex-A57") to its architecture version
+// and core profile, matching the C++ CoreArchProfileMap / getCoreProfile behaviour.
+func getCoreProfile(coreName string) (ocsd.ArchVersion, ocsd.CoreProfile) {
+	if ap, ok := archProfileMap.GetArchProfile(coreName); ok {
+		return ap.Arch, ap.Profile
+	}
+	return ocsd.ArchUnknown, ocsd.ProfileUnknown
+}
 
-	if strings.HasPrefix(devTypeName, "ETMv3") || strings.HasPrefix(devTypeName, "ETM3") {
+func (b *CreateDcdTreeFromSnapShot) createPEDecoder(devTypeName string, devSrc *ParsedDevice, coreName string) error {
+	// Strip any trailing ".x" version suffix from the device type name (e.g. "ETM4.1" → "ETM4").
+	if pos := strings.IndexByte(devTypeName, '.'); pos >= 0 {
+		devTypeName = devTypeName[:pos]
+	}
+
+	if devTypeName == ETMv3Protocol || strings.HasPrefix(devTypeName, "ETMv3") {
 		return b.createETMv3Decoder(coreName, devSrc)
-	} else if strings.HasPrefix(devTypeName, "ETMv4") || strings.HasPrefix(devTypeName, "ETM4") {
+	} else if devTypeName == ETMv4Protocol || strings.HasPrefix(devTypeName, "ETMv4") {
 		return b.createETMv4Decoder(coreName, devSrc)
-	} else if strings.HasPrefix(devTypeName, "ETE") {
+	} else if devTypeName == ETEProtocol {
 		return b.createETEDecoder(coreName, devSrc)
-	} else if strings.HasPrefix(devTypeName, "PTM") || strings.HasPrefix(devTypeName, "PFT") {
+	} else if devTypeName == PTMProtocol || devTypeName == PFTProtocol {
 		return b.createPTMDecoder(coreName, devSrc)
 	}
 	return fmt.Errorf("unknown PE devType: %s", devTypeName)
@@ -224,10 +241,14 @@ func (b *CreateDcdTreeFromSnapShot) createPEDecoder(coreName string, devSrc *Par
 
 func (b *CreateDcdTreeFromSnapShot) createSTDecoder(devSrc *ParsedDevice) error {
 	devTypeName := devSrc.DeviceTypeName
+	// Strip any trailing ".x" version suffix (e.g. "STM.1" → "STM").
+	if pos := strings.IndexByte(devTypeName, '.'); pos >= 0 {
+		devTypeName = devTypeName[:pos]
+	}
 
-	if strings.HasPrefix(devTypeName, "STM") {
+	if devTypeName == STMProtocol {
 		return b.createSTMDecoder(devSrc)
-	} else if strings.HasPrefix(devTypeName, "ITM") {
+	} else if devTypeName == ITMProtocol {
 		return b.createITMDecoder(devSrc)
 	}
 	return fmt.Errorf("unknown ST devType: %s", devTypeName)
@@ -248,6 +269,8 @@ func (b *CreateDcdTreeFromSnapShot) createETMv3Decoder(coreName string, devSrc *
 	if val, ok := devSrc.GetRegValue("etmccer"); ok {
 		cfg.RegCCER = uint32(parseUint(val))
 	}
+
+	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
 	createFlags := ocsd.CreateFlgFullDecoder
 	if b.bPacketProcOnly {
@@ -276,6 +299,8 @@ func (b *CreateDcdTreeFromSnapShot) createPTMDecoder(coreName string, devSrc *Pa
 		cfg.RegCCER = uint32(parseUint(val))
 	}
 
+	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
+
 	createFlags := ocsd.CreateFlgFullDecoder
 	if b.bPacketProcOnly {
 		createFlags = ocsd.CreateFlgPacketProc
@@ -293,6 +318,7 @@ func (b *CreateDcdTreeFromSnapShot) createETEDecoder(coreName string, devSrc *Pa
 	if val, ok := devSrc.GetRegValue("trcidr0"); ok {
 		cfg.RegIdr0 = uint32(parseUint(val))
 	}
+	// TRCIDR1: use snapshot value if present; ete.NewConfig() already sets the correct ETE default.
 	if val, ok := devSrc.GetRegValue("trcidr1"); ok {
 		cfg.RegIdr1 = uint32(parseUint(val))
 	}
@@ -302,6 +328,7 @@ func (b *CreateDcdTreeFromSnapShot) createETEDecoder(coreName string, devSrc *Pa
 	if val, ok := devSrc.GetRegValue("trcidr8"); ok {
 		cfg.RegIdr8 = uint32(parseUint(val))
 	}
+	// TRCDEVARCH: use snapshot value if present; ete.NewConfig() already sets the correct default.
 	if val, ok := devSrc.GetRegValue("trcdevarch"); ok {
 		cfg.RegDevArch = uint32(parseUint(val))
 	}
@@ -311,6 +338,8 @@ func (b *CreateDcdTreeFromSnapShot) createETEDecoder(coreName string, devSrc *Pa
 	if val, ok := devSrc.GetRegValue("trctraceidr"); ok {
 		cfg.RegTraceidr = uint32(parseUint(val))
 	}
+
+	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
 	createFlags := ocsd.CreateFlgFullDecoder
 	if b.bPacketProcOnly {
@@ -329,8 +358,11 @@ func (b *CreateDcdTreeFromSnapShot) createETMv4Decoder(coreName string, devSrc *
 	if val, ok := devSrc.GetRegValue("trcidr0"); ok {
 		cfg.RegIdr0 = uint32(parseUint(val))
 	}
+	// TRCIDR1: use snapshot value if present, otherwise fall back to the C++ default 0x4100F403.
 	if val, ok := devSrc.GetRegValue("trcidr1"); ok {
 		cfg.RegIdr1 = uint32(parseUint(val))
+	} else {
+		cfg.RegIdr1 = 0x4100F403
 	}
 	if val, ok := devSrc.GetRegValue("trcidr2"); ok {
 		cfg.RegIdr2 = uint32(parseUint(val))
@@ -359,6 +391,8 @@ func (b *CreateDcdTreeFromSnapShot) createETMv4Decoder(coreName string, devSrc *
 	if val, ok := devSrc.GetRegValue("trctraceidr"); ok {
 		cfg.RegTraceidr = uint32(parseUint(val))
 	}
+
+	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
 	createFlags := ocsd.CreateFlgFullDecoder
 	if b.bPacketProcOnly {
@@ -403,54 +437,42 @@ func (b *CreateDcdTreeFromSnapShot) createITMDecoder(devSrc *ParsedDevice) error
 	return nil
 }
 
-func (b *CreateDcdTreeFromSnapShot) setupMemoryAccessors() error {
-	if b.dcdTree == nil {
-		return fmt.Errorf("decode tree is nil")
-	}
+// addCoreDumpMemory adds memory region accessors from a core device's dump definitions.
+// It is called once per PE decoder that is successfully created, only in full-decoder mode.
+func (b *CreateDcdTreeFromSnapShot) addCoreDumpMemory(mapper memacc.Mapper, dev *ParsedDevice) {
+	for _, dump := range dev.DumpDefs {
+		if strings.TrimSpace(dump.Path) == "" {
+			continue
+		}
 
-	mapper := memacc.NewGlobalMapper()
-	b.dcdTree.SetMemAccessI(&mapperAdapter{mapper: mapper})
+		path := filepath.Join(b.reader.SnapshotPath, dump.Path)
+		fileBytes, err := os.ReadFile(path)
+		if err != nil {
+			b.reader.logError(fmt.Sprintf("Failed to read dump file for %s at %s: %v", dev.DeviceName, path, err))
+			continue
+		}
 
-	for devName, dev := range b.reader.ParsedDeviceList {
-		for _, dump := range dev.DumpDefs {
-			if strings.TrimSpace(dump.Path) == "" {
+		if dump.Offset > 0 {
+			if dump.Offset >= uint64(len(fileBytes)) {
+				b.reader.logError(fmt.Sprintf("Dump offset out of range for %s at %s", dev.DeviceName, path))
 				continue
 			}
+			fileBytes = fileBytes[dump.Offset:]
+		}
 
-			path := filepath.Join(b.reader.SnapshotPath, dump.Path)
-			fileBytes, err := os.ReadFile(path)
-			if err != nil {
-				b.reader.logError(fmt.Sprintf("Failed to read dump file for %s at %s: %v", devName, path, err))
-				continue
-			}
+		if dump.Length > 0 && dump.Length < uint64(len(fileBytes)) {
+			fileBytes = fileBytes[:dump.Length]
+		}
 
-			if dump.Offset > 0 {
-				if dump.Offset >= uint64(len(fileBytes)) {
-					b.reader.logError(fmt.Sprintf("Dump offset out of range for %s at %s", devName, path))
-					continue
-				}
-				fileBytes = fileBytes[dump.Offset:]
-			}
+		if len(fileBytes) == 0 {
+			b.reader.logError(fmt.Sprintf("Empty dump mapping for %s at %s", dev.DeviceName, path))
+			continue
+		}
 
-			if dump.Length > 0 {
-				if dump.Length < uint64(len(fileBytes)) {
-					fileBytes = fileBytes[:dump.Length]
-				}
-			}
-
-			if len(fileBytes) == 0 {
-				b.reader.logError(fmt.Sprintf("Empty dump mapping for %s at %s", devName, path))
-				continue
-			}
-
-			acc := memacc.NewBufferAccessor(ocsd.VAddr(dump.Address), fileBytes)
-			acc.SetMemSpace(mapDumpMemSpace(dump.Space))
-			if errCode := mapper.AddAccessor(acc, 0); errCode != ocsd.OK {
-				b.reader.logError(fmt.Sprintf("Failed to add memory accessor for %s (%s): %v", devName, path, errCode))
-				continue
-			}
+		acc := memacc.NewBufferAccessor(ocsd.VAddr(dump.Address), fileBytes)
+		acc.SetMemSpace(mapDumpMemSpace(dump.Space))
+		if errCode := mapper.AddAccessor(acc, 0); errCode != ocsd.OK {
+			b.reader.logError(fmt.Sprintf("Failed to add memory accessor for %s (%s): %v", dev.DeviceName, path, errCode))
 		}
 	}
-
-	return nil
 }

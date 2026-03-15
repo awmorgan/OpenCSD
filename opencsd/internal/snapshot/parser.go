@@ -34,6 +34,17 @@ func ParseSingleDevice(input io.Reader) (*ParsedDevice, error) {
 		}
 	}
 
+	// Extended regs section ([extendregs]) — numeric address → value pairs.
+	if extSec, ok := ini.Sections[ExtendedRegsSectionName]; ok {
+		for k, v := range extSec {
+			addr, errA := strconv.ParseUint(strings.TrimSpace(k), 0, 32)
+			val, errV := strconv.ParseUint(strings.TrimSpace(v), 0, 32)
+			if errA == nil && errV == nil {
+				parsed.ExtendRegDefs[uint32(addr)] = uint32(val)
+			}
+		}
+	}
+
 	// Dump sections (prefix "dump")
 	for secName, secMap := range ini.Sections {
 		if strings.HasPrefix(secName, DumpFileSectionPrefix) {

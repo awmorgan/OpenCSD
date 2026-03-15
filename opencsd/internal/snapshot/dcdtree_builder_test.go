@@ -17,10 +17,16 @@ func TestMapDumpMemSpace(t *testing.T) {
 	}{
 		{name: "el1s", in: "EL1S", want: ocsd.MemSpaceEL1S},
 		{name: "el2", in: "el2", want: ocsd.MemSpaceEL2},
+		{name: "el2n alias", in: "EL2N", want: ocsd.MemSpaceEL2},
 		{name: "secure", in: "S", want: ocsd.MemSpaceS},
 		{name: "nonsecure", in: "N", want: ocsd.MemSpaceN},
 		{name: "any", in: "ANY", want: ocsd.MemSpaceAny},
 		{name: "unknown defaults any", in: "UNKNOWN", want: ocsd.MemSpaceAny},
+		// Legacy C++ aliases
+		{name: "H hypervisor", in: "H", want: ocsd.MemSpaceEL2},
+		{name: "P privileged", in: "P", want: ocsd.MemSpaceEL1N},
+		{name: "NP non-secure privileged", in: "NP", want: ocsd.MemSpaceEL1N},
+		{name: "SP secure privileged", in: "SP", want: ocsd.MemSpaceEL1S},
 	}
 
 	for _, tc := range tests {
@@ -47,8 +53,7 @@ func TestCreatePEDecoderRoutesETMv4(t *testing.T) {
 	devSrc.DeviceTypeName = "ETMv4"
 	devSrc.RegDefs["trctraceidr"] = "0x10"
 
-	coreDev := NewParsedDevice()
-	if err := b.createPEDecoder("cpu_0", devSrc, coreDev); err != nil {
+	if err := b.createPEDecoder(devSrc.DeviceTypeName, devSrc, "Cortex-A53"); err != nil {
 		t.Fatalf("createPEDecoder ETMv4 route failed: %v", err)
 	}
 }
