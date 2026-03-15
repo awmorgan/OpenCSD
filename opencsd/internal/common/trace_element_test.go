@@ -543,7 +543,7 @@ func TestTraceElement_ITMTraceStrings(t *testing.T) {
 		itm.Value = 0xAA
 		e.SetSWTITMInfo(itm)
 		e.SetTS(0xBB, false)
-		exp := fmt.Sprintf("OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x000000aa, { %s}; TS cumulative: 0xbb) )", tt.name)
+		exp := fmt.Sprintf("OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_LOCAL ( TS delta: 0x000000aa, { %s}; TS cumulative: 0x00000000000000bb) )", tt.name)
 		if got := e.String(); got != exp {
 			t.Errorf("Expected %q, got %q", exp, got)
 		}

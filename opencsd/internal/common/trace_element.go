@@ -710,6 +710,6 @@ func (e *TraceElement) printSWInfoPktItm(sb *strings.Builder) {
 
 	if tsLocalDesc != "" {
 		sb.WriteString(fmt.Sprintf("ITM_TS_LOCAL ( TS delta: 0x%08x, { %s}; ", itm.Value, tsLocalDesc))
-		sb.WriteString(fmt.Sprintf("TS cumulative: 0x%x) ", e.Timestamp))
+		sb.WriteString(fmt.Sprintf("TS cumulative: 0x%016x) ", e.Timestamp))
 	}
 }
