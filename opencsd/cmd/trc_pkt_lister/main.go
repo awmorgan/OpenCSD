@@ -685,7 +685,7 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 func printMappedRanges(out io.Writer, ranges []mappedRange) {
 	fmt.Fprintln(out, "Gen_Info : Mapped Memory Accessors")
 	for _, r := range ranges {
-		fmt.Fprintf(out, "Gen_Info : FileAcc; Range::0x%x:0x%x; Mem Space::%s\n", uint64(r.start), uint64(r.end), memacc.GetMemSpaceString(r.space))
+		fmt.Fprintf(out, "Gen_Info : FileAcc; Range::0x%x:%x; Mem Space::%s\n", uint64(r.start), uint64(r.end), memacc.GetMemSpaceString(r.space))
 		fmt.Fprintf(out, "Filename=%s\n", r.path)
 	}
 	fmt.Fprintln(out, "Gen_Info : ========================")
