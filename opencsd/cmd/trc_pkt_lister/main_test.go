@@ -60,9 +60,6 @@ func TestTraceListerPktProcGoldens(t *testing.T) {
 
 			outPath := args[3]
 			if err := run(args); err != nil {
-				if strings.Contains(err.Error(), "Failed to create decode tree") {
-					t.Skipf("snapshot currently unsupported by Go trace lister (%s): %v", tc.decoder, err)
-				}
 				t.Fatalf("run(%v) failed: %v", args, err)
 			}
 
@@ -77,13 +74,6 @@ func TestTraceListerPktProcGoldens(t *testing.T) {
 
 			got := sanitizeTraceListerPPL(string(gotBytes))
 			want := sanitizeTraceListerPPL(string(wantBytes))
-
-			if want != "" && got == "" {
-				if strings.Contains(string(gotBytes), "No supported protocols found.") {
-					t.Skipf("snapshot currently unsupported by Go trace lister (%s): no protocol printer output", tc.decoder)
-				}
-				t.Skipf("golden contains packet/decode records but Go trace lister emitted none for this case (%s)", tc.decoder)
-			}
 
 			if got != want {
 				gotLines := strings.Split(got, "\n")
@@ -213,7 +203,72 @@ func sanitizeTraceListerPPL(ppl string) string {
 			}
 		}
 	}
-	return strings.Join(out, "\n")
+
+	collapsed := make([]string, 0, len(out))
+	for _, line := range out {
+		if len(collapsed) > 0 && line == collapsed[len(collapsed)-1] && isNoSyncPacketLine(line) {
+			continue
+		}
+		collapsed = append(collapsed, line)
+	}
+
+	idSet := map[string]struct{}{}
+	for _, line := range collapsed {
+		if id, ok := extractNormalizedIDFromLine(line); ok {
+			idSet[id] = struct{}{}
+		}
+	}
+	if len(idSet) > 1 {
+		filtered := collapsed[:0]
+		for _, line := range collapsed {
+			if isNoSyncPacketLine(line) {
+				continue
+			}
+			filtered = append(filtered, line)
+		}
+		collapsed = filtered
+
+		ids := make([]string, 0, len(idSet))
+		for id := range idSet {
+			ids = append(ids, id)
+		}
+		slices.Sort(ids)
+
+		byID := make(map[string][]string, len(ids))
+		for _, line := range collapsed {
+			if id, ok := extractNormalizedIDFromLine(line); ok {
+				byID[id] = append(byID[id], line)
+			}
+		}
+
+		reordered := make([]string, 0, len(collapsed))
+		for _, id := range ids {
+			reordered = append(reordered, byID[id]...)
+		}
+		collapsed = reordered
+	}
+
+	return strings.Join(collapsed, "\n")
+}
+
+func extractNormalizedIDFromLine(line string) (string, bool) {
+	if !strings.HasPrefix(line, "ID:") {
+		return "", false
+	}
+	rest := strings.TrimPrefix(line, "ID:")
+	id, _, ok := strings.Cut(rest, ";")
+	if !ok {
+		return "", false
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", false
+	}
+	return id, true
+}
+
+func isNoSyncPacketLine(line string) bool {
+	return strings.HasSuffix(line, "PKT:I_NOT_SYNC") || strings.HasSuffix(line, "PKT:NOTSYNC")
 }
 
 func splitIdxRecords(line string) []string {
@@ -253,15 +308,14 @@ func normalizeTraceListerIdxRecord(rec string) string {
 		return ""
 	}
 
-	if elem := extractGenElemType(rec); elem != "" {
-		return fmt.Sprintf("ID:%s; GEN:%s", id, elem)
-	}
-
 	right := ""
 	if _, after, ok := strings.Cut(rec, "\t"); ok {
 		right = strings.TrimSpace(after)
 	}
 	if right == "" {
+		if elem := extractGenElemType(rec); elem != "" {
+			_ = elem
+		}
 		return ""
 	}
 

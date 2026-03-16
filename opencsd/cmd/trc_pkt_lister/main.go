@@ -14,6 +14,7 @@ import (
 
 	"opencsd/internal/dcdtree"
 	"opencsd/internal/etmv3"
+	"opencsd/internal/etmv4"
 	"opencsd/internal/itm"
 	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
@@ -144,6 +145,28 @@ func (p *etmv3RawPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.Trc
 		fmt.Fprintf(p.writer, "0x%02x ", b)
 	}
 	fmt.Fprintf(p.writer, "];\t%s\n", pkt.String())
+}
+
+type etmv4RawPrinter struct {
+	writer io.Writer
+	id     uint8
+}
+
+func (p *etmv4RawPrinter) SetMute(bool) {}
+
+func (p *etmv4RawPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket, rawData []byte) {
+	if op == ocsd.OpEOT {
+		fmt.Fprintf(p.writer, "ID:%x\tEND OF TRACE DATA\n", p.id)
+		return
+	}
+	if op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
+		return
+	}
+	fmt.Fprintf(p.writer, "Idx:%d; ID:%x; [", indexSOP, p.id)
+	for _, b := range rawData {
+		fmt.Fprintf(p.writer, "0x%02x ", b)
+	}
+	fmt.Fprintf(p.writer, "];\t%s\n", pkt.EffectiveType().String())
 }
 
 type itmRawPrinter struct {
@@ -555,6 +578,9 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 			ok = true
 		case *etmv3.PktProc:
 			_ = proc.PktRawMonI.ReplaceFirst(&etmv3RawPrinter{writer: out, id: csID})
+			ok = true
+		case *etmv4.Processor:
+			_ = proc.PktRawMonI.ReplaceFirst(&etmv4RawPrinter{writer: out, id: csID})
 			ok = true
 		case *itm.PktProc:
 			_ = proc.PktRawMonI.ReplaceFirst(&itmRawPrinter{writer: out, id: csID})

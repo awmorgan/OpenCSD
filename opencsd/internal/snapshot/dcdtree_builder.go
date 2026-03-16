@@ -174,7 +174,7 @@ func (b *CreateDcdTreeFromSnapShot) CreateDecodeTree(sourceName string, bPacketP
 				if coreName != "<none>" && coreName != "" {
 					coreDev := b.reader.ParsedDeviceList[coreName]
 					if coreDev != nil {
-						err := b.createPEDecoder(coreDev.DeviceTypeName, devSrc, coreName)
+						err := b.createPEDecoder(devSrc.DeviceTypeName, devSrc, coreName)
 						if err == nil {
 							numDecodersCreated++
 							// Process dump files for this core device in full-decoder mode only.
