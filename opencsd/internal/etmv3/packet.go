@@ -162,6 +162,8 @@ type Packet struct {
 
 	Data Data //!< data transfer values
 
+	AddrPktBits int //!< number of address bits updated by the current branch address packet
+
 	ErrType PktType //!< Basic packet type if primary type indicates error or incomplete
 }
 
@@ -203,6 +205,7 @@ func (p *Packet) UpdateAddress(partAddrVal uint64, updateBits int) {
 		mask >>= (32 - updateBits)
 	}
 	p.Addr = (p.Addr & ^mask) | (partAddrVal & mask)
+	p.AddrPktBits = updateBits
 }
 
 func (p *Packet) UpdateTimestamp(tsVal uint64, updateBits uint8) {
@@ -329,14 +332,248 @@ func (p *Packet) UpdateAtomFromPHdr(pHdr uint8, cycleAccurate bool) bool {
 	return isValid
 }
 
+// packetTypeNameDesc returns the C++ name and description strings for a packet type.
+func packetTypeNameDesc(pt PktType) (string, string) {
+	switch pt {
+	case PktNotSync:
+		return "NOTSYNC", "Trace Stream not synchronised"
+	case PktIncompleteEOT:
+		return "INCOMPLETE_EOT.", "Incomplete packet at end of trace data."
+	case PktBranchAddress:
+		return "BRANCH_ADDRESS", "Branch address."
+	case PktASync:
+		return "A_SYNC", "Alignment Synchronisation."
+	case PktCycleCount:
+		return "CYCLE_COUNT", "Cycle Count."
+	case PktISync:
+		return "I_SYNC", "Instruction Packet synchronisation."
+	case PktISyncCycle:
+		return "I_SYNC_CYCLE", "Instruction Packet synchronisation with cycle count."
+	case PktTrigger:
+		return "TRIGGER", "Trace Trigger Event."
+	case PktPHdr:
+		return "P_HDR", "Atom P-header."
+	case PktStoreFail:
+		return "STORE_FAIL", "Data Store Failed."
+	case PktOOOData:
+		return "OOO_DATA", "Out of Order data value packet."
+	case PktOOOAddrPlc:
+		return "OOO_ADDR_PLC", "Out of Order data address placeholder."
+	case PktNormData:
+		return "NORM_DATA", "Data trace packet."
+	case PktDataSuppressed:
+		return "DATA_SUPPRESSED", "Data trace suppressed."
+	case PktValNotTraced:
+		return "VAL_NOT_TRACED", "Data trace value not traced."
+	case PktIgnore:
+		return "IGNORE", "Packet ignored."
+	case PktContextID:
+		return "CONTEXT_ID", "Context ID change."
+	case PktVMID:
+		return "VMID", "VMID change."
+	case PktExceptionEntry:
+		return "EXCEPTION_ENTRY", "Exception entry data marker."
+	case PktExceptionExit:
+		return "EXCEPTION_EXIT", "Exception return."
+	case PktTimestamp:
+		return "TIMESTAMP", "Timestamp Value."
+	case PktBadSequence:
+		return "BAD_SEQUENCE", "Invalid sequence for packet type."
+	case PktBadTraceMode:
+		return "BAD_TRACEMODE", "Invalid packet type for this trace mode."
+	default:
+		return "I_RESERVED", "Reserved Packet Header"
+	}
+}
+
+// addrValStr formats a 32-bit address like C++ getValStr: uppercase hex, 8 digits,
+// with an optional ~[0xNN] suffix showing the low pktBits of the value.
+func addrValStr(addr uint64, pktBits int) string {
+	s := fmt.Sprintf("0x%08X", uint32(addr))
+	if pktBits > 0 && pktBits < 32 {
+		mask := uint32((1 << pktBits) - 1)
+		s += fmt.Sprintf(" ~[0x%X]", uint32(addr)&mask)
+	}
+	return s
+}
+
+// buildISAStr returns the ISA string matching C++ getISAStr output (e.g. "ISA=ARM(32); ").
+func buildISAStr(isa ocsd.ISA) string {
+	switch isa {
+	case ocsd.ISAArm:
+		return "ISA=ARM(32); "
+	case ocsd.ISAThumb2:
+		return "ISA=Thumb2; "
+	case ocsd.ISAJazelle:
+		return "ISA=Jazelle; "
+	case ocsd.ISATee:
+		return "ISA=ThumbEE; "
+	default:
+		return "ISA=Unknown; "
+	}
+}
+
+// buildAtomStrCA returns the atom string matching C++ getAtomStr, supporting cycle-accurate mode.
+func (p *Packet) buildAtomStrCA() string {
+	var oss strings.Builder
+	bitpattern := p.Atom.EnBits
+	if p.CycleCount == 0 {
+		// non-cycle-accurate
+		for i := 0; i < int(p.Atom.Num); i++ {
+			if bitpattern&1 == 1 {
+				oss.WriteString("E")
+			} else {
+				oss.WriteString("N")
+			}
+			bitpattern >>= 1
+		}
+	} else {
+		switch p.PHdrFmt {
+		case 1:
+			for i := 0; i < int(p.Atom.Num); i++ {
+				if bitpattern&1 == 1 {
+					oss.WriteString("WE")
+				} else {
+					oss.WriteString("WN")
+				}
+				bitpattern >>= 1
+			}
+		case 2:
+			oss.WriteString("W")
+			for i := 0; i < int(p.Atom.Num); i++ {
+				if bitpattern&1 == 1 {
+					oss.WriteString("E")
+				} else {
+					oss.WriteString("N")
+				}
+				bitpattern >>= 1
+			}
+		case 3:
+			for i := uint32(0); i < p.CycleCount; i++ {
+				oss.WriteString("W")
+			}
+			if p.Atom.Num > 0 {
+				if bitpattern&1 == 1 {
+					oss.WriteString("E")
+				} else {
+					oss.WriteString("N")
+				}
+			}
+		}
+		fmt.Fprintf(&oss, "; Cycles=%d", p.CycleCount)
+	}
+	return oss.String()
+}
+
+// buildISyncStr returns the ISync string matching C++ getISyncStr output.
+func (p *Packet) buildISyncStr() string {
+	var oss strings.Builder
+	reasons := []string{"Periodic", "Trace Enable", "Restart Overflow", "Debug Exit"}
+	reason := "Unknown"
+	if int(p.ISyncInfo.Reason) < len(reasons) {
+		reason = reasons[p.ISyncInfo.Reason]
+	}
+	fmt.Fprintf(&oss, "(%s); ", reason)
+	if !p.ISyncInfo.NoAddress {
+		if p.ISyncInfo.HasLSipAddr {
+			fmt.Fprintf(&oss, "Data Instr Addr=0x%08x; ", uint32(p.Addr))
+		} else {
+			fmt.Fprintf(&oss, "Addr=0x%08x; ", uint32(p.Addr))
+		}
+	}
+	if p.Context.CurrNS {
+		oss.WriteString("NS; ")
+	} else {
+		oss.WriteString("S; ")
+	}
+	if p.Context.CurrHyp {
+		oss.WriteString("Hyp; ")
+	} else {
+		oss.WriteString(" ")
+	}
+	if p.Context.UpdatedC {
+		fmt.Fprintf(&oss, "CtxtID=%x; ", p.Context.CtxtID)
+	}
+	if p.ISyncInfo.NoAddress {
+		return oss.String()
+	}
+	oss.WriteString(buildISAStr(p.CurrISA))
+	if p.ISyncInfo.HasCycleCount {
+		fmt.Fprintf(&oss, "Cycles=%d; ", p.CycleCount)
+	}
+	return oss.String()
+}
+
+// buildBranchAddressStr returns the branch address string matching C++ getBranchAddressStr.
+func (p *Packet) buildBranchAddressStr() string {
+	var oss strings.Builder
+	oss.WriteString("Addr=")
+	oss.WriteString(addrValStr(p.Addr, p.AddrPktBits))
+	oss.WriteString("; ")
+	if p.CurrISA != p.PrevISA {
+		oss.WriteString(buildISAStr(p.CurrISA))
+	}
+	if p.Context.Updated {
+		if p.Context.CurrNS {
+			oss.WriteString("NS; ")
+		} else {
+			oss.WriteString("S; ")
+		}
+		if p.Context.CurrHyp {
+			oss.WriteString("Hyp; ")
+		}
+	}
+	if p.Exception.Present {
+		oss.WriteString(p.buildExcepStr())
+	}
+	return oss.String()
+}
+
+var armV7ExcepNames = []string{
+	"No Exception", "Debug Halt", "SMC", "Hyp",
+	"Async Data Abort", "Jazelle", "Reserved", "Reserved",
+	"PE Reset", "Undefined Instr", "SVC", "Prefetch Abort",
+	"Data Fault", "Generic", "IRQ", "FIQ",
+}
+
+// buildExcepStr returns the exception string matching C++ getExcepStr (ARMv7 non-CM case).
+func (p *Packet) buildExcepStr() string {
+	var oss strings.Builder
+	oss.WriteString("Exception=")
+	num := int(p.Exception.Number)
+	if num < len(armV7ExcepNames) {
+		oss.WriteString(armV7ExcepNames[num])
+	} else {
+		fmt.Fprintf(&oss, "IRQ%d", num-0x10)
+	}
+	oss.WriteString("; ")
+	if p.ExceptionCancel {
+		oss.WriteString("; Cancel prev instr")
+	}
+	return oss.String()
+}
+
 func (p *Packet) String() string {
-	s := fmt.Sprintf("ETMv3 Pkt [%s]", p.Type.String())
-	if p.Type == PktPHdr {
-		s += fmt.Sprintf(" Atoms: %d (%08b)", p.Atom.Num, p.Atom.EnBits)
-	} else if p.Type == PktISync {
-		s += fmt.Sprintf(" Addr: 0x%x", p.Addr)
-	} else if p.Type == PktBranchAddress {
-		s += fmt.Sprintf(" Addr: 0x%x", p.Addr)
+	name, desc := packetTypeNameDesc(p.Type)
+	s := name + " : " + desc
+	switch p.Type {
+	case PktBadSequence, PktBadTraceMode:
+		errName, _ := packetTypeNameDesc(p.ErrType)
+		s += "[" + errName + "]"
+	case PktBranchAddress:
+		s += "; " + p.buildBranchAddressStr()
+	case PktISync, PktISyncCycle:
+		s += "; " + p.buildISyncStr()
+	case PktPHdr:
+		s += "; " + p.buildAtomStrCA()
+	case PktCycleCount:
+		s += fmt.Sprintf("; Cycles=%d", p.CycleCount)
+	case PktContextID:
+		s += fmt.Sprintf("; CtxtID=0x%x", p.Context.CtxtID)
+	case PktVMID:
+		s += fmt.Sprintf("; VMID=0x%x", uint32(p.Context.VMID))
+	case PktTimestamp:
+		s += fmt.Sprintf("; TS=0x%x (%d) ", p.Timestamp, p.Timestamp)
 	}
 	return s
 }
@@ -346,7 +583,7 @@ func (p *Packet) GetISAStr() string {
 	case ocsd.ISAArm:
 		return "ARM(32)"
 	case ocsd.ISAThumb2:
-		return "Thumb"
+		return "Thumb2"
 	case ocsd.ISAJazelle:
 		return "Jazelle"
 	case ocsd.ISATee:
