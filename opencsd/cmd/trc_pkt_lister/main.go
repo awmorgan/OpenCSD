@@ -167,7 +167,11 @@ func (p *etmv4RawPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.Trc
 		fmt.Fprintf(p.writer, "0x%02x ", b)
 	}
 	et := pkt.EffectiveType()
-	fmt.Fprintf(p.writer, "];\t%s : %s\n", et.String(), et.Description())
+	desc := et.Description()
+	if (et == etmv4.PktAddrMatch || et == etmv4.ETE_PktSrcAddrMatch) && pkt.Valid.ExactMatchIdxValid {
+		desc = fmt.Sprintf("%s, [%d]", desc, pkt.AddrExactMatchIdx)
+	}
+	fmt.Fprintf(p.writer, "];\t%s : %s\n", et.String(), desc)
 }
 
 type itmRawPrinter struct {
