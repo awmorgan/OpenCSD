@@ -195,6 +195,12 @@ func sanitizeTraceListerPPL(ppl string) string {
 		if raw == "" {
 			continue
 		}
+
+		if mappedRange, ok := normalizeMappedRangeLine(raw); ok {
+			out = append(out, mappedRange)
+			continue
+		}
+
 		records := splitIdxRecords(raw)
 		for _, rec := range records {
 			normalized := normalizeTraceListerIdxRecord(rec)
@@ -249,6 +255,23 @@ func sanitizeTraceListerPPL(ppl string) string {
 	}
 
 	return strings.Join(collapsed, "\n")
+}
+
+func normalizeMappedRangeLine(line string) (string, bool) {
+	const prefix = "Gen_Info : FileAcc; Range::"
+	if !strings.HasPrefix(line, prefix) {
+		return "", false
+	}
+	rangePart, _, _ := strings.Cut(strings.TrimPrefix(line, prefix), ";")
+	rangePart = strings.TrimSpace(rangePart)
+	if rangePart == "" {
+		return "", false
+	}
+
+	// Compare only the start:end range segment so formatting regressions are caught
+	// (for example, an unexpected "0x" prefix on the second address), while
+	// ignoring unrelated output differences such as memory-space naming.
+	return "MAP_RANGE:" + rangePart, true
 }
 
 func extractNormalizedIDFromLine(line string) (string, bool) {
