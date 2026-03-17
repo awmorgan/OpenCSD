@@ -438,6 +438,153 @@ func (t PktType) String() string {
 	return "I_UNKNOWN"
 }
 
+func (t PktType) Description() string {
+	switch t {
+	case PktNotSync:
+		return "I Stream not synchronised"
+	case PktIncompleteEOT:
+		return "Incomplete packet at end of trace."
+	case PktNoErrType:
+		return "No Error Type."
+	case PktBadSequence:
+		return "Invalid Sequence in packet."
+	case PktBadTraceMode:
+		return "Invalid Packet for trace mode."
+	case PktReserved:
+		return "Reserved Packet Header"
+	case PktReservedCfg:
+		return "Reserved header for current configuration."
+	case PktExtension:
+		return "Extension packet header."
+	case PktTraceInfo:
+		return "Trace Info."
+	case PktTimestamp:
+		return "Timestamp."
+	case PktTraceOn:
+		return "Trace On."
+	case PktFuncRet:
+		return "V8M - function return."
+	case PktExcept:
+		return "Exception."
+	case PktExceptRtn:
+		return "Exception Return."
+	case ETE_PktITE:
+		return "Instrumentation"
+	case ETE_PktTransSt:
+		return "Transaction Start."
+	case ETE_PktTransCommit:
+		return "Transaction Commit."
+	case PktCcntF1:
+		return "Cycle Count format 1."
+	case PktCcntF2:
+		return "Cycle Count format 2."
+	case PktCcntF3:
+		return "Cycle Count format 3."
+	case PktNumDsMkr:
+		return "Data Synchronisation Marker - Numbered."
+	case PktUnnumDsMkr:
+		return "Data Synchronisation Marker - Unnumbered."
+	case PktCommit:
+		return "Commit"
+	case PktCancelF1:
+		return "Cancel Format 1."
+	case PktCancelF1Mispred:
+		return "Cancel Format 1 + Mispredict."
+	case PktMispredict:
+		return "Mispredict."
+	case PktCancelF2:
+		return "Cancel Format 2."
+	case PktCancelF3:
+		return "Cancel Format 3."
+	case PktCondIF2:
+		return "Conditional Instruction, format 2."
+	case PktCondFlush:
+		return "Conditional Flush."
+	case PktCondResF4:
+		return "Conditional Result, format 4."
+	case PktCondResF2:
+		return "Conditional Result, format 2."
+	case PktCondResF3:
+		return "Conditional Result, format 3."
+	case PktCondResF1:
+		return "Conditional Result, format 1."
+	case PktCondIF1:
+		return "Conditional Instruction, format 1."
+	case PktCondIF3:
+		return "Conditional Instruction, format 3."
+	case PktIgnore:
+		return "Ignore."
+	case PktEvent:
+		return "Trace Event."
+	case PktCtxt:
+		return "Context Packet."
+	case PktAddrCtxtL_32IS0:
+		return "Address & Context, Long, 32 bit, IS0."
+	case PktAddrCtxtL_32IS1:
+		return "Address & Context, Long, 32 bit, IS1."
+	case PktAddrCtxtL_64IS0:
+		return "Address & Context, Long, 64 bit, IS0."
+	case PktAddrCtxtL_64IS1:
+		return "Address & Context, Long, 64 bit, IS1."
+	case ETE_PktTSMarker:
+		return "Timestamp Marker"
+	case PktAddrMatch:
+		return "Exact Address Match."
+	case PktAddrS_IS0:
+		return "Address, Short, IS0."
+	case PktAddrS_IS1:
+		return "Address, Short, IS1."
+	case PktAddrL_32IS0:
+		return "Address, Long, 32 bit, IS0."
+	case PktAddrL_32IS1:
+		return "Address, Long, 32 bit, IS1."
+	case PktAddrL_64IS0:
+		return "Address, Long, 64 bit, IS0."
+	case PktAddrL_64IS1:
+		return "Address, Long, 64 bit, IS1."
+	case PktQ:
+		return "Q Packet."
+	case ETE_PktSrcAddrMatch:
+		return "Exact Source Address Match."
+	case ETE_PktSrcAddrS_IS0:
+		return "Source Address, Short, IS0."
+	case ETE_PktSrcAddrS_IS1:
+		return "Source Address, Short, IS1."
+	case ETE_PktSrcAddrL_32IS0:
+		return "Source Address, Long, 32 bit, IS0."
+	case ETE_PktSrcAddrL_32IS1:
+		return "Source Address, Long, 32 bit, IS1."
+	case ETE_PktSrcAddrL_64IS0:
+		return "Source Address, Long, 64 bit, IS0."
+	case ETE_PktSrcAddrL_64IS1:
+		return "Source Address, Long, 64 bit, IS1."
+	case PktAtomF6:
+		return "Atom format 6."
+	case PktAtomF5:
+		return "Atom format 5."
+	case PktAtomF2:
+		return "Atom format 2."
+	case PktAtomF4:
+		return "Atom format 4."
+	case PktAtomF1:
+		return "Atom format 1."
+	case PktAtomF3:
+		return "Atom format 3."
+	case PktAsync:
+		return "Alignment Synchronisation."
+	case PktDiscard:
+		return "Discard."
+	case PktOverflow:
+		return "Overflow."
+	case ETE_PktPeReset:
+		return "PE Reset."
+	case ETE_PktTransFail:
+		return "Transaction Fail."
+	default:
+		return "Unknown Packet Header"
+	}
+}
+
 // PushVAddr pushes the current VAddr and VAddrISA to the top of the history stack
 func (p *TracePacket) PushVAddr() {
 	p.VAddrStack[2] = p.VAddrStack[1]

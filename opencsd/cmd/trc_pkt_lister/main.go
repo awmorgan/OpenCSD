@@ -166,7 +166,8 @@ func (p *etmv4RawPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.Trc
 	for _, b := range rawData {
 		fmt.Fprintf(p.writer, "0x%02x ", b)
 	}
-	fmt.Fprintf(p.writer, "];\t%s\n", pkt.EffectiveType().String())
+	et := pkt.EffectiveType()
+	fmt.Fprintf(p.writer, "];\t%s : %s\n", et.String(), et.Description())
 }
 
 type itmRawPrinter struct {

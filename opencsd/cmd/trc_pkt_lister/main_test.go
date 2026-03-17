@@ -201,6 +201,11 @@ func sanitizeTraceListerPPL(ppl string) string {
 			continue
 		}
 
+		if sourceLine, ok := normalizeSourceLine(raw); ok {
+			out = append(out, sourceLine)
+			continue
+		}
+
 		records := splitIdxRecords(raw)
 		for _, rec := range records {
 			normalized := normalizeTraceListerIdxRecord(rec)
@@ -291,7 +296,7 @@ func extractNormalizedIDFromLine(line string) (string, bool) {
 }
 
 func isNoSyncPacketLine(line string) bool {
-	return strings.HasSuffix(line, "PKT:I_NOT_SYNC") || strings.HasSuffix(line, "PKT:NOTSYNC")
+	return strings.Contains(line, "PKT:I_NOT_SYNC") || strings.Contains(line, "PKT:NOTSYNC")
 }
 
 func splitIdxRecords(line string) []string {
@@ -346,7 +351,32 @@ func normalizeTraceListerIdxRecord(rec string) string {
 	if packetType == "" {
 		return ""
 	}
-	return fmt.Sprintf("ID:%s; PKT:%s", id, packetType)
+	packetHeader := normalizePacketHeader(right)
+	return fmt.Sprintf("ID:%s; PKT:%s; HDR:%s", id, packetType, packetHeader)
+}
+
+func normalizePacketHeader(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	before, _, _ := strings.Cut(s, ";")
+	hdr := strings.Join(strings.Fields(strings.TrimSpace(before)), " ")
+	hdr = regexp.MustCompile(`,\s*\[[0-9]+\]$`).ReplaceAllString(hdr, "")
+	return hdr
+}
+
+func normalizeSourceLine(line string) (string, bool) {
+	const prefix = "Using "
+	const suffix = " as trace source"
+	if !strings.HasPrefix(line, prefix) || !strings.HasSuffix(line, suffix) {
+		return "", false
+	}
+	source := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, prefix), suffix))
+	if source == "" {
+		return "", false
+	}
+	return "SOURCE:" + source, true
 }
 
 func extractLineID(line string) (string, bool) {
