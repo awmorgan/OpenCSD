@@ -363,7 +363,6 @@ func normalizePacketHeader(s string) string {
 	}
 	before, _, _ := strings.Cut(s, ";")
 	hdr := strings.Join(strings.Fields(strings.TrimSpace(before)), " ")
-	hdr = regexp.MustCompile(`,\s*\[[0-9]+\]$`).ReplaceAllString(hdr, "")
 	return hdr
 }
 
