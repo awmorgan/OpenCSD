@@ -352,7 +352,8 @@ func normalizeTraceListerIdxRecord(rec string) string {
 		return ""
 	}
 	packetHeader := normalizePacketHeader(right)
-	return fmt.Sprintf("ID:%s; PKT:%s; HDR:%s", id, packetType, packetHeader)
+	packetDesc := extractPacketDescription(packetHeader)
+	return fmt.Sprintf("ID:%s; PKT:%s; HDR:%s; DESC:%s", id, packetType, packetHeader, packetDesc)
 }
 
 func normalizePacketHeader(s string) string {
@@ -364,6 +365,19 @@ func normalizePacketHeader(s string) string {
 	hdr := strings.Join(strings.Fields(strings.TrimSpace(before)), " ")
 	hdr = regexp.MustCompile(`,\s*\[[0-9]+\]$`).ReplaceAllString(hdr, "")
 	return hdr
+}
+
+func extractPacketDescription(header string) string {
+	header = strings.TrimSpace(header)
+	_, desc, ok := strings.Cut(header, ":")
+	if !ok {
+		return "<missing>"
+	}
+	desc = strings.Join(strings.Fields(strings.TrimSpace(desc)), " ")
+	if desc == "" {
+		return "<missing>"
+	}
+	return desc
 }
 
 func normalizeSourceLine(line string) (string, bool) {
