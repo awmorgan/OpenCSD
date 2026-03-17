@@ -585,6 +585,16 @@ func (t PktType) Description() string {
 	}
 }
 
+// HeaderString returns packet header text in trc_pkt_lister format.
+func (p *TracePacket) HeaderString() string {
+	et := p.EffectiveType()
+	desc := et.Description()
+	if (et == PktAddrMatch || et == ETE_PktSrcAddrMatch) && p.Valid.ExactMatchIdxValid {
+		desc = fmt.Sprintf("%s, [%d]", desc, p.AddrExactMatchIdx)
+	}
+	return fmt.Sprintf("%s : %s", et.String(), desc)
+}
+
 // PushVAddr pushes the current VAddr and VAddrISA to the top of the history stack
 func (p *TracePacket) PushVAddr() {
 	p.VAddrStack[2] = p.VAddrStack[1]

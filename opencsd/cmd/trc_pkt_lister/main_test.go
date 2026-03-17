@@ -362,7 +362,9 @@ func normalizePacketHeader(s string) string {
 		return ""
 	}
 	before, _, _ := strings.Cut(s, ";")
-	return strings.Join(strings.Fields(strings.TrimSpace(before)), " ")
+	hdr := strings.Join(strings.Fields(strings.TrimSpace(before)), " ")
+	hdr = regexp.MustCompile(`,\s*\[[0-9]+\]$`).ReplaceAllString(hdr, "")
+	return hdr
 }
 
 func extractPacketDescription(header string) string {
