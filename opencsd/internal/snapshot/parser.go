@@ -45,29 +45,34 @@ func ParseSingleDevice(input io.Reader) (*ParsedDevice, error) {
 		}
 	}
 
-	// Dump sections (prefix "dump")
-	for secName, secMap := range ini.Sections {
-		if strings.HasPrefix(secName, DumpFileSectionPrefix) {
-			var dump DumpDef
-
-			if addrStr, ok := secMap[DumpAddressKey]; ok {
-				dump.Address = parseUint(addrStr)
-			}
-			if lenStr, ok := secMap[DumpLengthKey]; ok {
-				dump.Length = parseUint(lenStr)
-			}
-			if offStr, ok := secMap[DumpOffsetKey]; ok {
-				dump.Offset = parseUint(offStr)
-			}
-			if file, ok := secMap[DumpFileKey]; ok {
-				dump.Path = file
-			}
-			if space, ok := secMap[DumpSpaceKey]; ok {
-				dump.Space = space
-			}
-
-			parsed.DumpDefs = append(parsed.DumpDefs, dump)
+	// Dump sections (prefix "dump") — iterate in file declaration order via SectionOrder.
+	for _, secName := range ini.SectionOrder {
+		if !strings.HasPrefix(strings.ToLower(secName), DumpFileSectionPrefix) {
+			continue
 		}
+		secMap, ok := ini.Sections[secName]
+		if !ok {
+			continue
+		}
+		var dump DumpDef
+
+		if addrStr, ok := secMap[DumpAddressKey]; ok {
+			dump.Address = parseUint(addrStr)
+		}
+		if lenStr, ok := secMap[DumpLengthKey]; ok {
+			dump.Length = parseUint(lenStr)
+		}
+		if offStr, ok := secMap[DumpOffsetKey]; ok {
+			dump.Offset = parseUint(offStr)
+		}
+		if file, ok := secMap[DumpFileKey]; ok {
+			dump.Path = file
+		}
+		if space, ok := secMap[DumpSpaceKey]; ok {
+			dump.Space = space
+		}
+
+		parsed.DumpDefs = append(parsed.DumpDefs, dump)
 	}
 
 	return parsed, nil
@@ -138,8 +143,13 @@ func ParseTraceMetaData(input io.Reader) (*ParsedTrace, error) {
 	}
 
 	// core_trace_sources section
+	// Each entry has format core_name=source_name. A core may appear multiple times with
+	// different sources (e.g. multi-session ETE), resulting in comma-separated accumulated
+	// values from the INI parser's duplicate-key handling.
 	if ctsSec, ok := ini.Sections[CoreSourcesSectionName]; ok {
-		maps.Copy(parsed.CPUSourceAssoc, ctsSec)
+		for k, v := range ctsSec {
+			parsed.CPUSourceAssoc[k] = v
+		}
 	}
 
 	return parsed, nil
@@ -170,10 +180,16 @@ func ExtractSourceTree(bufferName string, metadata *ParsedTrace, bufferData *Tra
 			if cName, ok := metadata.CPUSourceAssoc[sourceName]; ok {
 				coreName = cName
 			} else {
-				// Search values instead of keys
+				// Search values instead of keys; values may be comma-separated when a core
+				// has multiple sessions (duplicate keys accumulated by the INI parser).
 				for k, v := range metadata.CPUSourceAssoc {
-					if v == sourceName {
-						coreName = k
+					for _, sv := range strings.Split(v, ",") {
+						if strings.TrimSpace(sv) == sourceName {
+							coreName = k
+							break
+						}
+					}
+					if coreName != "<none>" {
 						break
 					}
 				}

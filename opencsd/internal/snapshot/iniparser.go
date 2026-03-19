@@ -10,14 +10,18 @@ import (
 // IniFile represents a parsed INI file.
 // It maps section names to a map of key-value pairs.
 // Global properties (before any section) are stored in the "" (empty string) section.
+// SectionOrder records the order in which sections were first encountered in the file.
+// When a key appears more than once within a section, its values are joined with ",".
 type IniFile struct {
-	Sections map[string]map[string]string
+	Sections     map[string]map[string]string
+	SectionOrder []string
 }
 
 // NewIniFile creates a new empty IniFile
 func NewIniFile() *IniFile {
 	return &IniFile{
-		Sections: make(map[string]map[string]string),
+		Sections:     make(map[string]map[string]string),
+		SectionOrder: []string{},
 	}
 }
 
@@ -45,6 +49,7 @@ func ParseIni(r io.Reader) *IniFile {
 			currentSection = sectionName
 			if _, exists := ini.Sections[currentSection]; !exists {
 				ini.Sections[currentSection] = make(map[string]string)
+				ini.SectionOrder = append(ini.SectionOrder, currentSection)
 			}
 			continue
 		}
@@ -55,7 +60,12 @@ func ParseIni(r io.Reader) *IniFile {
 			key := strings.TrimSpace(parts[0])
 			val := strings.TrimSpace(stripInlineComment(parts[1]))
 
-			ini.Sections[currentSection][key] = val
+			// Accumulate duplicate keys with "," as separator.
+			if existing, ok := ini.Sections[currentSection][key]; ok {
+				ini.Sections[currentSection][key] = existing + "," + val
+			} else {
+				ini.Sections[currentSection][key] = val
+			}
 		}
 	}
 

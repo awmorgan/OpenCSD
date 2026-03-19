@@ -46,15 +46,8 @@ func TestTraceListerGoldens(t *testing.T) {
 		testCases = append(testCases, tc)
 	}
 
-	// focusTest: only this one test is active; all others are skipped.
-	// To re-enable all tests, delete this constant and the t.Skip block below.
-	const focusTest = "etmv4/juno-ret-stck/juno-ret-stck.ppl"
-
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.name != focusTest {
-				t.Skip("temporarily disabled")
-			}
 			args := []string{
 				"-ss_dir", tc.snapshotDir,
 				"-logfilename", filepath.Join(t.TempDir(), "out.ppl"),
@@ -327,7 +320,7 @@ func extractNormalizedIDFromLine(line string) (string, bool) {
 }
 
 func isNoSyncPacketLine(line string) bool {
-	return strings.Contains(line, "PKT:I_NOT_SYNC") || strings.Contains(line, "PKT:NOTSYNC")
+	return strings.Contains(line, "PKT:I_NOT_SYNC") || strings.Contains(line, "PKT:NOTSYNC") || strings.Contains(line, "PKT:ITM_NOTSYNC")
 }
 
 func splitIdxRecords(line string) []string {

@@ -274,7 +274,7 @@ func TestITMErrorCases(t *testing.T) {
 func TestITMPacketStringVariants(t *testing.T) {
 	pkt := &Packet{}
 	pkt.InitPacket()
-	if pkt.String() != "RESERVED:Reserved packet header" {
+	if pkt.String() != "ITM_RESERVED: " {
 		t.Errorf("Unexpected string: %s", pkt.String())
 	}
 

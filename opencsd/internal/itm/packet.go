@@ -2,6 +2,7 @@ package itm
 
 import (
 	"fmt"
+	"strings"
 )
 
 // PktType represents the ITM packet type.
@@ -111,162 +112,186 @@ func (p *Packet) IsBadPacket() bool {
 	return p.Type >= PktBadSequence
 }
 
-// String provides a string representation of the packet.
+// String provides a string representation of the packet, matching C++ trc_pkt_elem_itm formatting.
 func (p *Packet) String() string {
-	name, desc := p.typeNameAndDesc()
-	str := fmt.Sprintf("%s:%s", name, desc)
+	name, _ := p.typeNameAndDesc()
+	str := name + ": "
 
 	switch p.Type {
 	case PktSWIT:
-		str += fmt.Sprintf("; %v; Port 0x%02X; Data 0x%08X", p.valSizeStr(), p.SrcID, p.Value)
+		str += fmt.Sprintf("{src id: 0x%02x}  %s", p.SrcID, p.hexVal())
 	case PktDWT:
-		str += fmt.Sprintf("; %s", p.dwtPacketStr())
+		str += fmt.Sprintf("{desc: 0x%02x} %s", p.SrcID, p.dwtPacketBody())
 	case PktTSLocal:
-		str += fmt.Sprintf("; %s", p.tsLocalPacketStr())
+		str += p.tsLocalPacketBody()
 	case PktTSGlobal1:
-		str += fmt.Sprintf("; TS 25:0  0x%07X", p.Value)
+		str += p.tsGlobal1PacketBody()
 	case PktTSGlobal2:
-		str += fmt.Sprintf("; TS 63:26 0x%010X", p.GetExtValue())
+		str += p.tsGlobal2PacketBody()
 	case PktExtension:
-		valStr := ""
-		if p.ValSz > 0 {
-			switch p.ValSz {
-			case 1, 2, 4:
-				valStr = fmt.Sprintf("0x%08X", p.Value)
-			case 5:
-				valStr = fmt.Sprintf("0x%010X", p.GetExtValue())
-			}
-		} else {
-			valStr = "<none>"
-		}
-		str += fmt.Sprintf("; Src %s; Val %s", func() string {
-			if (p.SrcID & 0x80) != 0 {
-				return "HW"
-			}
-			return "SW"
-		}(), valStr)
+		str += p.extensionPacketBody()
 	case PktBadSequence:
-		name, _ = (&Packet{Type: p.ErrType}).typeNameAndDesc()
-		str += fmt.Sprintf("[%s]", name)
+		errName, _ := (&Packet{Type: p.ErrType}).typeNameAndDesc()
+		str += fmt.Sprintf("[%s]", errName)
 	}
+
 	return str
 }
 
 func (p *Packet) typeNameAndDesc() (string, string) {
 	switch p.Type {
 	case PktNotSync:
-		return "NOTSYNC", "ITM not synchronised"
+		return "ITM_NOTSYNC", ""
 	case PktIncompleteEOT:
-		return "INCOMPLETE_EOT", "Incomplete packet at end of trace"
+		return "ITM_INCOMPLETE_EOT", ""
 	case PktAsync:
-		return "ASYNC", "Alignment synchronisation packet"
+		return "ITM_ASYNC", ""
 	case PktOverflow:
-		return "OVERFLOW", "Overflow packet"
+		return "ITM_OVERFLOW", ""
 	case PktSWIT:
-		return "SWIT", "Software stimulus packet"
+		return "ITM_SWIT", ""
 	case PktDWT:
-		return "DWT", "Hardware stimulus packet"
+		return "ITM_DWT", ""
 	case PktTSLocal:
-		return "TS_L", "Local timestamp packet"
+		return "ITM_TS_LOCAL", ""
 	case PktTSGlobal1:
-		return "TS_G1", "Global timestamp packet 1"
+		return "ITM_GTS_1", ""
 	case PktTSGlobal2:
-		return "TS_G2", "Global timestamp packet 2"
+		return "ITM_GTS_2", ""
 	case PktExtension:
-		return "EXTENSION", "Extension packet"
+		return "ITM_EXTENSION", ""
 	case PktBadSequence:
-		return "BAD_SEQUENCE", "Invalid sequence in packet"
+		return "ITM_BAD_SEQUENCE", ""
 	case PktReserved:
-		return "RESERVED", "Reserved packet header"
+		return "ITM_RESERVED", ""
 	default:
-		return "UNKNOWN", "Unknown Packet Type"
+		return "ITM_UNKNOWN", ""
 	}
 }
 
-func (p *Packet) valSizeStr() string {
-	switch p.ValSz {
-	case 1:
-		return "8 bit"
-	case 2:
-		return "16 bit"
-	case 4:
-		return "32 bit"
-	default:
-		return "Unsized"
+func (p *Packet) hexVal() string {
+	valSz := int(p.ValSz)
+	if valSz < 1 || valSz > 4 {
+		valSz = 4
 	}
+	return fmt.Sprintf("0x%0*x", valSz*2, p.Value)
 }
 
-func (p *Packet) dwtPacketStr() string {
-	str := p.valSizeStr()
-	desc := ""
+func (p *Packet) dwtPacketBody() string {
+	var sb strings.Builder
 
-	if p.SrcID == 0 { // Event packet
-		desc = "Event"
-		val := p.Value
-		if (val & uint32(DwtEcntrCPI)) != 0 {
-			str += " CPI;"
+	if p.SrcID == 0 {
+		fmt.Fprintf(&sb, "[Event Counter: 0x%02x; Flags: ", p.Value)
+		flags := []struct {
+			bit DwtEcntr
+			str string
+		}{
+			{DwtEcntrCPI, "CPI"},
+			{DwtEcntrEXC, "EXC"},
+			{DwtEcntrSLP, "Sleep"},
+			{DwtEcntrLSU, "LSU"},
+			{DwtEcntrFLD, "Fold"},
+			{DwtEcntrCYC, "CYC"},
 		}
-		if (val & uint32(DwtEcntrEXC)) != 0 {
-			str += " EXC;"
+		for _, f := range flags {
+			if p.Value&uint32(f.bit) != 0 {
+				fmt.Fprintf(&sb, " %s ", f.str)
+			} else {
+				sb.WriteString(" --- ")
+			}
 		}
-		if (val & uint32(DwtEcntrSLP)) != 0 {
-			str += " SLP;"
-		}
-		if (val & uint32(DwtEcntrLSU)) != 0 {
-			str += " LSU;"
-		}
-		if (val & uint32(DwtEcntrFLD)) != 0 {
-			str += " FLD;"
-		}
-		if (val & uint32(DwtEcntrCYC)) != 0 {
-			str += " CYC;"
-		}
-	} else if p.SrcID == 1 { // Exception Trace
-		desc = "Exception"
-		str += fmt.Sprintf("; Exception Num %03d", p.Value&0x1FF)
+		sb.WriteString("] ")
+		return sb.String()
+	}
+
+	if p.SrcID == 1 {
+		excepFn := []string{"reserved", "entered", "exited", "returned to"}
 		action := (p.Value >> 12) & 0x3
-		switch action {
-		case 1:
-			str += " Entered"
-		case 2:
-			str += " Exited"
-		case 3:
-			str += " Returned"
-		}
-	} else if p.SrcID == 2 { // PC sample
-		desc = "PC Sample"
-		str += fmt.Sprintf("; PC = 0x%08X", p.Value)
-	} else if p.SrcID == 8 { // Data Trace PC value
-		desc = "Data Trace PC Value"
-		str += fmt.Sprintf("; PC = 0x%08X", p.Value)
-	} else if p.SrcID == 9 || p.SrcID == 11 { // Data trace address
-		desc = "Data Trace Address"
-		str += fmt.Sprintf("; Addr = 0x%08X", p.Value)
-	} else if p.SrcID >= 16 && p.SrcID <= 24 { // Data trace data
-		desc = "Data Trace Data"
-		str += fmt.Sprintf("; Data = 0x%08X", p.Value)
-		op := (p.SrcID >> 1) & 0x3
-		switch op {
-		case 1:
-			str += " (Read)"
-		case 2:
-			str += " (Write)"
-		}
-	} else {
-		desc = "Unknown"
-		str += fmt.Sprintf("; ID = 0x%02X; Data = 0x%08X", p.SrcID, p.Value)
+		fmt.Fprintf(&sb, "[Exception Num:  0x%04x(%s) ]", p.Value&0x1FF, excepFn[action])
+		return sb.String()
 	}
 
-	return fmt.Sprintf("%s : %s", desc, str)
+	if p.SrcID == 2 {
+		fmt.Fprintf(&sb, "[PC Sample: %s] ", p.hexVal())
+		return sb.String()
+	}
+
+	if p.SrcID >= 8 && p.SrcID <= 23 {
+		dtType := (p.SrcID >> 3) & 0x3
+		dtRW := p.SrcID & 0x1
+		dtComp := (p.SrcID >> 1) & 0x3
+		val := p.hexVal()
+		if dtType == 0x1 && dtRW == 0 {
+			fmt.Fprintf(&sb, "[Data Trc: comp=%d; PC Value=%s ] ", dtComp, val)
+			return sb.String()
+		}
+		if dtType == 0x1 && dtRW == 1 {
+			fmt.Fprintf(&sb, "[Data Trc: comp=%d; Address=%s ] ", dtComp, val)
+			return sb.String()
+		}
+		if dtType == 0x2 {
+			if dtRW == 1 {
+				fmt.Fprintf(&sb, "[Data Trc: comp=%d; Val write: %s] ", dtComp, val)
+			} else {
+				fmt.Fprintf(&sb, "[Data Trc: comp=%d; Val read: %s] ", dtComp, val)
+			}
+			return sb.String()
+		}
+	}
+
+	return "[Reserved discriminator value] "
 }
 
-func (p *Packet) tsLocalPacketStr() string {
-	tcDescs := []string{
+func (p *Packet) tsLocalPacketBody() string {
+	tsType := []string{
 		"TS Sync",
-		"TS Delay",
-		"TS Async",
-		"TS delayed - async",
+		"TS Delayed",
+		"TS Sync, Packet Delayed",
+		"TS Delayed, Packet Delayed",
 	}
-	tcIdx := p.SrcID & 0x3
-	return fmt.Sprintf("TC %s; TS = 0x%07X", tcDescs[tcIdx], p.Value)
+	return fmt.Sprintf("%s { %s }", p.hexVal(), tsType[p.SrcID&3])
+}
+
+func (p *Packet) tsGlobal1PacketBody() string {
+	gts1BitSize := []int{6, 13, 20, 25}
+	idx := int(p.ValSz) - 1
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(gts1BitSize) {
+		idx = len(gts1BitSize) - 1
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "{ TS bits [%d:0]", gts1BitSize[idx])
+	if p.SrcID&0x1 != 0 {
+		sb.WriteString(", Clk change")
+	}
+	if p.SrcID&0x2 != 0 {
+		sb.WriteString(", Clk wrap")
+	}
+	sb.WriteString("} ")
+	sb.WriteString(p.hexVal())
+	return sb.String()
+}
+
+func (p *Packet) tsGlobal2PacketBody() string {
+	var sb strings.Builder
+	if p.ValSz == 5 {
+		sb.WriteString("{ TS bits [63:26]} ")
+		fmt.Fprintf(&sb, "0x%02x%08x", p.ValExt, p.Value)
+	} else {
+		sb.WriteString("{ TS bits [47:26]} ")
+		sb.WriteString(p.hexVal())
+	}
+	return sb.String()
+}
+
+func (p *Packet) extensionPacketBody() string {
+	bitsize := int(p.SrcID&0x1F) + 1
+	if bitsize == 3 && (p.SrcID&0x80) == 0 {
+		return fmt.Sprintf("{stim port page} 0x%02x", p.Value)
+	}
+	width := (bitsize / 4) + 1
+	return fmt.Sprintf("{unknown extension type, %d bits } 0x%0*x", bitsize, width, p.Value)
 }

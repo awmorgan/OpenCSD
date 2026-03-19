@@ -57,7 +57,7 @@ func TestPktTypeString(t *testing.T) {
 		{"ETE_PktSrcAddrMatch", ETE_PktSrcAddrMatch, "I_SRC_ADDR_MATCH"},
 		{"ETE_PktSrcAddrS_IS0", ETE_PktSrcAddrS_IS0, "I_SRC_ADDR_S_IS0"},
 		{"ETE_PktSrcAddrS_IS1", ETE_PktSrcAddrS_IS1, "I_SRC_ADDR_S_IS1"},
-		{"ETE_PktSrcAddrL_32IS0", ETE_PktSrcAddrL_32IS0, "I_SRC_ADDR_L_32IS0"},
+		{"ETE_PktSrcAddrL_32IS0", ETE_PktSrcAddrL_32IS0, "I_SCR_ADDR_L_32IS0"},
 		{"ETE_PktSrcAddrL_32IS1", ETE_PktSrcAddrL_32IS1, "I_SRC_ADDR_L_32IS1"},
 		{"ETE_PktSrcAddrL_64IS0", ETE_PktSrcAddrL_64IS0, "I_SRC_ADDR_L_64IS0"},
 		{"ETE_PktSrcAddrL_64IS1", ETE_PktSrcAddrL_64IS1, "I_SRC_ADDR_L_64IS1"},

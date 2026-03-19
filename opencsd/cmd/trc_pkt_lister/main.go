@@ -270,8 +270,23 @@ func run(args []string) error {
 		}
 	}
 
+	if opts.multiSession && opts.srcName != "" {
+		sourceNames = rotateSourceNames(sourceNames, opts.srcName)
+	}
+
 	fmt.Fprintf(out, "Using %s as trace source\n", opts.srcName)
 	return listTracePackets(out, reader, opts, sourceNames)
+}
+
+func rotateSourceNames(sourceNames []string, first string) []string {
+	idx := slices.Index(sourceNames, first)
+	if idx <= 0 {
+		return sourceNames
+	}
+	rotated := make([]string, 0, len(sourceNames))
+	rotated = append(rotated, sourceNames[idx:]...)
+	rotated = append(rotated, sourceNames[:idx]...)
+	return rotated
 }
 
 func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sourceNames []string) error {
@@ -471,16 +486,16 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 		if opts.ssVerbose {
 			fmt.Fprintf(os.Stderr, "[trc_pkt_lister] fatal response=%d at trace index=%d pending=%d\n", dataPathResp, traceIndex, len(pending))
 		}
-		return errors.New("fatal datapath error")
-	}
-
-	if _, _, err := tree.TraceDataIn(ocsd.OpEOT, 0, nil); err != nil {
-		return err
-	}
-
-	if opts.multiSession {
-		if _, _, err := tree.TraceDataIn(ocsd.OpReset, 0, nil); err != nil {
+		// continue to print "done" line, matching C++ behaviour
+	} else {
+		if _, _, err := tree.TraceDataIn(ocsd.OpEOT, 0, nil); err != nil {
 			return err
+		}
+
+		if opts.multiSession {
+			if _, _, err := tree.TraceDataIn(ocsd.OpReset, 0, nil); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -636,6 +651,10 @@ func configureFrameDemux(tree *dcdtree.DecodeTree, out io.Writer, opts options) 
 
 func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader) []mappedRange {
 	ranges := make([]mappedRange, 0)
+	// seenFiles tracks canonical file paths already represented in ranges.
+	// When the same file is referenced by multiple dump sections (e.g. with different
+	// offsets), C++ merges them into one accessor and prints only one Gen_Info line.
+	seenFiles := make(map[string]struct{})
 	for _, dev := range reader.ParsedDeviceList {
 		if !strings.EqualFold(dev.DeviceClass, "core") {
 			continue
@@ -667,18 +686,23 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 				continue
 			}
 
+			// Only add to printed ranges on first encounter of each file path,
+			// matching C++ behaviour where same-file sections share one accessor entry.
+			normPath := filepath.ToSlash(filePath)
+			if _, seen := seenFiles[normPath]; seen {
+				continue
+			}
+			seenFiles[normPath] = struct{}{}
+
 			ranges = append(ranges, mappedRange{
 				start: ocsd.VAddr(memParams.Address),
 				end:   ocsd.VAddr(memParams.Address + uint64(len(b)) - 1),
 				space: space,
-				path:  filepath.ToSlash(filePath),
+				path:  normPath,
 			})
 		}
 	}
 
-	sort.Slice(ranges, func(i, j int) bool {
-		return ranges[i].start < ranges[j].start
-	})
 	return ranges
 }
 
@@ -766,11 +790,8 @@ func parseOptions(args []string) (options, error) {
 				return opts, errors.New("Trace Packet Lister : Error: Missing source name string on -src_name option")
 			}
 			opts.srcName = args[i]
-			opts.multiSession = false
 		case "-multi_session":
-			if opts.srcName == "" {
-				opts.multiSession = true
-			}
+			opts.multiSession = true
 		case "-decode":
 			opts.decode = true
 		case "-decode_only":

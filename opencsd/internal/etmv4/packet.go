@@ -405,7 +405,7 @@ func (t PktType) String() string {
 	case ETE_PktSrcAddrS_IS1:
 		return "I_SRC_ADDR_S_IS1"
 	case ETE_PktSrcAddrL_32IS0:
-		return "I_SRC_ADDR_L_32IS0"
+		return "I_SCR_ADDR_L_32IS0" // C++ typo: SCR not SRC; golden files match C++ output
 	case ETE_PktSrcAddrL_32IS1:
 		return "I_SRC_ADDR_L_32IS1"
 	case ETE_PktSrcAddrL_64IS0:
