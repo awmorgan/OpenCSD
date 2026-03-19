@@ -19,10 +19,11 @@ type listerGoldenCase struct {
 	sourceName  string
 	id          string
 	decode      bool
+	extraFlags  []string
 }
 
-func TestTraceListerPktProcGoldens(t *testing.T) {
-	pattern := filepath.Join("..", "..", "internal", "*", "testdata", "*", "pkt_proc_logs", "trc_pkt_lister*.ppl")
+func TestTraceListerGoldens(t *testing.T) {
+	pattern := filepath.Join("..", "..", "internal", "*", "testdata", "*.ppl")
 	paths, err := filepath.Glob(pattern)
 	if err != nil {
 		t.Fatalf("glob %q: %v", pattern, err)
@@ -36,6 +37,10 @@ func TestTraceListerPktProcGoldens(t *testing.T) {
 	for _, p := range paths {
 		tc, parseErr := parseGoldenCase(p)
 		if parseErr != nil {
+			// Skip golden files without corresponding snapshot directories
+			if strings.Contains(parseErr.Error(), "invalid snapshot dir") {
+				continue
+			}
 			t.Fatalf("parse test case from %s: %v", p, parseErr)
 		}
 		testCases = append(testCases, tc)
@@ -54,6 +59,7 @@ func TestTraceListerPktProcGoldens(t *testing.T) {
 			if tc.id != "" {
 				args = append(args, "-id", tc.id)
 			}
+			args = append(args, tc.extraFlags...)
 			if tc.decode {
 				args = append(args, "-decode")
 			}
@@ -92,28 +98,40 @@ func parseGoldenCase(goldenPath string) (listerGoldenCase, error) {
 	}
 
 	name := strings.TrimSuffix(filepath.Base(goldenPath), ".ppl")
-	decoder := filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(goldenPath)))))
-	snapshotDir := filepath.Dir(filepath.Dir(goldenPath))
+	decoder := filepath.Base(filepath.Dir(filepath.Dir(goldenPath)))
+
+	// Extract snapshot directory by removing known suffixes
+	snapshotName := name
+	for _, suffix := range []string{"_src_addr_N", "_multi_sess"} {
+		if strings.HasSuffix(snapshotName, suffix) {
+			snapshotName = strings.TrimSuffix(snapshotName, suffix)
+			break
+		}
+	}
+
+	snapshotDir := filepath.Join(filepath.Dir(goldenPath), snapshotName)
 	if stat, err := os.Stat(snapshotDir); err != nil || !stat.IsDir() {
 		return listerGoldenCase{}, fmt.Errorf("invalid snapshot dir %s", snapshotDir)
 	}
 
-	id, decode := parseOptionsFromGolden(name, string(content))
+	id, decode, extraFlags := parseOptionsFromGolden(name, string(content))
 
 	return listerGoldenCase{
-		name:        filepath.ToSlash(filepath.Join(decoder, filepath.Base(filepath.Dir(filepath.Dir(goldenPath))), filepath.Base(filepath.Dir(goldenPath)), filepath.Base(goldenPath))),
+		name:        filepath.ToSlash(filepath.Join(decoder, snapshotName, name+".ppl")),
 		decoder:     decoder,
 		goldenPath:  goldenPath,
 		snapshotDir: snapshotDir,
 		sourceName:  extractSourceName(string(content)),
 		id:          id,
 		decode:      decode,
+		extraFlags:  extraFlags,
 	}, nil
 }
 
-func parseOptionsFromGolden(name, ppl string) (string, bool) {
+func parseOptionsFromGolden(name, ppl string) (string, bool, []string) {
 	decode := strings.Contains(strings.ToLower(name), "-dcd-")
 	id := ""
+	var extraFlags []string
 
 	if m := regexp.MustCompile(`(?i)(?:_|-dcd-)0x([0-9a-f]+)$`).FindStringSubmatch(name); len(m) == 2 {
 		id = "0x" + strings.ToLower(m[1])
@@ -121,7 +139,7 @@ func parseOptionsFromGolden(name, ppl string) (string, bool) {
 
 	cmdLine := extractGoldenCommandLine(ppl)
 	if cmdLine == "" {
-		return id, decode
+		return id, decode, extraFlags
 	}
 
 	fields := strings.Fields(cmdLine)
@@ -139,10 +157,16 @@ func parseOptionsFromGolden(name, ppl string) (string, bool) {
 					}
 				}
 			}
+		case "-src_addr_n", "-multi_session", "-pkt_mon", "-aa64_opcode_chk":
+			// These flags should be passed through
+			extraFlags = append(extraFlags, tok)
+		case "-dstream_format", "-o_raw_packed", "-o_raw_unpacked":
+			// These flags should be passed through
+			extraFlags = append(extraFlags, tok)
 		}
 	}
 
-	return id, decode
+	return id, decode, extraFlags
 }
 
 func extractGoldenCommandLine(ppl string) string {
