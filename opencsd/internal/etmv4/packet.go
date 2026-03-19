@@ -592,6 +592,13 @@ func (p *TracePacket) HeaderString() string {
 	if (et == PktAddrMatch || et == ETE_PktSrcAddrMatch) && p.Valid.ExactMatchIdxValid {
 		desc = fmt.Sprintf("%s, [%d]", desc, p.AddrExactMatchIdx)
 	}
+	// For I_INCOMPLETE_EOT, p.Type holds the original packet type that was interrupted.
+	if et == PktIncompleteEOT && p.Type != PktNoErrType {
+		desc = fmt.Sprintf("%s[%s]", desc, p.Type.String())
+	} else if (et == PktBadSequence || et == PktReservedCfg) && p.ErrType != PktNoErrType && p.ErrType != PktIncompleteEOT {
+		// For I_BAD_SEQUENCE and I_RESERVED_CFG, ErrType holds the original type.
+		desc = fmt.Sprintf("%s[%s]", desc, p.ErrType.String())
+	}
 	return fmt.Sprintf("%s : %s", et.String(), desc)
 }
 
