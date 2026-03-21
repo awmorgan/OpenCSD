@@ -51,10 +51,18 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, ocs
 	return proc, decoder, ocsd.OK
 }
 
-func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
+func typedConfig(config any) (*Config, ocsd.Err) {
 	cfg, ok := config.(*Config)
 	if !ok {
-		return nil, nil, ocsd.ErrInvalidParamVal
+		return nil, ocsd.ErrInvalidParamVal
+	}
+	return cfg, ocsd.OK
+}
+
+func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
+	cfg, err := typedConfig(config)
+	if ocsd.IsNotOK(err) {
+		return nil, nil, err
 	}
 	proc, err := NewConfiguredProcessor(cfg)
 	if ocsd.IsNotOK(err) {
@@ -64,9 +72,9 @@ func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDat
 }
 
 func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
-	cfg, ok := config.(*Config)
-	if !ok {
-		return nil, nil, ocsd.ErrInvalidParamVal
+	cfg, err := typedConfig(config)
+	if ocsd.IsNotOK(err) {
+		return nil, nil, err
 	}
 	proc, decoder, err := NewConfiguredPipeline(instID, cfg)
 	if ocsd.IsNotOK(err) {

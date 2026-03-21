@@ -53,14 +53,22 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, ocsd.
 	return proc, dec, ocsd.OK
 }
 
+func typedConfig(config any) (*Config, ocsd.Err) {
+	cfg, ok := config.(*Config)
+	if !ok {
+		return nil, ocsd.ErrInvalidParamType
+	}
+	return cfg, ocsd.OK
+}
+
 // Implement DecoderManagerBase overrides just by defining functions that return the appropriate components.
 // Normally we'd register this in lib_dcd_register, but since the port uses Go idiomatic registries,
 // we just provide the factory methods.
 
 func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
-	cfg, ok := config.(*Config)
-	if !ok {
-		return nil, nil, ocsd.ErrInvalidParamType
+	cfg, err := typedConfig(config)
+	if ocsd.IsNotOK(err) {
+		return nil, nil, err
 	}
 	proc, err := NewConfiguredPktProc(instID, cfg)
 	if ocsd.IsNotOK(err) {
@@ -70,9 +78,9 @@ func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDat
 }
 
 func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
-	cfg, ok := config.(*Config)
-	if !ok {
-		return nil, nil, ocsd.ErrInvalidParamType
+	cfg, err := typedConfig(config)
+	if ocsd.IsNotOK(err) {
+		return nil, nil, err
 	}
 	proc, dec, err := NewConfiguredPipeline(instID, cfg)
 	if ocsd.IsNotOK(err) {
