@@ -419,7 +419,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 				endAddr := startAddr + ocsd.VAddr(len(b)-1)
 				cbCtx := &memRegionCallbackCtx{startAddr: startAddr, data: b, readCount: &callbackReads}
 				acc := memacc.NewCallbackAccessor(startAddr, endAddr, ocsd.MemSpaceAny)
-				acc.SetCBIfFn(memRegionAccessCB, cbCtx)
+				acc.SetCallback(memRegionAccessCB, cbCtx)
 				if err := mapper.AddAccessor(acc, 0); err != ocsd.OK && err != ocsd.ErrMemAccOverlap {
 					return nil, fmt.Errorf("add callback mem accessor failed for %s: %v", path, err)
 				}

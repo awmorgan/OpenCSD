@@ -176,7 +176,7 @@ func TestTrcIDCacheMemCB(t *testing.T) {
 	}
 
 	cbAcc := NewCallbackAccessor(0, 0xFFFFFFFF, ocsd.MemSpaceAny)
-	cbAcc.SetCBIDIfFn(testMemAccCB, ranges)
+	cbAcc.SetTraceIDCallback(testMemAccCB, ranges)
 	mapper.AddAccessor(cbAcc, 0)
 
 	accCallbackCount = 0
@@ -615,7 +615,7 @@ func TestMapper_ErrorAndCacheEdgePaths(t *testing.T) {
 	mapper = NewGlobalMapper()
 	mapper.EnableCaching(false) // hit the cache.Enabled() == false branch after findAccessor
 	badAcc := NewCallbackAccessor(0, 0xFF, ocsd.MemSpaceAny)
-	badAcc.SetCBIfFn(testMemAccBadLenCB, nil)
+	badAcc.SetCallback(testMemAccBadLenCB, nil)
 	mapper.AddAccessor(badAcc, 0)
 
 	numBytes := uint32(4)
@@ -676,7 +676,7 @@ func TestBufferAccessorReadBytesIgnoresMemSpace(t *testing.T) {
 func TestCallbackAccessorReadBytesDelegatesWithoutPrefilter(t *testing.T) {
 	cbAcc := NewCallbackAccessor(0x1000, 0x1FFF, ocsd.MemSpaceEL1N)
 	called := false
-	cbAcc.SetCBIfFn(func(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, byteBuffer []byte) uint32 {
+	cbAcc.SetCallback(func(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, byteBuffer []byte) uint32 {
 		called = true
 		copy(byteBuffer, []byte{0xAB, 0xCD})
 		return 2
