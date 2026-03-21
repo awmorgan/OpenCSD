@@ -24,19 +24,6 @@ type DecoderRegister struct {
 	nextCustomID    ocsd.TraceProtocol
 }
 
-var (
-	defaultRegisterOnce sync.Once
-	defaultRegister     *DecoderRegister
-)
-
-// DefaultDecoderRegister returns the package-level registry populated with built-in decoders.
-func DefaultDecoderRegister() *DecoderRegister {
-	defaultRegisterOnce.Do(func() {
-		defaultRegister = NewBuiltinDecoderRegister()
-	})
-	return defaultRegister
-}
-
 // NewDecoderRegister creates a new decoder registry instance.
 func NewDecoderRegister() *DecoderRegister {
 	return &DecoderRegister{
