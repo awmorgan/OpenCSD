@@ -98,15 +98,12 @@ func mapDumpMemSpace(space string) ocsd.MemSpaceAcc {
 
 // DecodeTreeBuilder builds a decode tree from snapshot metadata.
 type DecodeTreeBuilder struct {
-	reader          *Reader
-	registry        *dcdtree.DecoderRegister
-	tree            *dcdtree.DecodeTree
-	packetProcOnly  bool
-	bufferFileName  string
+	reader         *Reader
+	registry       *dcdtree.DecoderRegister
+	tree           *dcdtree.DecodeTree
+	packetProcOnly bool
+	bufferFileName string
 }
-
-// CreateDcdTreeFromSnapShot is a compatibility alias for the legacy C++-style type name.
-type CreateDcdTreeFromSnapShot = DecodeTreeBuilder
 
 // NewDecodeTreeBuilder creates a new builder for DecodeTree from a snapshot.
 func NewDecodeTreeBuilder(r *Reader) *DecodeTreeBuilder {
@@ -122,17 +119,6 @@ func NewDecodeTreeBuilderWithRegistry(r *Reader, registry *dcdtree.DecoderRegist
 	}
 }
 
-// NewCreateDcdTreeFromSnapShot creates a new builder for DecodeTree from a snapshot.
-func NewCreateDcdTreeFromSnapShot(r *Reader) *DecodeTreeBuilder {
-	return NewDecodeTreeBuilder(r)
-}
-
-// NewCreateDcdTreeFromSnapShotWithRegistry creates a new builder with an explicit decoder registry.
-// If registry is nil, the package default registry is used when the tree is created.
-func NewCreateDcdTreeFromSnapShotWithRegistry(r *Reader, registry *dcdtree.DecoderRegister) *DecodeTreeBuilder {
-	return NewDecodeTreeBuilderWithRegistry(r, registry)
-}
-
 // DecodeTree returns the built decode tree.
 func (b *DecodeTreeBuilder) DecodeTree() *dcdtree.DecodeTree {
 	return b.tree
@@ -142,7 +128,6 @@ func (b *DecodeTreeBuilder) DecodeTree() *dcdtree.DecodeTree {
 func (b *DecodeTreeBuilder) BufferFileName() string {
 	return b.bufferFileName
 }
-
 
 // Build builds the tree for a specific named source buffer (e.g., "ETB_0").
 func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdtree.DecodeTree, error) {
