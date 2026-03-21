@@ -164,7 +164,7 @@ func TestNewBuiltinDecoderRegisterIncludesBuiltins(t *testing.T) {
 }
 
 func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
-	reg := DefaultDecoderRegister()
+	reg := NewBuiltinDecoderRegister()
 	name := "TEST_SINGLE_REMOVE_DECODER"
 	if !reg.IsRegisteredDecoder(name) {
 		if err := reg.RegisterDecoderManagerByName(name, &fakeManager{protocol: ocsd.ProtocolSTM}); err != ocsd.OK {
@@ -172,7 +172,7 @@ func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 		}
 	}
 
-	tree := NewDefaultDecodeTree(ocsd.TrcSrcSingle, 0)
+	tree := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
 	if tree == nil {
 		t.Fatal("CreateDecodeTree returned nil")
 	}
@@ -215,7 +215,7 @@ func TestDecodeTreeElementIterationIsOrdered(t *testing.T) {
 }
 
 func TestDecodeTreeCreateDecoderRejectsOutOfRangeRouteID(t *testing.T) {
-	reg := DefaultDecoderRegister()
+	reg := NewBuiltinDecoderRegister()
 	name := "TEST_INVALID_ROUTE_ID"
 	if !reg.IsRegisteredDecoder(name) {
 		if err := reg.RegisterDecoderManagerByName(name, &fakeManager{protocol: ocsd.ProtocolSTM}); err != ocsd.OK {
@@ -223,7 +223,7 @@ func TestDecodeTreeCreateDecoderRejectsOutOfRangeRouteID(t *testing.T) {
 		}
 	}
 
-	tree := NewDefaultDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign)
+	tree := NewDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign, reg)
 	if tree == nil {
 		t.Fatal("CreateDecodeTree returned nil")
 	}
@@ -308,7 +308,7 @@ func TestDecodeTreeErrorWrappersExposeSentinels(t *testing.T) {
 }
 
 func TestDecodeTreeTraceDataInContextCancelled(t *testing.T) {
-	tree := NewDefaultDecodeTree(ocsd.TrcSrcSingle, 0)
+	tree := NewDecodeTree(ocsd.TrcSrcSingle, 0, NewBuiltinDecoderRegister())
 	if tree == nil {
 		t.Fatal("NewDefaultDecodeTree returned nil")
 	}
