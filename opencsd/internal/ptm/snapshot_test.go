@@ -46,9 +46,8 @@ func (p *ptmRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd
 
 func (m *mapperAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
 	buf := make([]byte, reqBytes)
-	readBytes := reqBytes
-	err := m.mapper.ReadTargetMemory(address, csTraceID, memSpace, &readBytes, buf)
-	return readBytes, buf[:readBytes], err
+	readBytes, err := m.mapper.Read(address, csTraceID, memSpace, reqBytes, buf)
+	return readBytes, buf[:readBytes], ocsd.AsErr(err)
 }
 
 func (m *mapperAdapter) InvalidateMemAccCache(csTraceID uint8) {

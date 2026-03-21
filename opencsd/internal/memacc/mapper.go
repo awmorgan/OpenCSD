@@ -7,6 +7,9 @@ import (
 
 // Mapper defines the interface for mapping and reading target memory.
 type Mapper interface {
+	// Read reads up to reqBytes into buffer and returns bytes read with standard Go error.
+	Read(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) (uint32, error)
+
 	// ReadTargetMemory reads bytes from the mapped memory accessors.
 	ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, numBytes *uint32, buffer []byte) ocsd.Err
 
