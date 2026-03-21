@@ -54,8 +54,8 @@ func (m *CoreArchProfileMap) initMap() {
 	m.coreMap["Cortex-M0"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM}
 }
 
-// GetArchProfile returns the architecture profile for a given core name.
-func (m *CoreArchProfileMap) GetArchProfile(coreName string) (ocsd.ArchProfile, bool) {
+// ArchProfile returns the architecture profile for a given core name.
+func (m *CoreArchProfileMap) ArchProfile(coreName string) (ocsd.ArchProfile, bool) {
 	if val, ok := m.coreMap[coreName]; ok {
 		return val, true
 	}

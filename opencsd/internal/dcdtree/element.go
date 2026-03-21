@@ -7,15 +7,15 @@ import (
 )
 
 type traceElemAttachOwner interface {
-	GetTraceElemOutAttachPt() *common.AttachPt[interfaces.TrcGenElemIn]
+	TraceElemOutAttachPt() *common.AttachPt[interfaces.TrcGenElemIn]
 }
 
 type instrDecodeAttachOwner interface {
-	GetInstrDecodeAttachPt() *common.AttachPt[common.InstrDecode]
+	InstrDecodeAttachPt() *common.AttachPt[common.InstrDecode]
 }
 
 type memAccAttachOwner interface {
-	GetMemAccAttachPt() *common.AttachPt[common.TargetMemAccess]
+	MemAccAttachPt() *common.AttachPt[common.TargetMemAccess]
 }
 
 // DecodeTreeElement represents a registered decoder instance within the trace decode tree.
@@ -40,17 +40,17 @@ func NewDecodeTreeElement(name string, dcdMngr interfaces.DecoderMngr, dcdHandle
 
 	var traceElemAttach *common.AttachPt[interfaces.TrcGenElemIn]
 	if owner, ok := dcdHandle.(traceElemAttachOwner); ok {
-		traceElemAttach = owner.GetTraceElemOutAttachPt()
+		traceElemAttach = owner.TraceElemOutAttachPt()
 	}
 
 	var instrDecAttach *common.AttachPt[common.InstrDecode]
 	if owner, ok := dcdHandle.(instrDecodeAttachOwner); ok {
-		instrDecAttach = owner.GetInstrDecodeAttachPt()
+		instrDecAttach = owner.InstrDecodeAttachPt()
 	}
 
 	var memAccAttach *common.AttachPt[common.TargetMemAccess]
 	if owner, ok := dcdHandle.(memAccAttachOwner); ok {
-		memAccAttach = owner.GetMemAccAttachPt()
+		memAccAttach = owner.MemAccAttachPt()
 	}
 
 	return &DecodeTreeElement{

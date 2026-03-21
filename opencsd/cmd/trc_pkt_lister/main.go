@@ -523,7 +523,7 @@ func frameAlignment(tree *dcdtree.DecodeTree) int {
 	if deformatter == nil {
 		return 1
 	}
-	flags := deformatter.GetConfigFlags()
+	flags := deformatter.ConfigFlags()
 	if (flags & ocsd.DfrmtrHasHsyncs) != 0 {
 		return 2
 	}
@@ -621,7 +621,7 @@ func configureFrameDemux(tree *dcdtree.DecodeTree, out io.Writer, opts options) 
 		return
 	}
 
-	flags := deformatter.GetConfigFlags()
+	flags := deformatter.ConfigFlags()
 	if opts.tpiuFormat {
 		flags |= ocsd.DfrmtrHasFsyncs
 	}

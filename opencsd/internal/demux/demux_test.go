@@ -295,7 +295,7 @@ func TestDemuxEdgeCases(t *testing.T) {
 	// 6 - Edge case coverage
 	df.OutputFilterIDs([]uint8{0x10}, false)
 	df.OutputFilterAllIDs(true)
-	df.GetConfigFlags()
+	df.ConfigFlags()
 
 	// Create a dummy stream just to test executeNoneDataOpAllIDs routing
 	df.SetIDStream(0, &mockDataSink{})

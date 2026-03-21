@@ -75,17 +75,17 @@ type PktDecodeI struct {
 	traceIDProvider PktDecodeTraceIDProvider
 }
 
-func (p *PktDecodeI) GetTraceElemOutAttachPt() *AttachPt[interfaces.TrcGenElemIn] {
+func (p *PktDecodeI) TraceElemOutAttachPt() *AttachPt[interfaces.TrcGenElemIn] {
 	return &p.TraceElemOut
 }
-func (p *PktDecodeI) GetInstrDecodeAttachPt() *AttachPt[InstrDecode] { return &p.InstrDecode }
-func (p *PktDecodeI) GetMemAccAttachPt() *AttachPt[TargetMemAccess]  { return &p.MemAccess }
+func (p *PktDecodeI) InstrDecodeAttachPt() *AttachPt[InstrDecode] { return &p.InstrDecode }
+func (p *PktDecodeI) MemAccAttachPt() *AttachPt[TargetMemAccess]  { return &p.MemAccess }
 
 func (p *PktDecodeI) SetUsesMemAccess(uses bool) { p.usesMemAccess = uses }
-func (p *PktDecodeI) GetUsesMemAccess() bool     { return p.usesMemAccess }
+func (p *PktDecodeI) UsesMemAccess() bool     { return p.usesMemAccess }
 
 func (p *PktDecodeI) SetUsesIDecode(uses bool) { p.usesIDecode = uses }
-func (p *PktDecodeI) GetUsesIDecode() bool     { return p.usesIDecode }
+func (p *PktDecodeI) UsesIDecode() bool     { return p.usesIDecode }
 
 func (p *PktDecodeI) decodeNotReadyReason() string {
 	if !p.configInitOK {
@@ -438,7 +438,7 @@ func (pb *PktProcBase[P, Pt, Pc]) SetProtocolConfig(config *Pc) ocsd.Err {
 	return ocsd.ErrInvalidParamVal
 }
 
-func (pb *PktProcBase[P, Pt, Pc]) GetStatsBlock() (*ocsd.DecodeStats, ocsd.Err) {
+func (pb *PktProcBase[P, Pt, Pc]) StatsBlock() (*ocsd.DecodeStats, ocsd.Err) {
 	if !pb.statsInit {
 		return &pb.Stats, ocsd.ErrNotInit
 	}

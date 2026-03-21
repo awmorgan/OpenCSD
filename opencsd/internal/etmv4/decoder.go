@@ -204,7 +204,7 @@ func (d *PktDecode) initDecoder() {
 	d.p0Stack = nil
 	d.poppedElems = nil
 	d.outElem = *common.NewGenElemStack()
-	d.outElem.InitSendIf(d.GetTraceElemOutAttachPt())
+	d.outElem.InitSendIf(d.TraceElemOutAttachPt())
 	if d.config != nil {
 		d.outElem.InitCSID(d.config.TraceID())
 	}
@@ -225,7 +225,7 @@ func (d *PktDecode) OnProtocolConfig() ocsd.Err {
 	// d.InitDecoderCore()
 	d.initDecoder()
 	d.outElem.InitCSID(d.config.TraceID())
-	d.outElem.InitSendIf(d.GetTraceElemOutAttachPt())
+	d.outElem.InitSendIf(d.TraceElemOutAttachPt())
 
 	// Match C++ decoder behavior: enable the return stack only when configured.
 	if d.config.EnabledRetStack() {
@@ -268,10 +268,10 @@ func (d *PktDecode) SetInstrRangeLimit(limit uint32) {
 
 func (d *PktDecode) syncAA64OpcodeCheckMode() {
 	enabled := d.aa64BadOpcode || (d.ComponentOpMode()&ocsd.OpflgPktdecAA64OpcodeChk) != 0
-	if !d.GetInstrDecodeAttachPt().HasAttachedAndEnabled() {
+	if !d.InstrDecodeAttachPt().HasAttachedAndEnabled() {
 		return
 	}
-	if setter, ok := d.GetInstrDecodeAttachPt().First().(interface{ SetAA64ErrOnBadOpcode(bool) }); ok {
+	if setter, ok := d.InstrDecodeAttachPt().First().(interface{ SetAA64ErrOnBadOpcode(bool) }); ok {
 		setter.SetAA64ErrOnBadOpcode(enabled)
 	}
 }
@@ -331,7 +331,7 @@ func (d *PktDecode) commitElemOnEOT() ocsd.Err {
 		if d.prevOverflow {
 			reason = ocsd.UnsyncOverflow
 		}
-		d.outElem.GetCurrElem().SetUnSyncEOTReason(reason)
+		d.outElem.CurrElem().SetUnSyncEOTReason(reason)
 	}
 	return err
 }
@@ -378,7 +378,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 			if err == ocsd.OK {
 				err = d.outElem.AddElemType(d.IndexCurrPkt, ocsd.GenElemNoSync)
 				if err == ocsd.OK {
-					d.outElem.GetCurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
+					d.outElem.CurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
 					resp = d.outElem.SendElements()
 					d.currState = waitSync
 				}
@@ -745,7 +745,7 @@ func (d *PktDecode) commitElements() ocsd.Err {
 					if d.prevOverflow {
 						reason = ocsd.TraceOnOverflow
 					}
-					d.outElem.GetCurrElem().Payload.TraceOnReason = reason
+					d.outElem.CurrElem().Payload.TraceOnReason = reason
 					d.prevOverflow = false
 					d.returnStack.Flush()
 				}
@@ -763,7 +763,7 @@ func (d *PktDecode) commitElements() ocsd.Err {
 				if pElem.context.Updated {
 					err = d.outElem.AddElem(pElem.rootIndex)
 					if err == ocsd.OK {
-						d.updateContext(pElem, d.outElem.GetCurrElem())
+						d.updateContext(pElem, d.outElem.CurrElem())
 						contextFlush = true
 						d.InvalidateMemAccCache()
 					}
@@ -985,27 +985,27 @@ func (d *PktDecode) processTSCCEventElem(pElem *p0Elem) ocsd.Err {
 	case p0Event:
 		err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemEvent)
 		if err == ocsd.OK {
-			d.outElem.GetCurrElem().Payload.TraceEvent.EvType = ocsd.EventNumbered
-			d.outElem.GetCurrElem().Payload.TraceEvent.EvNumber = uint16(pElem.params[0])
+			d.outElem.CurrElem().Payload.TraceEvent.EvType = ocsd.EventNumbered
+			d.outElem.CurrElem().Payload.TraceEvent.EvNumber = uint16(pElem.params[0])
 		}
 	case p0TS:
 		if bPermitTS {
 			err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemTimestamp)
 			if err == ocsd.OK {
-				d.outElem.GetCurrElem().Timestamp = uint64(pElem.params[0]) | (uint64(pElem.params[1]) << 32)
+				d.outElem.CurrElem().Timestamp = uint64(pElem.params[0]) | (uint64(pElem.params[1]) << 32)
 			}
 		}
 	case p0CC:
 		err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemCycleCount)
 		if err == ocsd.OK {
-			d.outElem.GetCurrElem().SetCycleCount(pElem.params[0])
+			d.outElem.CurrElem().SetCycleCount(pElem.params[0])
 		}
 	case p0TSCC:
 		if bPermitTS {
 			err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemTimestamp)
 			if err == ocsd.OK {
-				d.outElem.GetCurrElem().Timestamp = uint64(pElem.params[0]) | (uint64(pElem.params[1]) << 32)
-				d.outElem.GetCurrElem().SetCycleCount(pElem.params[2])
+				d.outElem.CurrElem().Timestamp = uint64(pElem.params[0]) | (uint64(pElem.params[1]) << 32)
+				d.outElem.CurrElem().SetCycleCount(pElem.params[2])
 			}
 		}
 	}
@@ -1019,7 +1019,7 @@ func (d *PktDecode) processMarkerElem(pElem *p0Elem) ocsd.Err {
 
 	err := d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemSyncMarker)
 	if err == ocsd.OK {
-		d.outElem.GetCurrElem().Payload.SyncMarker = pElem.marker
+		d.outElem.CurrElem().Payload.SyncMarker = pElem.marker
 	}
 	return err
 }
@@ -1028,7 +1028,7 @@ func (d *PktDecode) processTransElem(pElem *p0Elem) ocsd.Err {
 	err := d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemMemTrans)
 	if err == ocsd.OK {
 		tt := ocsd.MemTransFail - ocsd.TraceMemtrans(p0TransFail-pElem.p0Type)
-		d.outElem.GetCurrElem().Payload.MemTrans = tt
+		d.outElem.CurrElem().Payload.MemTrans = tt
 	}
 	return err
 }
@@ -1036,7 +1036,7 @@ func (d *PktDecode) processTransElem(pElem *p0Elem) ocsd.Err {
 func (d *PktDecode) processITEElem(pElem *p0Elem) ocsd.Err {
 	err := d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemInstrumentation)
 	if err == ocsd.OK {
-		d.outElem.GetCurrElem().Payload.SWIte = pElem.ite
+		d.outElem.CurrElem().Payload.SWIte = pElem.ite
 	}
 	return err
 }
@@ -1187,7 +1187,7 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, pElem *p0Elem) ocsd.Err {
 			}
 		}
 
-		d.setElemTraceRange(d.outElem.GetCurrElem(), addrRange, atom == ocsd.AtomE, pElem.rootIndex)
+		d.setElemTraceRange(d.outElem.CurrElem(), addrRange, atom == ocsd.AtomE, pElem.rootIndex)
 
 		// Check for discontinuous ranges that can indicate an inconsistent/corrupt
 		// program image used for decode. Mirrors the C++ etmv4 decoder logic.
@@ -1213,18 +1213,18 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, pElem *p0Elem) ocsd.Err {
 		d.nextRangeCheckClear()
 
 		if addrRange.stAddr != addrRange.enAddr {
-			d.setElemTraceRange(d.outElem.GetCurrElem(), addrRange, true, pElem.rootIndex)
+			d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true, pElem.rootIndex)
 			if WPRes == wpNacc {
 				err = d.outElem.AddElem(pElem.rootIndex)
 			}
 		}
 
 		if WPRes == wpNacc && err == ocsd.OK {
-			d.outElem.GetCurrElem().SetType(ocsd.GenElemAddrNacc)
-			d.outElem.GetCurrElem().StAddr = d.instrInfo.InstrAddr
+			d.outElem.CurrElem().SetType(ocsd.GenElemAddrNacc)
+			d.outElem.CurrElem().StAddr = d.instrInfo.InstrAddr
 
 			currMemSpace := d.getCurrMemSpace()
-			d.outElem.GetCurrElem().Payload.ExceptionNum = uint32(currMemSpace)
+			d.outElem.CurrElem().Payload.ExceptionNum = uint32(currMemSpace)
 		}
 	}
 	return ocsd.OK
@@ -1282,7 +1282,7 @@ func (d *PktDecode) processException(pElem *p0Elem) ocsd.Err {
 	}
 
 	if pCtxtElem != nil {
-		d.updateContext(pCtxtElem, d.outElem.GetCurrElem())
+		d.updateContext(pCtxtElem, d.outElem.CurrElem())
 		err = d.outElem.AddElem(excepPktIndex)
 		if err != ocsd.OK {
 			return err
@@ -1311,12 +1311,12 @@ func (d *PktDecode) processException(pElem *p0Elem) ocsd.Err {
 			}
 
 			if WPRes == wpFound {
-				d.setElemTraceRange(d.outElem.GetCurrElem(), addrRange, true, excepPktIndex)
+				d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true, excepPktIndex)
 				rangeOut = true
 			} else {
 				d.needAddr = true
 				if addrRange.stAddr != addrRange.enAddr {
-					d.setElemTraceRange(d.outElem.GetCurrElem(), addrRange, true, excepPktIndex)
+					d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true, excepPktIndex)
 					rangeOut = true
 				}
 			}
@@ -1330,9 +1330,9 @@ func (d *PktDecode) processException(pElem *p0Elem) ocsd.Err {
 		}
 
 		if WPRes == wpNacc {
-			d.outElem.GetCurrElem().SetType(ocsd.GenElemAddrNacc)
-			d.outElem.GetCurrElem().StAddr = d.instrInfo.InstrAddr
-			d.outElem.GetCurrElem().Payload.ExceptionNum = uint32(d.getCurrMemSpace())
+			d.outElem.CurrElem().SetType(ocsd.GenElemAddrNacc)
+			d.outElem.CurrElem().StAddr = d.instrInfo.InstrAddr
+			d.outElem.CurrElem().Payload.ExceptionNum = uint32(d.getCurrMemSpace())
 
 			err = d.outElem.AddElem(excepPktIndex)
 			if err != ocsd.OK {
@@ -1341,15 +1341,15 @@ func (d *PktDecode) processException(pElem *p0Elem) ocsd.Err {
 		}
 	}
 
-	d.outElem.GetCurrElem().SetType(ocsd.GenElemException)
-	d.outElem.GetCurrElem().EnAddr = excepRetAddr
-	d.outElem.GetCurrElem().SetExcepRetAddr(true)
+	d.outElem.CurrElem().SetType(ocsd.GenElemException)
+	d.outElem.CurrElem().EnAddr = excepRetAddr
+	d.outElem.CurrElem().SetExcepRetAddr(true)
 	if bMTailChain {
-		d.outElem.GetCurrElem().SetExcepRetAddr(false)
-		d.outElem.GetCurrElem().SetExcepMTailChain(true)
+		d.outElem.CurrElem().SetExcepRetAddr(false)
+		d.outElem.CurrElem().SetExcepMTailChain(true)
 	}
-	d.outElem.GetCurrElem().SetExcepRetAddrBrTgt(branchTarget)
-	d.outElem.GetCurrElem().Payload.ExceptionNum = uint32(pExceptElem.excepNum)
+	d.outElem.CurrElem().SetExcepRetAddrBrTgt(branchTarget)
+	d.outElem.CurrElem().Payload.ExceptionNum = uint32(pExceptElem.excepNum)
 
 	// Remove processed elements from p0Stack
 	// pElem (index 0) will be popped by the caller. So pop from 1 to idx
@@ -1380,8 +1380,8 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) ocsd.Err {
 
 	if bytesRead != 4 {
 		err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemAddrNacc)
-		d.outElem.GetCurrElem().StAddr = srcAddr
-		d.outElem.GetCurrElem().Payload.ExceptionNum = uint32(d.getCurrMemSpace())
+		d.outElem.CurrElem().StAddr = srcAddr
+		d.outElem.CurrElem().Payload.ExceptionNum = uint32(d.getCurrMemSpace())
 		return err
 	}
 
@@ -1436,7 +1436,7 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) ocsd.Err {
 						if err != ocsd.OK {
 							return err
 						}
-						d.setElemTraceRangeInstr(d.outElem.GetCurrElem(), midRange, false, pElem.rootIndex, &instr)
+						d.setElemTraceRangeInstr(d.outElem.CurrElem(), midRange, false, pElem.rootIndex, &instr)
 						outRange.stAddr = midRange.enAddr
 						outRange.numInstr = 0
 					}
@@ -1446,8 +1446,8 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) ocsd.Err {
 					if err != ocsd.OK {
 						return err
 					}
-					d.outElem.GetCurrElem().StAddr = srcAddr
-					d.outElem.GetCurrElem().Payload.ExceptionNum = uint32(d.getCurrMemSpace())
+					d.outElem.CurrElem().StAddr = srcAddr
+					d.outElem.CurrElem().Payload.ExceptionNum = uint32(d.getCurrMemSpace())
 					outRange.numInstr = 1
 					outRange.stAddr = srcAddr
 					outRange.enAddr = d.instrInfo.InstrAddr
@@ -1473,7 +1473,7 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) ocsd.Err {
 	d.instrInfo.Isa = d.instrInfo.NextIsa
 
 	d.outElem.AddElem(pElem.rootIndex)
-	d.setElemTraceRange(d.outElem.GetCurrElem(), outRange, true, pElem.rootIndex)
+	d.setElemTraceRange(d.outElem.CurrElem(), outRange, true, pElem.rootIndex)
 
 	return err
 }
@@ -1579,7 +1579,7 @@ func (d *PktDecode) processQElement(pElem *p0Elem) ocsd.Err {
 			if d.instrInfo.InstrAddr == qAddr || isBranch {
 				inCompleteRange = false
 				addrRange.enAddr = d.instrInfo.InstrAddr
-				d.setElemTraceRange(d.outElem.GetCurrElem(), addrRange, true, pElem.rootIndex)
+				d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true, pElem.rootIndex)
 			}
 		}
 
@@ -1587,11 +1587,11 @@ func (d *PktDecode) processQElement(pElem *p0Elem) ocsd.Err {
 			addrRange.enAddr = qAddr
 			addrRange.numInstr = uint32(iCount)
 
-			d.outElem.GetCurrElem().SetType(ocsd.GenElemIRangeNopath)
-			d.outElem.GetCurrElem().StAddr = addrRange.stAddr
-			d.outElem.GetCurrElem().EnAddr = addrRange.enAddr
-			d.outElem.GetCurrElem().Payload.NumInstrRange = addrRange.numInstr
-			d.outElem.GetCurrElem().ISA = d.calcISA(d.is64bit, qIs)
+			d.outElem.CurrElem().SetType(ocsd.GenElemIRangeNopath)
+			d.outElem.CurrElem().StAddr = addrRange.stAddr
+			d.outElem.CurrElem().EnAddr = addrRange.enAddr
+			d.outElem.CurrElem().Payload.NumInstrRange = addrRange.numInstr
+			d.outElem.CurrElem().ISA = d.calcISA(d.is64bit, qIs)
 		}
 
 		d.setInstrInfoInAddrISA(qAddr, qIs)
@@ -1795,7 +1795,7 @@ func (d *PktDecode) resetDecoderState() {
 		if d.config != nil {
 			d.outElem.InitCSID(d.config.TraceID())
 		}
-		d.outElem.InitSendIf(d.GetTraceElemOutAttachPt())
+		d.outElem.InitSendIf(d.TraceElemOutAttachPt())
 	}
 
 	d.returnStack = *common.NewAddrReturnStack()
@@ -1826,7 +1826,7 @@ func (d *PktDecode) emitNoSyncAtUnsyncIdx() ocsd.DatapathResp {
 	if err := d.outElem.AddElemType(idx, ocsd.GenElemNoSync); err != ocsd.OK {
 		return ocsd.RespFatalSysErr
 	}
-	d.outElem.GetCurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
+	d.outElem.CurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
 	return d.outElem.SendElements()
 }
 

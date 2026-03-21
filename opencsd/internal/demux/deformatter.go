@@ -116,7 +116,7 @@ func (d *FrameDeformatter) Configure(flags uint32) ocsd.Err {
 	return err
 }
 
-func (d *FrameDeformatter) GetConfigFlags() uint32 {
+func (d *FrameDeformatter) ConfigFlags() uint32 {
 	return d.cfgFlags
 }
 

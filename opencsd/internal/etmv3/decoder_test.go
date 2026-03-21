@@ -340,8 +340,8 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
 	if len(out.elements) == n0 {
-		t.Logf("InstrType from follower: %v", dec.codeFollower.GetInstrInfo().Type)
-		t.Logf("InstrOpcode from follower: %x", dec.codeFollower.GetInstrInfo().Opcode)
+		t.Logf("InstrType from follower: %v", dec.codeFollower.InstrInfo().Type)
+		t.Logf("InstrOpcode from follower: %x", dec.codeFollower.InstrInfo().Opcode)
 		t.Error("expected InstrRange element from E-atom processing")
 	}
 	for _, e := range out.elements[n0:] {
@@ -437,8 +437,8 @@ func TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
 	if !dec.bNeedAddr {
-		t.Logf("InstrType from follower: %v", dec.codeFollower.GetInstrInfo().Type)
-		t.Logf("InstrOpcode from follower: %x", dec.codeFollower.GetInstrInfo().Opcode)
+		t.Logf("InstrType from follower: %v", dec.codeFollower.InstrInfo().Type)
+		t.Logf("InstrOpcode from follower: %x", dec.codeFollower.InstrInfo().Opcode)
 		t.Logf("HasNextAddr: %v", dec.codeFollower.HasNextAddr())
 		t.Error("expected bNeedAddr=true after IndirectBr E-atom")
 	}
@@ -834,7 +834,7 @@ func TestOnFlush_SendPktsState(t *testing.T) {
 
 	// Directly manipulate to enter sendPkts state with an element pending
 	dec.currState = sendPkts
-	pElem := dec.outputElemList.GetNextElem(5)
+	pElem := dec.outputElemList.NextElem(5)
 	if pElem != nil {
 		pElem.ElemType = ocsd.GenElemEvent
 	}
@@ -880,7 +880,7 @@ func TestOnFlush_SendPkts_WaitISync(t *testing.T) {
 	// Manually put into sendPkts with bWaitISync=true
 	dec.currState = sendPkts
 	dec.bWaitISync = true
-	pElem := dec.outputElemList.GetNextElem(2)
+	pElem := dec.outputElemList.NextElem(2)
 	if pElem != nil {
 		pElem.ElemType = ocsd.GenElemTimestamp
 		pElem.Timestamp = 0xABCD

@@ -68,7 +68,7 @@ func (l *GenElemList) getAdjustedIdx(idx int) int {
 	return idx
 }
 
-func (l *GenElemList) GetNextElem(trcPktIdx ocsd.TrcIndex) *ocsd.TraceElement {
+func (l *GenElemList) NextElem(trcPktIdx ocsd.TrcIndex) *ocsd.TraceElement {
 	if l.numUsed >= len(l.elemArray) {
 		l.growArray()
 	}
@@ -78,11 +78,11 @@ func (l *GenElemList) GetNextElem(trcPktIdx ocsd.TrcIndex) *ocsd.TraceElement {
 	return l.elemArray[idx].PElem
 }
 
-func (l *GenElemList) GetNumElem() int {
+func (l *GenElemList) NumElem() int {
 	return l.numUsed
 }
 
-func (l *GenElemList) GetElemType(entryN int) ocsd.GenElemType {
+func (l *GenElemList) ElemType(entryN int) ocsd.GenElemType {
 	if entryN < l.numUsed {
 		idx := l.getAdjustedIdx(l.firstIdx + entryN)
 		return l.elemArray[idx].PElem.ElemType
@@ -170,7 +170,7 @@ func (s *GenElemStack) InitCSID(csID uint8) {
 	s.csID = csID
 }
 
-func (s *GenElemStack) GetCurrElem() *ocsd.TraceElement {
+func (s *GenElemStack) CurrElem() *ocsd.TraceElement {
 	return s.elemArray[s.currElemIdx].PElem
 }
 
@@ -228,7 +228,7 @@ func (s *GenElemStack) SetCurrElemIdx(trcPktIdx ocsd.TrcIndex) {
 func (s *GenElemStack) AddElemType(trcPktIdx ocsd.TrcIndex, elemType ocsd.GenElemType) ocsd.Err {
 	err := s.AddElem(trcPktIdx)
 	if err == ocsd.OK {
-		s.GetCurrElem().SetType(elemType)
+		s.CurrElem().SetType(elemType)
 	}
 	return err
 }

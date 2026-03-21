@@ -95,19 +95,19 @@ func (cf *CodeFollower) ClearNacc() {
 	cf.naccErr = false
 }
 
-func (cf *CodeFollower) GetNextAddr() ocsd.VAddr {
+func (cf *CodeFollower) NextAddr() ocsd.VAddr {
 	return cf.nextAddr
 }
 
-func (cf *CodeFollower) GetNumInstructs() uint32 {
+func (cf *CodeFollower) NumInstructs() uint32 {
 	return cf.instructs
 }
 
-func (cf *CodeFollower) GetInstrType() ocsd.InstrType {
+func (cf *CodeFollower) InstrType() ocsd.InstrType {
 	return cf.instrInfo.Type
 }
 
-func (cf *CodeFollower) GetInstrSubType() ocsd.InstrSubtype {
+func (cf *CodeFollower) InstrSubType() ocsd.InstrSubtype {
 	return cf.instrInfo.SubType
 }
 
@@ -127,11 +127,11 @@ func (cf *CodeFollower) NextISA() ocsd.ISA {
 	return cf.instrInfo.NextIsa
 }
 
-func (cf *CodeFollower) GetInstrSize() uint8 {
+func (cf *CodeFollower) InstrSize() uint8 {
 	return cf.instrInfo.InstrSize
 }
 
-func (cf *CodeFollower) GetInstrInfo() *ocsd.InstrInfo {
+func (cf *CodeFollower) InstrInfo() *ocsd.InstrInfo {
 	return &cf.instrInfo
 }
 
@@ -143,7 +143,7 @@ func (cf *CodeFollower) RangeEn() ocsd.VAddr {
 	return cf.enAddr
 }
 
-func (cf *CodeFollower) GetNaccAddr() ocsd.VAddr {
+func (cf *CodeFollower) NaccAddr() ocsd.VAddr {
 	return cf.naccAddr
 }
 

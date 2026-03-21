@@ -34,7 +34,7 @@ func TestOnFlushCommitsPendingElements(t *testing.T) {
 	out.elements = nil
 	dec.currState = decodePkts
 
-	pElem := dec.outputElemList.GetNextElem(7)
+	pElem := dec.outputElemList.NextElem(7)
 	pElem.SetType(ocsd.GenElemInstrRange)
 	dec.outputElemList.PendLastNElem(1)
 
@@ -93,8 +93,8 @@ func TestProcessBranchAddrContextWithoutException(t *testing.T) {
 	if out.elements[0].Context.ExceptionLevel != ocsd.EL2 {
 		t.Fatalf("expected EL2 context, got %v", out.elements[0].Context.ExceptionLevel)
 	}
-	if dec.codeFollower.GetInstrInfo().Isa != ocsd.ISAThumb2 {
-		t.Fatalf("expected code follower ISA to track branch ISA, got %v", dec.codeFollower.GetInstrInfo().Isa)
+	if dec.codeFollower.InstrInfo().Isa != ocsd.ISAThumb2 {
+		t.Fatalf("expected code follower ISA to track branch ISA, got %v", dec.codeFollower.InstrInfo().Isa)
 	}
 }
 
@@ -102,7 +102,7 @@ func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 	dec, out := buildDecInDecodePkts(&Config{})
 	out.elements = nil
 
-	pElem := dec.outputElemList.GetNextElem(3)
+	pElem := dec.outputElemList.NextElem(3)
 	pElem.SetType(ocsd.GenElemInstrRange)
 	dec.outputElemList.PendLastNElem(1)
 	dec.pendingNacc = true
@@ -143,7 +143,7 @@ func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 	dec, out := buildDecInDecodePkts(&Config{})
 	out.elements = nil
 
-	pElem := dec.outputElemList.GetNextElem(5)
+	pElem := dec.outputElemList.NextElem(5)
 	pElem.SetType(ocsd.GenElemInstrRange)
 	dec.outputElemList.PendLastNElem(1)
 	dec.pendingNacc = true
@@ -173,8 +173,8 @@ func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 	if dec.pendingNacc {
 		t.Fatal("expected pending NACC state to be cleared by exception cancel")
 	}
-	if dec.outputElemList.GetNumElem() != 0 {
-		t.Fatalf("expected output list to be empty after cancel, got %d", dec.outputElemList.GetNumElem())
+	if dec.outputElemList.NumElem() != 0 {
+		t.Fatalf("expected output list to be empty after cancel, got %d", dec.outputElemList.NumElem())
 	}
 }
 

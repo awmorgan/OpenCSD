@@ -119,7 +119,7 @@ func (d *PktDecode) OnReset() ocsd.DatapathResp {
 
 func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if d.outputElemList.GetNumElem() == 0 && !d.pendingNacc {
+	if d.outputElemList.NumElem() == 0 && !d.pendingNacc {
 		return resp
 	}
 
@@ -129,7 +129,7 @@ func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 		return resp
 	}
 
-	if d.outputElemList.GetNumElem() == 0 {
+	if d.outputElemList.NumElem() == 0 {
 		d.currState = d.nextDecodeState()
 		return resp
 	}
@@ -223,7 +223,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) getNextOpElem() (*ocsd.TraceElement, error) {
-	pElem := d.outputElemList.GetNextElem(d.IndexCurrPkt)
+	pElem := d.outputElemList.NextElem(d.IndexCurrPkt)
 	if pElem == nil {
 		return nil, &common.Error{Code: ocsd.ErrMem, Idx: d.IndexCurrPkt, ChanID: d.csID, Message: "Memory Allocation Error - fatal"}
 	}
@@ -231,7 +231,7 @@ func (d *PktDecode) getNextOpElem() (*ocsd.TraceElement, error) {
 }
 
 func (d *PktDecode) getNextOpElemAt(index ocsd.TrcIndex) (*ocsd.TraceElement, error) {
-	pElem := d.outputElemList.GetNextElem(index)
+	pElem := d.outputElemList.NextElem(index)
 	if pElem == nil {
 		return nil, &common.Error{Code: ocsd.ErrMem, Idx: index, ChanID: d.csID, Message: "Memory Allocation Error - fatal"}
 	}
@@ -589,9 +589,9 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 func (d *PktDecode) pendExceptionReturn() {
 	pendElem := 1
 	if d.Config.CoreProf != ocsd.ProfileCortexM {
-		nElem := d.outputElemList.GetNumElem()
+		nElem := d.outputElemList.NumElem()
 		if nElem > 1 {
-			if d.outputElemList.GetElemType(nElem-2) == ocsd.GenElemInstrRange {
+			if d.outputElemList.ElemType(nElem-2) == ocsd.GenElemInstrRange {
 				pendElem = 2
 			}
 		}
@@ -693,7 +693,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					return ocsd.RespFatalSysErr
 				}
 
-				if d.codeFollower.GetNumInstructs() > 0 {
+				if d.codeFollower.NumInstructs() > 0 {
 					pElem, err = d.getNextOpElem()
 					if err != nil {
 						d.LogError(common.NewErrorMsg(ocsd.ErrSevError, err.(*common.Error).Code, err.Error()))
@@ -702,9 +702,9 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					pElem.SetType(ocsd.GenElemInstrRange)
 					pElem.StAddr = d.codeFollower.RangeSt()
 					pElem.EnAddr = d.codeFollower.RangeEn()
-					pElem.Payload.NumInstrRange = d.codeFollower.GetNumInstructs()
+					pElem.Payload.NumInstrRange = d.codeFollower.NumInstructs()
 
-					instrInfo := d.codeFollower.GetInstrInfo()
+					instrInfo := d.codeFollower.InstrInfo()
 					pElem.SetLastInstrExec(val == ocsd.AtomE)
 					pElem.LastIType = instrInfo.Type
 					pElem.LastISubtype = instrInfo.SubType
@@ -716,7 +716,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 						pElem.SetCycleCount(getAtomCC())
 					}
 
-					d.iAddr = uint64(d.codeFollower.GetNextAddr())
+					d.iAddr = uint64(d.codeFollower.NextAddr())
 					isa = instrInfo.NextIsa
 
 					if !d.codeFollower.HasNextAddr() {
@@ -725,8 +725,8 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 				}
 
 				if errCF == ocsd.ErrMemNacc {
-					naccAddr := uint64(d.codeFollower.GetNaccAddr())
-					if d.outputElemList.GetNumElem() > 0 && d.outputElemList.GetElemType(d.outputElemList.GetNumElem()-1) == ocsd.GenElemInstrRange {
+					naccAddr := uint64(d.codeFollower.NaccAddr())
+					if d.outputElemList.NumElem() > 0 && d.outputElemList.ElemType(d.outputElemList.NumElem()-1) == ocsd.GenElemInstrRange {
 						d.queuePendingNacc(naccAddr, memSpace)
 					} else {
 						pElem, err = d.getNextOpElem()
@@ -763,9 +763,9 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 		}
 	}
 
-	numElem := d.outputElemList.GetNumElem()
+	numElem := d.outputElemList.NumElem()
 	if numElem >= 1 {
-		if d.outputElemList.GetElemType(numElem-1) == ocsd.GenElemInstrRange {
+		if d.outputElemList.ElemType(numElem-1) == ocsd.GenElemInstrRange {
 			d.outputElemList.PendLastNElem(1)
 		}
 	}

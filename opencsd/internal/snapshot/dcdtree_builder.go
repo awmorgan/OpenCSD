@@ -246,7 +246,7 @@ func (b *DecodeTreeBuilder) CreateDecodeTree(sourceName string, packetProcOnly b
 // getCoreProfile maps a core device type name (e.g. "Cortex-A57") to its architecture version
 // and core profile, matching the C++ CoreArchProfileMap / getCoreProfile behaviour.
 func getCoreProfile(coreName string) (ocsd.ArchVersion, ocsd.CoreProfile) {
-	if ap, ok := archProfileMap.GetArchProfile(coreName); ok {
+	if ap, ok := archProfileMap.ArchProfile(coreName); ok {
 		return ap.Arch, ap.Profile
 	}
 	return ocsd.ArchUnknown, ocsd.ProfileUnknown

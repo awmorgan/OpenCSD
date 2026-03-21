@@ -27,15 +27,15 @@ func TestGenElemList(t *testing.T) {
 
 	// Test array growth and insertion
 	for i := range 5 {
-		elem := list.GetNextElem(ocsd.TrcIndex(i))
+		elem := list.NextElem(ocsd.TrcIndex(i))
 		elem.SetType(ocsd.GenElemInstrRange)
 	}
 
-	if list.GetNumElem() != 5 {
-		t.Errorf("Expected 5 elements, got %d", list.GetNumElem())
+	if list.NumElem() != 5 {
+		t.Errorf("Expected 5 elements, got %d", list.NumElem())
 	}
-	if list.GetElemType(0) != ocsd.GenElemInstrRange {
-		t.Errorf("Expected GenElemInstrRange, got %v", list.GetElemType(0))
+	if list.ElemType(0) != ocsd.GenElemInstrRange {
+		t.Errorf("Expected GenElemInstrRange, got %v", list.ElemType(0))
 	}
 
 	// Test pending
@@ -53,8 +53,8 @@ func TestGenElemList(t *testing.T) {
 	// Pending logic
 	// Cancel pending
 	list.CancelPendElem()
-	if list.GetNumElem() != 0 || list.NumPendElem() != 0 {
-		t.Errorf("Expected 0 elements after cancellation, got %d", list.GetNumElem())
+	if list.NumElem() != 0 || list.NumPendElem() != 0 {
+		t.Errorf("Expected 0 elements after cancellation, got %d", list.NumElem())
 	}
 
 	list.Reset()
@@ -62,7 +62,7 @@ func TestGenElemList(t *testing.T) {
 		t.Errorf("Reset failed")
 	}
 
-	list.GetNextElem(0)
+	list.NextElem(0)
 	list.PendLastNElem(1)
 	list.CommitAllPendElem()
 	if list.NumPendElem() != 0 {
@@ -80,7 +80,7 @@ func TestGenElemListPendLastPartialWindow(t *testing.T) {
 	list.InitCSID(12)
 
 	for i := range 3 {
-		elem := list.GetNextElem(ocsd.TrcIndex(i))
+		elem := list.NextElem(ocsd.TrcIndex(i))
 		elem.SetType(ocsd.GenElemInstrRange)
 	}
 
@@ -96,13 +96,13 @@ func TestGenElemListPendLastPartialWindow(t *testing.T) {
 	if dummy.sentCount != 2 {
 		t.Fatalf("expected 2 sent elements, got %d", dummy.sentCount)
 	}
-	if list.GetNumElem() != 1 || list.NumPendElem() != 1 {
-		t.Fatalf("expected 1 pending element left, got num=%d pend=%d", list.GetNumElem(), list.NumPendElem())
+	if list.NumElem() != 1 || list.NumPendElem() != 1 {
+		t.Fatalf("expected 1 pending element left, got num=%d pend=%d", list.NumElem(), list.NumPendElem())
 	}
 
 	list.CancelPendElem()
-	if list.GetNumElem() != 0 || list.NumPendElem() != 0 {
-		t.Fatalf("expected empty list after cancel, got num=%d pend=%d", list.GetNumElem(), list.NumPendElem())
+	if list.NumElem() != 0 || list.NumPendElem() != 0 {
+		t.Fatalf("expected empty list after cancel, got num=%d pend=%d", list.NumElem(), list.NumPendElem())
 	}
 	if dummy.sentCount != 2 {
 		t.Fatalf("expected cancel to avoid extra sends, got %d", dummy.sentCount)
@@ -128,7 +128,7 @@ func TestGenElemStack(t *testing.T) {
 	}
 
 	stack.SetCurrElemIdx(10)
-	curr := stack.GetCurrElem()
+	curr := stack.CurrElem()
 	curr.SetType(ocsd.GenElemEvent)
 
 	stack.AddElemType(11, ocsd.GenElemTimestamp)

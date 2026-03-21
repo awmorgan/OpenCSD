@@ -85,12 +85,12 @@ func TestPktDecodeBase(t *testing.T) {
 
 	// Test 0% coverage functions
 	pb.SetUsesMemAccess(true)
-	if !pb.GetUsesMemAccess() {
-		t.Errorf("GetUsesMemAccess failed")
+	if !pb.UsesMemAccess() {
+		t.Errorf("UsesMemAccess failed")
 	}
 	pb.SetUsesIDecode(true)
-	if !pb.GetUsesIDecode() {
-		t.Errorf("GetUsesIDecode failed")
+	if !pb.UsesIDecode() {
+		t.Errorf("UsesIDecode failed")
 	}
 
 	pb.OutputTraceElementIdx(123, elem)
@@ -169,7 +169,7 @@ func TestPktProcBase(t *testing.T) {
 	pb.StatsAddTotalCount(100)
 	pb.StatsInit()
 
-	stats, errCode := pb.GetStatsBlock()
+	stats, errCode := pb.StatsBlock()
 	if errCode != ocsd.OK || stats.ChannelTotal != 100 {
 		t.Errorf("Stats failed")
 	}
