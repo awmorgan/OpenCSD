@@ -77,26 +77,22 @@ func (s *AddrReturnStack) Overflow() bool {
 	return s.numEntries < 0
 }
 
-func (s *AddrReturnStack) SetPopPending() {
+func (s *AddrReturnStack) SetPopPending(pending bool) {
 	if s.active {
-		s.popPending = true
+		s.popPending = pending
+		return
 	}
-}
-
-func (s *AddrReturnStack) ClearPopPending() {
-	s.popPending = false
+	if !pending {
+		s.popPending = false
+	}
 }
 
 func (s *AddrReturnStack) PopPending() bool {
 	return s.popPending
 }
 
-func (s *AddrReturnStack) SetTInfoWaitAddr() {
-	s.tInfoWaitAddr = true
-}
-
-func (s *AddrReturnStack) ClearTInfoWaitAddr() {
-	s.tInfoWaitAddr = false
+func (s *AddrReturnStack) SetTInfoWaitAddr(wait bool) {
+	s.tInfoWaitAddr = wait
 }
 
 func (s *AddrReturnStack) IsTInfoWaitAddr() bool {

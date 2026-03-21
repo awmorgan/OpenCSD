@@ -800,10 +800,10 @@ func (d *PktDecode) commitElements() ocsd.Err {
 				}
 
 			case p0Addr:
-				d.returnStack.ClearPopPending()
+				d.returnStack.SetPopPending(false)
 				if d.returnStack.IsTInfoWaitAddr() {
 					// equivalent to is_t_info_wait_addr / clear_t_info_wait_addr
-					d.returnStack.ClearTInfoWaitAddr()
+					d.returnStack.SetTInfoWaitAddr(false)
 				}
 				d.setInstrInfoInAddrISA(pElem.addrVal, pElem.addrIS)
 				d.needAddr = false
@@ -893,7 +893,7 @@ func (d *PktDecode) commitElements() ocsd.Err {
 				d.elemRes.P0Commit--
 
 			case p0TInfo:
-				d.returnStack.SetTInfoWaitAddr() // tinfo_wait_addr
+				d.returnStack.SetTInfoWaitAddr(true) // tinfo_wait_addr
 				d.returnStack.Flush()
 			}
 			if bPopElem {
@@ -1229,7 +1229,7 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, pElem *p0Elem) ocsd.Err {
 				if d.instrInfo.IsLink != 0 {
 					d.returnStack.Push(nextAddr, d.instrInfo.Isa)
 				}
-				d.returnStack.SetPopPending()
+				d.returnStack.SetPopPending(true)
 				if d.config.MajVersion() >= 0x5 && d.instrInfo.SubType == ocsd.SInstrV8Eret {
 					ETE_ERET = true // simulate ETE ERET
 				}
@@ -1517,7 +1517,7 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) ocsd.Err {
 		if d.instrInfo.IsLink != 0 {
 			d.returnStack.Push(d.instrInfo.InstrAddr, d.instrInfo.Isa)
 		}
-		d.returnStack.SetPopPending()
+		d.returnStack.SetPopPending(true)
 	}
 	d.instrInfo.Isa = d.instrInfo.NextIsa
 

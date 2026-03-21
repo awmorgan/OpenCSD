@@ -21,13 +21,13 @@ func TestAddrReturnStack(t *testing.T) {
 
 	s.SetActive(true)
 
-	s.SetPopPending()
+	s.SetPopPending(true)
 	if !s.PopPending() {
 		t.Errorf("SetPopPending failed")
 	}
-	s.ClearPopPending()
+	s.SetPopPending(false)
 
-	s.SetTInfoWaitAddr()
+	s.SetTInfoWaitAddr(true)
 	if !s.IsTInfoWaitAddr() {
 		t.Errorf("SetTInfoWaitAddr failed")
 	}
@@ -35,7 +35,7 @@ func TestAddrReturnStack(t *testing.T) {
 	if s.numEntries != 0 {
 		t.Errorf("Push while tInfoWaitAddr modified stack")
 	}
-	s.ClearTInfoWaitAddr()
+	s.SetTInfoWaitAddr(false)
 
 	// Push 5 items
 	s.Push(0x100, ocsd.ISAArm)
