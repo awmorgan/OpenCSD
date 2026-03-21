@@ -449,17 +449,9 @@ func (b *DecodeTreeBuilder) createITMDecoder(devSrc *ParsedDevice) error {
 
 func (b *DecodeTreeBuilder) createDecoder(decoderName string, cfg any) error {
 	if b.bPacketProcOnly {
-		err := b.dcdTree.CreatePacketProcessor(decoderName, cfg)
-		if err != ocsd.OK {
-			return err
-		}
-		return nil
+		return b.dcdTree.CreatePacketProcessorError(decoderName, cfg)
 	}
-	err := b.dcdTree.CreateFullDecoder(decoderName, cfg)
-	if err != ocsd.OK {
-		return err
-	}
-	return nil
+	return b.dcdTree.CreateFullDecoderError(decoderName, cfg)
 }
 
 // addCoreDumpMemory adds memory region accessors from a core device's dump definitions.
