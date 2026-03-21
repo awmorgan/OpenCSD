@@ -99,42 +99,52 @@ func (dt *DecodeTree) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, data 
 }
 
 // CreateFullDecoder creates a full decoder within the tree for a generic trace config.
-func (dt *DecodeTree) CreateFullDecoder(decoderName string, config any) ocsd.Err {
+func (dt *DecodeTree) CreateFullDecoder(decoderName string, config any) error {
 	return dt.createDecoder(decoderName, config, true)
+}
+
+// CreateFullDecoderStatus creates a full decoder and returns legacy ocsd.Err status code.
+func (dt *DecodeTree) CreateFullDecoderStatus(decoderName string, config any) ocsd.Err {
+	return ocsd.AsErr(dt.CreateFullDecoder(decoderName, config))
 }
 
 // CreateFullDecoderError creates a full decoder and returns a Go error.
 func (dt *DecodeTree) CreateFullDecoderError(decoderName string, config any) error {
 	err := dt.CreateFullDecoder(decoderName, config)
-	if err == ocsd.OK {
+	if err == nil {
 		return nil
 	}
-	return fmt.Errorf("%w: %q (ocsd err %d)", ErrCreateFullDecoder, decoderName, uint32(err))
+	return fmt.Errorf("%w: %q (%w)", ErrCreateFullDecoder, decoderName, err)
 }
 
 // CreatePacketProcessor creates a packet processor within the tree for a generic trace config.
-func (dt *DecodeTree) CreatePacketProcessor(decoderName string, config any) ocsd.Err {
+func (dt *DecodeTree) CreatePacketProcessor(decoderName string, config any) error {
 	return dt.createDecoder(decoderName, config, false)
+}
+
+// CreatePacketProcessorStatus creates a packet processor and returns legacy ocsd.Err status code.
+func (dt *DecodeTree) CreatePacketProcessorStatus(decoderName string, config any) ocsd.Err {
+	return ocsd.AsErr(dt.CreatePacketProcessor(decoderName, config))
 }
 
 // CreatePacketProcessorError creates a packet processor and returns a Go error.
 func (dt *DecodeTree) CreatePacketProcessorError(decoderName string, config any) error {
 	err := dt.CreatePacketProcessor(decoderName, config)
-	if err == ocsd.OK {
+	if err == nil {
 		return nil
 	}
-	return fmt.Errorf("%w: %q (ocsd err %d)", ErrCreatePacketProcessor, decoderName, uint32(err))
+	return fmt.Errorf("%w: %q (%w)", ErrCreatePacketProcessor, decoderName, err)
 }
 
-func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder bool) ocsd.Err {
+func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder bool) error {
 	registry := dt.registry
 	if registry == nil {
 		registry = DefaultDecoderRegister()
 	}
 
 	mngr, err := registry.DecoderMngrByName(decoderName)
-	if err != ocsd.OK {
-		return err
+	if ocsd.IsNotOK(err) {
+		return ocsd.ToError(err)
 	}
 
 	type configWithID interface {
@@ -142,7 +152,7 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 	}
 	cfgID, ok := config.(configWithID)
 	if !ok {
-		return ocsd.ErrInvalidParamType
+		return ocsd.ToError(ocsd.ErrInvalidParamType)
 	}
 	csID := cfgID.TraceID()
 	routeID := csID
@@ -150,11 +160,11 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 		routeID = 0
 	}
 	if routeID >= 0x80 {
-		return ocsd.ErrInvalidID
+		return ocsd.ToError(ocsd.ErrInvalidID)
 	}
 
 	if _, exists := dt.decodeElements[routeID]; exists {
-		return ocsd.ErrAttachTooMany
+		return ocsd.ToError(ocsd.ErrAttachTooMany)
 	}
 
 	var pktIn ocsd.TrcDataIn
@@ -164,18 +174,18 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 		var err2 error
 		pktIn, handle, err2 = mngr.CreateTypedDecoder(int(routeID), config)
 		if err2 != nil {
-			return ocsd.AsErr(err2)
+			return err2
 		}
 	} else {
 		var err2 error
 		pktIn, handle, err2 = mngr.CreateTypedPktProc(int(routeID), config)
 		if err2 != nil {
-			return ocsd.AsErr(err2)
+			return err2
 		}
 	}
 
 	if handle == nil {
-		return ocsd.ErrFail
+		return ocsd.ToError(ocsd.ErrFail)
 	}
 
 	elem := NewDecodeTreeElement(decoderName, mngr, handle, pktIn, true)
@@ -197,7 +207,7 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 		elem.MemAccAttach.ReplaceFirst(dt.memAccess)
 	}
 
-	return ocsd.OK
+	return nil
 }
 
 // RemoveDecoder removes a decoder mapped to the given CSID.

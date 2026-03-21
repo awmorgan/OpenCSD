@@ -178,7 +178,7 @@ func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	if err := tree.CreateFullDecoder(name, testConfig{id: 0x23}); err != ocsd.OK {
+	if err := tree.CreateFullDecoder(name, testConfig{id: 0x23}); err != nil {
 		t.Fatalf("CreateDecoder failed: %v", err)
 	}
 	if _, ok := tree.decodeElements[0]; !ok {
@@ -230,7 +230,7 @@ func TestDecodeTreeCreateDecoderRejectsOutOfRangeRouteID(t *testing.T) {
 	defer tree.Destroy()
 
 	err := tree.CreateFullDecoder(name, testConfig{id: 0x80})
-	if err != ocsd.ErrInvalidID {
+	if got := ocsd.AsErr(err); got != ocsd.ErrInvalidID {
 		t.Fatalf("expected ErrInvalidID for route ID 0x80, got %v", err)
 	}
 }
@@ -248,7 +248,7 @@ func TestNewDecodeTreeUsesInjectedRegistry(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	if err := tree.CreateFullDecoder(name, testConfig{id: 0x11}); err != ocsd.OK {
+	if err := tree.CreateFullDecoder(name, testConfig{id: 0x11}); err != nil {
 		t.Fatalf("CreateDecoder failed using injected registry: %v", err)
 	}
 
@@ -266,7 +266,7 @@ func TestDecodeTreePrefersTypedManagerPath(t *testing.T) {
 	}
 
 	tree := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
-	if err := tree.CreateFullDecoder(name, testConfig{id: 0x12}); err != ocsd.OK {
+	if err := tree.CreateFullDecoder(name, testConfig{id: 0x12}); err != nil {
 		t.Fatalf("CreateDecoder failed: %v", err)
 	}
 	if !mgr.typedDecoderCalled {
@@ -274,7 +274,7 @@ func TestDecodeTreePrefersTypedManagerPath(t *testing.T) {
 	}
 
 	tree.RemoveDecoder(0x12)
-	if err := tree.CreatePacketProcessor(name, testConfig{id: 0x12}); err != ocsd.OK {
+	if err := tree.CreatePacketProcessor(name, testConfig{id: 0x12}); err != nil {
 		t.Fatalf("CreateDecoder packet-proc path failed: %v", err)
 	}
 	if !mgr.typedPktProcCalled {

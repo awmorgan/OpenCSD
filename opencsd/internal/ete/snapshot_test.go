@@ -213,8 +213,8 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 			continue
 		}
 
-		if err := tree.CreateFullDecoder(ocsd.BuiltinDcdETE, cfg); err != ocsd.OK {
-			if err == ocsd.ErrAttachTooMany {
+		if err := tree.CreateFullDecoder(ocsd.BuiltinDcdETE, cfg); err != nil {
+			if ocsd.AsErr(err) == ocsd.ErrAttachTooMany {
 				continue
 			}
 			return nil, fmt.Errorf("create ETE decoder for %s failed: %v", srcDevName, err)
