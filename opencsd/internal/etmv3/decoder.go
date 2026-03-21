@@ -836,7 +836,7 @@ func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, ocsd.Err) {
 		return nil, ocsd.ErrInvalidParamVal
 	}
 	proc := NewPktProc(instID)
-	if err := proc.SetProtocolConfig(cfg); ocsd.IsNotOK(err) {
+	if err := proc.SetProtocolConfig(cfg); err != ocsd.OK {
 		return nil, err
 	}
 	return proc, ocsd.OK
@@ -848,7 +848,7 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, ocsd.Err) {
 		return nil, ocsd.ErrInvalidParamVal
 	}
 	dec := NewPktDecode(instID)
-	if err := dec.SetProtocolConfig(cfg); ocsd.IsNotOK(err) {
+	if err := dec.SetProtocolConfig(cfg); err != ocsd.OK {
 		return nil, err
 	}
 	return dec, ocsd.OK
@@ -857,14 +857,14 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, ocsd.Err) {
 // NewConfiguredPipeline creates and wires a typed ETMv3 processor/decoder pair.
 func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, ocsd.Err) {
 	proc, err := NewConfiguredPktProc(instID, cfg)
-	if ocsd.IsNotOK(err) {
+	if err != ocsd.OK {
 		return nil, nil, err
 	}
 	dec, err := NewConfiguredPktDecode(instID, cfg)
-	if ocsd.IsNotOK(err) {
+	if err != ocsd.OK {
 		return nil, nil, err
 	}
-	if err := proc.PktOutI.Replace(dec); ocsd.IsNotOK(err) {
+	if err := proc.PktOutI.Replace(dec); err != ocsd.OK {
 		return nil, nil, err
 	}
 	return proc, dec, ocsd.OK
@@ -884,7 +884,7 @@ func (m *DecoderManager) CreatePacketProcessor(instID int, config any) (ocsd.Trc
 		return nil, nil, err
 	}
 	proc, createErr := NewConfiguredPktProc(instID, cfg)
-	if ocsd.IsNotOK(createErr) {
+	if createErr != ocsd.OK {
 		return nil, nil, ocsd.ToError(createErr)
 	}
 	return proc, proc, nil
@@ -896,7 +896,7 @@ func (m *DecoderManager) CreateDecoder(instID int, config any) (ocsd.TrcDataIn, 
 		return nil, nil, err
 	}
 	proc, dec, createErr := NewConfiguredPipeline(instID, cfg)
-	if ocsd.IsNotOK(createErr) {
+	if createErr != ocsd.OK {
 		return nil, nil, ocsd.ToError(createErr)
 	}
 	return proc, dec, nil
