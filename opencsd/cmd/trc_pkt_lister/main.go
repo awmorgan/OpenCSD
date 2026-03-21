@@ -104,7 +104,6 @@ func (g *filteredGenElemPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID u
 	return g.printer.TraceElemIn(indexSOP, trcChanID, elem)
 }
 
-// genericRawPrinter handles raw output for any packet type using Go 1.18+ generics.
 type genericRawPrinter[T any] struct {
 	writer   io.Writer
 	id       uint8
@@ -329,7 +328,6 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 			}
 
 			if used > 0 {
-				// FIX: Shift remaining bytes to the start of the slice to reuse capacity
 				n := copy(pending, pending[used:])
 				pending = pending[:n]
 				traceIndex += used
@@ -541,7 +539,7 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 					if pkt == nil {
 						return ""
 					}
-					return pkt.HeaderString() // Unique string formatter handled cleanly!
+					return pkt.HeaderString() // Unique string formatter
 				},
 			})
 			ok = true
@@ -614,9 +612,6 @@ func configureFrameDemux(tree *dcdtree.DecodeTree, out io.Writer, opts options) 
 
 func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader) []mappedRange {
 	ranges := make([]mappedRange, 0)
-	// seenFiles tracks canonical file paths already represented in ranges.
-	// When the same file is referenced by multiple dump sections (e.g. with different
-	// offsets), C++ merges them into one accessor and prints only one Gen_Info line.
 	seenFiles := make(map[string]struct{})
 	for _, dev := range reader.ParsedDeviceList {
 		if !strings.EqualFold(dev.DeviceClass, "core") {
@@ -649,8 +644,6 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 				continue
 			}
 
-			// Only add to printed ranges on first encounter of each file path,
-			// matching C++ behaviour where same-file sections share one accessor entry.
 			normPath := filepath.ToSlash(filePath)
 			if _, seen := seenFiles[normPath]; seen {
 				continue
@@ -741,11 +734,9 @@ func parseOptions(args []string) (options, error) {
 		logFileName:  defaultLogFile,
 	}
 
-	// We use a local FlagSet instead of flag.CommandLine so we can pass in args manually.
-	// ContinueOnError allows us to handle errors gracefully rather than os.Exit.
 	fs := flag.NewFlagSet("Trace Packet Lister", flag.ContinueOnError)
 
-	// Override default usage to rely on your existing printHelp function
+	// Override default usage to rely on existing printHelp function
 	fs.Usage = func() {}
 
 	// Standard flags mapped directly to the options struct
