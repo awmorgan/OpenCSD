@@ -8,8 +8,8 @@ import (
 
 func TestDecoderManagerProtocolType(t *testing.T) {
 	m := NewDecoderManager()
-	if got := m.ProtocolType(); got != ocsd.ProtocolETE {
-		t.Fatalf("ProtocolType=%v want %v", got, ocsd.ProtocolETE)
+	if got := m.Protocol(); got != ocsd.ProtocolETE {
+		t.Fatalf("Protocol=%v want %v", got, ocsd.ProtocolETE)
 	}
 }
 

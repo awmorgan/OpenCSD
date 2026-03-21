@@ -34,7 +34,7 @@ func (m *fakeManager) CreateDecoder(instID int, config any) (ocsd.TrcDataIn, any
 	return &fakeDataIn{}, struct{}{}, nil
 }
 
-func (m *fakeManager) ProtocolType() ocsd.TraceProtocol {
+func (m *fakeManager) Protocol() ocsd.TraceProtocol {
 	return m.protocol
 }
 

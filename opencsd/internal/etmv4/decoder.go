@@ -2046,6 +2046,6 @@ func (m *DecoderManager) CreateDecoder(instID int, config any) (ocsd.TrcDataIn, 
 	return proc, decoder, nil
 }
 
-func (m *DecoderManager) ProtocolType() ocsd.TraceProtocol {
+func (m *DecoderManager) Protocol() ocsd.TraceProtocol {
 	return ocsd.ProtocolETMV4I
 }

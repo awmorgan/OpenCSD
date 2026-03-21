@@ -35,7 +35,7 @@ type DecodeTreeElement struct {
 func NewDecodeTreeElement(name string, decoderManager ocsd.DecoderManager, dcdHandle any, dataIn ocsd.TrcDataIn, created bool) *DecodeTreeElement {
 	protocol := ocsd.ProtocolUnknown
 	if decoderManager != nil {
-		protocol = decoderManager.ProtocolType()
+		protocol = decoderManager.Protocol()
 	}
 
 	var traceElemAttach *common.AttachPt[ocsd.TrcGenElemIn]

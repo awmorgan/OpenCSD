@@ -60,5 +60,5 @@ type TrcRawFrameIn interface {
 type DecoderManager interface {
 	CreatePacketProcessor(instID int, config any) (TrcDataIn, any, error)
 	CreateDecoder(instID int, config any) (TrcDataIn, any, error)
-	ProtocolType() TraceProtocol
+	Protocol() TraceProtocol
 }

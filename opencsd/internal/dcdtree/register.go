@@ -50,11 +50,11 @@ func (r *DecoderRegister) registerDecoderManagerByNameStatus(name string, mngr o
 		return ocsd.ErrDcdregNameRepeat
 	}
 	r.decoderManagers[name] = mngr
-	if mngr.ProtocolType() != ocsd.ProtocolUnknown {
-		if _, exists := r.typedManagers[mngr.ProtocolType()]; exists {
+	if mngr.Protocol() != ocsd.ProtocolUnknown {
+		if _, exists := r.typedManagers[mngr.Protocol()]; exists {
 			return ocsd.OK
 		}
-		r.typedManagers[mngr.ProtocolType()] = mngr
+		r.typedManagers[mngr.Protocol()] = mngr
 	}
 	return ocsd.OK
 }
