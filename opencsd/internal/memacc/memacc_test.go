@@ -108,22 +108,24 @@ type testRange struct {
 
 var accCallbackCount int
 
-func testMemAccCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32 {
-	ranges := ctx.([]testRange)
-	var bytesRead uint32 = 0
+func makeTestMemAccCB(ranges []testRange) ocsd.FnMemAccIDCB {
 
-	for _, r := range ranges {
-		if (uint32(memSpace)&uint32(r.memSpace) != 0) && (trcID == r.trcID) {
-			if address >= r.sAddr && address < (r.sAddr+ocsd.VAddr(r.size)) {
-				offset := address - r.sAddr
-				bytesRead = min(r.size-uint32(offset), reqBytes)
-				copy(buffer, r.buffer[offset:offset+ocsd.VAddr(bytesRead)])
-				break
+	return func(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32 {
+		var bytesRead uint32 = 0
+
+		for _, r := range ranges {
+			if (uint32(memSpace)&uint32(r.memSpace) != 0) && (trcID == r.trcID) {
+				if address >= r.sAddr && address < (r.sAddr+ocsd.VAddr(r.size)) {
+					offset := address - r.sAddr
+					bytesRead = min(r.size-uint32(offset), reqBytes)
+					copy(buffer, r.buffer[offset:offset+ocsd.VAddr(bytesRead)])
+					break
+				}
 			}
 		}
+		accCallbackCount++
+		return bytesRead
 	}
-	accCallbackCount++
-	return bytesRead
 }
 
 func readAndCheckFromRange(t *testing.T, m Mapper, ranges []testRange, rangeIdx int, byteOffset ocsd.VAddr, expectCallback bool) bool {
@@ -176,7 +178,7 @@ func TestTrcIDCacheMemCB(t *testing.T) {
 	}
 
 	cbAcc := NewCallbackAccessor(0, 0xFFFFFFFF, ocsd.MemSpaceAny)
-	cbAcc.SetTraceIDCallback(testMemAccCB, ranges)
+	cbAcc.SetTraceIDCallback(makeTestMemAccCB(ranges))
 	mapper.AddAccessor(cbAcc, 0)
 
 	accCallbackCount = 0
@@ -492,9 +494,9 @@ func TestEdgeCasesAndUtilities(t *testing.T) {
 	}
 }
 
-func testMemAccSimpleCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
-	buf := ctx.([]byte)
+func testMemAccSimpleCB(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
 	if address == 0 {
+		buf := []byte{0xDE, 0xAD, 0xBE, 0xEF}
 		read := min(reqBytes, uint32(len(buf)))
 		copy(buffer, buf[:read])
 		return read
@@ -504,8 +506,7 @@ func testMemAccSimpleCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, 
 
 func TestAlternativeCallback(t *testing.T) {
 	cbAcc := NewCallbackAccessor(0, 0xFFFFFFFF, ocsd.MemSpaceAny)
-	buf := []byte{0xDE, 0xAD, 0xBE, 0xEF}
-	cbAcc.SetCallback(testMemAccSimpleCB, buf)
+	cbAcc.SetCallback(testMemAccSimpleCB)
 
 	readBuf := make([]byte, 4)
 	read := cbAcc.ReadBytes(0, ocsd.MemSpaceEL1N, 0, 4, readBuf)
@@ -559,7 +560,7 @@ func TestGlobalMapperRead(t *testing.T) {
 	}
 }
 
-func testMemAccBadLenCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
+func testMemAccBadLenCB(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
 	fmt.Printf("testMemAccBadLenCB called! reqBytes=%d\n", reqBytes)
 	return reqBytes + 1 // deliberately bad
 }
@@ -615,7 +616,7 @@ func TestMapper_ErrorAndCacheEdgePaths(t *testing.T) {
 	mapper = NewGlobalMapper()
 	mapper.EnableCaching(false) // hit the cache.Enabled() == false branch after findAccessor
 	badAcc := NewCallbackAccessor(0, 0xFF, ocsd.MemSpaceAny)
-	badAcc.SetCallback(testMemAccBadLenCB, nil)
+	badAcc.SetCallback(testMemAccBadLenCB)
 	mapper.AddAccessor(badAcc, 0)
 
 	numBytes := uint32(4)
@@ -679,11 +680,11 @@ func TestBufferAccessorReadBytesIgnoresMemSpace(t *testing.T) {
 func TestCallbackAccessorReadBytesDelegatesWithoutPrefilter(t *testing.T) {
 	cbAcc := NewCallbackAccessor(0x1000, 0x1FFF, ocsd.MemSpaceEL1N)
 	called := false
-	cbAcc.SetCallback(func(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
+	cbAcc.SetCallback(func(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
 		called = true
 		copy(buffer, []byte{0xAB, 0xCD})
 		return 2
-	}, nil)
+	})
 
 	buf := make([]byte, 2)
 	read := cbAcc.ReadBytes(0x2000, ocsd.MemSpaceEL3, 0, 2, buf)

@@ -46,27 +46,29 @@ type memRegionCallbackCtx struct {
 	readCount *int
 }
 
-func memRegionAccessCB(ctx any, address ocsd.VAddr, _ ocsd.MemSpaceAcc, reqBytes uint32, byteBuffer []byte) uint32 {
-	cbCtx, ok := ctx.(*memRegionCallbackCtx)
-	if !ok || cbCtx == nil || len(cbCtx.data) == 0 {
-		return 0
-	}
+func makeMemRegionAccessCB(cbCtx *memRegionCallbackCtx) ocsd.FnMemAccCB {
 
-	start := cbCtx.startAddr
-	end := start + ocsd.VAddr(len(cbCtx.data)-1)
-	if address < start || address > end {
-		return 0
-	}
+	return func(address ocsd.VAddr, _ ocsd.MemSpaceAcc, reqBytes uint32, byteBuffer []byte) uint32 {
+		if cbCtx == nil || len(cbCtx.data) == 0 {
+			return 0
+		}
 
-	maxReadable := uint32(end-address) + 1
-	readBytes := min(reqBytes, maxReadable)
+		start := cbCtx.startAddr
+		end := start + ocsd.VAddr(len(cbCtx.data)-1)
+		if address < start || address > end {
+			return 0
+		}
 
-	offset := int(address - start)
-	copy(byteBuffer, cbCtx.data[offset:offset+int(readBytes)])
-	if cbCtx.readCount != nil {
-		(*cbCtx.readCount)++
+		maxReadable := uint32(end-address) + 1
+		readBytes := min(reqBytes, maxReadable)
+
+		offset := int(address - start)
+		copy(byteBuffer, cbCtx.data[offset:offset+int(readBytes)])
+		if cbCtx.readCount != nil {
+			(*cbCtx.readCount)++
+		}
+		return readBytes
 	}
-	return readBytes
 }
 
 func (l *testErrLogger) LogError(_ ocsd.HandleErrLog, err *common.Error) {
@@ -419,7 +421,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 				endAddr := startAddr + ocsd.VAddr(len(b)-1)
 				cbCtx := &memRegionCallbackCtx{startAddr: startAddr, data: b, readCount: &callbackReads}
 				acc := memacc.NewCallbackAccessor(startAddr, endAddr, ocsd.MemSpaceAny)
-				acc.SetCallback(memRegionAccessCB, cbCtx)
+				acc.SetCallback(makeMemRegionAccessCB(cbCtx))
 				if err := mapper.AddAccessor(acc, 0); err != ocsd.OK && err != ocsd.ErrMemAccOverlap {
 					return nil, fmt.Errorf("add callback mem accessor failed for %s: %v", path, err)
 				}

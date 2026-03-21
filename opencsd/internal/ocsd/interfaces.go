@@ -11,7 +11,7 @@ package ocsd
 //
 // Return 0 bytes if start address out of covered range, or memory space is not one of those defined as supported
 // when the callback was registered.
-type FnMemAccCB func(ctx any, address VAddr, memSpace MemSpaceAcc, reqBytes uint32, buffer []byte) uint32
+type FnMemAccCB func(address VAddr, memSpace MemSpaceAcc, reqBytes uint32, buffer []byte) uint32
 
 // FnMemAccIDCB is the callback function definition for callback function memory accessor type.
 //
@@ -24,7 +24,7 @@ type FnMemAccCB func(ctx any, address VAddr, memSpace MemSpaceAcc, reqBytes uint
 //
 // Return 0 bytes if start address out of covered range, or memory space is not one of those defined as supported
 // when the callback was registered.
-type FnMemAccIDCB func(ctx any, address VAddr, memSpace MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32
+type FnMemAccIDCB func(address VAddr, memSpace MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32
 
 // TrcDataIn is the generic interface for supplying raw trace data
 // to a component in the decode datapath.
