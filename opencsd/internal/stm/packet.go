@@ -76,18 +76,18 @@ type Packet struct {
 	ErrType PktType // Initial type of packet if type indicates bad sequence.
 }
 
-// InitStartState initializes packet state at start of decoder.
-func (p *Packet) InitStartState() {
+// ResetStartState initializes packet state at start of decoder.
+func (p *Packet) ResetStartState() {
 	p.Master = 0
 	p.Channel = 0
 	p.Timestamp = 0
 	p.TSType = TSUnknown
 	p.Type = PktNotSync
-	p.InitNextPacket()
+	p.ResetNextPacket()
 }
 
-// InitNextPacket initializes state for next packet.
-func (p *Packet) InitNextPacket() {
+// ResetNextPacket initializes state for the next packet.
+func (p *Packet) ResetNextPacket() {
 	p.ErrType = PktNoErrType
 	p.PktTSBits = 0
 	p.PktHasMarker = 0

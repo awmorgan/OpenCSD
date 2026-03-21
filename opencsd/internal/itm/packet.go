@@ -58,8 +58,8 @@ type Packet struct {
 	ErrType PktType /**< Initial type of packet if type indicates bad sequence. */
 }
 
-// InitPacket initializes packet to clean state.
-func (p *Packet) InitPacket() {
+// Reset initializes packet to a clean state.
+func (p *Packet) Reset() {
 	p.Type = PktReserved
 	p.SrcID = 0
 	p.Value = 0

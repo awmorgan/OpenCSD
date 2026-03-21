@@ -245,7 +245,7 @@ func TestSTMErrorCases(t *testing.T) {
 
 func TestSTMPacketString(t *testing.T) {
 	pkt := &Packet{}
-	pkt.InitStartState()
+	pkt.ResetStartState()
 	if pkt.String() != "NOTSYNC:STM not synchronised" {
 		t.Errorf("Unexpected string for initial state: %s", pkt.String())
 	}
@@ -325,7 +325,7 @@ func TestSTMFlushResetAndBadPacketClassification(t *testing.T) {
 	}
 
 	pkt := &Packet{}
-	pkt.InitNextPacket()
+	pkt.ResetNextPacket()
 	pkt.SetPacketType(PktBadSequence, false)
 	if !pkt.IsBadPacket() {
 		t.Errorf("Expected IsBadPacket to be true")

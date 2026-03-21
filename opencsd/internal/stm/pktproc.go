@@ -306,7 +306,7 @@ func (p *PktProc) setReservedHdrError(msg string) error {
 func (p *PktProc) initProcessorState() {
 	p.setProcUnsynced()
 	p.clearSyncCount()
-	p.currPacket.InitStartState()
+	p.currPacket.ResetStartState()
 	p.nibble2ndValid = false
 	p.initNextPacket()
 	p.bWaitSyncSaveSuppressed = false
@@ -319,7 +319,7 @@ func (p *PktProc) initNextPacket() {
 	p.numNibbles = 0
 	p.numDataNibbles = 0
 	p.currDecode = decodeNone
-	p.currPacket.InitNextPacket()
+	p.currPacket.ResetNextPacket()
 }
 
 func (p *PktProc) runDecodeAction() error {

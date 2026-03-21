@@ -119,7 +119,7 @@ func (p *PktProc) initProcessorState() {
 
 func (p *PktProc) initNextPacket() {
 	p.packetData = p.packetData[:0] // clear
-	p.currPacket.InitPacket()
+	p.currPacket.Reset()
 	p.decodeState = decodeNone
 }
 
