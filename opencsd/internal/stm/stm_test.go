@@ -54,7 +54,7 @@ func TestSTMEndToEndDecode(t *testing.T) {
 	}
 
 	// Op mode test
-	proc.SetComponentOpMode(ocsd.OpflgPktprocUnsyncOnBadPkts)
+	proc.ConfigureComponentOpMode(ocsd.OpflgPktprocUnsyncOnBadPkts)
 
 	outReceiver := &testTrcElemIn{}
 	if err := dec.TraceElemOut.Attach(outReceiver); err != ocsd.OK {
@@ -194,7 +194,7 @@ func TestSTMErrorCases(t *testing.T) {
 
 	// Try with bad packet handling component mode
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)
-	proc.SetComponentOpMode(ocsd.OpflgPktprocErrBadPkts)
+	proc.ConfigureComponentOpMode(ocsd.OpflgPktprocErrBadPkts)
 	_, resp, _ = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
 	// Should be fatal if ErrBadPkts mode is set
 	if !ocsd.DataRespIsFatal(resp) {

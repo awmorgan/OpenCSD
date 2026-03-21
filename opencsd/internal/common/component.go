@@ -163,8 +163,8 @@ func (tc *TraceComponent) DetachErrorLogger() ocsd.Err {
 	return tc.errorLogger.Detach()
 }
 
-// SetComponentOpMode sets the operational mode for the component.
-func (tc *TraceComponent) SetComponentOpMode(opFlags uint32) ocsd.Err {
+// ConfigureComponentOpMode sets the operational mode for the component.
+func (tc *TraceComponent) ConfigureComponentOpMode(opFlags uint32) ocsd.Err {
 	tc.opFlags = opFlags & tc.supportedOpFlags
 	return ocsd.OK
 }

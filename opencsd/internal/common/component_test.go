@@ -152,7 +152,7 @@ func TestTraceComponent(t *testing.T) {
 	}
 
 	tc.SetSupportedOpModes(0x0F)
-	err := tc.SetComponentOpMode(0x01)
+	err := tc.ConfigureComponentOpMode(0x01)
 	if err != ocsd.OK {
 		t.Errorf("expected OK")
 	}
@@ -160,7 +160,7 @@ func TestTraceComponent(t *testing.T) {
 		t.Errorf("expected op mode 0x01")
 	}
 
-	err = tc.SetComponentOpMode(0x10)
+	err = tc.ConfigureComponentOpMode(0x10)
 	if err != ocsd.OK {
 		t.Errorf("expected OK for unsupported-flag mask behavior")
 	}
