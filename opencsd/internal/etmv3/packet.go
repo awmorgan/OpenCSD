@@ -582,7 +582,7 @@ func (p *Packet) String() string {
 	return s
 }
 
-func (p *Packet) GetISAStr() string {
+func (p *Packet) ISAStr() string {
 	switch p.CurrISA {
 	case ocsd.ISAArm:
 		return "ARM(32)"
@@ -597,7 +597,7 @@ func (p *Packet) GetISAStr() string {
 	}
 }
 
-func (p *Packet) GetISyncStr() string {
+func (p *Packet) ISyncStr() string {
 	switch p.ISyncInfo.Reason {
 	case ocsd.ISyncPeriodic:
 		return "Periodic"
@@ -612,7 +612,7 @@ func (p *Packet) GetISyncStr() string {
 	}
 }
 
-func (p *Packet) GetAtomStr() string {
+func (p *Packet) AtomStr() string {
 	if p.Atom.Num == 0 {
 		return ""
 	}

@@ -132,7 +132,7 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 		registry = DefaultDecoderRegister()
 	}
 
-	mngr, err := registry.GetDecoderMngrByName(decoderName)
+	mngr, err := registry.DecoderMngrByName(decoderName)
 	if err != ocsd.OK {
 		return err
 	}

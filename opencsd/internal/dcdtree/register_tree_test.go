@@ -58,15 +58,15 @@ func (m *fakeTypedManager) CreateTypedDecoder(instID int, config any) (interface
 func TestDecoderRegisterCustomProtocolAllocation(t *testing.T) {
 	r := NewDecoderRegister()
 
-	if got := r.GetNextCustomProtocolID(); got != ocsd.ProtocolCustom0 {
+	if got := r.NextCustomProtocolID(); got != ocsd.ProtocolCustom0 {
 		t.Fatalf("expected first custom protocol %v, got %v", ocsd.ProtocolCustom0, got)
 	}
-	if got := r.GetNextCustomProtocolID(); got != ocsd.ProtocolCustom1 {
+	if got := r.NextCustomProtocolID(); got != ocsd.ProtocolCustom1 {
 		t.Fatalf("expected second custom protocol %v, got %v", ocsd.ProtocolCustom1, got)
 	}
 
 	r.ReleaseLastCustomProtocolID()
-	if got := r.GetNextCustomProtocolID(); got != ocsd.ProtocolCustom1 {
+	if got := r.NextCustomProtocolID(); got != ocsd.ProtocolCustom1 {
 		t.Fatalf("expected released id to be reused (%v), got %v", ocsd.ProtocolCustom1, got)
 	}
 }
@@ -83,9 +83,9 @@ func TestDecoderRegisterTypeMapKeepsFirst(t *testing.T) {
 		t.Fatalf("register second failed: %v", err)
 	}
 
-	m, err := r.GetDecoderMngrByType(ocsd.ProtocolSTM)
+	m, err := r.DecoderMngrByType(ocsd.ProtocolSTM)
 	if err != ocsd.OK {
-		t.Fatalf("GetDecoderMngrByType failed: %v", err)
+		t.Fatalf("DecoderMngrByType failed: %v", err)
 	}
 	if m != first {
 		t.Fatalf("expected first manager to stay registered for type, got %p want %p", m, first)
