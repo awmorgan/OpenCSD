@@ -153,95 +153,103 @@ func (b *DecodeTreeBuilder) GetBufferFileName() string {
 	return b.BufferFileName()
 }
 
-// CreateDecodeTree builds the tree for a specific named source buffer (e.g., "ETB_0").
-func (b *DecodeTreeBuilder) CreateDecodeTree(sourceName string, bPacketProcOnly bool) bool {
+// Build builds the tree for a specific named source buffer (e.g., "ETB_0").
+func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdtree.DecodeTree, error) {
 	if !b.reader.SnapshotReadOK() {
-		b.reader.logError("Supplied snapshot reader has not correctly read the snapshot.")
-		return false
+		err := fmt.Errorf("supplied snapshot reader has not correctly read the snapshot")
+		b.reader.logError(err.Error())
+		return nil, err
 	}
 
-	b.bPacketProcOnly = bPacketProcOnly
+	b.bPacketProcOnly = packetProcOnly
 	tree := NewTraceBufferSourceTree()
-
-	if ExtractSourceTree(sourceName, b.reader.ParsedTrace, tree) {
-		formatterFlags := uint32(ocsd.DfrmtrFrameMemAlign)
-
-		b.bufferFileName = filepath.Join(b.reader.SnapshotPath, tree.BufferInfo.DataFileName)
-
-		dataFormat := strings.ToLower(tree.BufferInfo.DataFormat)
-
-		srcFormat := ocsd.TrcSrcFrameFormatted
-		if dataFormat == "source_data" {
-			srcFormat = ocsd.TrcSrcSingle
-		}
-
-		if dataFormat == "dstream_coresight" {
-			formatterFlags = ocsd.DfrmtrHasFsyncs
-		}
-
-		b.dcdTree = dcdtree.NewDecodeTree(srcFormat, formatterFlags, b.registry)
-		if b.dcdTree == nil {
-			b.reader.logError("Failed to create decode tree object")
-			return false
-		}
-
-		if df := b.dcdTree.GetFrameDeformatter(); df != nil {
-			df.SetErrorLogger(&snapshotErrorLogger{reader: b.reader})
-		}
-
-		// Create a memory accessor mapper in full-decoder mode only.
-		var mapper memacc.Mapper
-		if !bPacketProcOnly {
-			mapper = memacc.NewGlobalMapper()
-			b.dcdTree.SetMemAccessI(&mapperAdapter{mapper: mapper})
-		}
-
-		numDecodersCreated := 0
-
-		for srcName, coreName := range tree.SourceCoreAssoc {
-			// Direct map lookup — ParsedDeviceList is keyed by device name.
-			devSrc := b.reader.ParsedDeviceList[srcName]
-
-			if devSrc != nil {
-				if coreName != "<none>" && coreName != "" {
-					coreDev := b.reader.ParsedDeviceList[coreName]
-					if coreDev != nil {
-						err := b.createPEDecoder(devSrc.DeviceTypeName, devSrc, coreName)
-						if err == nil {
-							numDecodersCreated++
-							// Process dump files for this core device in full-decoder mode only.
-							if !bPacketProcOnly && len(coreDev.DumpDefs) > 0 {
-								b.addCoreDumpMemory(mapper, coreDev)
-							}
-						} else {
-							b.reader.logError(fmt.Sprintf("Failed to create PEDecoder for source %s: %v", srcName, err))
-						}
-					} else {
-						b.reader.logError(fmt.Sprintf("Failed to get device data for core %s.", coreName))
-					}
-				} else {
-					err := b.createSTDecoder(devSrc)
-					if err == nil {
-						numDecodersCreated++
-					} else {
-						b.reader.logError(fmt.Sprintf("Failed to create STDecoder for none core source %s: %v", srcName, err))
-					}
-				}
-			} else {
-				b.reader.logError(fmt.Sprintf("Failed to find device data for source %s.", srcName))
-			}
-		}
-
-		if numDecodersCreated == 0 {
-			b.dcdTree = nil
-			return false
-		}
-		return true
-
-	} else {
-		b.reader.logError(fmt.Sprintf("Failed to get parsed source tree for buffer %s.", sourceName))
-		return false
+	if !ExtractSourceTree(sourceName, b.reader.ParsedTrace, tree) {
+		err := fmt.Errorf("failed to get parsed source tree for buffer %s", sourceName)
+		b.reader.logError(err.Error())
+		return nil, err
 	}
+
+	formatterFlags := uint32(ocsd.DfrmtrFrameMemAlign)
+	b.bufferFileName = filepath.Join(b.reader.SnapshotPath, tree.BufferInfo.DataFileName)
+
+	dataFormat := strings.ToLower(tree.BufferInfo.DataFormat)
+	srcFormat := ocsd.TrcSrcFrameFormatted
+	if dataFormat == "source_data" {
+		srcFormat = ocsd.TrcSrcSingle
+	}
+	if dataFormat == "dstream_coresight" {
+		formatterFlags = ocsd.DfrmtrHasFsyncs
+	}
+
+	b.dcdTree = dcdtree.NewDecodeTree(srcFormat, formatterFlags, b.registry)
+	if b.dcdTree == nil {
+		err := fmt.Errorf("failed to create decode tree object")
+		b.reader.logError(err.Error())
+		return nil, err
+	}
+
+	if df := b.dcdTree.GetFrameDeformatter(); df != nil {
+		df.SetErrorLogger(&snapshotErrorLogger{reader: b.reader})
+	}
+
+	// Create a memory accessor mapper in full-decoder mode only.
+	var mapper memacc.Mapper
+	if !packetProcOnly {
+		mapper = memacc.NewGlobalMapper()
+		b.dcdTree.SetMemAccessI(&mapperAdapter{mapper: mapper})
+	}
+
+	numDecodersCreated := 0
+	for srcName, coreName := range tree.SourceCoreAssoc {
+		devSrc := b.reader.ParsedDeviceList[srcName]
+		if devSrc == nil {
+			b.reader.logError(fmt.Sprintf("Failed to find device data for source %s.", srcName))
+			continue
+		}
+
+		if coreName != "<none>" && coreName != "" {
+			coreDev := b.reader.ParsedDeviceList[coreName]
+			if coreDev == nil {
+				b.reader.logError(fmt.Sprintf("Failed to get device data for core %s.", coreName))
+				continue
+			}
+
+			err := b.createPEDecoder(devSrc.DeviceTypeName, devSrc, coreName)
+			if err != nil {
+				b.reader.logError(fmt.Sprintf("Failed to create PEDecoder for source %s: %v", srcName, err))
+				continue
+			}
+
+			numDecodersCreated++
+			if !packetProcOnly && len(coreDev.DumpDefs) > 0 {
+				b.addCoreDumpMemory(mapper, coreDev)
+			}
+			continue
+		}
+
+		err := b.createSTDecoder(devSrc)
+		if err != nil {
+			b.reader.logError(fmt.Sprintf("Failed to create STDecoder for none core source %s: %v", srcName, err))
+			continue
+		}
+		numDecodersCreated++
+	}
+
+	if numDecodersCreated == 0 {
+		b.dcdTree = nil
+		err := fmt.Errorf("no supported protocols found")
+		b.reader.logError(err.Error())
+		return nil, err
+	}
+
+	return b.dcdTree, nil
+}
+
+// CreateDecodeTree builds the tree for a specific named source buffer (e.g., "ETB_0").
+// Deprecated: prefer Build, which returns an error.
+func (b *DecodeTreeBuilder) CreateDecodeTree(sourceName string, bPacketProcOnly bool) bool {
+	_, err := b.Build(sourceName, bPacketProcOnly)
+	return err == nil
 }
 
 // getCoreProfile maps a core device type name (e.g. "Cortex-A57") to its architecture version

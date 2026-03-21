@@ -292,11 +292,11 @@ func rotateSourceNames(sourceNames []string, first string) []string {
 func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sourceNames []string) error {
 	builder := snapshot.NewDecodeTreeBuilder(reader)
 	packetProcOnly := !opts.decode
-	if !builder.CreateDecodeTree(opts.srcName, packetProcOnly) {
-		return fmt.Errorf("Trace Packet Lister : Failed to create decode tree for source %s", opts.srcName)
+	tree, err := builder.Build(opts.srcName, packetProcOnly)
+	if err != nil {
+		return fmt.Errorf("Trace Packet Lister : Failed to create decode tree for source %s: %w", opts.srcName, err)
 	}
 
-	tree := builder.DecodeTree()
 	if tree == nil {
 		return errors.New("Trace Packet Lister : No supported protocols found.")
 	}
