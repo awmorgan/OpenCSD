@@ -33,6 +33,11 @@ func (r *Reader) SetDir(dir string) {
 	r.SnapshotPath = dir
 }
 
+// Dir returns the configured snapshot directory path.
+func (r *Reader) Dir() string {
+	return r.SnapshotPath
+}
+
 // SetSnapshotDir sets the directory to read from.
 // Deprecated: prefer SetDir.
 func (r *Reader) SetSnapshotDir(dir string) {
@@ -57,6 +62,23 @@ func (r *Reader) SnapshotReadOK() bool {
 // ReadOK returns true if the parse was fully successful.
 func (r *Reader) ReadOK() bool {
 	return r.readOK
+}
+
+// Device returns the parsed device definition by name.
+func (r *Reader) Device(name string) (*ParsedDevice, bool) {
+	dev, ok := r.ParsedDeviceList[name]
+	return dev, ok
+}
+
+// Trace returns parsed trace metadata.
+func (r *Reader) Trace() *ParsedTrace {
+	return r.ParsedTrace
+}
+
+// SourceTree returns a parsed source tree by buffer name.
+func (r *Reader) SourceTree(name string) (*TraceBufferSourceTree, bool) {
+	tree, ok := r.SourceTrees[name]
+	return tree, ok
 }
 
 // Read reads the snapshot directory and parses all ini files.

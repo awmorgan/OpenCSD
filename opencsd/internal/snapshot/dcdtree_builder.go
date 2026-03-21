@@ -163,14 +163,14 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 
 	b.packetProcOnly = packetProcOnly
 	tree := NewTraceBufferSourceTree()
-	if !ExtractSourceTree(sourceName, b.reader.ParsedTrace, tree) {
+	if !ExtractSourceTree(sourceName, b.reader.Trace(), tree) {
 		err := fmt.Errorf("failed to get parsed source tree for buffer %s", sourceName)
 		b.reader.logError(err.Error())
 		return nil, err
 	}
 
 	formatterFlags := uint32(ocsd.DfrmtrFrameMemAlign)
-	b.bufferFileName = filepath.Join(b.reader.SnapshotPath, tree.BufferInfo.DataFileName)
+	b.bufferFileName = filepath.Join(b.reader.Dir(), tree.BufferInfo.DataFileName)
 
 	dataFormat := strings.ToLower(tree.BufferInfo.DataFormat)
 	srcFormat := ocsd.TrcSrcFrameFormatted
@@ -201,15 +201,15 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 
 	numDecodersCreated := 0
 	for srcName, coreName := range tree.SourceCoreAssoc {
-		devSrc := b.reader.ParsedDeviceList[srcName]
-		if devSrc == nil {
+		devSrc, ok := b.reader.Device(srcName)
+		if !ok || devSrc == nil {
 			b.reader.logError(fmt.Sprintf("Failed to find device data for source %s.", srcName))
 			continue
 		}
 
 		if coreName != "<none>" && coreName != "" {
-			coreDev := b.reader.ParsedDeviceList[coreName]
-			if coreDev == nil {
+			coreDev, ok := b.reader.Device(coreName)
+			if !ok || coreDev == nil {
 				b.reader.logError(fmt.Sprintf("Failed to get device data for core %s.", coreName))
 				continue
 			}
@@ -462,7 +462,7 @@ func (b *DecodeTreeBuilder) addCoreDumpMemory(mapper memacc.Mapper, dev *ParsedD
 			continue
 		}
 
-		path := filepath.Join(b.reader.SnapshotPath, dump.Path)
+		path := filepath.Join(b.reader.Dir(), dump.Path)
 		fileBytes, err := os.ReadFile(path)
 		if err != nil {
 			b.reader.logError(fmt.Sprintf("Failed to read dump file for %s at %s: %v", dev.DeviceName, path, err))
