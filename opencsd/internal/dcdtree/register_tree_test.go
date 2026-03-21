@@ -183,7 +183,7 @@ func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	if err := tree.CreateDecoder(name, int(ocsd.CreateFlgFullDecoder), testConfig{id: 0x23}); err != ocsd.OK {
+	if err := tree.CreateFullDecoder(name, testConfig{id: 0x23}); err != ocsd.OK {
 		t.Fatalf("CreateDecoder failed: %v", err)
 	}
 	if _, ok := tree.decodeElements[0]; !ok {
@@ -234,7 +234,7 @@ func TestDecodeTreeCreateDecoderRejectsOutOfRangeRouteID(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	err := tree.CreateDecoder(name, int(ocsd.CreateFlgFullDecoder), testConfig{id: 0x80})
+	err := tree.CreateFullDecoder(name, testConfig{id: 0x80})
 	if err != ocsd.ErrInvalidID {
 		t.Fatalf("expected ErrInvalidID for route ID 0x80, got %v", err)
 	}
@@ -253,7 +253,7 @@ func TestNewDecodeTreeUsesInjectedRegistry(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	if err := tree.CreateDecoder(name, int(ocsd.CreateFlgFullDecoder), testConfig{id: 0x11}); err != ocsd.OK {
+	if err := tree.CreateFullDecoder(name, testConfig{id: 0x11}); err != ocsd.OK {
 		t.Fatalf("CreateDecoder failed using injected registry: %v", err)
 	}
 
@@ -271,7 +271,7 @@ func TestDecodeTreePrefersTypedManagerPath(t *testing.T) {
 	}
 
 	tree := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
-	if err := tree.CreateDecoder(name, int(ocsd.CreateFlgFullDecoder), testConfig{id: 0x12}); err != ocsd.OK {
+	if err := tree.CreateFullDecoder(name, testConfig{id: 0x12}); err != ocsd.OK {
 		t.Fatalf("CreateDecoder failed: %v", err)
 	}
 	if !mgr.typedDecoderCalled {
@@ -279,7 +279,7 @@ func TestDecodeTreePrefersTypedManagerPath(t *testing.T) {
 	}
 
 	tree.RemoveDecoder(0x12)
-	if err := tree.CreateDecoder(name, int(ocsd.CreateFlgPacketProc), testConfig{id: 0x12}); err != ocsd.OK {
+	if err := tree.CreatePacketProcessor(name, testConfig{id: 0x12}); err != ocsd.OK {
 		t.Fatalf("CreateDecoder packet-proc path failed: %v", err)
 	}
 	if !mgr.typedPktProcCalled {
@@ -295,7 +295,7 @@ func TestDecodeTreeRejectsManagerWithoutConstructionPath(t *testing.T) {
 	}
 
 	tree := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
-	err := tree.CreateDecoder(name, int(ocsd.CreateFlgFullDecoder), testConfig{id: 0x13})
+	err := tree.CreateFullDecoder(name, testConfig{id: 0x13})
 	if err != ocsd.ErrInvalidParamType {
 		t.Fatalf("expected ErrInvalidParamType for manager without construction path, got %v", err)
 	}
@@ -309,7 +309,7 @@ func TestDecodeTreeUsesLegacyDecoderOnlyManager(t *testing.T) {
 	}
 
 	tree := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
-	if err := tree.CreateDecoder(name, int(ocsd.CreateFlgFullDecoder), testConfig{id: 0x14}); err != ocsd.OK {
+	if err := tree.CreateFullDecoder(name, testConfig{id: 0x14}); err != ocsd.OK {
 		t.Fatalf("CreateDecoder failed: %v", err)
 	}
 }
@@ -322,7 +322,37 @@ func TestDecodeTreeUsesLegacyPktProcOnlyManager(t *testing.T) {
 	}
 
 	tree := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
-	if err := tree.CreateDecoder(name, int(ocsd.CreateFlgPacketProc), testConfig{id: 0x15}); err != ocsd.OK {
+	if err := tree.CreatePacketProcessor(name, testConfig{id: 0x15}); err != ocsd.OK {
 		t.Fatalf("CreateDecoder packet-proc path failed: %v", err)
+	}
+}
+
+func TestDecodeTreeCreateDecoderCompatibilityWrapper(t *testing.T) {
+	const name = "TEST_CREATE_DECODER_COMPAT_WRAPPER"
+	reg := NewDecoderRegister()
+	mgr := &fakeTypedManager{fakeManager: fakeManager{protocol: ocsd.ProtocolSTM}}
+	if err := reg.RegisterDecoderTypeByName(name, mgr); err != ocsd.OK {
+		t.Fatalf("register manager failed: %v", err)
+	}
+
+	tree := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
+	if err := tree.CreateDecoder(name, int(ocsd.CreateFlgFullDecoder), testConfig{id: 0x16}); err != ocsd.OK {
+		t.Fatalf("CreateDecoder full-decoder wrapper failed: %v", err)
+	}
+	if !mgr.typedDecoderCalled {
+		t.Fatal("expected full-decoder wrapper to route to typed decoder path")
+	}
+
+	tree.RemoveDecoder(0x16)
+	mgr.typedPktProcCalled = false
+	if err := tree.CreateDecoder(name, int(ocsd.CreateFlgPacketProc), testConfig{id: 0x16}); err != ocsd.OK {
+		t.Fatalf("CreateDecoder packet-proc wrapper failed: %v", err)
+	}
+	if !mgr.typedPktProcCalled {
+		t.Fatal("expected packet-proc wrapper to route to typed pkt-proc path")
+	}
+
+	if err := tree.CreateDecoder(name, 0, testConfig{id: 0x17}); err != ocsd.ErrInvalidParamType {
+		t.Fatalf("expected ErrInvalidParamType for zero create flags, got %v", err)
 	}
 }
