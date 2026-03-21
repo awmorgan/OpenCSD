@@ -401,13 +401,6 @@ const (
 // Decoder creation information
 
 const (
-	// CreateFlgPacketProc is part of the legacy flag-based decoder creation API.
-	// Prefer explicit DecodeTree creation methods where available.
-	CreateFlgPacketProc  = 0x01
-	// CreateFlgFullDecoder is part of the legacy flag-based decoder creation API.
-	// Prefer explicit DecodeTree creation methods where available.
-	CreateFlgFullDecoder = 0x02
-
 	BuiltinDcdSTM    = "STM"
 	BuiltinDcdETMV3  = "ETMV3"
 	BuiltinDcdETMV4I = "ETMV4I"
