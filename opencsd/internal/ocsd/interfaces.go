@@ -11,7 +11,7 @@ package ocsd
 //
 // Return 0 bytes if start address out of covered range, or memory space is not one of those defined as supported
 // when the callback was registered.
-type FnMemAccCB func(pContext any, address VAddr, memSpace MemSpaceAcc, reqBytes uint32, byteBuffer []byte) uint32
+type FnMemAccCB func(ctx any, address VAddr, memSpace MemSpaceAcc, reqBytes uint32, buffer []byte) uint32
 
 // FnMemAccIDCB is the callback function definition for callback function memory accessor type.
 //
@@ -24,11 +24,10 @@ type FnMemAccCB func(pContext any, address VAddr, memSpace MemSpaceAcc, reqBytes
 //
 // Return 0 bytes if start address out of covered range, or memory space is not one of those defined as supported
 // when the callback was registered.
-type FnMemAccIDCB func(pContext any, address VAddr, memSpace MemSpaceAcc, trcID uint8, reqBytes uint32, byteBuffer []byte) uint32
+type FnMemAccIDCB func(ctx any, address VAddr, memSpace MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32
 
-// TrcDataIn represents ITrcDataIn.
-// It is the generic interface for supplying raw trace data to a component
-// in the decode datapath.
+// TrcDataIn is the generic interface for supplying raw trace data
+// to a component in the decode datapath.
 type TrcDataIn interface {
 	// TraceDataIn processes trace data.
 	// We use an idiomatic Go slice for the data block, returning
@@ -36,26 +35,22 @@ type TrcDataIn interface {
 	TraceDataIn(op DatapathOp, index TrcIndex, dataBlock []byte) (uint32, DatapathResp, error)
 }
 
-// TrcGenElemIn represents ITrcGenElemIn.
-// Interface for the input of generic trace elements.
+// TrcGenElemIn is the input interface for generic trace elements.
 type TrcGenElemIn interface {
 	TraceElemIn(indexSOP TrcIndex, trcChanID uint8, elem *TraceElement) DatapathResp
 }
 
-// PktDataIn represents IPktDataIn<P>.
-// Provide input for discrete protocol packets.
+// PktDataIn provides input for discrete protocol packets.
 type PktDataIn[P any] interface {
 	PacketDataIn(op DatapathOp, indexSOP TrcIndex, pkt *P) DatapathResp
 }
 
-// PktRawDataMon represents IPktRawDataMon<P>.
-// Monitor functionality not on decode path.
+// PktRawDataMon provides packet monitor functionality off the decode path.
 type PktRawDataMon[P any] interface {
 	RawPacketDataMon(op DatapathOp, indexSOP TrcIndex, pkt *P, rawData []byte)
 }
 
-// TrcRawFrameIn represents ITrcRawFrameIn.
-// Interface for the input of raw frame data bytes.
+// TrcRawFrameIn is the input interface for raw frame bytes.
 type TrcRawFrameIn interface {
 	TraceRawFrameIn(op DatapathOp, index TrcIndex, frameElem RawframeElem, data []byte, traceID uint8) DatapathResp
 }

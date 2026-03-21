@@ -7,9 +7,9 @@ import (
 // CallbackAccessor represents a callback trace memory accessor.
 type CallbackAccessor struct {
 	BaseAccessor
-	CBFn   ocsd.FnMemAccCB
-	CBIDFn ocsd.FnMemAccIDCB
-	Ctx    any
+	callback        ocsd.FnMemAccCB
+	traceIDCallback ocsd.FnMemAccIDCB
+	context         any
 }
 
 // NewCallbackAccessor creates a new callback accessor.
@@ -26,27 +26,39 @@ func NewCallbackAccessor(startAddr ocsd.VAddr, endAddr ocsd.VAddr, memSpace ocsd
 
 // ReadBytes implements the Accessor interface.
 func (c *CallbackAccessor) ReadBytes(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, byteBuffer []byte) uint32 {
-	if c.CBIDFn != nil {
-		return c.CBIDFn(c.Ctx, address, memSpace, trcID, reqBytes, byteBuffer)
-	} else if c.CBFn != nil {
-		return c.CBFn(c.Ctx, address, memSpace, reqBytes, byteBuffer)
+	if c.traceIDCallback != nil {
+		return c.traceIDCallback(c.context, address, memSpace, trcID, reqBytes, byteBuffer)
+	} else if c.callback != nil {
+		return c.callback(c.context, address, memSpace, reqBytes, byteBuffer)
 	}
 
 	return 0
 }
 
+// SetCallback sets a callback function that does not take a trace ID.
+func (c *CallbackAccessor) SetCallback(fn ocsd.FnMemAccCB, ctx any) {
+	c.callback = fn
+	c.context = ctx
+	c.traceIDCallback = nil
+}
+
+// SetTraceIDCallback sets a callback function that includes trace ID.
+func (c *CallbackAccessor) SetTraceIDCallback(fn ocsd.FnMemAccIDCB, ctx any) {
+	c.traceIDCallback = fn
+	c.context = ctx
+	c.callback = nil
+}
+
 // SetCBIfFn sets the callback function.
+// Deprecated: use SetCallback.
 func (c *CallbackAccessor) SetCBIfFn(fn ocsd.FnMemAccCB, ctx any) {
-	c.CBFn = fn
-	c.Ctx = ctx
-	c.CBIDFn = nil
+	c.SetCallback(fn, ctx)
 }
 
 // SetCBIDIfFn sets the callback with ID function.
+// Deprecated: use SetTraceIDCallback.
 func (c *CallbackAccessor) SetCBIDIfFn(fn ocsd.FnMemAccIDCB, ctx any) {
-	c.CBIDFn = fn
-	c.Ctx = ctx
-	c.CBFn = nil
+	c.SetTraceIDCallback(fn, ctx)
 }
 
 // InitAccessor re-initializes the accessor.

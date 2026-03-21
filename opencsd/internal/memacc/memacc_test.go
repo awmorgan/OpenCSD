@@ -505,7 +505,7 @@ func testMemAccSimpleCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, 
 func TestAlternativeCallback(t *testing.T) {
 	cbAcc := NewCallbackAccessor(0, 0xFFFFFFFF, ocsd.MemSpaceAny)
 	buf := []byte{0xDE, 0xAD, 0xBE, 0xEF}
-	cbAcc.SetCBIfFn(testMemAccSimpleCB, buf)
+	cbAcc.SetCallback(testMemAccSimpleCB, buf)
 
 	readBuf := make([]byte, 4)
 	read := cbAcc.ReadBytes(0, ocsd.MemSpaceEL1N, 0, 4, readBuf)
@@ -526,6 +526,36 @@ func TestAlternativeCallback(t *testing.T) {
 	st, en := cbAcc.Range()
 	if st != 0x100 || en != 0x200 {
 		t.Errorf("InitAccessor mismatch")
+	}
+}
+
+func TestGlobalMapperRead(t *testing.T) {
+	mapper := NewGlobalMapper()
+	data := []byte{0x11, 0x22, 0x33, 0x44}
+	acc := NewBufferAccessor(0x1000, data)
+	if err := mapper.AddAccessor(acc, 0); err != ocsd.OK {
+		t.Fatalf("failed to add accessor: %v", err)
+	}
+
+	buf := make([]byte, 4)
+	read, err := mapper.Read(0x1000, 0, ocsd.MemSpaceAny, 4, buf)
+	if err != nil {
+		t.Fatalf("unexpected read error: %v", err)
+	}
+	if read != 4 {
+		t.Fatalf("expected read size 4, got %d", read)
+	}
+	if binary.LittleEndian.Uint32(buf) != 0x44332211 {
+		t.Fatalf("unexpected read data: %x", buf)
+	}
+
+	buf = make([]byte, 2)
+	read, err = mapper.Read(0x1000, 0, ocsd.MemSpaceAny, 4, buf)
+	if err != nil {
+		t.Fatalf("unexpected short-buffer read error: %v", err)
+	}
+	if read != 2 {
+		t.Fatalf("expected read size 2 with short buffer, got %d", read)
 	}
 }
 

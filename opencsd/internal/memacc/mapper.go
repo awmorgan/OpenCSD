@@ -8,7 +8,7 @@ import (
 // Mapper defines the interface for mapping and reading target memory.
 type Mapper interface {
 	// ReadTargetMemory reads bytes from the mapped memory accessors.
-	ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, numBytes *uint32, pBuffer []byte) ocsd.Err
+	ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, numBytes *uint32, buffer []byte) ocsd.Err
 
 	// InvalidateMemAccCache invalidates cache entries for a specific Trace ID.
 	InvalidateMemAccCache(trcID uint8)
@@ -51,7 +51,21 @@ func (m *GlobalMapper) SetCacheSizes(pageSize uint16, numPages int, errOnLimit b
 	return m.cache.SetCacheSizes(pageSize, numPages, errOnLimit)
 }
 
-func (m *GlobalMapper) ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, numBytes *uint32, pBuffer []byte) ocsd.Err {
+// Read is an idiomatic helper over ReadTargetMemory that returns bytes read and error.
+func (m *GlobalMapper) Read(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) (uint32, error) {
+	if reqBytes > uint32(len(buffer)) {
+		reqBytes = uint32(len(buffer))
+	}
+
+	bytesRead := reqBytes
+	err := m.ReadTargetMemory(address, trcID, memSpace, &bytesRead, buffer)
+	if err != ocsd.OK {
+		return 0, ocsd.ToError(err)
+	}
+	return bytesRead, nil
+}
+
+func (m *GlobalMapper) ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, numBytes *uint32, buffer []byte) ocsd.Err {
 	prevAcc := m.accCurr
 	found := m.findAccessor(address, memSpace, trcID)
 	if found && m.cache.Enabled() && prevAcc != nil && prevAcc != m.accCurr {
@@ -66,7 +80,7 @@ func (m *GlobalMapper) ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpac
 	// Read from cache if enabled
 	if m.cache.EnabledForSize(*numBytes) {
 		readVal := *numBytes
-		err := m.cache.ReadBytesFromCache(m.accCurr, address, memSpace, trcID, &readVal, pBuffer)
+		err := m.cache.ReadBytesFromCache(m.accCurr, address, memSpace, trcID, &readVal, buffer)
 		if err == ocsd.OK {
 			*numBytes = readVal
 			return ocsd.OK
@@ -74,7 +88,7 @@ func (m *GlobalMapper) ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpac
 		// Fallback to direct read if cache fails (though ReadBytesFromCache should have loaded it)
 	}
 
-	read := m.accCurr.ReadBytes(address, memSpace, trcID, *numBytes, pBuffer)
+	read := m.accCurr.ReadBytes(address, memSpace, trcID, *numBytes, buffer)
 	if read > *numBytes {
 		return ocsd.ErrMemAccBadLen
 	}
