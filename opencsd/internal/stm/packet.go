@@ -299,25 +299,31 @@ func (p *Packet) String() string {
 	case PktFreq:
 		str += fmt.Sprintf("; Freq=%dHz", p.Payload.D32)
 	case PktTrig:
-		str += fmt.Sprintf("; TrigData=0x%02X", p.Payload.D8)
+		str += fmt.Sprintf("; TrigData=0x%02x", p.Payload.D8)
 	case PktM8:
-		str += fmt.Sprintf("; Master=0x%02X", p.Master)
+		str += fmt.Sprintf("; Master=0x%02x", p.Master)
 	case PktC8, PktC16:
-		str += fmt.Sprintf("; Chan=0x%04X", p.Channel)
+		str += fmt.Sprintf("; Chan=0x%04x", p.Channel)
 	case PktD4:
-		str += fmt.Sprintf("; Data=0x%01X", p.Payload.D8&0xF)
+		str += fmt.Sprintf("; Data=0x%01x", p.Payload.D8&0xF)
 	case PktD8:
-		str += fmt.Sprintf("; Data=0x%02X", p.Payload.D8)
+		str += fmt.Sprintf("; Data=0x%02x", p.Payload.D8)
 	case PktD16:
-		str += fmt.Sprintf("; Data=0x%04X", p.Payload.D16)
+		str += fmt.Sprintf("; Data=0x%04x", p.Payload.D16)
 	case PktD32:
-		str += fmt.Sprintf("; Data=0x%08X", p.Payload.D32)
+		str += fmt.Sprintf("; Data=0x%08x", p.Payload.D32)
 	case PktD64:
-		str += fmt.Sprintf("; Data=0x%016X", p.Payload.D64)
+		str += fmt.Sprintf("; Data=0x%016x", p.Payload.D64)
 	}
 
 	if p.IsTSPkt() {
-		str += fmt.Sprintf("; TS=0x%X ~[%d]", p.Timestamp, p.PktTSBits)
+		updateMask := uint64(0)
+		if p.PktTSBits >= 64 {
+			updateMask = ^uint64(0)
+		} else if p.PktTSBits > 0 {
+			updateMask = (uint64(1) << p.PktTSBits) - 1
+		}
+		str += fmt.Sprintf("; TS=0x%016X ~[0x%X]", p.Timestamp, p.Timestamp&updateMask)
 	}
 
 	return str

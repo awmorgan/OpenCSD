@@ -245,7 +245,7 @@ func TestSTMPacketString(t *testing.T) {
 	pkt.SetPacketType(PktD8, false)
 	pkt.SetD8Payload(0xAB)
 	str := pkt.String()
-	if str != "D8:8 bit data; Data=0xAB" {
+	if str != "D8:8 bit data; Data=0xab" {
 		t.Errorf("Unexpected formatting for D8: %s", str)
 	}
 
