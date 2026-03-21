@@ -19,7 +19,7 @@ func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, ocsd.Err) {
 		return nil, ocsd.ErrInvalidParamVal
 	}
 	proc := NewPktProc(instID)
-	if err := proc.SetProtocolConfig(cfg); err != ocsd.OK {
+	if err := proc.SetProtocolConfig(cfg); ocsd.IsNotOK(err) {
 		return nil, err
 	}
 	return proc, ocsd.OK
@@ -31,7 +31,7 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, ocsd.Err) {
 		return nil, ocsd.ErrInvalidParamVal
 	}
 	dec := NewPktDecode(instID)
-	if err := dec.SetProtocolConfig(cfg); err != ocsd.OK {
+	if err := dec.SetProtocolConfig(cfg); ocsd.IsNotOK(err) {
 		return nil, err
 	}
 	return dec, ocsd.OK

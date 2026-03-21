@@ -31,7 +31,7 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, ocsd.Err) {
 		return nil, ocsd.ErrInvalidParamVal
 	}
 	decoder := NewPktDecode(instID)
-	if decoder.SetProtocolConfig(cfg.ToETMv4Config()) != ocsd.OK {
+	if err := decoder.SetProtocolConfig(cfg.ToETMv4Config()); ocsd.IsNotOK(err) {
 		return nil, ocsd.ErrInvalidParamVal
 	}
 	return decoder, ocsd.OK
