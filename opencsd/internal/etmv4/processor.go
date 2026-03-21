@@ -209,7 +209,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 
 		case SendPkt:
 			resp = p.outputPacket()
-			p.initPacketState()
+			p.resetPacketState()
 			p.processState = ProcHdr
 
 		case SendUnsynced:
@@ -241,7 +241,7 @@ func (p *Processor) onEOT() ocsd.DatapathResp {
 	if len(p.currPacketData) != 0 {
 		p.currPacket.ErrType = PktIncompleteEOT
 		resp = p.outputPacket()
-		p.initPacketState()
+		p.resetPacketState()
 	}
 
 	if p.pktOut != nil && !ocsd.DataRespIsFatal(resp) {
@@ -261,7 +261,7 @@ func (p *Processor) onReset() ocsd.DatapathResp {
 		resp = p.pktOut.PacketDataIn(ocsd.OpReset, 0, nil)
 	}
 	if !ocsd.DataRespIsFatal(resp) {
-		p.initProcessorState()
+		p.resetProcessorState()
 	}
 	return resp
 }
@@ -278,12 +278,12 @@ func (p *Processor) onFlush() ocsd.DatapathResp {
 	return resp
 }
 
-func (p *Processor) initStartState() {
+func (p *Processor) resetStartState() {
 	p.currPacket = TracePacket{}
 	p.currPacket.ProtocolVersion = p.config.FullVersion()
 }
 
-func (p *Processor) initPacketState() {
+func (p *Processor) resetPacketState() {
 	p.currPacketData = p.currPacketData[:0]
 
 	p.currPacket.Type = 0
@@ -309,9 +309,9 @@ func (p *Processor) initPacketState() {
 	p.updateOnUnsyncPktIdx = 0
 }
 
-func (p *Processor) initProcessorState() {
-	p.initStartState()
-	p.initPacketState()
+func (p *Processor) resetProcessorState() {
+	p.resetStartState()
+	p.resetPacketState()
 	p.currDecode = decodeNotSync
 	p.packetIndex = 0
 	p.isSync = false

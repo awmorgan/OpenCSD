@@ -51,7 +51,7 @@ func NewPktDecode(instID int) *PktDecode {
 	d.ConfigurePktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV3", instID))
 	d.codeFollower = common.NewCodeFollowerWithInterfaces(&d.MemAccess, &d.InstrDecode)
 
-	d.initDecoder()
+	d.configureDecoder()
 	return d
 }
 
@@ -98,7 +98,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 	return resp
 }
 
-func (d *PktDecode) initDecoder() {
+func (d *PktDecode) configureDecoder() {
 	d.csID = 0
 	d.resetDecoder()
 	d.unsyncInfo = common.UnsyncInitDecoder

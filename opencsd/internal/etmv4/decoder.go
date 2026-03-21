@@ -170,7 +170,7 @@ func NewPktDecode(instIDNum int) *PktDecode {
 	d.ConfigurePktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV4", instIDNum))
 	d.SetSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms | ocsd.OpflgPktdecAA64OpcodeChk)
 
-	d.initDecoder()
+	d.configureDecoder()
 	return d
 }
 
@@ -230,7 +230,7 @@ func (d *PktDecode) TraceID() uint8 {
 	return 0
 }
 
-func (d *PktDecode) initDecoder() {
+func (d *PktDecode) configureDecoder() {
 	// Not needed yet depending on PktDecodeBase
 	// d.ResetDecoderBase()
 	d.currState = noSync
@@ -272,7 +272,7 @@ func (d *PktDecode) SetProtocolConfig(config *Config) ocsd.Err {
 	// Extract basic config elements
 	d.maxSpecDepth = int(d.config.MaxSpecDepth())
 	// d.InitDecoderCore()
-	d.initDecoder()
+	d.configureDecoder()
 	d.outElem.SetCSID(d.config.TraceID())
 	d.outElem.SetSendIf(d.TraceElemOutAttachPt())
 
@@ -400,7 +400,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) OnReset() ocsd.DatapathResp {
-	d.initDecoder()
+	d.configureDecoder()
 	d.unsyncEOTInfo = ocsd.UnsyncResetDecoder
 	return ocsd.RespCont
 }

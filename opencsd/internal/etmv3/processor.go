@@ -56,7 +56,7 @@ func NewPktProc(instID int) *PktProc {
 	p.ConfigurePktProcBase(fmt.Sprintf("%s_%d", "PKTP_ETMV3", instID))
 
 	// Initialise configuration
-	p.initProcessorState()
+	p.resetProcessorState()
 	return p
 }
 
@@ -103,16 +103,16 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 	return processed, resp, err
 }
 
-func (p *PktProc) initProcessorState() {
+func (p *PktProc) resetProcessorState() {
 	p.bStreamSync = false
 	p.processState = waitSync
 	p.bStartOfSync = false
 	p.currPacket.ResetState()
-	p.initPacketState()
+	p.resetPacketState()
 	p.bSendPartPkt = false
 }
 
-func (p *PktProc) initPacketState() {
+func (p *PktProc) resetPacketState() {
 	p.bytesExpected = 0
 	p.branchNeedsEx = false
 	p.isyncGotCC = false
@@ -131,12 +131,12 @@ func (p *PktProc) initPacketState() {
 func (p *PktProc) SetProtocolConfig(config *Config) ocsd.Err {
 	p.Config = config
 	// Re-initialize state when config changes
-	p.initProcessorState()
+	p.resetProcessorState()
 	return ocsd.OK // config structure handles validation properties directly
 }
 
 func (p *PktProc) OnReset() ocsd.DatapathResp {
-	p.initProcessorState()
+	p.resetProcessorState()
 	return ocsd.RespCont
 }
 
@@ -149,7 +149,7 @@ func (p *PktProc) OnEOT() ocsd.DatapathResp {
 	if len(p.currPacketData) != 0 {
 		p.currPacket.ErrType = PktIncompleteEOT
 		resp = p.outputPacket()
-		p.initPacketState()
+		p.resetPacketState()
 	}
 	return resp
 }
@@ -242,7 +242,7 @@ func (p *PktProc) waitForSync(dataBlock []byte) int {
 }
 
 func (p *PktProc) processHeaderByte(by uint8) {
-	p.initPacketState()
+	p.resetPacketState()
 	p.currPacketData = append(p.currPacketData, by)
 	p.processState = procData
 

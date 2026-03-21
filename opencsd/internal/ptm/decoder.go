@@ -95,7 +95,7 @@ func NewPktDecode(instIDNum int) *PktDecode {
 	d := &PktDecode{}
 	d.ConfigurePktDecodeBase(fmt.Sprintf("%s_%d", "DCD_PTM", instIDNum))
 
-	d.initDecoder()
+	d.configureDecoder()
 	return d
 }
 
@@ -146,7 +146,7 @@ func (d *PktDecode) TraceID() uint8 {
 	return d.csID
 }
 
-func (d *PktDecode) initDecoder() {
+func (d *PktDecode) configureDecoder() {
 	d.csID = 0
 	d.instrInfo.PeType.Profile = ocsd.ProfileUnknown
 	d.instrInfo.PeType.Arch = ocsd.ArchUnknown

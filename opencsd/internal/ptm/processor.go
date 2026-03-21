@@ -98,7 +98,7 @@ func NewPktProc(instIDNum int) *PktProc {
 	p := &PktProc{}
 	p.ConfigurePktProcBase(fmt.Sprintf("%s_%d", "PKTP_PTM", instIDNum))
 
-	p.initProcessorState()
+	p.resetProcessorState()
 	p.buildIPacketTable()
 	return p
 }
@@ -159,11 +159,11 @@ func (p *PktProc) IsBadPacket() bool {
 	return p.currPacket.IsBadPacket()
 }
 
-func (p *PktProc) initPacketState() {
+func (p *PktProc) resetPacketState() {
 	p.currPacket.Clear()
 }
 
-func (p *PktProc) initProcessorState() {
+func (p *PktProc) resetProcessorState() {
 	p.currPacket.Type = PktNotSync
 	p.currDecode = decodeReserved
 	p.processState = stateWaitSync
@@ -174,7 +174,7 @@ func (p *PktProc) initProcessorState() {
 	p.excepAltISA = 0
 
 	p.currPacket.ResetState()
-	p.initPacketState()
+	p.resetPacketState()
 }
 
 func (p *PktProc) readByteVal() (uint8, bool) {
@@ -279,7 +279,7 @@ func (p *PktProc) doProcessLoop(currByte *uint8, ok *bool) (ocsd.DatapathResp, e
 
 	case stateSendPkt:
 		resp = p.outputPacket()
-		p.initPacketState()
+		p.resetPacketState()
 		p.processState = stateProcHdr
 	}
 
@@ -338,7 +338,7 @@ func (p *PktProc) OnReset() ocsd.DatapathResp {
 	if p.Config == nil {
 		return ocsd.RespFatalNotInit
 	}
-	p.initProcessorState()
+	p.resetProcessorState()
 	return ocsd.RespCont
 }
 

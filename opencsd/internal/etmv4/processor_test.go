@@ -2,7 +2,7 @@ package etmv4
 
 import "testing"
 
-func TestProcessorInitPacketStateClearsConditionalState(t *testing.T) {
+func TestProcessorResetPacketStateClearsConditionalState(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.currPacketData = []byte{0xAA, 0xBB}
 	p.currPacket.CondInstr = CondInstr{
@@ -19,7 +19,7 @@ func TestProcessorInitPacketStateClearsConditionalState(t *testing.T) {
 		KeyRes1Set: true,
 	}
 
-	p.initPacketState()
+	p.resetPacketState()
 
 	if len(p.currPacketData) != 0 {
 		t.Fatalf("expected packet data cleared, got %d bytes", len(p.currPacketData))
