@@ -172,6 +172,7 @@ func (p *Packet) Clear() {
 	// like Timestamp, Addr, Context, and ISA.
 	p.Type = PktNoError
 	p.ErrType = PktNoError
+	p.PrevISA = p.CurrISA
 	p.Context.Updated = false
 	p.Context.UpdatedC = false
 	p.Context.UpdatedV = false
@@ -390,8 +391,11 @@ func packetTypeNameDesc(pt PktType) (string, string) {
 // with an optional ~[0xNN] suffix showing the low pktBits of the value.
 func addrValStr(addr uint64, pktBits int) string {
 	s := fmt.Sprintf("0x%08X", uint32(addr))
-	if pktBits > 0 && pktBits < 32 {
-		mask := uint32((1 << pktBits) - 1)
+	if pktBits > 0 && pktBits <= 32 {
+		mask := uint32(0xFFFFFFFF)
+		if pktBits < 32 {
+			mask = uint32((1 << pktBits) - 1)
+		}
 		s += fmt.Sprintf(" ~[0x%X]", uint32(addr)&mask)
 	}
 	return s
