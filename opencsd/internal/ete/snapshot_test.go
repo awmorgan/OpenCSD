@@ -128,8 +128,8 @@ func TestSanitizePPLEmbeddedIdxRecords(t *testing.T) {
 func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOptions) ([]byte, error) {
 	reader := snapshot.NewReader()
 	reader.SetSnapshotDir(snapshotDir)
-	if !reader.ReadSnapShot() {
-		return nil, fmt.Errorf("failed to read snapshot: %s", snapshotDir)
+	if err := reader.Read(); err != nil {
+		return nil, fmt.Errorf("failed to read snapshot: %v", err)
 	}
 	if reader.ParsedTrace == nil {
 		return nil, fmt.Errorf("missing parsed trace metadata")

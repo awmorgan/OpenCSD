@@ -264,8 +264,8 @@ ETM_0=cpu_0
 	reader.SetSnapshotDir(tempDir)
 	reader.Verbose = true
 
-	if ok := reader.ReadSnapShot(); !ok {
-		t.Fatalf("expected success")
+	if err := reader.Read(); err != nil {
+		t.Fatalf("expected success: %v", err)
 	}
 
 	if !reader.SnapshotFound() {
@@ -305,7 +305,7 @@ func TestReader_Errors(t *testing.T) {
 	reader.Verbose = true
 	// Invalid path
 	reader.SetSnapshotDir("/non/existent/path/for/sure")
-	if ok := reader.ReadSnapShot(); ok {
+	if err := reader.Read(); err == nil {
 		t.Errorf("expected failure")
 	}
 
@@ -321,7 +321,7 @@ metadata=missing_trace.ini
 `), 0644)
 
 	// should still return true as it read snapshot.ini but individual files failed
-	if ok := reader.ReadSnapShot(); !ok {
+	if err := reader.Read(); err != nil {
 		t.Errorf("expected success reading snapshot.ini even if sub files fail")
 	}
 
@@ -371,8 +371,8 @@ ETM_0=cpu_0
 
 	reader := NewReader()
 	reader.SetSnapshotDir(tempDir)
-	if ok := reader.ReadSnapShot(); !ok {
-		t.Fatalf("expected success")
+	if err := reader.Read(); err != nil {
+		t.Fatalf("expected success: %v", err)
 	}
 
 	if reader.ParsedTrace == nil {
@@ -410,8 +410,8 @@ name=cpu_legacy_1
 
 	reader := NewReader()
 	reader.SetSnapshotDir(tempDir)
-	if ok := reader.ReadSnapShot(); !ok {
-		t.Fatalf("expected success")
+	if err := reader.Read(); err != nil {
+		t.Fatalf("expected success: %v", err)
 	}
 
 	if len(reader.ParsedDeviceList) != 2 {

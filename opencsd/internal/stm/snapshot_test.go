@@ -93,8 +93,8 @@ func runSTMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) ([]byte, error) {
 	reader := snapshot.NewReader()
 	reader.SetSnapshotDir(snapshotDir)
-	if !reader.ReadSnapShot() {
-		return nil, fmt.Errorf("failed to read snapshot: %s", snapshotDir)
+	if err := reader.Read(); err != nil {
+		return nil, fmt.Errorf("failed to read snapshot: %v", err)
 	}
 
 	if reader.ParsedTrace == nil {

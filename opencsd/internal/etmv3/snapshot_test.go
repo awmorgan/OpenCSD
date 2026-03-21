@@ -186,8 +186,8 @@ func TestETMv3SnapshotsAgainstGolden(t *testing.T) {
 func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	reader := snapshot.NewReader()
 	reader.SetSnapshotDir(snapshotDir)
-	if !reader.ReadSnapShot() {
-		return nil, fmt.Errorf("failed to read snapshot: %s", snapshotDir)
+	if err := reader.Read(); err != nil {
+		return nil, fmt.Errorf("failed to read snapshot: %w", err)
 	}
 
 	if reader.ParsedTrace == nil {

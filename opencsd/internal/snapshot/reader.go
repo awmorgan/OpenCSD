@@ -43,8 +43,8 @@ func (r *Reader) SnapshotReadOK() bool {
 	return r.readOK
 }
 
-// ReadSnapShot reads the snapshot directory and parses all ini files
-func (r *Reader) ReadSnapShot() bool {
+// Read reads the snapshot directory and parses all ini files.
+func (r *Reader) Read() error {
 	r.snapshotFound = false
 	r.readOK = false
 	r.ParsedDeviceList = make(map[string]*ParsedDevice)
@@ -55,7 +55,7 @@ func (r *Reader) ReadSnapShot() bool {
 	file, err := os.Open(iniPath)
 	if err != nil {
 		r.logError(fmt.Sprintf("Failed to open %s: %v", iniPath, err))
-		return false
+		return fmt.Errorf("open snapshot ini %s: %w", iniPath, err)
 	}
 	defer file.Close()
 
@@ -64,7 +64,7 @@ func (r *Reader) ReadSnapShot() bool {
 	devList, err := ParseDeviceList(file)
 	if err != nil {
 		r.logError(fmt.Sprintf("Failed to parse device list from %s: %v", iniPath, err))
-		return false
+		return fmt.Errorf("parse device list %s: %w", iniPath, err)
 	}
 
 	// Parse devices
@@ -107,7 +107,13 @@ func (r *Reader) ReadSnapShot() bool {
 	}
 
 	r.readOK = true
-	return true
+	return nil
+}
+
+// ReadSnapShot reads the snapshot directory and parses all ini files.
+// Deprecated: prefer Read, which returns an error.
+func (r *Reader) ReadSnapShot() bool {
+	return r.Read() == nil
 }
 
 func (r *Reader) loadDevice(devName string, iniFileName string) {
