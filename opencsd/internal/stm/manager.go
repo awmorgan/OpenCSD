@@ -53,40 +53,40 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, ocsd.
 	return proc, dec, ocsd.OK
 }
 
-func typedConfig(config any) (*Config, ocsd.Err) {
+func typedConfig(config any) (*Config, error) {
 	cfg, ok := config.(*Config)
 	if !ok {
-		return nil, ocsd.ErrInvalidParamType
+		return nil, ocsd.ToError(ocsd.ErrInvalidParamType)
 	}
-	return cfg, ocsd.OK
+	return cfg, nil
 }
 
 // Implement DecoderManagerBase overrides just by defining functions that return the appropriate components.
 // Normally we'd register this in lib_dcd_register, but since the port uses Go idiomatic registries,
 // we just provide the factory methods.
 
-func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
+func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, error) {
 	cfg, err := typedConfig(config)
-	if ocsd.IsNotOK(err) {
+	if err != nil {
 		return nil, nil, err
 	}
-	proc, err := NewConfiguredPktProc(instID, cfg)
-	if ocsd.IsNotOK(err) {
-		return nil, nil, err
+	proc, createErr := NewConfiguredPktProc(instID, cfg)
+	if ocsd.IsNotOK(createErr) {
+		return nil, nil, ocsd.ToError(createErr)
 	}
-	return proc, proc, ocsd.OK
+	return proc, proc, nil
 }
 
-func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
+func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, error) {
 	cfg, err := typedConfig(config)
-	if ocsd.IsNotOK(err) {
+	if err != nil {
 		return nil, nil, err
 	}
-	proc, dec, err := NewConfiguredPipeline(instID, cfg)
-	if ocsd.IsNotOK(err) {
-		return nil, nil, err
+	proc, dec, createErr := NewConfiguredPipeline(instID, cfg)
+	if ocsd.IsNotOK(createErr) {
+		return nil, nil, ocsd.ToError(createErr)
 	}
-	return proc, dec, ocsd.OK
+	return proc, dec, nil
 }
 
 func (m *DecoderManager) ProtocolType() ocsd.TraceProtocol {

@@ -24,14 +24,14 @@ type fakeManager struct {
 	protocol ocsd.TraceProtocol
 }
 
-func (m *fakeManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
+func (m *fakeManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, error) {
 	proc := &fakeDataIn{}
-	return proc, proc, ocsd.OK
+	return proc, proc, nil
 
 }
 
-func (m *fakeManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
-	return &fakeDataIn{}, struct{}{}, ocsd.OK
+func (m *fakeManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, error) {
+	return &fakeDataIn{}, struct{}{}, nil
 }
 
 func (m *fakeManager) ProtocolType() ocsd.TraceProtocol {
@@ -44,15 +44,15 @@ type fakeTypedManager struct {
 	typedDecoderCalled bool
 }
 
-func (m *fakeTypedManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
+func (m *fakeTypedManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, error) {
 	m.typedPktProcCalled = true
 	proc := &fakeDataIn{}
-	return proc, proc, ocsd.OK
+	return proc, proc, nil
 }
 
-func (m *fakeTypedManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
+func (m *fakeTypedManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, error) {
 	m.typedDecoderCalled = true
-	return &fakeDataIn{}, struct{}{}, ocsd.OK
+	return &fakeDataIn{}, struct{}{}, nil
 }
 
 func TestDecoderRegisterCustomProtocolAllocation(t *testing.T) {

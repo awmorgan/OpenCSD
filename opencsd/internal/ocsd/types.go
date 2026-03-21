@@ -1,5 +1,7 @@
 package ocsd
 
+import "errors"
+
 // Trace Indexing and Channel IDs
 
 // TrcIndex is the trace source index type.
@@ -79,6 +81,32 @@ const (
 	ErrBadDecodeImage        Err = 46
 	ErrLast                  Err = 47
 )
+
+type StatusError struct {
+	Code Err
+}
+
+func (e StatusError) Error() string {
+	return "ocsd status error"
+}
+
+func ToError(err Err) error {
+	if err == OK {
+		return nil
+	}
+	return StatusError{Code: err}
+}
+
+func AsErr(err error) Err {
+	if err == nil {
+		return OK
+	}
+	var statusErr StatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.Code
+	}
+	return ErrFail
+}
 
 func IsOK(err Err) bool {
 	return err == OK

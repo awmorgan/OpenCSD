@@ -161,16 +161,16 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 	var handle any
 
 	if fullDecoder {
-		var err2 ocsd.Err
+		var err2 error
 		pktIn, handle, err2 = mngr.CreateTypedDecoder(int(routeID), config)
-		if err2 != ocsd.OK {
-			return err2
+		if err2 != nil {
+			return ocsd.AsErr(err2)
 		}
 	} else {
-		var err2 ocsd.Err
+		var err2 error
 		pktIn, handle, err2 = mngr.CreateTypedPktProc(int(routeID), config)
-		if err2 != ocsd.OK {
-			return err2
+		if err2 != nil {
+			return ocsd.AsErr(err2)
 		}
 	}
 

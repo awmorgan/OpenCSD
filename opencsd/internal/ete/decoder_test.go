@@ -37,7 +37,7 @@ func TestDecoderManagerCreateDecoder(t *testing.T) {
 	cfg := NewConfig()
 
 	in, handle, err := NewDecoderManager().CreateTypedDecoder(3, cfg)
-	if err != ocsd.OK {
+	if err != nil {
 		t.Fatalf("CreateTypedDecoder err=%v", err)
 	}
 	if in == nil || handle == nil {
@@ -72,7 +72,7 @@ func TestDecoderManagerRejectsWrongConfigType(t *testing.T) {
 	m := NewDecoderManager()
 
 	in, handle, err := m.CreateTypedPktProc(0, struct{}{})
-	if err != ocsd.ErrInvalidParamVal {
+	if got := ocsd.AsErr(err); got != ocsd.ErrInvalidParamVal {
 		t.Fatalf("CreateTypedPktProc err=%v want %v", err, ocsd.ErrInvalidParamVal)
 	}
 	if in != nil || handle != nil {
@@ -80,7 +80,7 @@ func TestDecoderManagerRejectsWrongConfigType(t *testing.T) {
 	}
 
 	in, handle, err = m.CreateTypedDecoder(0, struct{}{})
-	if err != ocsd.ErrInvalidParamVal {
+	if got := ocsd.AsErr(err); got != ocsd.ErrInvalidParamVal {
 		t.Fatalf("CreateTypedDecoder err=%v want %v", err, ocsd.ErrInvalidParamVal)
 	}
 	if in != nil || handle != nil {

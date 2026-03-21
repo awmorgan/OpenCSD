@@ -63,7 +63,7 @@ type TrcRawFrameIn interface {
 // DecoderMngr identifies a registered decoder manager by protocol.
 // It provides typed construction of packet processors and full decoders.
 type DecoderMngr interface {
-	CreateTypedPktProc(instID int, config any) (TrcDataIn, any, Err)
-	CreateTypedDecoder(instID int, config any) (TrcDataIn, any, Err)
+	CreateTypedPktProc(instID int, config any) (TrcDataIn, any, error)
+	CreateTypedDecoder(instID int, config any) (TrcDataIn, any, error)
 	ProtocolType() TraceProtocol
 }

@@ -2014,36 +2014,36 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, ocs
 	return proc, decoder, ocsd.OK
 }
 
-func typedConfig(config any) (*Config, ocsd.Err) {
+func typedConfig(config any) (*Config, error) {
 	cfg, ok := config.(*Config)
 	if !ok {
-		return nil, ocsd.ErrInvalidParamVal
+		return nil, ocsd.ToError(ocsd.ErrInvalidParamVal)
 	}
-	return cfg, ocsd.OK
+	return cfg, nil
 }
 
-func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
+func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, error) {
 	cfg, err := typedConfig(config)
-	if ocsd.IsNotOK(err) {
+	if err != nil {
 		return nil, nil, err
 	}
-	proc, err := NewConfiguredProcessor(cfg)
-	if ocsd.IsNotOK(err) {
-		return nil, nil, err
+	proc, createErr := NewConfiguredProcessor(cfg)
+	if ocsd.IsNotOK(createErr) {
+		return nil, nil, ocsd.ToError(createErr)
 	}
-	return proc, proc, ocsd.OK
+	return proc, proc, nil
 }
 
-func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
+func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, error) {
 	cfg, err := typedConfig(config)
-	if ocsd.IsNotOK(err) {
+	if err != nil {
 		return nil, nil, err
 	}
-	proc, decoder, err := NewConfiguredPipeline(instID, cfg)
-	if ocsd.IsNotOK(err) {
-		return nil, nil, err
+	proc, decoder, createErr := NewConfiguredPipeline(instID, cfg)
+	if ocsd.IsNotOK(createErr) {
+		return nil, nil, ocsd.ToError(createErr)
 	}
-	return proc, decoder, ocsd.OK
+	return proc, decoder, nil
 }
 
 func (m *DecoderManager) ProtocolType() ocsd.TraceProtocol {
