@@ -1,7 +1,6 @@
 package itm
 
 import (
-	
 	"opencsd/internal/ocsd"
 )
 
@@ -11,8 +10,7 @@ type DecoderManager struct {
 
 // NewDecoderManager creates a new ITM decoder manager.
 func NewDecoderManager() *DecoderManager {
-	m := &DecoderManager{}
-	return m
+	return &DecoderManager{}
 }
 
 // NewConfiguredPktProc creates an ITM packet processor with a typed config.
@@ -42,14 +40,14 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, ocsd.Err) {
 // NewConfiguredPipeline creates and wires a typed ITM processor/decoder pair.
 func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, ocsd.Err) {
 	proc, err := NewConfiguredPktProc(instID, cfg)
-	if err != ocsd.OK {
+	if ocsd.IsNotOK(err) {
 		return nil, nil, err
 	}
 	dec, err := NewConfiguredPktDecode(instID, cfg)
-	if err != ocsd.OK {
+	if ocsd.IsNotOK(err) {
 		return nil, nil, err
 	}
-	if err := proc.PktOutI.ReplaceFirst(dec); err != ocsd.OK {
+	if err := proc.PktOutI.ReplaceFirst(dec); ocsd.IsNotOK(err) {
 		return nil, nil, err
 	}
 	return proc, dec, ocsd.OK
@@ -61,7 +59,7 @@ func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDat
 		return nil, nil, ocsd.ErrInvalidParamType
 	}
 	proc, err := NewConfiguredPktProc(instID, cfg)
-	if err != ocsd.OK {
+	if ocsd.IsNotOK(err) {
 		return nil, nil, err
 	}
 	return proc, proc, ocsd.OK
@@ -73,7 +71,7 @@ func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDat
 		return nil, nil, ocsd.ErrInvalidParamType
 	}
 	proc, dec, err := NewConfiguredPipeline(instID, cfg)
-	if err != ocsd.OK {
+	if ocsd.IsNotOK(err) {
 		return nil, nil, err
 	}
 	return proc, dec, ocsd.OK
