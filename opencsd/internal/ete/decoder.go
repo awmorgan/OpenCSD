@@ -31,7 +31,7 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, ocsd.Err) {
 		return nil, ocsd.ErrInvalidParamVal
 	}
 	decoder := NewPktDecode(instID)
-	if err := decoder.SetProtocolConfig(cfg.ToETMv4Config()); ocsd.IsNotOK(err) {
+	if err := decoder.SetProtocolConfig(cfg.ToETMv4Config()); err != ocsd.OK {
 		return nil, ocsd.ErrInvalidParamVal
 	}
 	return decoder, ocsd.OK
@@ -40,11 +40,11 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, ocsd.Err) {
 // NewConfiguredPipeline creates and wires a typed ETE processor/decoder pair.
 func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, ocsd.Err) {
 	proc, err := NewConfiguredProcessor(cfg)
-	if ocsd.IsNotOK(err) {
+	if err != ocsd.OK {
 		return nil, nil, err
 	}
 	decoder, err := NewConfiguredPktDecode(instID, cfg)
-	if ocsd.IsNotOK(err) {
+	if err != ocsd.OK {
 		return nil, nil, err
 	}
 	proc.SetPktOut(decoder)
@@ -65,7 +65,7 @@ func (m *DecoderManager) CreatePacketProcessor(instID int, config any) (ocsd.Trc
 		return nil, nil, err
 	}
 	proc, createErr := NewConfiguredProcessor(cfg)
-	if ocsd.IsNotOK(createErr) {
+	if createErr != ocsd.OK {
 		return nil, nil, ocsd.ToError(createErr)
 	}
 	return proc, proc, nil
@@ -77,7 +77,7 @@ func (m *DecoderManager) CreateDecoder(instID int, config any) (ocsd.TrcDataIn, 
 		return nil, nil, err
 	}
 	proc, decoder, createErr := NewConfiguredPipeline(instID, cfg)
-	if ocsd.IsNotOK(createErr) {
+	if createErr != ocsd.OK {
 		return nil, nil, ocsd.ToError(createErr)
 	}
 	return proc, decoder, nil
