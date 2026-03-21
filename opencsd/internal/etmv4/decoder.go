@@ -1931,12 +1931,49 @@ func NewDecoderManager() *DecoderManager {
 	return &DecoderManager{}
 }
 
+// NewConfiguredProcessor creates an ETMv4 packet processor with a typed config.
+func NewConfiguredProcessor(cfg *Config) (*Processor, ocsd.Err) {
+	if cfg == nil {
+		return nil, ocsd.ErrInvalidParamVal
+	}
+	return NewProcessor(cfg), ocsd.OK
+}
+
+// NewConfiguredPktDecode creates an ETMv4 packet decoder with a typed config.
+func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, ocsd.Err) {
+	if cfg == nil {
+		return nil, ocsd.ErrInvalidParamVal
+	}
+	decoder := NewPktDecode(instID)
+	if decoder.SetProtocolConfig(cfg) != ocsd.OK {
+		return nil, ocsd.ErrInvalidParamVal
+	}
+	return decoder, ocsd.OK
+}
+
+// NewConfiguredPipeline creates and wires a typed ETMv4 processor/decoder pair.
+func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, ocsd.Err) {
+	proc, err := NewConfiguredProcessor(cfg)
+	if err != ocsd.OK {
+		return nil, nil, err
+	}
+	decoder, err := NewConfiguredPktDecode(instID, cfg)
+	if err != ocsd.OK {
+		return nil, nil, err
+	}
+	proc.SetPktOut(decoder)
+	return proc, decoder, ocsd.OK
+}
+
 func (m *DecoderManager) CreatePktProc(instID int, config any) interfaces.TrcTypedBase {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil
 	}
-	proc := NewProcessor(cfg)
+	proc, err := NewConfiguredProcessor(cfg)
+	if err != ocsd.OK {
+		return nil
+	}
 	return proc
 }
 
@@ -1945,25 +1982,22 @@ func (m *DecoderManager) CreatePktDecode(instID int, config any) interfaces.TrcT
 	if !ok {
 		return nil
 	}
-	decoder := NewPktDecode(instID)
-	if decoder.SetProtocolConfig(cfg) != ocsd.OK {
+	decoder, err := NewConfiguredPktDecode(instID, cfg)
+	if err != ocsd.OK {
 		return nil
 	}
 	return decoder
 }
 
 func (m *DecoderManager) CreateDecoder(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {
-	procAny := m.CreatePktProc(instID, config)
-	if procAny == nil {
+	cfg, ok := config.(*Config)
+	if !ok {
 		return nil, nil, ocsd.ErrInvalidParamVal
 	}
-	decAny := m.CreatePktDecode(instID, config)
-	if decAny == nil {
-		return nil, nil, ocsd.ErrInvalidParamVal
+	proc, decoder, err := NewConfiguredPipeline(instID, cfg)
+	if err != ocsd.OK {
+		return nil, nil, err
 	}
-	proc := procAny.(*Processor)
-	decoder := decAny.(*PktDecode)
-	proc.SetPktOut(decoder)
 	return proc, decoder, ocsd.OK
 }
 

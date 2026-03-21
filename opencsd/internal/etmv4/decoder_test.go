@@ -6,6 +6,35 @@ import (
 	"opencsd/internal/ocsd"
 )
 
+func TestTypedConstructors(t *testing.T) {
+	cfg := &Config{}
+
+	proc, err := NewConfiguredProcessor(cfg)
+	if err != ocsd.OK || proc == nil {
+		t.Fatalf("NewConfiguredProcessor failed: proc=%v err=%v", proc, err)
+	}
+
+	dec, err := NewConfiguredPktDecode(1, cfg)
+	if err != ocsd.OK || dec == nil || dec.Config != cfg {
+		t.Fatalf("NewConfiguredPktDecode failed: dec=%v err=%v", dec, err)
+	}
+
+	proc, dec, err = NewConfiguredPipeline(2, cfg)
+	if err != ocsd.OK || proc == nil || dec == nil {
+		t.Fatalf("NewConfiguredPipeline failed: proc=%v dec=%v err=%v", proc, dec, err)
+	}
+
+	if proc, err := NewConfiguredProcessor(nil); err != ocsd.ErrInvalidParamVal || proc != nil {
+		t.Fatalf("expected nil-config processor constructor failure, got proc=%v err=%v", proc, err)
+	}
+	if dec, err := NewConfiguredPktDecode(0, nil); err != ocsd.ErrInvalidParamVal || dec != nil {
+		t.Fatalf("expected nil-config decode constructor failure, got dec=%v err=%v", dec, err)
+	}
+	if proc, dec, err := NewConfiguredPipeline(0, nil); err != ocsd.ErrInvalidParamVal || proc != nil || dec != nil {
+		t.Fatalf("expected nil-config pipeline constructor failure, got proc=%v dec=%v err=%v", proc, dec, err)
+	}
+}
+
 func TestDecoderOnFlushResolvesPendingState(t *testing.T) {
 	d := NewPktDecode(0)
 	d.Config = &Config{}
