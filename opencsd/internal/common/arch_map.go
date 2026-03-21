@@ -12,11 +12,11 @@ func NewCoreArchProfileMap() *CoreArchProfileMap {
 	m := &CoreArchProfileMap{
 		coreMap: make(map[string]ocsd.ArchProfile),
 	}
-	m.initMap()
+	m.loadMap()
 	return m
 }
 
-func (m *CoreArchProfileMap) initMap() {
+func (m *CoreArchProfileMap) loadMap() {
 	// Cortex-A Series
 	m.coreMap["Cortex-A77"] = ocsd.ArchProfile{Arch: ocsd.ArchV8r3, Profile: ocsd.ProfileCortexA} // Assuming ArchV8r3 exists
 	m.coreMap["Cortex-A76"] = ocsd.ArchProfile{Arch: ocsd.ArchV8r3, Profile: ocsd.ProfileCortexA}

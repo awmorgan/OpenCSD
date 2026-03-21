@@ -1124,7 +1124,7 @@ func newTestDec(hitAfter int) (*PktDecode, *testTrcElemIn) {
 func TestAtomDataMethods(t *testing.T) {
 	var a PtmAtoms
 
-	a.init(ocsd.PktAtom{Num: 3, EnBits: 0x5}, 42) // binary 101 -> E,N,E
+	a.set(ocsd.PktAtom{Num: 3, EnBits: 0x5}, 42) // binary 101 -> E,N,E
 	if a.numAtoms() != 3 {
 		t.Errorf("numAtoms: want 3, got %d", a.numAtoms())
 	}

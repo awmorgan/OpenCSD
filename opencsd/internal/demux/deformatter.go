@@ -151,7 +151,7 @@ func (d *FrameDeformatter) rawChanEnabled(id uint8) bool {
 
 // Decode control
 
-func (d *FrameDeformatter) initCollateDataPathResp() {
+func (d *FrameDeformatter) resetCollateDataPathResp() {
 	d.highestResp = ocsd.RespCont
 }
 
@@ -197,7 +197,7 @@ func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocs
 
 func (d *FrameDeformatter) Reset() ocsd.DatapathResp {
 	d.resetStateParams()
-	d.initCollateDataPathResp()
+	d.resetCollateDataPathResp()
 	return d.executeNoneDataOpAllIDs(ocsd.OpReset, 0)
 }
 
@@ -228,7 +228,7 @@ func (d *FrameDeformatter) resetStateParams() {
 // TraceDataIn implementation
 func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
 	resp := ocsd.RespFatalInvalidOp
-	d.initCollateDataPathResp()
+	d.resetCollateDataPathResp()
 
 	d.outPackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrPackedRawOut) != 0
 	d.outUnpackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrUnpackedRawOut) != 0

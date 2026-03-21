@@ -40,7 +40,7 @@ type PtmAtoms struct {
 	rootIndex ocsd.TrcIndex
 }
 
-func (a *PtmAtoms) init(atom ocsd.PktAtom, rootIndex ocsd.TrcIndex) {
+func (a *PtmAtoms) set(atom ocsd.PktAtom, rootIndex ocsd.TrcIndex) {
 	a.atom = atom
 	a.rootIndex = rootIndex
 }
@@ -362,7 +362,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 		}
 	case PktAtom:
 		if d.currPeState.valid {
-			d.atoms.init(pkt.Atom, d.IndexCurrPkt)
+			d.atoms.set(pkt.Atom, d.IndexCurrPkt)
 			resp = d.processAtom()
 		} else {
 			d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevWarn, ocsd.ErrBadPacketSeq, d.IndexCurrPkt, d.csID, "Dropped atom packet while PE state is invalid; waiting for branch address or I-Sync."))
