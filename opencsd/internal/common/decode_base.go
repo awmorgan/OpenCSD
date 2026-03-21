@@ -45,7 +45,6 @@ type PktDecodeResetHook interface{ OnReset() ocsd.DatapathResp }
 type PktDecodeFlushHook interface{ OnFlush() ocsd.DatapathResp }
 type PktDecodeProtocolConfigHook interface{ OnProtocolConfig() ocsd.Err }
 type PktDecodeTraceIDProvider interface{ GetTraceID() uint8 }
-type PktDecodeFirstInitHook interface{ OnFirstInitOK() }
 
 // PktProcStrategy defines the core strategy for packet processing.
 type PktProcStrategy[P any, Pt any, Pc any] interface {
@@ -75,7 +74,6 @@ type PktDecodeI struct {
 	usesIDecode   bool
 
 	traceIDProvider PktDecodeTraceIDProvider
-	onFirstInitOK   PktDecodeFirstInitHook
 }
 
 func (p *PktDecodeI) GetTraceElemOutAttachPt() *AttachPt[interfaces.TrcGenElemIn] {
@@ -118,9 +116,6 @@ func (p *PktDecodeI) ensureDecodeReady() (bool, string) {
 	}
 
 	p.decodeInitOK = true
-	if p.onFirstInitOK != nil {
-		p.onFirstInitOK.OnFirstInitOK()
-	}
 
 	return true, ""
 }
@@ -185,11 +180,6 @@ func (pb *PktDecodeBase[P, Pc]) SetStrategy(strategy PktDecodeStrategy[P, Pc]) {
 		pb.traceIDProvider = traceIDProvider
 	} else {
 		pb.traceIDProvider = nil
-	}
-	if firstInitHook, ok := any(strategy).(PktDecodeFirstInitHook); ok {
-		pb.onFirstInitOK = firstInitHook
-	} else {
-		pb.onFirstInitOK = nil
 	}
 }
 
