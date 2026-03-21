@@ -103,114 +103,31 @@ func (g *filteredGenElemPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID u
 	return g.printer.TraceElemIn(indexSOP, trcChanID, elem)
 }
 
-type ptmRawPrinter struct {
-	writer io.Writer
-	id     uint8
+// genericRawPrinter handles raw output for any packet type using Go 1.18+ generics.
+type genericRawPrinter[T any] struct {
+	writer   io.Writer
+	id       uint8
+	formatFn func(T) string
 }
 
-func (p *ptmRawPrinter) SetMute(bool) {}
+func (p *genericRawPrinter[T]) SetMute(bool) {}
 
-func (p *ptmRawPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *ptm.Packet, rawData []byte) {
+func (p *genericRawPrinter[T]) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt T, rawData []byte) {
 	if op == ocsd.OpEOT {
 		fmt.Fprintf(p.writer, "ID:%x\tEND OF TRACE DATA\n", p.id)
 		return
 	}
-	if op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
+
+	formattedPkt := p.formatFn(pkt)
+	if op != ocsd.OpData || formattedPkt == "" || len(rawData) == 0 {
 		return
 	}
+
 	fmt.Fprintf(p.writer, "Idx:%d; ID:%x; [", indexSOP, p.id)
 	for _, b := range rawData {
 		fmt.Fprintf(p.writer, "0x%02x ", b)
 	}
-	fmt.Fprintf(p.writer, "];\t%s\n", pkt.String())
-}
-
-type etmv3RawPrinter struct {
-	writer io.Writer
-	id     uint8
-}
-
-func (p *etmv3RawPrinter) SetMute(bool) {}
-
-func (p *etmv3RawPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *etmv3.Packet, rawData []byte) {
-	if op == ocsd.OpEOT {
-		fmt.Fprintf(p.writer, "ID:%x\tEND OF TRACE DATA\n", p.id)
-		return
-	}
-	if op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
-		return
-	}
-	fmt.Fprintf(p.writer, "Idx:%d; ID:%x; [", indexSOP, p.id)
-	for _, b := range rawData {
-		fmt.Fprintf(p.writer, "0x%02x ", b)
-	}
-	fmt.Fprintf(p.writer, "];\t%s\n", pkt.String())
-}
-
-type etmv4RawPrinter struct {
-	writer io.Writer
-	id     uint8
-}
-
-func (p *etmv4RawPrinter) SetMute(bool) {}
-
-func (p *etmv4RawPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket, rawData []byte) {
-	if op == ocsd.OpEOT {
-		fmt.Fprintf(p.writer, "ID:%x\tEND OF TRACE DATA\n", p.id)
-		return
-	}
-	if op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
-		return
-	}
-	fmt.Fprintf(p.writer, "Idx:%d; ID:%x; [", indexSOP, p.id)
-	for _, b := range rawData {
-		fmt.Fprintf(p.writer, "0x%02x ", b)
-	}
-	fmt.Fprintf(p.writer, "];\t%s\n", pkt.HeaderString())
-}
-
-type itmRawPrinter struct {
-	writer io.Writer
-	id     uint8
-}
-
-func (p *itmRawPrinter) SetMute(bool) {}
-
-func (p *itmRawPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *itm.Packet, rawData []byte) {
-	if op == ocsd.OpEOT {
-		fmt.Fprintf(p.writer, "ID:%x\tEND OF TRACE DATA\n", p.id)
-		return
-	}
-	if op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
-		return
-	}
-	fmt.Fprintf(p.writer, "Idx:%d; ID:%x; [", indexSOP, p.id)
-	for _, b := range rawData {
-		fmt.Fprintf(p.writer, "0x%02x ", b)
-	}
-	fmt.Fprintf(p.writer, "];\t%s\n", pkt.String())
-}
-
-type stmRawPrinter struct {
-	writer io.Writer
-	id     uint8
-}
-
-func (p *stmRawPrinter) SetMute(bool) {}
-
-func (p *stmRawPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *stm.Packet, rawData []byte) {
-	if op == ocsd.OpEOT {
-		fmt.Fprintf(p.writer, "ID:%x\tEND OF TRACE DATA\n", p.id)
-		return
-	}
-	if op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
-		return
-	}
-	fmt.Fprintf(p.writer, "Idx:%d; ID:%x; [", indexSOP, p.id)
-	for _, b := range rawData {
-		fmt.Fprintf(p.writer, "0x%02x ", b)
-	}
-	fmt.Fprintf(p.writer, "];\t%s\n", pkt.String())
+	fmt.Fprintf(p.writer, "];\t%s\n", formattedPkt)
 }
 
 func main() {
@@ -379,8 +296,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, genPrinter *printers.GenericElementPrinter, opts options) error {
 	file, err := os.Open(fileName)
 	if err != nil {
-		fmt.Fprintln(out, "Trace Packet Lister : Error : Unable to open trace buffer.")
-		return err
+		return fmt.Errorf("Trace Packet Lister : Error : Unable to open trace buffer %s: %w", fileName, err)
 	}
 	defer file.Close()
 
@@ -388,6 +304,7 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 	var traceIndex uint32
 	dataPathResp := ocsd.RespCont
 	var dataPathErr error
+
 	buf := make([]byte, 1024)
 	pending := make([]byte, 0, 2048)
 	align := frameAlignment(tree)
@@ -402,16 +319,21 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 					break
 				}
 			}
+
 			used, resp, dpErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
 			dataPathResp = resp
 			if dpErr != nil {
 				dataPathErr = dpErr
 				return
 			}
+
 			if used > 0 {
-				pending = pending[used:]
+				// FIX: Shift remaining bytes to the start of the slice to reuse capacity
+				n := copy(pending, pending[used:])
+				pending = pending[:n]
 				traceIndex += used
 			}
+
 			if ocsd.DataRespIsWait(dataPathResp) {
 				if genPrinter.NeedAckWait() {
 					genPrinter.AckWait()
@@ -419,6 +341,7 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 				_, dataPathResp, _ = tree.TraceDataIn(ocsd.OpFlush, 0, nil)
 				continue
 			}
+
 			if used == 0 {
 				break
 			}
@@ -429,7 +352,7 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 	}
 
 	for dataPathResp < ocsd.RespFatalNotInit {
-		n := 0
+		var n int
 		if opts.dstreamFormat {
 			n, err = io.ReadFull(file, buf[:512-8])
 			if err == io.ErrUnexpectedEOF || err == io.EOF {
@@ -478,7 +401,7 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 	}
 
 	if dataPathErr != nil {
-		return dataPathErr
+		return fmt.Errorf("Trace Packet Lister : Data path processing error: %w", dataPathErr)
 	}
 
 	if ocsd.DataRespIsFatal(dataPathResp) {
@@ -486,15 +409,14 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 		if opts.ssVerbose {
 			fmt.Fprintf(os.Stderr, "[trc_pkt_lister] fatal response=%d at trace index=%d pending=%d\n", dataPathResp, traceIndex, len(pending))
 		}
-		// continue to print "done" line, matching C++ behaviour
 	} else {
 		if _, _, err := tree.TraceDataIn(ocsd.OpEOT, 0, nil); err != nil {
-			return err
+			return fmt.Errorf("Trace Packet Lister : OpEOT error: %w", err)
 		}
 
 		if opts.multiSession {
 			if _, _, err := tree.TraceDataIn(ocsd.OpReset, 0, nil); err != nil {
-				return err
+				return fmt.Errorf("Trace Packet Lister : OpReset error: %w", err)
 			}
 		}
 	}
@@ -517,7 +439,6 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 
 	return nil
 }
-
 func frameAlignment(tree *dcdtree.DecodeTree) int {
 	deformatter := tree.FrameDeformatter()
 	if deformatter == nil {
@@ -565,11 +486,13 @@ func applyAdditionalFlags(tree *dcdtree.DecodeTree, flags uint32) {
 func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options) int {
 	attached := 0
 	idFilter := makeIDSet(opts.idList)
+
 	type elemRef struct {
 		id   uint8
 		elem *dcdtree.DecodeTreeElement
 	}
 	elems := make([]elemRef, 0)
+
 	tree.ForEachElement(func(csID uint8, elem *dcdtree.DecodeTreeElement) {
 		elems = append(elems, elemRef{id: csID, elem: elem})
 	})
@@ -589,19 +512,59 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 
 		switch proc := elem.DataIn.(type) {
 		case *ptm.PktProc:
-			_ = proc.PktRawMonI.Replace(&ptmRawPrinter{writer: out, id: csID})
+			_ = proc.PktRawMonI.Replace(&genericRawPrinter[*ptm.Packet]{
+				writer: out, id: csID,
+				formatFn: func(pkt *ptm.Packet) string {
+					if pkt == nil {
+						return ""
+					}
+					return pkt.String()
+				},
+			})
 			ok = true
 		case *etmv3.PktProc:
-			_ = proc.PktRawMonI.Replace(&etmv3RawPrinter{writer: out, id: csID})
+			_ = proc.PktRawMonI.Replace(&genericRawPrinter[*etmv3.Packet]{
+				writer: out, id: csID,
+				formatFn: func(pkt *etmv3.Packet) string {
+					if pkt == nil {
+						return ""
+					}
+					return pkt.String()
+				},
+			})
 			ok = true
 		case *etmv4.Processor:
-			_ = proc.PktRawMonI.Replace(&etmv4RawPrinter{writer: out, id: csID})
+			_ = proc.PktRawMonI.Replace(&genericRawPrinter[*etmv4.TracePacket]{
+				writer: out, id: csID,
+				formatFn: func(pkt *etmv4.TracePacket) string {
+					if pkt == nil {
+						return ""
+					}
+					return pkt.HeaderString() // Unique string formatter handled cleanly!
+				},
+			})
 			ok = true
 		case *itm.PktProc:
-			_ = proc.PktRawMonI.Replace(&itmRawPrinter{writer: out, id: csID})
+			_ = proc.PktRawMonI.Replace(&genericRawPrinter[*itm.Packet]{
+				writer: out, id: csID,
+				formatFn: func(pkt *itm.Packet) string {
+					if pkt == nil {
+						return ""
+					}
+					return pkt.String()
+				},
+			})
 			ok = true
 		case *stm.PktProc:
-			_ = proc.PktRawMonI.Replace(&stmRawPrinter{writer: out, id: csID})
+			_ = proc.PktRawMonI.Replace(&genericRawPrinter[*stm.Packet]{
+				writer: out, id: csID,
+				formatFn: func(pkt *stm.Packet) string {
+					if pkt == nil {
+						return ""
+					}
+					return pkt.String()
+				},
+			})
 			ok = true
 		}
 
@@ -609,12 +572,11 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 			fmt.Fprintf(out, "Trace Packet Lister : Protocol printer %s on Trace ID 0x%x\n", protocolName, csID)
 			attached++
 		} else {
-			fmt.Fprintf(out, "Trace Packet Lister : Failed to Protocol printer %s on Trace ID 0x%x\n", protocolName, csID)
+			fmt.Fprintf(out, "Trace Packet Lister : Failed to attach Protocol printer %s on Trace ID 0x%x\n", protocolName, csID)
 		}
 	}
 	return attached
 }
-
 func configureFrameDemux(tree *dcdtree.DecodeTree, out io.Writer, opts options) {
 	deformatter := tree.FrameDeformatter()
 	if deformatter == nil {
