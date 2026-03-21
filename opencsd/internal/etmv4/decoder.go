@@ -1977,6 +1977,18 @@ func (m *DecoderManager) CreatePktProc(instID int, config any) interfaces.TrcTyp
 	return proc
 }
 
+func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {
+	cfg, ok := config.(*Config)
+	if !ok {
+		return nil, nil, ocsd.ErrInvalidParamVal
+	}
+	proc, err := NewConfiguredProcessor(cfg)
+	if err != ocsd.OK {
+		return nil, nil, err
+	}
+	return proc, proc, ocsd.OK
+}
+
 func (m *DecoderManager) CreatePktDecode(instID int, config any) interfaces.TrcTypedBase {
 	cfg, ok := config.(*Config)
 	if !ok {
@@ -1987,6 +1999,18 @@ func (m *DecoderManager) CreatePktDecode(instID int, config any) interfaces.TrcT
 		return nil
 	}
 	return decoder
+}
+
+func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {
+	cfg, ok := config.(*Config)
+	if !ok {
+		return nil, nil, ocsd.ErrInvalidParamVal
+	}
+	proc, decoder, err := NewConfiguredPipeline(instID, cfg)
+	if err != ocsd.OK {
+		return nil, nil, err
+	}
+	return proc, decoder, ocsd.OK
 }
 
 func (m *DecoderManager) CreateDecoder(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {

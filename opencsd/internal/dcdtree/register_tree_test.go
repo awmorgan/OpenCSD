@@ -39,6 +39,23 @@ func (m *fakeManager) ProtocolType() ocsd.TraceProtocol {
 	return m.protocol
 }
 
+type fakeTypedManager struct {
+	fakeManager
+	typedPktProcCalled bool
+	typedDecoderCalled bool
+}
+
+func (m *fakeTypedManager) CreateTypedPktProc(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {
+	m.typedPktProcCalled = true
+	proc := &fakeDataIn{}
+	return proc, proc, ocsd.OK
+}
+
+func (m *fakeTypedManager) CreateTypedDecoder(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {
+	m.typedDecoderCalled = true
+	return &fakeDataIn{}, struct{}{}, ocsd.OK
+}
+
 func TestDecoderRegisterCustomProtocolAllocation(t *testing.T) {
 	r := NewDecoderRegister()
 
@@ -214,5 +231,30 @@ func TestNewDecodeTreeUsesInjectedRegistry(t *testing.T) {
 
 	if _, ok := tree.decodeElements[0]; !ok {
 		t.Fatal("expected decoder created from injected registry")
+	}
+}
+
+func TestDecodeTreePrefersTypedManagerPath(t *testing.T) {
+	const name = "TEST_TYPED_MANAGER_PATH"
+	reg := NewDecoderRegister()
+	mgr := &fakeTypedManager{fakeManager: fakeManager{protocol: ocsd.ProtocolSTM}}
+	if err := reg.RegisterDecoderTypeByName(name, mgr); err != ocsd.OK {
+		t.Fatalf("register manager failed: %v", err)
+	}
+
+	tree := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
+	if err := tree.CreateDecoder(name, int(ocsd.CreateFlgFullDecoder), testConfig{id: 0x12}); err != ocsd.OK {
+		t.Fatalf("CreateDecoder failed: %v", err)
+	}
+	if !mgr.typedDecoderCalled {
+		t.Fatal("expected DecodeTree to prefer the typed full-decoder path")
+	}
+
+	tree.RemoveDecoder(0x12)
+	if err := tree.CreateDecoder(name, int(ocsd.CreateFlgPacketProc), testConfig{id: 0x12}); err != ocsd.OK {
+		t.Fatalf("CreateDecoder packet-proc path failed: %v", err)
+	}
+	if !mgr.typedPktProcCalled {
+		t.Fatal("expected DecodeTree to prefer the typed packet-processor path")
 	}
 }

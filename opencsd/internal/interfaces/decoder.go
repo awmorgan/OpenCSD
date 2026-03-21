@@ -15,3 +15,11 @@ type DecoderMngr interface {
 	CreateDecoder(instID int, config any) (TrcDataIn, TrcTypedBase, ocsd.Err)
 	ProtocolType() ocsd.TraceProtocol
 }
+
+// TypedDecoderMngr is an optional Go-native constructor interface.
+// DecodeTree prefers this when available so built-in managers can avoid the
+// legacy any-returning factory path while preserving compatibility.
+type TypedDecoderMngr interface {
+	CreateTypedPktProc(instID int, config any) (TrcDataIn, TrcTypedBase, ocsd.Err)
+	CreateTypedDecoder(instID int, config any) (TrcDataIn, TrcTypedBase, ocsd.Err)
+}

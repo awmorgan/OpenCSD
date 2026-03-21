@@ -117,21 +117,34 @@ func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config 
 
 	var pktIn interfaces.TrcDataIn
 	var handle interfaces.TrcTypedBase
+	typedMngr, hasTypedPath := mngr.(interfaces.TypedDecoderMngr)
 
 	if (createFlags & ocsd.CreateFlgFullDecoder) != 0 {
 		var err2 ocsd.Err
-		pktIn, handle, err2 = mngr.CreateDecoder(int(routeID), config)
+		if hasTypedPath {
+			pktIn, handle, err2 = typedMngr.CreateTypedDecoder(int(routeID), config)
+		} else {
+			pktIn, handle, err2 = mngr.CreateDecoder(int(routeID), config)
+		}
 		if err2 != ocsd.OK {
 			return err2
 		}
 	} else if (createFlags & ocsd.CreateFlgPacketProc) != 0 {
-		h := mngr.CreatePktProc(int(routeID), config)
-		if h == nil {
-			return ocsd.ErrInvalidParamType
-		}
-		handle = h
-		if in, ok := h.(interfaces.TrcDataIn); ok {
-			pktIn = in
+		if hasTypedPath {
+			var err2 ocsd.Err
+			pktIn, handle, err2 = typedMngr.CreateTypedPktProc(int(routeID), config)
+			if err2 != ocsd.OK {
+				return err2
+			}
+		} else {
+			h := mngr.CreatePktProc(int(routeID), config)
+			if h == nil {
+				return ocsd.ErrInvalidParamType
+			}
+			handle = h
+			if in, ok := h.(interfaces.TrcDataIn); ok {
+				pktIn = in
+			}
 		}
 	}
 
