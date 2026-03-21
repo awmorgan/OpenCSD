@@ -375,28 +375,20 @@ func normalizeTraceListerIdxRecord(rec, decoder string) string {
 	if packetType == "" {
 		return ""
 	}
-	packetHeader := normalizePacketHeader(right, decoder)
-	packetDesc := extractPacketDescription(packetHeader, decoder)
+	packetHeader := normalizePacketHeader(right)
+	packetDesc := extractPacketDescription(packetHeader)
 	return fmt.Sprintf("ID:%s; PKT:%s; HDR:%s; DESC:%s", id, packetType, packetHeader, packetDesc)
 }
 
-func normalizePacketHeader(s, decoder string) string {
+func normalizePacketHeader(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return ""
 	}
-
-	// For ETMv4, ETE, ETMv3, PTM and STM, stop truncating at semicolon to accurately test full packet headers
-	if decoder == "etmv4" || decoder == "ete" || decoder == "etmv3" || decoder == "ptm" || decoder == "stm" {
-		return strings.Join(strings.Fields(s), " ")
-	}
-
-	before, _, _ := strings.Cut(s, ";")
-	hdr := strings.Join(strings.Fields(strings.TrimSpace(before)), " ")
-	return hdr
+	return strings.Join(strings.Fields(s), " ")
 }
 
-func extractPacketDescription(header, decoder string) string {
+func extractPacketDescription(header string) string {
 	header = strings.TrimSpace(header)
 	_, desc, ok := strings.Cut(header, ":")
 	if !ok {

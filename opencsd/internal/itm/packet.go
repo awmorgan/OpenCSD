@@ -114,7 +114,7 @@ func (p *Packet) IsBadPacket() bool {
 
 // String provides a string representation of the packet, matching C++ trc_pkt_elem_itm formatting.
 func (p *Packet) String() string {
-	name, _ := p.typeNameAndDesc()
+	name, desc := p.typeNameAndDesc()
 	str := name + ": "
 
 	switch p.Type {
@@ -130,42 +130,43 @@ func (p *Packet) String() string {
 		str += p.tsGlobal2PacketBody()
 	case PktExtension:
 		str += p.extensionPacketBody()
-	case PktBadSequence:
+	case PktIncompleteEOT, PktBadSequence:
 		errName, _ := (&Packet{Type: p.ErrType}).typeNameAndDesc()
-		str += fmt.Sprintf("[%s]", errName)
+		str += fmt.Sprintf("[Init type: %s] ", errName)
 	}
 
+	str += "; '" + desc + "'"
 	return str
 }
 
 func (p *Packet) typeNameAndDesc() (string, string) {
 	switch p.Type {
 	case PktNotSync:
-		return "ITM_NOTSYNC", ""
+		return "ITM_NOTSYNC", "ITM data stream not synchronised"
 	case PktIncompleteEOT:
-		return "ITM_INCOMPLETE_EOT", ""
+		return "ITM_INCOMPLETE_EOT", "Incomplete packet flushed at end of trace"
 	case PktAsync:
-		return "ITM_ASYNC", ""
+		return "ITM_ASYNC", "Alignment synchronisation packet"
 	case PktOverflow:
-		return "ITM_OVERFLOW", ""
+		return "ITM_OVERFLOW", "ITM overflow packet"
 	case PktSWIT:
-		return "ITM_SWIT", ""
+		return "ITM_SWIT", "Software Stimulus write packet"
 	case PktDWT:
-		return "ITM_DWT", ""
+		return "ITM_DWT", "DWT hardware stimulus write"
 	case PktTSLocal:
-		return "ITM_TS_LOCAL", ""
+		return "ITM_TS_LOCAL", "Local Timestamp"
 	case PktTSGlobal1:
-		return "ITM_GTS_1", ""
+		return "ITM_GTS_1", "Global Timestamp [25:0]"
 	case PktTSGlobal2:
-		return "ITM_GTS_2", ""
+		return "ITM_GTS_2", "Global Timestamp [{63|42}:26]"
 	case PktExtension:
-		return "ITM_EXTENSION", ""
+		return "ITM_EXTENSION", "Extension packet"
 	case PktBadSequence:
-		return "ITM_BAD_SEQUENCE", ""
+		return "ITM_BAD_SEQUENCE", "Invalid sequence in packet"
 	case PktReserved:
-		return "ITM_RESERVED", ""
+		return "ITM_RESERVED", "Reserved Packet Header"
 	default:
-		return "ITM_UNKNOWN", ""
+		return "ITM_UNKNOWN", "ERROR: unknown packet type"
 	}
 }
 
