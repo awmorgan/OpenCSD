@@ -5,16 +5,15 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-// ElemPtr pairs a TraceElement pointer with a trace packet index.
-type ElemPtr struct {
-	PElem     *ocsd.TraceElement
-	TrcPktIdx ocsd.TrcIndex
+type elemSlot struct {
+	elem     *ocsd.TraceElement
+	pktIndex ocsd.TrcIndex
 }
 
 // GenElemList implements OcsdGenElemList.
 // A circular buffer / ring buffer of TraceElement used to queue items before sending out.
 type GenElemList struct {
-	elemArray []ElemPtr
+	elemArray []elemSlot
 	firstIdx  int
 	numUsed   int
 	numPend   int
@@ -25,10 +24,10 @@ type GenElemList struct {
 // NewGenElemList creates a new list with an initial capacity.
 func NewGenElemList() *GenElemList {
 	l := &GenElemList{
-		elemArray: make([]ElemPtr, 16),
+		elemArray: make([]elemSlot, 16),
 	}
 	for i := range l.elemArray {
-		l.elemArray[i].PElem = ocsd.NewTraceElement()
+		l.elemArray[i].elem = ocsd.NewTraceElement()
 	}
 	return l
 }
@@ -49,12 +48,12 @@ func (l *GenElemList) Reset() {
 
 func (l *GenElemList) growArray() {
 	newSize := len(l.elemArray) * 2
-	newArr := make([]ElemPtr, newSize)
+	newArr := make([]elemSlot, newSize)
 	for i := range newSize {
 		if i < l.numUsed {
 			newArr[i] = l.elemArray[l.getAdjustedIdx(l.firstIdx+i)]
 		} else {
-			newArr[i].PElem = ocsd.NewTraceElement()
+			newArr[i].elem = ocsd.NewTraceElement()
 		}
 	}
 	l.elemArray = newArr
@@ -73,9 +72,9 @@ func (l *GenElemList) NextElem(trcPktIdx ocsd.TrcIndex) *ocsd.TraceElement {
 		l.growArray()
 	}
 	idx := l.getAdjustedIdx(l.firstIdx + l.numUsed)
-	l.elemArray[idx].TrcPktIdx = trcPktIdx
+	l.elemArray[idx].pktIndex = trcPktIdx
 	l.numUsed++
-	return l.elemArray[idx].PElem
+	return l.elemArray[idx].elem
 }
 
 func (l *GenElemList) NumElem() int {
@@ -85,7 +84,7 @@ func (l *GenElemList) NumElem() int {
 func (l *GenElemList) ElemType(entryN int) ocsd.GenElemType {
 	if entryN < l.numUsed {
 		idx := l.getAdjustedIdx(l.firstIdx + entryN)
-		return l.elemArray[idx].PElem.ElemType
+		return l.elemArray[idx].elem.ElemType
 	}
 	return ocsd.GenElemUnknown
 }
@@ -123,7 +122,7 @@ func (l *GenElemList) SendElements() ocsd.DatapathResp {
 	for l.ElemToSend() && ocsd.DataRespIsCont(resp) {
 		idx := l.firstIdx
 		pPtr := &l.elemArray[idx]
-		resp = l.sendIf.First().TraceElemIn(pPtr.TrcPktIdx, l.csID, pPtr.PElem)
+		resp = l.sendIf.First().TraceElemIn(pPtr.pktIndex, l.csID, pPtr.elem)
 		l.firstIdx = l.getAdjustedIdx(l.firstIdx + 1)
 		l.numUsed--
 	}
@@ -132,7 +131,7 @@ func (l *GenElemList) SendElements() ocsd.DatapathResp {
 
 // GenElemStack implements OcsdGenElemStack.
 type GenElemStack struct {
-	elemArray   []ElemPtr
+	elemArray   []elemSlot
 	elemToSend  int
 	currElemIdx int
 	sendElemIdx int
@@ -144,10 +143,10 @@ type GenElemStack struct {
 // NewGenElemStack creates a new trace element stack.
 func NewGenElemStack() *GenElemStack {
 	s := &GenElemStack{
-		elemArray: make([]ElemPtr, 4),
+		elemArray: make([]elemSlot, 4),
 	}
 	for i := range s.elemArray {
-		s.elemArray[i].PElem = ocsd.NewTraceElement()
+		s.elemArray[i].elem = ocsd.NewTraceElement()
 	}
 	return s
 }
@@ -171,7 +170,7 @@ func (s *GenElemStack) InitCSID(csID uint8) {
 }
 
 func (s *GenElemStack) CurrElem() *ocsd.TraceElement {
-	return s.elemArray[s.currElemIdx].PElem
+	return s.elemArray[s.currElemIdx].elem
 }
 
 func (s *GenElemStack) ResetElemStack() ocsd.Err {
@@ -192,15 +191,15 @@ func (s *GenElemStack) resetIndexes() {
 }
 
 func (s *GenElemStack) copyPersistentData(src, dst int) {
-	s.elemArray[dst].PElem.CopyPersistentData(s.elemArray[src].PElem)
+	s.elemArray[dst].elem.CopyPersistentData(s.elemArray[src].elem)
 }
 
 func (s *GenElemStack) growArray() ocsd.Err {
 	newSize := len(s.elemArray) + 4
-	newArr := make([]ElemPtr, newSize)
+	newArr := make([]elemSlot, newSize)
 	copy(newArr, s.elemArray)
 	for i := len(s.elemArray); i < newSize; i++ {
-		newArr[i].PElem = ocsd.NewTraceElement()
+		newArr[i].elem = ocsd.NewTraceElement()
 	}
 	s.elemArray = newArr
 	return ocsd.OK
@@ -216,13 +215,13 @@ func (s *GenElemStack) AddElem(trcPktIdx ocsd.TrcIndex) ocsd.Err {
 		s.copyPersistentData(s.currElemIdx, s.currElemIdx+1)
 		s.currElemIdx++
 	}
-	s.elemArray[s.currElemIdx].TrcPktIdx = trcPktIdx
+	s.elemArray[s.currElemIdx].pktIndex = trcPktIdx
 	s.elemToSend++
 	return ocsd.OK
 }
 
 func (s *GenElemStack) SetCurrElemIdx(trcPktIdx ocsd.TrcIndex) {
-	s.elemArray[s.currElemIdx].TrcPktIdx = trcPktIdx
+	s.elemArray[s.currElemIdx].pktIndex = trcPktIdx
 }
 
 func (s *GenElemStack) AddElemType(trcPktIdx ocsd.TrcIndex, elemType ocsd.GenElemType) ocsd.Err {
@@ -244,7 +243,7 @@ func (s *GenElemStack) SendElements() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 	for s.elemToSend > 0 && ocsd.DataRespIsCont(resp) {
 		pPtr := &s.elemArray[s.sendElemIdx]
-		resp = s.sendIf.First().TraceElemIn(pPtr.TrcPktIdx, s.csID, pPtr.PElem)
+		resp = s.sendIf.First().TraceElemIn(pPtr.pktIndex, s.csID, pPtr.elem)
 		s.elemToSend--
 		s.sendElemIdx++
 	}
