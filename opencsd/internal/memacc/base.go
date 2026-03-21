@@ -19,7 +19,7 @@ const (
 // Accessor defines the interface for a memory range access.
 type Accessor interface {
 	// ReadBytes reads bytes from via the accessor from the memory range.
-	ReadBytes(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, byteBuffer []byte) uint32
+	ReadBytes(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32
 
 	// AddrInRange tests if an address is in the inclusive range for this accessor.
 	AddrInRange(address ocsd.VAddr) bool
@@ -323,8 +323,8 @@ func (c *Cache) Read(acc Accessor, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc
 
 // ReadBytesFromCache reads bytes from cache-backed accessor state.
 // Deprecated: use Read.
-func (c *Cache) ReadBytesFromCache(acc Accessor, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, numBytes *uint32, byteBuffer []byte) ocsd.Err {
-	bytesRead, err := c.Read(acc, address, memSpace, trcID, *numBytes, byteBuffer)
+func (c *Cache) ReadBytesFromCache(acc Accessor, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, numBytes *uint32, buffer []byte) ocsd.Err {
+	bytesRead, err := c.Read(acc, address, memSpace, trcID, *numBytes, buffer)
 	*numBytes = bytesRead
 	return ocsd.AsErr(err)
 }

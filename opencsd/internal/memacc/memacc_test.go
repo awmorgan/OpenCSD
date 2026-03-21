@@ -108,7 +108,7 @@ type testRange struct {
 
 var accCallbackCount int
 
-func testMemAccCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, byteBuffer []byte) uint32 {
+func testMemAccCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32 {
 	ranges := ctx.([]testRange)
 	var bytesRead uint32 = 0
 
@@ -117,7 +117,7 @@ func testMemAccCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID 
 			if address >= r.sAddr && address < (r.sAddr+ocsd.VAddr(r.size)) {
 				offset := address - r.sAddr
 				bytesRead = min(r.size-uint32(offset), reqBytes)
-				copy(byteBuffer, r.buffer[offset:offset+ocsd.VAddr(bytesRead)])
+				copy(buffer, r.buffer[offset:offset+ocsd.VAddr(bytesRead)])
 				break
 			}
 		}
@@ -492,11 +492,11 @@ func TestEdgeCasesAndUtilities(t *testing.T) {
 	}
 }
 
-func testMemAccSimpleCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, byteBuffer []byte) uint32 {
+func testMemAccSimpleCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
 	buf := ctx.([]byte)
 	if address == 0 {
 		read := min(reqBytes, uint32(len(buf)))
-		copy(byteBuffer, buf[:read])
+		copy(buffer, buf[:read])
 		return read
 	}
 	return 0
@@ -559,7 +559,7 @@ func TestGlobalMapperRead(t *testing.T) {
 	}
 }
 
-func testMemAccBadLenCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, byteBuffer []byte) uint32 {
+func testMemAccBadLenCB(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
 	fmt.Printf("testMemAccBadLenCB called! reqBytes=%d\n", reqBytes)
 	return reqBytes + 1 // deliberately bad
 }
@@ -679,9 +679,9 @@ func TestBufferAccessorReadBytesIgnoresMemSpace(t *testing.T) {
 func TestCallbackAccessorReadBytesDelegatesWithoutPrefilter(t *testing.T) {
 	cbAcc := NewCallbackAccessor(0x1000, 0x1FFF, ocsd.MemSpaceEL1N)
 	called := false
-	cbAcc.SetCallback(func(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, byteBuffer []byte) uint32 {
+	cbAcc.SetCallback(func(ctx any, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
 		called = true
-		copy(byteBuffer, []byte{0xAB, 0xCD})
+		copy(buffer, []byte{0xAB, 0xCD})
 		return 2
 	}, nil)
 

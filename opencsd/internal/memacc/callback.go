@@ -25,11 +25,11 @@ func NewCallbackAccessor(startAddr ocsd.VAddr, endAddr ocsd.VAddr, memSpace ocsd
 }
 
 // ReadBytes implements the Accessor interface.
-func (c *CallbackAccessor) ReadBytes(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, byteBuffer []byte) uint32 {
+func (c *CallbackAccessor) ReadBytes(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32 {
 	if c.traceIDCallback != nil {
-		return c.traceIDCallback(c.context, address, memSpace, trcID, reqBytes, byteBuffer)
+		return c.traceIDCallback(c.context, address, memSpace, trcID, reqBytes, buffer)
 	} else if c.callback != nil {
-		return c.callback(c.context, address, memSpace, reqBytes, byteBuffer)
+		return c.callback(c.context, address, memSpace, reqBytes, buffer)
 	}
 
 	return 0
