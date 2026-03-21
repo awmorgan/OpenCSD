@@ -1,6 +1,8 @@
 package etmv3
 
 import (
+	"testing"
+
 	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
@@ -52,13 +54,41 @@ func (s *noopPktSinkV3) PacketDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, pk
 }
 
 func setupProcDec(config *Config) (*PktProc, *PktDecode, *testTrcElemIn) {
-	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config).(*PktProc)
-	dec := manager.CreatePktDecode(0, config).(*PktDecode)
-	proc.PktOutI.Attach(dec)
+	proc, dec, err := NewConfiguredPipeline(0, config)
+	if err != ocsd.OK {
+		panic(err)
+	}
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1, hitAfter: -1})
 	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.TraceElemOut.Attach(out)
 	return proc, dec, out
+}
+
+func TestETMv3TypedConstructors(t *testing.T) {
+	config := &Config{}
+	proc, err := NewConfiguredPktProc(1, config)
+	if err != ocsd.OK || proc == nil || proc.Config != config {
+		t.Fatalf("NewConfiguredPktProc failed: proc=%v err=%v", proc, err)
+	}
+
+	dec, err := NewConfiguredPktDecode(2, config)
+	if err != ocsd.OK || dec == nil || dec.Config != config {
+		t.Fatalf("NewConfiguredPktDecode failed: dec=%v err=%v", dec, err)
+	}
+
+	proc, dec, err = NewConfiguredPipeline(3, config)
+	if err != ocsd.OK || proc == nil || dec == nil {
+		t.Fatalf("NewConfiguredPipeline failed: proc=%v dec=%v err=%v", proc, dec, err)
+	}
+	if got := proc.PktOutI.First(); got != dec {
+		t.Fatal("expected pipeline constructor to wire processor output to decoder")
+	}
+
+	if proc, err := NewConfiguredPktProc(0, nil); err != ocsd.ErrInvalidParamVal || proc != nil {
+		t.Fatalf("expected nil-config proc constructor failure, got proc=%v err=%v", proc, err)
+	}
+	if dec, err := NewConfiguredPktDecode(0, nil); err != ocsd.ErrInvalidParamVal || dec != nil {
+		t.Fatalf("expected nil-config decode constructor failure, got dec=%v err=%v", dec, err)
+	}
 }
