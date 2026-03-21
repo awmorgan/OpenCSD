@@ -133,19 +133,9 @@ func (a *AttachPt[T]) SetEnabled(enable bool) {
 	a.enabled = enable
 }
 
-// HasAttached returns true if there is an attached interface.
-func (a *AttachPt[T]) HasAttached() bool {
-	return a.IsAttached()
-}
-
 // IsAttached returns true if there is an attached interface.
 func (a *AttachPt[T]) IsAttached() bool {
 	return a.hasAttached
-}
-
-// HasAttachedAndEnabled returns true if there is an attachment and it is enabled.
-func (a *AttachPt[T]) HasAttachedAndEnabled() bool {
-	return a.IsActive()
 }
 
 // IsActive returns true if there is an attachment and it is enabled.
