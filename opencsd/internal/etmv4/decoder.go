@@ -177,17 +177,8 @@ func NewPktDecode(instIDNum int) *PktDecode {
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *TracePacket) ocsd.DatapathResp {
 	resp := ocsd.RespCont
 
-	// equivalent to decodeNotReadyReason
-	if !d.TraceElemOutAttachPt().IsActive() {
-		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No element output interface attached and enabled"))
-		return ocsd.RespFatalNotInit
-	}
-	if d.NeedsMemAccess() && !d.MemAccAttachPt().IsActive() {
-		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No memory access interface attached and enabled"))
-		return ocsd.RespFatalNotInit
-	}
-	if d.NeedsInstructionDecode() && !d.InstrDecodeAttachPt().IsActive() {
-		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No instruction decoder interface attached and enabled"))
+	if reason := d.DecodeNotReadyReason(); reason != "" {
+		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, reason))
 		return ocsd.RespFatalNotInit
 	}
 
