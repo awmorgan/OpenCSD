@@ -51,7 +51,7 @@ func TestPktDecodeBase(t *testing.T) {
 
 	elemIn := &myTrcGenElemIn{}
 	pb.TraceElemOut.Attach(elemIn)
-	pb.configInitOK = true
+	pb.ConfigInitOK = true
 	pb.SetUsesMemAccess(false)
 	pb.SetUsesIDecode(false)
 

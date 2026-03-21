@@ -54,11 +54,53 @@ func NewPktProc(instID int) *PktProc {
 	p := &PktProc{}
 	p.PktProcBase = &common.PktProcBase[Packet, PktType, Config]{}
 	p.InitPktProcBase(fmt.Sprintf("%s_%d", "PKTP_ETMV3", instID))
-	p.SetStrategy(p)
 
 	// Initialise configuration
 	p.initProcessorState()
 	return p
+}
+
+func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
+	resp := ocsd.RespCont
+	var processed uint32 = 0
+	var err error
+
+	switch op {
+	case ocsd.OpData:
+		if len(dataBlock) == 0 {
+			p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor: Zero length data block error"))
+			resp = ocsd.RespFatalInvalidParam
+		} else {
+			processed, resp, err = p.ProcessData(index, dataBlock)
+		}
+	case ocsd.OpEOT:
+		resp = p.OnEOT()
+		if p.PktOutI.HasAttachedAndEnabled() && !ocsd.DataRespIsFatal(resp) {
+			resp = p.PktOutI.First().PacketDataIn(ocsd.OpEOT, 0, nil)
+		}
+		if p.PktRawMonI.HasAttachedAndEnabled() {
+			p.PktRawMonI.First().RawPacketDataMon(ocsd.OpEOT, 0, nil, nil)
+		}
+	case ocsd.OpFlush:
+		resp = p.OnFlush()
+		if ocsd.DataRespIsCont(resp) && p.PktOutI.HasAttachedAndEnabled() {
+			resp = p.PktOutI.First().PacketDataIn(ocsd.OpFlush, 0, nil)
+		}
+	case ocsd.OpReset:
+		if p.PktOutI.HasAttachedAndEnabled() {
+			resp = p.PktOutI.First().PacketDataIn(ocsd.OpReset, index, nil)
+		}
+		if !ocsd.DataRespIsFatal(resp) {
+			resp = p.OnReset()
+		}
+		if p.PktRawMonI.HasAttachedAndEnabled() {
+			p.PktRawMonI.First().RawPacketDataMon(ocsd.OpReset, index, nil, nil)
+		}
+	default:
+		p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
+		resp = ocsd.RespFatalInvalidOp
+	}
+	return processed, resp, err
 }
 
 func (p *PktProc) initProcessorState() {
@@ -86,7 +128,8 @@ func (p *PktProc) initPacketState() {
 
 // Internal processor method signatures (impl is next)
 
-func (p *PktProc) OnProtocolConfig() ocsd.Err {
+func (p *PktProc) SetProtocolConfig(config *Config) ocsd.Err {
+	p.Config = config
 	// Re-initialize state when config changes
 	p.initProcessorState()
 	return ocsd.OK // config structure handles validation properties directly

@@ -68,7 +68,7 @@ type PktDecodeI struct {
 
 	IndexCurrPkt ocsd.TrcIndex
 
-	configInitOK  bool
+	ConfigInitOK  bool
 	usesMemAccess bool
 	usesIDecode   bool
 
@@ -88,7 +88,7 @@ func (p *PktDecodeI) SetUsesIDecode(uses bool) { p.usesIDecode = uses }
 func (p *PktDecodeI) UsesIDecode() bool     { return p.usesIDecode }
 
 func (p *PktDecodeI) decodeNotReadyReason() string {
-	if !p.configInitOK {
+	if !p.ConfigInitOK {
 		return "No decoder configuration information"
 	}
 	if !p.TraceElemOut.HasAttachedAndEnabled() {
@@ -238,11 +238,11 @@ func (pb *PktDecodeBase[P, Pc]) SetProtocolConfig(config *Pc) ocsd.Err {
 		if pb.protocolConfigHook != nil {
 			err := pb.protocolConfigHook.OnProtocolConfig()
 			if err == ocsd.OK {
-				pb.configInitOK = true
+				pb.ConfigInitOK = true
 			}
 			return err
 		}
-		pb.configInitOK = true
+		pb.ConfigInitOK = true
 		return ocsd.OK
 	}
 	return ocsd.ErrInvalidParamVal

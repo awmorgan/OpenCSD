@@ -50,10 +50,52 @@ func NewPktDecode(instID int) *PktDecode {
 	}
 	d.PktDecodeBase = &common.PktDecodeBase[Packet, Config]{}
 	d.InitPktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV3", instID))
-	d.SetStrategy(d)
 
 	d.initDecoder()
 	return d
+}
+
+func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) ocsd.DatapathResp {
+	resp := ocsd.RespCont
+
+	if !d.ConfigInitOK {
+		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No decoder configuration information"))
+		return ocsd.RespFatalNotInit
+	}
+	if !d.TraceElemOut.HasAttachedAndEnabled() {
+		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No element output interface attached and enabled"))
+		return ocsd.RespFatalNotInit
+	}
+	if d.UsesMemAccess() && !d.MemAccess.HasAttachedAndEnabled() {
+		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No memory access interface attached and enabled"))
+		return ocsd.RespFatalNotInit
+	}
+	if d.UsesIDecode() && !d.InstrDecode.HasAttachedAndEnabled() {
+		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No instruction decoder interface attached and enabled"))
+		return ocsd.RespFatalNotInit
+	}
+
+	switch op {
+	case ocsd.OpData:
+		if pktIn == nil {
+			d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
+			resp = ocsd.RespFatalInvalidParam
+		} else {
+			d.CurrPacketIn = pktIn
+			d.IndexCurrPkt = indexSOP
+			resp = d.ProcessPacket()
+		}
+	case ocsd.OpEOT:
+		resp = d.OnEOT()
+	case ocsd.OpFlush:
+		resp = d.OnFlush()
+	case ocsd.OpReset:
+		resp = d.OnReset()
+	default:
+		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
+		resp = ocsd.RespFatalInvalidOp
+	}
+	return resp
 }
 
 func (d *PktDecode) initDecoder() {
@@ -85,10 +127,12 @@ func (d *PktDecode) nextDecodeState() decoderState {
 	return decodePkts
 }
 
-func (d *PktDecode) OnProtocolConfig() ocsd.Err {
+func (d *PktDecode) SetProtocolConfig(config *Config) ocsd.Err {
+	d.Config = config
 	if d.Config == nil {
 		return ocsd.ErrNotInit
 	}
+	d.ConfigInitOK = true
 
 	d.csID = d.Config.TraceID()
 

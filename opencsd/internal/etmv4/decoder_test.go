@@ -38,7 +38,7 @@ func TestTypedConstructors(t *testing.T) {
 func TestDecoderOnFlushResolvesPendingState(t *testing.T) {
 	d := NewPktDecode(0)
 	d.Config = &Config{}
-	if err := d.OnProtocolConfig(); err != ocsd.OK {
+	if err := d.SetProtocolConfig(d.Config); err != ocsd.OK {
 		t.Fatalf("OnProtocolConfig failed: %v", err)
 	}
 
@@ -58,7 +58,7 @@ func TestDecoderTSRequiresMarkerWhenConfigured(t *testing.T) {
 		RegIdr0: 0x800000,
 		RegIdr1: 0x510, // full version 0x51
 	}
-	if err := d.OnProtocolConfig(); err != ocsd.OK {
+	if err := d.SetProtocolConfig(d.Config); err != ocsd.OK {
 		t.Fatalf("OnProtocolConfig failed: %v", err)
 	}
 

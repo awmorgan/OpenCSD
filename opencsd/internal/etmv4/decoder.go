@@ -165,15 +165,62 @@ type PktDecode struct {
 	}
 }
 
-// NewPktDecode creates a new ETMv4/ETE trace decoder
 func NewPktDecode(instIDNum int) *PktDecode {
 	d := &PktDecode{}
 	d.InitPktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV4", instIDNum))
-	d.SetStrategy(d)
 	d.SetSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms | ocsd.OpflgPktdecAA64OpcodeChk)
 
 	d.initDecoder()
 	return d
+}
+
+func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *TracePacket) ocsd.DatapathResp {
+	resp := ocsd.RespCont
+
+	// equivalent to decodeNotReadyReason
+	if !d.TraceElemOutAttachPt().HasAttachedAndEnabled() {
+		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No element output interface attached and enabled"))
+		return ocsd.RespFatalNotInit
+	}
+	if d.UsesMemAccess() && !d.MemAccAttachPt().HasAttachedAndEnabled() {
+		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No memory access interface attached and enabled"))
+		return ocsd.RespFatalNotInit
+	}
+	if d.UsesIDecode() && !d.InstrDecodeAttachPt().HasAttachedAndEnabled() {
+		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No instruction decoder interface attached and enabled"))
+		return ocsd.RespFatalNotInit
+	}
+
+	switch op {
+	case ocsd.OpData:
+		if pktIn == nil {
+			d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
+			resp = ocsd.RespFatalInvalidParam
+		} else {
+			d.CurrPacketIn = pktIn
+			d.IndexCurrPkt = indexSOP
+			resp = d.ProcessPacket()
+		}
+	case ocsd.OpEOT:
+		resp = d.OnEOT()
+	case ocsd.OpFlush:
+		resp = d.OnFlush()
+	case ocsd.OpReset:
+		resp = d.OnReset()
+	default:
+		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
+		resp = ocsd.RespFatalInvalidOp
+	}
+	return resp
+}
+
+func (d *PktDecode) accessMemory(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
+	if d.UsesMemAccess() {
+		if d.MemAccAttachPt().HasAttachedAndEnabled() {
+			return d.MemAccAttachPt().First().ReadTargetMemory(address, d.TraceID(), memSpace, reqBytes)
+		}
+	}
+	return 0, nil, ocsd.ErrDcdInterfaceUnused
 }
 
 func (d *PktDecode) TraceID() uint8 {
@@ -215,11 +262,13 @@ func (d *PktDecode) initDecoder() {
 	d.nextRangeCheckClear()
 }
 
-func (d *PktDecode) OnProtocolConfig() ocsd.Err {
-	d.config = d.Config
+func (d *PktDecode) SetProtocolConfig(config *Config) ocsd.Err {
+	d.Config = config
+	d.config = config
 	if d.config == nil {
 		return ocsd.ErrInvalidParamVal
 	}
+	d.ConfigInitOK = true
 	// Extract basic config elements
 	d.maxSpecDepth = int(d.config.MaxSpecDepth())
 	// d.InitDecoderCore()
@@ -1082,7 +1131,7 @@ func (d *PktDecode) traceInstrToWP(rangeOut *instrRange, res *wpRes, traceToAddr
 	for *res == wpNotFound {
 		bytesReq := uint32(4)
 		currMemSpace := d.getCurrMemSpace()
-		bytesRead, memData, errMem := d.AccessMemory(d.instrInfo.InstrAddr, currMemSpace, bytesReq)
+		bytesRead, memData, errMem := d.accessMemory(d.instrInfo.InstrAddr, currMemSpace, bytesReq)
 		if errMem != ocsd.OK {
 			return errMem
 		}
@@ -1372,7 +1421,7 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) ocsd.Err {
 	bSplitRangeOnN := (d.ComponentOpMode() & ocsd.OpflgPktdecSrcAddrNAtoms) != 0
 
 	bytesReq := uint32(4)
-	bytesRead, memData, errMem := d.AccessMemory(srcAddr, d.getCurrMemSpace(), bytesReq)
+	bytesRead, memData, errMem := d.accessMemory(srcAddr, d.getCurrMemSpace(), bytesReq)
 	if errMem != ocsd.OK {
 		d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, errMem, pElem.rootIndex, d.TraceID(), "Mem access error processing source address packet."))
 		return errMem
@@ -1416,7 +1465,7 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) ocsd.Err {
 
 			for instr.InstrAddr < outRange.enAddr && !bMemAccErr {
 				bytesReq = 4
-				bytesRead, mData, eMem := d.AccessMemory(instr.InstrAddr, d.getCurrMemSpace(), bytesReq)
+				bytesRead, mData, eMem := d.accessMemory(instr.InstrAddr, d.getCurrMemSpace(), bytesReq)
 				if eMem != ocsd.OK {
 					return eMem
 				}
@@ -1528,7 +1577,7 @@ func (d *PktDecode) processQElement(pElem *p0Elem) ocsd.Err {
 
 	for range iCount {
 		bytesReq := uint32(4)
-		bytesRead, memData, errMem := d.AccessMemory(d.instrInfo.InstrAddr, d.getCurrMemSpace(), bytesReq)
+		bytesRead, memData, errMem := d.accessMemory(d.instrInfo.InstrAddr, d.getCurrMemSpace(), bytesReq)
 		if errMem != ocsd.OK {
 			break
 		}
