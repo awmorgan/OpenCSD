@@ -38,6 +38,10 @@ type DecodeTree struct {
 	demuxStats ocsd.DemuxStats
 }
 
+type traceIDConfig interface {
+	TraceID() uint8
+}
+
 // NewDecodeTree creates a new Trace Decode Tree using the supplied decoder registry.
 // A non-nil registry is required.
 func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32, registry *DecoderRegister) *DecodeTree {
@@ -161,20 +165,9 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 		return err
 	}
 
-	type configWithID interface {
-		TraceID() uint8
-	}
-	cfgID, ok := config.(configWithID)
-	if !ok {
-		return ocsd.ToError(ocsd.ErrInvalidParamType)
-	}
-	csID := cfgID.TraceID()
-	routeID := csID
-	if dt.treeType == ocsd.TrcSrcSingle {
-		routeID = 0
-	}
-	if routeID >= 0x80 {
-		return ocsd.ToError(ocsd.ErrInvalidID)
+	routeID, err := dt.routeIDFromConfig(config)
+	if err != nil {
+		return err
 	}
 
 	if _, exists := dt.decodeElements[routeID]; exists {
@@ -208,20 +201,37 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 	if dt.frameDeformatter != nil && pktIn != nil {
 		dt.frameDeformatter.SetIDStream(routeID, pktIn)
 	}
-
-	if elem.TraceElemAttach != nil && dt.genElemOut != nil {
-		elem.TraceElemAttach.ReplaceFirst(dt.genElemOut)
-	}
-
-	if elem.InstrDecAttach != nil && dt.instrDecode != nil {
-		elem.InstrDecAttach.ReplaceFirst(dt.instrDecode)
-	}
-
-	if elem.MemAccAttach != nil && dt.memAccess != nil {
-		elem.MemAccAttach.ReplaceFirst(dt.memAccess)
-	}
+	dt.attachElementDependencies(elem)
 
 	return nil
+}
+
+func (dt *DecodeTree) routeIDFromConfig(config any) (uint8, error) {
+	cfg, ok := config.(traceIDConfig)
+	if !ok {
+		return 0, ocsd.ToError(ocsd.ErrInvalidParamType)
+	}
+
+	routeID := cfg.TraceID()
+	if dt.treeType == ocsd.TrcSrcSingle {
+		routeID = 0
+	}
+	if routeID >= 0x80 {
+		return 0, ocsd.ToError(ocsd.ErrInvalidID)
+	}
+	return routeID, nil
+}
+
+func (dt *DecodeTree) attachElementDependencies(elem *DecodeTreeElement) {
+	if elem.TraceElemAttach != nil && dt.genElemOut != nil {
+		elem.TraceElemAttach.Replace(dt.genElemOut)
+	}
+	if elem.InstrDecAttach != nil && dt.instrDecode != nil {
+		elem.InstrDecAttach.Replace(dt.instrDecode)
+	}
+	if elem.MemAccAttach != nil && dt.memAccess != nil {
+		elem.MemAccAttach.Replace(dt.memAccess)
+	}
 }
 
 // RemoveDecoder removes a decoder mapped to the given CSID.
@@ -242,7 +252,7 @@ func (dt *DecodeTree) SetGenTraceElemOutI(outI ocsd.TrcGenElemIn) {
 	dt.genElemOut = outI
 	for _, elem := range dt.decodeElements {
 		if elem.TraceElemAttach != nil {
-			elem.TraceElemAttach.ReplaceFirst(outI)
+			elem.TraceElemAttach.Replace(outI)
 		}
 	}
 }
@@ -252,7 +262,7 @@ func (dt *DecodeTree) SetInstrDecoder(instrDec common.InstrDecode) {
 	dt.instrDecode = instrDec
 	for _, elem := range dt.decodeElements {
 		if elem.InstrDecAttach != nil {
-			elem.InstrDecAttach.ReplaceFirst(instrDec)
+			elem.InstrDecAttach.Replace(instrDec)
 		}
 	}
 }
@@ -262,7 +272,7 @@ func (dt *DecodeTree) SetMemAccessI(memI common.TargetMemAccess) {
 	dt.memAccess = memI
 	for _, elem := range dt.decodeElements {
 		if elem.MemAccAttach != nil {
-			elem.MemAccAttach.ReplaceFirst(memI)
+			elem.MemAccAttach.Replace(memI)
 		}
 	}
 }
