@@ -91,7 +91,7 @@ func TestCodeFollower(t *testing.T) {
 	if cf.GetNaccAddr() != 0x2000 {
 		t.Errorf("Expected nacc addr 0x2000, got 0x%X", cf.GetNaccAddr())
 	}
-	if cf.GetMemSpace() != ocsd.MemSpaceAny {
+	if cf.MemSpace() != ocsd.MemSpaceAny {
 		t.Errorf("Expected memory space to be preserved")
 	}
 

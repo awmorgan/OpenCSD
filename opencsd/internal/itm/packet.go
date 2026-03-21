@@ -102,8 +102,8 @@ func (p *Packet) SetExtValue(extVal uint64) {
 	p.ValSz = 5
 }
 
-// GetExtValue gets the 38-bit extended value.
-func (p *Packet) GetExtValue() uint64 {
+// ExtValue gets the 38-bit extended value.
+func (p *Packet) ExtValue() uint64 {
 	return uint64(p.Value) | (uint64(p.ValExt) << 32)
 }
 

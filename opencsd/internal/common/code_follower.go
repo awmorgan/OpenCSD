@@ -147,7 +147,7 @@ func (cf *CodeFollower) GetNaccAddr() ocsd.VAddr {
 	return cf.naccAddr
 }
 
-func (cf *CodeFollower) GetMemSpace() ocsd.MemSpaceAcc {
+func (cf *CodeFollower) MemSpace() ocsd.MemSpaceAcc {
 	return cf.memSpace
 }
 

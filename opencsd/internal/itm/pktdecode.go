@@ -204,7 +204,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 	case PktTSGlobal2:
 		d.itmInfo.PktType = ocsd.TSGlobal
 		d.globalTS &= ^globalTSHiMask
-		d.globalTS |= (d.CurrPacketIn.GetExtValue() << 26)
+		d.globalTS |= (d.CurrPacketIn.ExtValue() << 26)
 		d.outputElem.SetTS(d.globalTS, d.bGTSFreqChange)
 		d.bGTSFreqChange = false
 		d.bNeedGTS2 = false

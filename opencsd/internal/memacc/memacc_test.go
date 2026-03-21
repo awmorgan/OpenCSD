@@ -204,7 +204,7 @@ func readAndCheckValue(t *testing.T, m Mapper, addr ocsd.VAddr, expectedVal uint
 	}
 	readVal := binary.LittleEndian.Uint32(buffer)
 	if readVal != expectedVal {
-		t.Errorf("Value mismatch at 0x%X (%s). Read 0x%X, expected 0x%X", addr, GetMemSpaceString(space), readVal, expectedVal)
+		t.Errorf("Value mismatch at 0x%X (%s). Read 0x%X, expected 0x%X", addr, MemSpaceString(space), readVal, expectedVal)
 		return false
 	}
 	return true
@@ -428,13 +428,13 @@ func TestEdgeCasesAndUtilities(t *testing.T) {
 
 	// Range Getters
 	acc2 := NewBufferAccessor(0x1000, make([]byte, 100))
-	st, en := acc2.GetRange()
+	st, en := acc2.Range()
 	if st != 0x1000 || en != 0x1000+100-1 {
-		t.Errorf("GetRange incorrect")
+		t.Errorf("Range incorrect")
 	}
 
-	if acc2.GetType() != TypeBufPtr {
-		t.Errorf("GetType incorrect")
+	if acc2.Type() != TypeBufPtr {
+		t.Errorf("Type incorrect")
 	}
 	if acc2.AddrStartOfRange(0x1001) {
 		t.Errorf("AddrStartOfRange false positive")
@@ -443,32 +443,32 @@ func TestEdgeCasesAndUtilities(t *testing.T) {
 		t.Errorf("AddrStartOfRange false negative")
 	}
 
-	// GetMemSpaceString & String
-	if GetMemSpaceString(ocsd.MemSpaceEL1N) != "EL1N" {
-		t.Errorf("GetMemSpaceString mismatch")
+	// MemSpaceString & String
+	if MemSpaceString(ocsd.MemSpaceEL1N) != "EL1N" {
+		t.Errorf("MemSpaceString mismatch")
 	}
-	if GetMemSpaceString(ocsd.MemSpaceEL2) != "EL2N" {
-		t.Errorf("GetMemSpaceString mismatch for EL2")
+	if MemSpaceString(ocsd.MemSpaceEL2) != "EL2N" {
+		t.Errorf("MemSpaceString mismatch for EL2")
 	}
-	if GetMemSpaceString(ocsd.MemSpaceN) != "Any NS" {
-		t.Errorf("GetMemSpaceString mismatch for non-secure aggregate")
+	if MemSpaceString(ocsd.MemSpaceN) != "Any NS" {
+		t.Errorf("MemSpaceString mismatch for non-secure aggregate")
 	}
-	if GetMemSpaceString(ocsd.MemSpaceNone) != "None" {
-		t.Errorf("GetMemSpaceString mismatch")
+	if MemSpaceString(ocsd.MemSpaceNone) != "None" {
+		t.Errorf("MemSpaceString mismatch")
 	}
 	str := acc2.String()
 	if str == "" {
 		t.Errorf("String() returned empty")
 	}
 
-	// Test other GetMemSpaceString values
+	// Test other MemSpaceString values
 	spaces := []ocsd.MemSpaceAcc{
 		ocsd.MemSpaceEL1S, ocsd.MemSpaceEL2, ocsd.MemSpaceEL3, ocsd.MemSpaceEL2S,
 		ocsd.MemSpaceEL1R, ocsd.MemSpaceEL2R, ocsd.MemSpaceRoot, ocsd.MemSpaceS,
 		ocsd.MemSpaceN, ocsd.MemSpaceR, ocsd.MemSpaceAny, ocsd.MemSpaceAcc(0xABC),
 	}
 	for _, s := range spaces {
-		GetMemSpaceString(s)
+		MemSpaceString(s)
 	}
 
 	// Test base accessor unknown type inside String()
@@ -487,8 +487,8 @@ func TestEdgeCasesAndUtilities(t *testing.T) {
 
 	acc2.AccType = TypeBufPtr // restore
 	acc2.SetMemSpace(ocsd.MemSpaceEL1N)
-	if acc2.GetMemSpace() != ocsd.MemSpaceEL1N {
-		t.Errorf("GetMemSpace error")
+	if acc2.MemSpace() != ocsd.MemSpaceEL1N {
+		t.Errorf("MemSpace error")
 	}
 }
 
@@ -523,7 +523,7 @@ func TestAlternativeCallback(t *testing.T) {
 
 	// test InitAccessor
 	cbAcc.InitAccessor(0x100, 0x200, ocsd.MemSpaceEL1N)
-	st, en := cbAcc.GetRange()
+	st, en := cbAcc.Range()
 	if st != 0x100 || en != 0x200 {
 		t.Errorf("InitAccessor mismatch")
 	}

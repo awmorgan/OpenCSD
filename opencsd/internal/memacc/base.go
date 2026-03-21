@@ -36,20 +36,20 @@ type Accessor interface {
 	// ValidateRange validates the address range - ensure addresses aligned, different, st < en etc.
 	ValidateRange() bool
 
-	// GetType returns the storage type of this accessor.
-	GetType() Type
+	// Type returns the storage type of this accessor.
+	Type() Type
 
 	// SetMemSpace sets the memory space for this accessor.
 	SetMemSpace(memSpace ocsd.MemSpaceAcc)
 
-	// GetMemSpace returns the memory space for this accessor.
-	GetMemSpace() ocsd.MemSpaceAcc
+	// MemSpace returns the memory space for this accessor.
+	MemSpace() ocsd.MemSpaceAcc
 
 	// InMemSpace tests if the accessor supports the given memory space.
 	InMemSpace(memSpace ocsd.MemSpaceAcc) bool
 
-	// GetRange returns the start and end addresses of this accessor.
-	GetRange() (ocsd.VAddr, ocsd.VAddr)
+	// Range returns the start and end addresses of this accessor.
+	Range() (ocsd.VAddr, ocsd.VAddr)
 }
 
 // BaseAccessor implements the common logic for memory accessors.
@@ -80,7 +80,7 @@ func (b *BaseAccessor) BytesInRange(address ocsd.VAddr, reqBytes uint32) uint32 
 }
 
 func (b *BaseAccessor) OverlapRange(testAcc Accessor) bool {
-	st, en := testAcc.GetRange()
+	st, en := testAcc.Range()
 	return b.AddrInRange(st) || b.AddrInRange(en)
 }
 
@@ -97,7 +97,7 @@ func (b *BaseAccessor) ValidateRange() bool {
 	return true
 }
 
-func (b *BaseAccessor) GetType() Type {
+func (b *BaseAccessor) Type() Type {
 	return b.AccType
 }
 
@@ -105,7 +105,7 @@ func (b *BaseAccessor) SetMemSpace(memSpace ocsd.MemSpaceAcc) {
 	b.MemSpaceAcc = memSpace
 }
 
-func (b *BaseAccessor) GetMemSpace() ocsd.MemSpaceAcc {
+func (b *BaseAccessor) MemSpace() ocsd.MemSpaceAcc {
 	return b.MemSpaceAcc
 }
 
@@ -113,7 +113,7 @@ func (b *BaseAccessor) InMemSpace(memSpace ocsd.MemSpaceAcc) bool {
 	return (uint8(b.MemSpaceAcc) & uint8(memSpace)) != 0
 }
 
-func (b *BaseAccessor) GetRange() (ocsd.VAddr, ocsd.VAddr) {
+func (b *BaseAccessor) Range() (ocsd.VAddr, ocsd.VAddr) {
 	return b.StartAddress, b.EndAddress
 }
 
@@ -129,7 +129,7 @@ func (b *BaseAccessor) String() string {
 	default:
 		typeStr = "UnknAcc"
 	}
-	spaceStr := GetMemSpaceString(b.MemSpaceAcc)
+	spaceStr := MemSpaceString(b.MemSpaceAcc)
 	return fmt.Sprintf("%s; Range::0x%x:%x; Mem Space::%s", typeStr, b.StartAddress, b.EndAddress, spaceStr)
 }
 
@@ -286,7 +286,7 @@ func (c *Cache) ReadBytesFromCache(acc Accessor, address ocsd.VAddr, memSpace oc
 	// Prepare for read from accessor
 	// Normalize address to page boundary for aligned caching
 	pageBase := address & ^ocsd.VAddr(c.pageSize-1)
-	accStart, _ := acc.GetRange()
+	accStart, _ := acc.Range()
 	if pageBase < accStart {
 		pageBase = accStart
 	}
@@ -365,7 +365,7 @@ func (c *Cache) findNewPage() int {
 
 // Utils
 
-func GetMemSpaceString(memSpace ocsd.MemSpaceAcc) string {
+func MemSpaceString(memSpace ocsd.MemSpaceAcc) string {
 	switch memSpace {
 	case ocsd.MemSpaceNone:
 		return "None"

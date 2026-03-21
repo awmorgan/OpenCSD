@@ -95,7 +95,7 @@ func (m *GlobalMapper) AddAccessor(accessor Accessor, trcID uint8) ocsd.Err {
 
 	// Check for overlaps with same or intersecting memory spaces
 	for _, a := range m.accessors {
-		if a.OverlapRange(accessor) && (uint32(a.GetMemSpace())&uint32(accessor.GetMemSpace()) != 0) {
+		if a.OverlapRange(accessor) && (uint32(a.MemSpace())&uint32(accessor.MemSpace()) != 0) {
 			return ocsd.ErrMemAccOverlap
 		}
 	}
@@ -135,9 +135,9 @@ func (m *GlobalMapper) findAccessor(address ocsd.VAddr, memSpace ocsd.MemSpaceAc
 	for _, acc := range m.accessors {
 		if acc.AddrInRange(address) && acc.InMemSpace(memSpace) {
 			// Prioritize more specific match (fewer bits set in accessor's memory space)
-			matchLen := bits.OnesCount32(uint32(acc.GetMemSpace()))
+			matchLen := bits.OnesCount32(uint32(acc.MemSpace()))
 			// Or even better: if exact match, always take it.
-			if acc.GetMemSpace() == memSpace {
+			if acc.MemSpace() == memSpace {
 				m.accCurr = acc
 				return true
 			}
