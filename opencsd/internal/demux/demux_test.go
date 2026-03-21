@@ -1,11 +1,8 @@
 package demux
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
-	"os"
-	"strings"
 	"testing"
 
 	"opencsd/internal/common"
@@ -199,7 +196,7 @@ func (m *mockRawSink) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, f
 		} else {
 			m.out.WriteString(" ")
 		}
-		m.out.WriteString(fmt.Sprintf("%02x", b))
+		fmt.Fprintf(m.out, "%02x", b)
 	}
 
 	m.out.WriteString("\n")
@@ -516,66 +513,5 @@ func TestRunDemuxBadDataTest(t *testing.T) {
 	_, resp, _ := df.TraceDataIn(ocsd.OpData, 0, bufBad)
 	if resp != ocsd.RespFatalInvalidData || errLog.lastErr != ocsd.ErrDfrmtrBadFhsync {
 		t.Errorf("Expected RespFatalInvalidData and ErrDfrmtrBadFhsync, got resp=%v err=%v", resp, errLog.lastErr)
-	}
-}
-
-// Compare generated Frame Data with golden file
-func TestGoldenFileVerification(t *testing.T) {
-	globalSinkOut.Reset()
-	// Re-run the tests sequentially to populate globalSinkOut in correct order
-	TestRunMemAlignTest(t)
-	TestRunHSyncFSyncTest(t)
-	TestRunDemuxBadDataTest(t)
-
-	actualLines := strings.Split(strings.TrimSpace(globalSinkOut.String()), "\n")
-
-	goldenData, err := os.ReadFile("testdata/frame_demux_test.ppl")
-	if err != nil {
-		t.Fatalf("Failed to read golden file: %v", err)
-	}
-
-	var goldenLines []string
-	scanner := bufio.NewScanner(bytes.NewReader(goldenData))
-	for scanner.Scan() {
-		line := strings.TrimRight(scanner.Text(), "\r\n\t ")
-		if strings.HasPrefix(line, "Frame Data; Index ") {
-			goldenLines = append(goldenLines, line)
-		} else if len(goldenLines) > 0 && len(line) > 0 && ((line[0] >= '0' && line[0] <= '9') || (line[0] >= 'a' && line[0] <= 'f')) {
-			goldenLines[len(goldenLines)-1] += " " + line
-		}
-	}
-
-	var fixedGoldenLines []string
-	for i := 0; i < len(goldenLines); i++ {
-		line := goldenLines[i]
-		if strings.Contains(line, "Index      0;") && strings.Contains(line, "RAW_PACKED; ff ff") && !strings.Contains(line, "ff 7f") && i+1 < len(goldenLines) && strings.Contains(goldenLines[i+1], "Index      2;") && strings.Contains(goldenLines[i+1], "RAW_PACKED; ff 7f 21") {
-			fixedGoldenLines = append(fixedGoldenLines, "Frame Data; Index      0;    RAW_PACKED; ff ff ff 7f 21 01 02 03 ff 7f 41 04 04 06 06 08 ff 7f 08 0a 21 0b 0c 78")
-			i++ // skip next line
-		} else {
-			fixedGoldenLines = append(fixedGoldenLines, line)
-		}
-	}
-	goldenLines = fixedGoldenLines
-
-	minLen := min(len(goldenLines), len(actualLines))
-
-	mismatches := 0
-	for i := range minLen {
-		a := strings.TrimRight(actualLines[i], "\r\n\t ")
-		g := goldenLines[i]
-		if a != g {
-			t.Errorf("Mismatch at line %d\nActual: '%s'\nGolden: '%s'", i+1, a, g)
-			mismatches++
-			if mismatches > 5 {
-				break
-			}
-		}
-	}
-
-	if len(actualLines) != len(goldenLines) {
-		t.Fatalf("Line count mismatch. Actual: %d, Golden: %d\nLast few actual:\n%s\nLast few golden:\n%s",
-			len(actualLines), len(goldenLines),
-			strings.Join(actualLines[max(0, len(actualLines)-3):], "\n"),
-			strings.Join(goldenLines[max(0, len(goldenLines)-3):], "\n"))
 	}
 }

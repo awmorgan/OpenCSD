@@ -37,6 +37,39 @@ type etmv4DecodeOptions struct {
 	suppressRawPackets bool
 	extraOpFlags       uint32
 	instrRangeLimit    uint32
+	useCallbackMemAcc  bool
+}
+
+type memRegionCallbackCtx struct {
+	startAddr ocsd.VAddr
+	data      []byte
+	readCount *int
+}
+
+func memRegionAccessCB(ctx any, address ocsd.VAddr, _ ocsd.MemSpaceAcc, reqBytes uint32, byteBuffer []byte) uint32 {
+	cbCtx, ok := ctx.(*memRegionCallbackCtx)
+	if !ok || cbCtx == nil || len(cbCtx.data) == 0 {
+		return 0
+	}
+
+	start := cbCtx.startAddr
+	end := start + ocsd.VAddr(len(cbCtx.data)-1)
+	if address < start || address > end {
+		return 0
+	}
+
+	maxReadable := uint32(end-address) + 1
+	readBytes := reqBytes
+	if readBytes > maxReadable {
+		readBytes = maxReadable
+	}
+
+	offset := int(address - start)
+	copy(byteBuffer, cbCtx.data[offset:offset+int(readBytes)])
+	if cbCtx.readCount != nil {
+		(*cbCtx.readCount)++
+	}
+	return readBytes
 }
 
 func (l *testErrLogger) LogError(_ ocsd.HandleErrLog, err *common.Error) {
@@ -100,7 +133,7 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 		{name: "bugfix-exact-match", sourceName: "etr_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
 		{name: "a55-test-tpiu", sourceName: "DSTREAM_0", traceIDs: []string{"1"}, packetOnly: true},
 		{name: "mem_buff_demo", snapshotName: "juno_r1_1", sourceName: "ETB_0", traceIDs: []string{"10"}, opts: etmv4DecodeOptions{suppressRawPackets: true}},
-		{name: "mem_buff_demo_cb", snapshotName: "juno_r1_1", sourceName: "ETB_0", traceIDs: []string{"10"}, opts: etmv4DecodeOptions{suppressRawPackets: true}},
+		{name: "mem_buff_demo_cb", snapshotName: "juno_r1_1", sourceName: "ETB_0", traceIDs: []string{"10"}, opts: etmv4DecodeOptions{suppressRawPackets: true, useCallbackMemAcc: true}},
 	}
 
 	for _, tc := range testCases {
@@ -336,6 +369,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 
 	mapper := memacc.NewGlobalMapper()
 	tree.SetMemAccessI(&mapperAdapter{mapper: mapper})
+	callbackReads := 0
 
 	for _, dev := range reader.ParsedDeviceList {
 		if !strings.EqualFold(dev.DeviceClass, "core") {
@@ -358,8 +392,21 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 				b = b[:memParams.Length]
 			}
 
-			acc := memacc.NewBufferAccessor(ocsd.VAddr(memParams.Address), b)
-			mapper.AddAccessor(acc, 0)
+			if opts.useCallbackMemAcc {
+				startAddr := ocsd.VAddr(memParams.Address)
+				endAddr := startAddr + ocsd.VAddr(len(b)-1)
+				cbCtx := &memRegionCallbackCtx{startAddr: startAddr, data: b, readCount: &callbackReads}
+				acc := memacc.NewCallbackAccessor(startAddr, endAddr, ocsd.MemSpaceAny)
+				acc.SetCBIfFn(memRegionAccessCB, cbCtx)
+				if err := mapper.AddAccessor(acc, 0); err != ocsd.OK && err != ocsd.ErrMemAccOverlap {
+					return nil, fmt.Errorf("add callback mem accessor failed for %s: %v", path, err)
+				}
+			} else {
+				acc := memacc.NewBufferAccessor(ocsd.VAddr(memParams.Address), b)
+				if err := mapper.AddAccessor(acc, 0); err != ocsd.OK && err != ocsd.ErrMemAccOverlap {
+					return nil, fmt.Errorf("add buffer mem accessor failed for %s: %v", path, err)
+				}
+			}
 		}
 	}
 
@@ -452,6 +499,10 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 	_, resp, _ := tree.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(traceIndex), nil)
 	if ocsd.DataRespIsFatal(resp) {
 		return nil, fmt.Errorf("fatal datapath response on EOT")
+	}
+
+	if opts.useCallbackMemAcc && callbackReads == 0 {
+		return nil, fmt.Errorf("callback memory accessor was not exercised")
 	}
 
 	return out.Bytes(), nil
