@@ -42,14 +42,10 @@ func NewCodeFollower() *CodeFollower {
 // NewCodeFollowerWithInterfaces creates a CodeFollower and attaches live decoder interfaces.
 func NewCodeFollowerWithInterfaces(memAccess *AttachPt[TargetMemAccess], idDecode *AttachPt[InstrDecode]) *CodeFollower {
 	cf := NewCodeFollower()
-	cf.InitInterfaces(memAccess, idDecode)
-	return cf
-}
-
-func (cf *CodeFollower) InitInterfaces(memAccess *AttachPt[TargetMemAccess], idDecode *AttachPt[InstrDecode]) {
 	cf.memAccess = memAccess
 	cf.idDecode = idDecode
 	// valid is computed lazily in FollowSingleInstr so newly-attached mocks are seen
+	return cf
 }
 
 func (cf *CodeFollower) SetArchProfile(arch ocsd.ArchProfile) {

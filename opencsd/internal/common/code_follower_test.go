@@ -25,8 +25,6 @@ func (m *mockMemAccess) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, me
 func (m *mockMemAccess) InvalidateMemAccCache(csTraceID uint8) {}
 
 func TestCodeFollower(t *testing.T) {
-	cf := NewCodeFollower()
-
 	memAtt := NewAttachPt[TargetMemAccess]()
 	mockMem := &mockMemAccess{
 		dataToReturn: []byte{0x00, 0x00, 0x00, 0x00},
@@ -38,13 +36,16 @@ func TestCodeFollower(t *testing.T) {
 	realID := idec.NewDecoder()
 	idAtt.Attach(realID)
 
+	cf := NewCodeFollower()
+
 	// Test without valid
 	err := cf.FollowSingleAtom(0x1000, ocsd.AtomN)
 	if err != ocsd.ErrNotInit {
 		t.Errorf("Expected NotInit error")
 	}
 
-	cf.InitInterfaces(memAtt, idAtt)
+	cf = NewCodeFollowerWithInterfaces(memAtt, idAtt)
+
 	cf.SetArchProfile(ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA})
 	cf.SetISA(ocsd.ISAAArch64)
 	cf.SetTraceID(0x12)
