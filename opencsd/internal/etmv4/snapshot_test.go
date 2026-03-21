@@ -59,10 +59,7 @@ func memRegionAccessCB(ctx any, address ocsd.VAddr, _ ocsd.MemSpaceAcc, reqBytes
 	}
 
 	maxReadable := uint32(end-address) + 1
-	readBytes := reqBytes
-	if readBytes > maxReadable {
-		readBytes = maxReadable
-	}
+	readBytes := min(reqBytes, maxReadable)
 
 	offset := int(address - start)
 	copy(byteBuffer, cbCtx.data[offset:offset+int(readBytes)])
