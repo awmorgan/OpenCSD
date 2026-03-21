@@ -99,26 +99,13 @@ func TestDecoderRegisterNamedIterationSorted(t *testing.T) {
 
 	names := r.Names()
 	want := []string{"ALPHA", "MID", "ZED"}
+	if len(names) != len(want) {
+		t.Fatalf("expected %d names, got %d", len(want), len(names))
+	}
 	for i := range want {
 		if names[i] != want[i] {
 			t.Fatalf("expected sorted names %v, got %v", want, names)
 		}
-	}
-
-	n, ok := r.GetFirstNamedDecoder()
-	if !ok || n != "ALPHA" {
-		t.Fatalf("expected first name ALPHA, got %q, ok=%v", n, ok)
-	}
-	n, ok = r.GetNextNamedDecoder()
-	if !ok || n != "MID" {
-		t.Fatalf("expected second name MID, got %q, ok=%v", n, ok)
-	}
-	n, ok = r.GetNextNamedDecoder()
-	if !ok || n != "ZED" {
-		t.Fatalf("expected third name ZED, got %q, ok=%v", n, ok)
-	}
-	if n, ok = r.GetNextNamedDecoder(); ok {
-		t.Fatalf("expected end of iteration, got %q", n)
 	}
 }
 

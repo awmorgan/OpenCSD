@@ -14,8 +14,6 @@ type DecoderRegister struct {
 	typedMngrs   map[ocsd.TraceProtocol]interfaces.DecoderMngr
 	nextCustomID ocsd.TraceProtocol
 	lastTyped    interfaces.DecoderMngr
-	iterNames    []string
-	iterPos      int
 }
 
 var defaultRegister = NewBuiltinDecoderRegister()
@@ -141,29 +139,4 @@ func (r *DecoderRegister) namesLocked() []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// GetFirstNamedDecoder starts iteration over registered decoder names.
-func (r *DecoderRegister) GetFirstNamedDecoder() (string, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.iterNames = r.namesLocked()
-	r.iterPos = 0
-	return r.getNextNamedDecoderLocked()
-}
-
-// GetNextNamedDecoder returns the next decoder name in iteration.
-func (r *DecoderRegister) GetNextNamedDecoder() (string, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.getNextNamedDecoderLocked()
-}
-
-func (r *DecoderRegister) getNextNamedDecoderLocked() (string, bool) {
-	if r.iterPos >= len(r.iterNames) {
-		return "", false
-	}
-	name := r.iterNames[r.iterPos]
-	r.iterPos++
-	return name, true
 }
