@@ -73,12 +73,6 @@ func (r *DecoderRegister) RegisterDecoderManagerByName(name string, mngr ocsd.De
 	return ocsd.OK
 }
 
-// RegisterDecoderTypeByName registers a decoder manager factory under a specific name.
-// Deprecated: use RegisterDecoderManagerByName.
-func (r *DecoderRegister) RegisterDecoderTypeByName(name string, mngr ocsd.DecoderManager) ocsd.Err {
-	return r.RegisterDecoderManagerByName(name, mngr)
-}
-
 // Register registers a decoder manager and returns a Go error.
 func (r *DecoderRegister) Register(name string, mngr ocsd.DecoderManager) error {
 	err := r.RegisterDecoderManagerByName(name, mngr)
@@ -98,12 +92,6 @@ func (r *DecoderRegister) DecoderManagerByNameStatus(name string) (ocsd.DecoderM
 	return nil, ocsd.ErrDcdregNameUnknown
 }
 
-// DecoderMngrByName retrieves a decoder factory by its registered name string.
-// Deprecated: use DecoderManagerByNameStatus or DecoderManagerByName.
-func (r *DecoderRegister) DecoderMngrByName(name string) (ocsd.DecoderMngr, ocsd.Err) {
-	return r.DecoderManagerByNameStatus(name)
-}
-
 // DecoderManagerByName retrieves a decoder manager by name and returns a Go error.
 func (r *DecoderRegister) DecoderManagerByName(name string) (ocsd.DecoderManager, error) {
 	mngr, err := r.DecoderManagerByNameStatus(name)
@@ -121,12 +109,6 @@ func (r *DecoderRegister) DecoderManagerByTypeStatus(dcdType ocsd.TraceProtocol)
 		return mngr, ocsd.OK
 	}
 	return nil, ocsd.ErrDcdregTypeUnknown
-}
-
-// DecoderMngrByType retrieves a decoder factory by its protocol enum value.
-// Deprecated: use DecoderManagerByTypeStatus or DecoderManagerByType.
-func (r *DecoderRegister) DecoderMngrByType(dcdType ocsd.TraceProtocol) (ocsd.DecoderMngr, ocsd.Err) {
-	return r.DecoderManagerByTypeStatus(dcdType)
 }
 
 // DecoderManagerByType retrieves a decoder manager by protocol and returns a Go error.

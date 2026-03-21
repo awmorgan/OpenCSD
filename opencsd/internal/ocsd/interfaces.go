@@ -62,7 +62,3 @@ type DecoderManager interface {
 	CreateTypedDecoder(instID int, config any) (TrcDataIn, any, error)
 	ProtocolType() TraceProtocol
 }
-
-// DecoderMngr is kept as a compatibility alias for existing call sites.
-// Deprecated: use DecoderManager.
-type DecoderMngr = DecoderManager

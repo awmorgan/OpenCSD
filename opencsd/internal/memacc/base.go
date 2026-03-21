@@ -321,14 +321,6 @@ func (c *Cache) Read(acc Accessor, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc
 	return bytesRead, nil
 }
 
-// ReadBytesFromCache reads bytes from cache-backed accessor state.
-// Deprecated: use Read.
-func (c *Cache) ReadBytesFromCache(acc Accessor, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, numBytes *uint32, buffer []byte) ocsd.Err {
-	bytesRead, err := c.Read(acc, address, memSpace, trcID, *numBytes, buffer)
-	*numBytes = bytesRead
-	return ocsd.AsErr(err)
-}
-
 func (c *Cache) blockInPage(idx int, address ocsd.VAddr, reqBytes uint32, trcID uint8) bool {
 	block := &c.blocks[idx]
 	if block.TrcID != trcID || block.ValidLen == 0 {

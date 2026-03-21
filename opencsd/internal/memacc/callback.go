@@ -49,18 +49,6 @@ func (c *CallbackAccessor) SetTraceIDCallback(fn ocsd.FnMemAccIDCB, ctx any) {
 	c.callback = nil
 }
 
-// SetCBIfFn sets the callback function.
-// Deprecated: use SetCallback.
-func (c *CallbackAccessor) SetCBIfFn(fn ocsd.FnMemAccCB, ctx any) {
-	c.SetCallback(fn, ctx)
-}
-
-// SetCBIDIfFn sets the callback with ID function.
-// Deprecated: use SetTraceIDCallback.
-func (c *CallbackAccessor) SetCBIDIfFn(fn ocsd.FnMemAccIDCB, ctx any) {
-	c.SetTraceIDCallback(fn, ctx)
-}
-
 // InitAccessor re-initializes the accessor.
 func (c *CallbackAccessor) InitAccessor(startAddr ocsd.VAddr, endAddr ocsd.VAddr, memSpace ocsd.MemSpaceAcc) {
 	c.StartAddress = startAddr
