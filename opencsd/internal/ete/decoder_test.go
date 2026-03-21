@@ -15,31 +15,29 @@ func TestDecoderManagerProtocolType(t *testing.T) {
 }
 
 func TestDecoderManagerCreatePktProcAndDecode(t *testing.T) {
-	m := NewDecoderManager()
 	cfg := NewConfig()
 
-	procAny := m.CreatePktProc(1, cfg)
-	if procAny == nil {
-		t.Fatalf("CreatePktProc returned nil")
+	proc, err := NewConfiguredProcessor(cfg)
+	if err != ocsd.OK {
+		t.Fatalf("NewConfiguredProcessor err=%v", err)
 	}
-	if _, ok := procAny.(*Processor); !ok {
-		t.Fatalf("CreatePktProc returned unexpected type %T", procAny)
+	if proc == nil {
+		t.Fatalf("NewConfiguredProcessor returned nil")
 	}
 
-	decAny := m.CreatePktDecode(1, cfg)
-	if decAny == nil {
-		t.Fatalf("CreatePktDecode returned nil")
+	dec, err := NewConfiguredPktDecode(1, cfg)
+	if err != ocsd.OK {
+		t.Fatalf("NewConfiguredPktDecode err=%v", err)
 	}
-	if _, ok := decAny.(*PktDecode); !ok {
-		t.Fatalf("CreatePktDecode returned unexpected type %T", decAny)
+	if dec == nil {
+		t.Fatalf("NewConfiguredPktDecode returned nil")
 	}
 }
 
 func TestDecoderManagerCreateDecoder(t *testing.T) {
-	m := NewDecoderManager()
 	cfg := NewConfig()
 
-	in, handle, err := m.CreateDecoder(3, cfg)
+	in, handle, err := NewDecoderManager().CreateDecoder(3, cfg)
 	if err != ocsd.OK {
 		t.Fatalf("CreateDecoder err=%v", err)
 	}
@@ -48,6 +46,26 @@ func TestDecoderManagerCreateDecoder(t *testing.T) {
 	}
 	if _, ok := in.(interfaces.TrcDataIn); !ok {
 		t.Fatalf("CreateDecoder input does not implement TrcDataIn")
+	}
+}
+
+func TestTypedPipelineConstructors(t *testing.T) {
+	proc, dec, err := NewConfiguredPipeline(3, NewConfig())
+	if err != ocsd.OK {
+		t.Fatalf("NewConfiguredPipeline err=%v", err)
+	}
+	if proc == nil || dec == nil {
+		t.Fatalf("NewConfiguredPipeline returned nil outputs")
+	}
+
+	if procOnly, err := NewConfiguredProcessor(nil); err != ocsd.ErrInvalidParamVal || procOnly != nil {
+		t.Fatalf("expected nil-config processor constructor failure, got proc=%v err=%v", procOnly, err)
+	}
+	if decOnly, err := NewConfiguredPktDecode(0, nil); err != ocsd.ErrInvalidParamVal || decOnly != nil {
+		t.Fatalf("expected nil-config decoder constructor failure, got dec=%v err=%v", decOnly, err)
+	}
+	if procOnly, decOnly, err := NewConfiguredPipeline(0, nil); err != ocsd.ErrInvalidParamVal || procOnly != nil || decOnly != nil {
+		t.Fatalf("expected nil-config pipeline constructor failure, got proc=%v dec=%v err=%v", procOnly, decOnly, err)
 	}
 }
 
