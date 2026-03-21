@@ -97,13 +97,14 @@ func TestITMEndToEndDecode(t *testing.T) {
 		cfg := NewConfig()
 		cfg.SetTraceID(0x11)
 
-		manager := NewDecoderManager()
-		proc := manager.CreatePktProc(0, cfg).(*PktProc)
-		dec := manager.CreatePktDecode(0, cfg).(*PktDecode)
-
-		proc.PktOutI.Attach(dec)
+		proc, dec, err := NewConfiguredPipeline(0, cfg)
+		if err != ocsd.OK {
+			t.Fatalf("NewConfiguredPipeline failed: %v", err)
+		}
 		outReceiver := &testTrcElemIn{}
-		dec.TraceElemOut.Attach(outReceiver)
+		if err := dec.TraceElemOut.Attach(outReceiver); err != ocsd.OK {
+			t.Fatalf("TraceElemOut.Attach failed: %v", err)
+		}
 
 		proc.TraceDataIn(ocsd.OpData, 0, stream)
 		proc.TraceDataIn(ocsd.OpFlush, 0, nil)
@@ -180,6 +181,68 @@ func TestITMEndToEndDecode(t *testing.T) {
 			if el.String() == "" {
 				t.Fatalf("element %d rendered empty string", i)
 			}
+		}
+	})
+}
+
+func TestITMTypedConstructors(t *testing.T) {
+	t.Run("ConfiguredPktProc", func(t *testing.T) {
+		cfg := NewConfig()
+		cfg.SetTraceID(0x21)
+
+		proc, err := NewConfiguredPktProc(3, cfg)
+		if err != ocsd.OK {
+			t.Fatalf("NewConfiguredPktProc failed: %v", err)
+		}
+		if proc == nil {
+			t.Fatal("expected non-nil processor")
+		}
+		if proc.Config != cfg {
+			t.Fatal("expected processor to keep typed config")
+		}
+	})
+
+	t.Run("ConfiguredPktDecode", func(t *testing.T) {
+		cfg := NewConfig()
+		cfg.SetTraceID(0x22)
+
+		dec, err := NewConfiguredPktDecode(4, cfg)
+		if err != ocsd.OK {
+			t.Fatalf("NewConfiguredPktDecode failed: %v", err)
+		}
+		if dec == nil {
+			t.Fatal("expected non-nil decoder")
+		}
+		if dec.Config != cfg {
+			t.Fatal("expected decoder to keep typed config")
+		}
+	})
+
+	t.Run("ConfiguredPipeline", func(t *testing.T) {
+		cfg := NewConfig()
+		cfg.SetTraceID(0x23)
+
+		proc, dec, err := NewConfiguredPipeline(5, cfg)
+		if err != ocsd.OK {
+			t.Fatalf("NewConfiguredPipeline failed: %v", err)
+		}
+		if proc == nil || dec == nil {
+			t.Fatal("expected non-nil processor and decoder")
+		}
+		if got := proc.PktOutI.First(); got != dec {
+			t.Fatal("expected pipeline constructor to wire processor output to decoder")
+		}
+	})
+
+	t.Run("RejectNilConfig", func(t *testing.T) {
+		if proc, err := NewConfiguredPktProc(0, nil); err != ocsd.ErrInvalidParamVal || proc != nil {
+			t.Fatalf("expected nil-config proc constructor to fail with ErrInvalidParamVal, got proc=%v err=%v", proc, err)
+		}
+		if dec, err := NewConfiguredPktDecode(0, nil); err != ocsd.ErrInvalidParamVal || dec != nil {
+			t.Fatalf("expected nil-config decode constructor to fail with ErrInvalidParamVal, got dec=%v err=%v", dec, err)
+		}
+		if proc, dec, err := NewConfiguredPipeline(0, nil); err != ocsd.ErrInvalidParamVal || proc != nil || dec != nil {
+			t.Fatalf("expected nil-config pipeline constructor to fail with ErrInvalidParamVal, got proc=%v dec=%v err=%v", proc, dec, err)
 		}
 	})
 }
