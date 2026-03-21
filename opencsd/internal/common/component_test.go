@@ -169,7 +169,7 @@ func TestTraceComponent(t *testing.T) {
 	}
 
 	assoc := &TraceComponent{}
-	tc.SetAssocComponent(assoc)
+	tc.AttachAssocComponent(assoc)
 	if tc.AssocComponent() != assoc {
 		t.Errorf("expected associated component to be set")
 	}

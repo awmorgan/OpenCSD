@@ -184,8 +184,8 @@ func (tc *TraceComponent) ConfigureSupportedOpModes(flags uint32) {
 	tc.supportedOpFlags = flags
 }
 
-// SetAssocComponent sets the associated trace component.
-func (tc *TraceComponent) SetAssocComponent(assocComp *TraceComponent) {
+// AttachAssocComponent sets the associated trace component.
+func (tc *TraceComponent) AttachAssocComponent(assocComp *TraceComponent) {
 	tc.assocComp = assocComp
 }
 
