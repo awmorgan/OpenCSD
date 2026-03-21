@@ -147,9 +147,7 @@ func ParseTraceMetaData(input io.Reader) (*ParsedTrace, error) {
 	// different sources (e.g. multi-session ETE), resulting in comma-separated accumulated
 	// values from the INI parser's duplicate-key handling.
 	if ctsSec, ok := ini.Sections[CoreSourcesSectionName]; ok {
-		for k, v := range ctsSec {
-			parsed.CPUSourceAssoc[k] = v
-		}
+		maps.Copy(parsed.CPUSourceAssoc, ctsSec)
 	}
 
 	return parsed, nil
@@ -183,7 +181,7 @@ func ExtractSourceTree(bufferName string, metadata *ParsedTrace, bufferData *Tra
 				// Search values instead of keys; values may be comma-separated when a core
 				// has multiple sessions (duplicate keys accumulated by the INI parser).
 				for k, v := range metadata.CPUSourceAssoc {
-					for _, sv := range strings.Split(v, ",") {
+					for sv := range strings.SplitSeq(v, ",") {
 						if strings.TrimSpace(sv) == sourceName {
 							coreName = k
 							break

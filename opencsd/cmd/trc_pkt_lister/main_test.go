@@ -103,8 +103,8 @@ func parseGoldenCase(goldenPath string) (listerGoldenCase, error) {
 	// Extract snapshot directory by removing known suffixes
 	snapshotName := name
 	for _, suffix := range []string{"_src_addr_N", "_multi_sess"} {
-		if strings.HasSuffix(snapshotName, suffix) {
-			snapshotName = strings.TrimSuffix(snapshotName, suffix)
+		if before, ok := strings.CutSuffix(snapshotName, suffix); ok {
+			snapshotName = before
 			break
 		}
 	}

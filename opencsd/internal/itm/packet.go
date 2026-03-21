@@ -254,10 +254,7 @@ func (p *Packet) tsLocalPacketBody() string {
 
 func (p *Packet) tsGlobal1PacketBody() string {
 	gts1BitSize := []int{6, 13, 20, 25}
-	idx := int(p.ValSz) - 1
-	if idx < 0 {
-		idx = 0
-	}
+	idx := max(int(p.ValSz)-1, 0)
 	if idx >= len(gts1BitSize) {
 		idx = len(gts1BitSize) - 1
 	}
