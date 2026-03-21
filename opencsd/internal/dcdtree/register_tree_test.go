@@ -163,7 +163,7 @@ func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 		}
 	}
 
-	tree := CreateDecodeTree(ocsd.TrcSrcSingle, 0)
+	tree := NewDefaultDecodeTree(ocsd.TrcSrcSingle, 0)
 	if tree == nil {
 		t.Fatal("CreateDecodeTree returned nil")
 	}
@@ -214,7 +214,7 @@ func TestDecodeTreeCreateDecoderRejectsOutOfRangeRouteID(t *testing.T) {
 		}
 	}
 
-	tree := CreateDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign)
+	tree := NewDefaultDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign)
 	if tree == nil {
 		t.Fatal("CreateDecodeTree returned nil")
 	}
@@ -272,4 +272,3 @@ func TestDecodeTreePrefersTypedManagerPath(t *testing.T) {
 		t.Fatal("expected DecodeTree to prefer the typed packet-processor path")
 	}
 }
-

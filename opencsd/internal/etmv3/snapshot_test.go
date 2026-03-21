@@ -218,7 +218,7 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		srcType = ocsd.TrcSrcSingle
 	}
 
-	tree := dcdtree.CreateDecodeTree(srcType, formatterFlags)
+	tree := dcdtree.NewDefaultDecodeTree(srcType, formatterFlags)
 	if tree == nil {
 		return nil, fmt.Errorf("nil decode tree")
 	}

@@ -52,9 +52,15 @@ func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32, registry *
 	return dt
 }
 
-// CreateDecodeTree creates a new Trace Decode Tree using the package default registry.
-func CreateDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) *DecodeTree {
+// NewDefaultDecodeTree creates a new Trace Decode Tree using the package default registry.
+func NewDefaultDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) *DecodeTree {
 	return NewDecodeTree(srcType, formatterCfgFlags, DefaultDecoderRegister())
+}
+
+// CreateDecodeTree creates a new Trace Decode Tree using the package default registry.
+// Deprecated: prefer NewDefaultDecodeTree.
+func CreateDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) *DecodeTree {
+	return NewDefaultDecodeTree(srcType, formatterCfgFlags)
 }
 
 // Destroy cleans up memory accessors (although GC does mostly).
