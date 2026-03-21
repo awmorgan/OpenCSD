@@ -82,15 +82,6 @@ func (p *PktDecodeI) GetTraceElemOutAttachPt() *AttachPt[interfaces.TrcGenElemIn
 func (p *PktDecodeI) GetInstrDecodeAttachPt() *AttachPt[InstrDecode] { return &p.InstrDecode }
 func (p *PktDecodeI) GetMemAccAttachPt() *AttachPt[TargetMemAccess]  { return &p.MemAccess }
 
-func (p *PktDecodeI) InitPktDecodeI(name string) {
-	p.InitTraceComponent(name)
-	p.TraceElemOut = *NewAttachPt[interfaces.TrcGenElemIn]()
-	p.MemAccess = *NewAttachPt[TargetMemAccess]()
-	p.InstrDecode = *NewAttachPt[InstrDecode]()
-	p.usesMemAccess = true
-	p.usesIDecode = true
-}
-
 func (p *PktDecodeI) SetUsesMemAccess(uses bool) { p.usesMemAccess = uses }
 func (p *PktDecodeI) GetUsesMemAccess() bool     { return p.usesMemAccess }
 
@@ -171,7 +162,12 @@ type PktDecodeBase[P any, Pc any] struct {
 }
 
 func (pb *PktDecodeBase[P, Pc]) InitPktDecodeBase(name string) {
-	pb.InitPktDecodeI(name)
+	pb.InitTraceComponent(name)
+	pb.TraceElemOut = *NewAttachPt[interfaces.TrcGenElemIn]()
+	pb.MemAccess = *NewAttachPt[TargetMemAccess]()
+	pb.InstrDecode = *NewAttachPt[InstrDecode]()
+	pb.usesMemAccess = true
+	pb.usesIDecode = true
 }
 
 func (pb *PktDecodeBase[P, Pc]) SetStrategy(strategy PktDecodeStrategy[P, Pc]) {
@@ -242,10 +238,6 @@ type PktProcI struct {
 	TraceComponent
 }
 
-func (p *PktProcI) InitPktProcI(name string) {
-	p.InitTraceComponent(name)
-}
-
 // PktProcBase represents TrcPktProcBase<P, Pt, Pc>.
 type PktProcBase[P any, Pt any, Pc any] struct {
 	PktProcI
@@ -259,7 +251,7 @@ type PktProcBase[P any, Pt any, Pc any] struct {
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) InitPktProcBase(name string) {
-	pb.InitPktProcI(name)
+	pb.InitTraceComponent(name)
 	pb.PktOutI = *NewAttachPt[PktDataIn[P]]()
 	pb.PktRawMonI = *NewAttachPt[PktRawDataMon[P]]()
 	pb.PktIndexerI = *NewAttachPt[TrcPktIndexer[Pt]]()
