@@ -589,19 +589,19 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 
 		switch proc := elem.DataIn.(type) {
 		case *ptm.PktProc:
-			_ = proc.PktRawMonI.ReplaceFirst(&ptmRawPrinter{writer: out, id: csID})
+			_ = proc.PktRawMonI.Replace(&ptmRawPrinter{writer: out, id: csID})
 			ok = true
 		case *etmv3.PktProc:
-			_ = proc.PktRawMonI.ReplaceFirst(&etmv3RawPrinter{writer: out, id: csID})
+			_ = proc.PktRawMonI.Replace(&etmv3RawPrinter{writer: out, id: csID})
 			ok = true
 		case *etmv4.Processor:
-			_ = proc.PktRawMonI.ReplaceFirst(&etmv4RawPrinter{writer: out, id: csID})
+			_ = proc.PktRawMonI.Replace(&etmv4RawPrinter{writer: out, id: csID})
 			ok = true
 		case *itm.PktProc:
-			_ = proc.PktRawMonI.ReplaceFirst(&itmRawPrinter{writer: out, id: csID})
+			_ = proc.PktRawMonI.Replace(&itmRawPrinter{writer: out, id: csID})
 			ok = true
 		case *stm.PktProc:
-			_ = proc.PktRawMonI.ReplaceFirst(&stmRawPrinter{writer: out, id: csID})
+			_ = proc.PktRawMonI.Replace(&stmRawPrinter{writer: out, id: csID})
 			ok = true
 		}
 

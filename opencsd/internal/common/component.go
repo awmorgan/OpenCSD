@@ -72,11 +72,6 @@ func (a *AttachPt[T]) Detach() ocsd.Err {
 	return ocsd.OK
 }
 
-// ReplaceFirst detaches any currently attached component and attaches the new one.
-func (a *AttachPt[T]) ReplaceFirst(comp T) ocsd.Err {
-	return a.Replace(comp)
-}
-
 // Replace detaches any currently attached component and attaches the new one.
 func (a *AttachPt[T]) Replace(comp T) ocsd.Err {
 	if a.hasAttached {
