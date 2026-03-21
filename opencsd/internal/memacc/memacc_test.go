@@ -75,7 +75,7 @@ func TestOverlapRegions(t *testing.T) {
 	}
 
 	// Non overlapping region - same memory space
-	acc2.InitAccessor(0x8000, asByteSlice(&el01NSBlocks, 1))
+	acc2.Configure(0x8000, asByteSlice(&el01NSBlocks, 1))
 	err = mapper.AddAccessor(acc2, 0)
 	if err != ocsd.OK {
 		t.Errorf("Failed to set non overlapping memory accessor: %v", err)
@@ -521,11 +521,11 @@ func TestAlternativeCallback(t *testing.T) {
 		t.Errorf("Callback accessor should delegate without local memspace filtering")
 	}
 
-	// test InitAccessor
-	cbAcc.InitAccessor(0x100, 0x200, ocsd.MemSpaceEL1N)
+	// test Configure
+	cbAcc.Configure(0x100, 0x200, ocsd.MemSpaceEL1N)
 	st, en := cbAcc.Range()
 	if st != 0x100 || en != 0x200 {
-		t.Errorf("InitAccessor mismatch")
+		t.Errorf("Configure mismatch")
 	}
 }
 
@@ -601,7 +601,7 @@ func TestMapper_ErrorAndCacheEdgePaths(t *testing.T) {
 	mapper.RemoveAllAccessors()
 
 	// 5. Buffer ReadBytes out of bounds / memspace
-	accBuf.InitAccessor(0, []byte{1, 2, 3, 4})
+	accBuf.Configure(0, []byte{1, 2, 3, 4})
 	accBuf.SetMemSpace(ocsd.MemSpaceEL1N)
 	readBuf := make([]byte, 4)
 	if accBuf.ReadBytes(0x10, ocsd.MemSpaceEL1N, 0, 4, readBuf) != 0 {

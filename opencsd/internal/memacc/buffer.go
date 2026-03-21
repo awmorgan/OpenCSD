@@ -40,8 +40,8 @@ func (b *BufferAccessor) ReadBytes(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc
 	return bytesToRead
 }
 
-// InitAccessor re-initializes the accessor with new values.
-func (b *BufferAccessor) InitAccessor(startAddr ocsd.VAddr, buffer []byte) {
+// Configure updates the accessor address range and backing buffer.
+func (b *BufferAccessor) Configure(startAddr ocsd.VAddr, buffer []byte) {
 	b.StartAddress = startAddr
 	b.EndAddress = startAddr + ocsd.VAddr(len(buffer)) - 1
 	b.Buffer = buffer

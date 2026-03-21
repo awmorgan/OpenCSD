@@ -49,8 +49,8 @@ func (c *CallbackAccessor) SetTraceIDCallback(fn ocsd.FnMemAccIDCB, ctx any) {
 	c.callback = nil
 }
 
-// InitAccessor re-initializes the accessor.
-func (c *CallbackAccessor) InitAccessor(startAddr ocsd.VAddr, endAddr ocsd.VAddr, memSpace ocsd.MemSpaceAcc) {
+// Configure updates accessor range and memory-space routing.
+func (c *CallbackAccessor) Configure(startAddr ocsd.VAddr, endAddr ocsd.VAddr, memSpace ocsd.MemSpaceAcc) {
 	c.StartAddress = startAddr
 	c.EndAddress = endAddr
 	c.MemSpaceAcc = memSpace
