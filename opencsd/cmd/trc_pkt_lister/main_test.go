@@ -22,29 +22,14 @@ type listerGoldenCase struct {
 	extraFlags  []string
 }
 
-func TestTraceListerGoldens(t *testing.T) {
-	pattern := filepath.Join("..", "..", "internal", "*", "testdata", "*.ppl")
-	paths, err := filepath.Glob(pattern)
-	if err != nil {
-		t.Fatalf("glob %q: %v", pattern, err)
-	}
-	if len(paths) == 0 {
-		t.Fatalf("no golden trc_pkt_lister files found with pattern: %s", pattern)
-	}
+type listerGoldenManifestEntry struct {
+	decoder      string
+	goldenName   string
+	snapshotName string
+}
 
-	slices.Sort(paths)
-	testCases := make([]listerGoldenCase, 0, len(paths))
-	for _, p := range paths {
-		tc, parseErr := parseGoldenCase(p)
-		if parseErr != nil {
-			// Skip golden files without corresponding snapshot directories
-			if strings.Contains(parseErr.Error(), "invalid snapshot dir") {
-				continue
-			}
-			t.Fatalf("parse test case from %s: %v", p, parseErr)
-		}
-		testCases = append(testCases, tc)
-	}
+func TestTraceListerGoldens(t *testing.T) {
+	testCases := explicitTraceListerGoldenCases(t)
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -91,41 +76,102 @@ func TestTraceListerGoldens(t *testing.T) {
 	}
 }
 
-func parseGoldenCase(goldenPath string) (listerGoldenCase, error) {
-	content, err := os.ReadFile(goldenPath)
-	if err != nil {
-		return listerGoldenCase{}, err
+func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
+	t.Helper()
+	manifest := []listerGoldenManifestEntry{
+		{decoder: "ete", goldenName: "001-ack_test", snapshotName: "001-ack_test"},
+		{decoder: "ete", goldenName: "002-ack_test_scr", snapshotName: "002-ack_test_scr"},
+		{decoder: "ete", goldenName: "002-ack_test_scr_src_addr_N", snapshotName: "002-ack_test_scr"},
+		{decoder: "ete", goldenName: "ete-bc-instr", snapshotName: "ete-bc-instr"},
+		{decoder: "ete", goldenName: "ete-ite-instr", snapshotName: "ete-ite-instr"},
+		{decoder: "ete", goldenName: "ete-ite-instr_multi_sess", snapshotName: "ete-ite-instr"},
+		{decoder: "ete", goldenName: "ete-wfet", snapshotName: "ete-wfet"},
+		{decoder: "ete", goldenName: "ete_ip", snapshotName: "ete_ip"},
+		{decoder: "ete", goldenName: "ete_ip_src_addr_N", snapshotName: "ete_ip"},
+		{decoder: "ete", goldenName: "ete_mem", snapshotName: "ete_mem"},
+		{decoder: "ete", goldenName: "ete_spec_1", snapshotName: "ete_spec_1"},
+		{decoder: "ete", goldenName: "ete_spec_2", snapshotName: "ete_spec_2"},
+		{decoder: "ete", goldenName: "ete_spec_3", snapshotName: "ete_spec_3"},
+		{decoder: "ete", goldenName: "event_test", snapshotName: "event_test"},
+		{decoder: "ete", goldenName: "feat_cmpbr", snapshotName: "feat_cmpbr"},
+		{decoder: "ete", goldenName: "infrastructure", snapshotName: "infrastructure"},
+		{decoder: "ete", goldenName: "maxspec0_commopt1", snapshotName: "maxspec0_commopt1"},
+		{decoder: "ete", goldenName: "maxspec78_commopt0", snapshotName: "maxspec78_commopt0"},
+		{decoder: "ete", goldenName: "pauth_lr", snapshotName: "pauth_lr"},
+		{decoder: "ete", goldenName: "pauth_lr_Rm", snapshotName: "pauth_lr_Rm"},
+		{decoder: "ete", goldenName: "pauth_lr_Rm_multi_sess", snapshotName: "pauth_lr_Rm"},
+		{decoder: "ete", goldenName: "pauth_lr_multi_sess", snapshotName: "pauth_lr"},
+		{decoder: "ete", goldenName: "q_elem", snapshotName: "q_elem"},
+		{decoder: "ete", goldenName: "q_elem_multi_sess", snapshotName: "q_elem"},
+		{decoder: "ete", goldenName: "rme_test", snapshotName: "rme_test"},
+		{decoder: "ete", goldenName: "rme_test_multi_sess", snapshotName: "rme_test"},
+		{decoder: "ete", goldenName: "s_9001", snapshotName: "s_9001"},
+		{decoder: "ete", goldenName: "s_9001_multi_sess", snapshotName: "s_9001"},
+		{decoder: "ete", goldenName: "src_addr", snapshotName: "src_addr"},
+		{decoder: "ete", goldenName: "src_addr_src_addr_N", snapshotName: "src_addr"},
+		{decoder: "ete", goldenName: "ss_ib_el1ns", snapshotName: "ss_ib_el1ns"},
+		{decoder: "ete", goldenName: "ss_ib_el1ns_multi_sess", snapshotName: "ss_ib_el1ns"},
+		{decoder: "ete", goldenName: "texit-poe2", snapshotName: "texit-poe2"},
+		{decoder: "ete", goldenName: "tme_simple", snapshotName: "tme_simple"},
+		{decoder: "ete", goldenName: "tme_tcancel", snapshotName: "tme_tcancel"},
+		{decoder: "ete", goldenName: "tme_test", snapshotName: "tme_test"},
+		{decoder: "ete", goldenName: "trace_file_cid_vmid", snapshotName: "trace_file_cid_vmid"},
+		{decoder: "ete", goldenName: "trace_file_vmid", snapshotName: "trace_file_vmid"},
+		{decoder: "ete", goldenName: "ts_bit64_set", snapshotName: "ts_bit64_set"},
+		{decoder: "ete", goldenName: "ts_marker", snapshotName: "ts_marker"},
+		{decoder: "etmv3", goldenName: "TC2", snapshotName: "TC2"},
+		{decoder: "etmv4", goldenName: "a55-test-tpiu", snapshotName: "a55-test-tpiu"},
+		{decoder: "etmv4", goldenName: "a57_single_step", snapshotName: "a57_single_step"},
+		{decoder: "etmv4", goldenName: "armv8_1m_branches", snapshotName: "armv8_1m_branches"},
+		{decoder: "etmv4", goldenName: "init-short-addr", snapshotName: "init-short-addr"},
+		{decoder: "etmv4", goldenName: "juno-ret-stck", snapshotName: "juno-ret-stck"},
+		{decoder: "etmv4", goldenName: "juno-uname-001", snapshotName: "juno-uname-001"},
+		{decoder: "etmv4", goldenName: "juno-uname-002", snapshotName: "juno-uname-002"},
+		{decoder: "etmv4", goldenName: "juno_r1_1", snapshotName: "juno_r1_1"},
+		{decoder: "etmv4", goldenName: "juno_r1_1_badopcode", snapshotName: "juno_r1_1"},
+		{decoder: "etmv4", goldenName: "juno_r1_1_badopcode_flag", snapshotName: "juno_r1_1"},
+		{decoder: "etmv4", goldenName: "juno_r1_1_rangelimit", snapshotName: "juno_r1_1"},
+		{decoder: "etmv4", goldenName: "test-file-mem-offsets", snapshotName: "test-file-mem-offsets"},
+		{decoder: "itm", goldenName: "itm_only_csformat", snapshotName: "itm_only_csformat"},
+		{decoder: "itm", goldenName: "itm_only_raw", snapshotName: "itm_only_raw"},
+		{decoder: "ptm", goldenName: "Snowball", snapshotName: "Snowball"},
+		{decoder: "ptm", goldenName: "TC2", snapshotName: "TC2"},
+		{decoder: "ptm", goldenName: "tc2-ptm-rstk-t32", snapshotName: "tc2-ptm-rstk-t32"},
+		{decoder: "ptm", goldenName: "trace_cov_a15", snapshotName: "trace_cov_a15"},
+		{decoder: "stm", goldenName: "stm-issue-27", snapshotName: "stm-issue-27"},
+		{decoder: "stm", goldenName: "stm_only-2", snapshotName: "stm_only-2"},
+		{decoder: "stm", goldenName: "stm_only-juno", snapshotName: "stm_only-juno"},
+		{decoder: "stm", goldenName: "stm_only", snapshotName: "stm_only"},
 	}
 
-	name := strings.TrimSuffix(filepath.Base(goldenPath), ".ppl")
-	decoder := filepath.Base(filepath.Dir(filepath.Dir(goldenPath)))
+	testCases := make([]listerGoldenCase, 0, len(manifest))
+	for _, entry := range manifest {
+		goldenPath := filepath.Join("..", "..", "internal", entry.decoder, "testdata", entry.goldenName+".ppl")
+		snapshotDir := filepath.Join("..", "..", "internal", entry.decoder, "testdata", entry.snapshotName)
 
-	// Extract snapshot directory by removing known suffixes
-	snapshotName := name
-	for _, suffix := range []string{"_src_addr_N", "_multi_sess"} {
-		if before, ok := strings.CutSuffix(snapshotName, suffix); ok {
-			snapshotName = before
-			break
+		goldenBytes, err := os.ReadFile(goldenPath)
+		if err != nil {
+			t.Fatalf("read golden %s: %v", goldenPath, err)
 		}
+		if stat, err := os.Stat(snapshotDir); err != nil || !stat.IsDir() {
+			t.Fatalf("missing snapshot dir %s", snapshotDir)
+		}
+
+		ppl := string(goldenBytes)
+		id, decode, extraFlags := parseOptionsFromGolden(entry.goldenName, ppl)
+		testCases = append(testCases, listerGoldenCase{
+			name:        filepath.ToSlash(filepath.Join(entry.decoder, entry.snapshotName, entry.goldenName+".ppl")),
+			decoder:     entry.decoder,
+			goldenPath:  goldenPath,
+			snapshotDir: snapshotDir,
+			sourceName:  extractSourceName(ppl),
+			id:          id,
+			decode:      decode,
+			extraFlags:  extraFlags,
+		})
 	}
 
-	snapshotDir := filepath.Join(filepath.Dir(goldenPath), snapshotName)
-	if stat, err := os.Stat(snapshotDir); err != nil || !stat.IsDir() {
-		return listerGoldenCase{}, fmt.Errorf("invalid snapshot dir %s", snapshotDir)
-	}
-
-	id, decode, extraFlags := parseOptionsFromGolden(name, string(content))
-
-	return listerGoldenCase{
-		name:        filepath.ToSlash(filepath.Join(decoder, snapshotName, name+".ppl")),
-		decoder:     decoder,
-		goldenPath:  goldenPath,
-		snapshotDir: snapshotDir,
-		sourceName:  extractSourceName(string(content)),
-		id:          id,
-		decode:      decode,
-		extraFlags:  extraFlags,
-	}, nil
+	return testCases
 }
 
 func parseOptionsFromGolden(name, ppl string) (string, bool, []string) {
