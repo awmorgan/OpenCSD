@@ -1,7 +1,7 @@
 package itm
 
 import (
-	"opencsd/internal/interfaces"
+	
 	"opencsd/internal/ocsd"
 )
 
@@ -55,7 +55,7 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, ocsd.
 	return proc, dec, ocsd.OK
 }
 
-func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
+func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil, nil, ocsd.ErrInvalidParamType
@@ -67,7 +67,7 @@ func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (interfaces.
 	return proc, proc, ocsd.OK
 }
 
-func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
+func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil, nil, ocsd.ErrInvalidParamType

@@ -2,7 +2,7 @@ package etmv4
 
 import (
 	"opencsd/internal/common"
-	"opencsd/internal/interfaces"
+	
 	"opencsd/internal/ocsd"
 )
 
@@ -72,10 +72,10 @@ type Processor struct {
 	config Config
 
 	// output interface
-	pktOut interfaces.PktDataIn[TracePacket]
+	pktOut ocsd.PktDataIn[TracePacket]
 
 	// raw packet monitor
-	PktRawMonI *common.AttachPt[interfaces.PktRawDataMon[TracePacket]]
+	PktRawMonI *common.AttachPt[ocsd.PktRawDataMon[TracePacket]]
 
 	processState ProcessState
 
@@ -138,14 +138,14 @@ type Processor struct {
 }
 
 // Ensure the struct satisfies TrcDataIn
-var _ interfaces.TrcDataIn = (*Processor)(nil)
+var _ ocsd.TrcDataIn = (*Processor)(nil)
 
 // NewProcessor creates and initializes a new ETMv4 packet Processor.
 func NewProcessor(config *Config) *Processor {
 	p := &Processor{
 		config:       *config,
 		processState: ProcHdr,
-		PktRawMonI:   common.NewAttachPt[interfaces.PktRawDataMon[TracePacket]](),
+		PktRawMonI:   common.NewAttachPt[ocsd.PktRawDataMon[TracePacket]](),
 	}
 	p.buildIPacketTable()
 	p.currPacket.ProtocolVersion = config.FullVersion()
@@ -154,11 +154,11 @@ func NewProcessor(config *Config) *Processor {
 }
 
 // SetPktOut attaches the packet processor output sink.
-func (p *Processor) SetPktOut(cb interfaces.PktDataIn[TracePacket]) {
+func (p *Processor) SetPktOut(cb ocsd.PktDataIn[TracePacket]) {
 	p.pktOut = cb
 }
 
-// TraceDataIn implements interfaces.TrcDataIn.
+// TraceDataIn implements ocsd.TrcDataIn.
 func (p *Processor) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
 	switch op {
 	case ocsd.OpData:

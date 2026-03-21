@@ -3,7 +3,7 @@ package demux
 import (
 	"fmt"
 	"opencsd/internal/common"
-	"opencsd/internal/interfaces"
+	
 	"opencsd/internal/ocsd"
 )
 
@@ -28,8 +28,8 @@ type FrameDeformatter struct {
 	rawChanEnable  [128]bool
 
 	// Datapath Attachments
-	idStreams     [128]interfaces.TrcDataIn
-	rawTraceFrame interfaces.TrcRawFrameIn
+	idStreams     [128]ocsd.TrcDataIn
+	rawTraceFrame ocsd.TrcRawFrameIn
 	errorLogger   common.ErrorLogger
 
 	// state params
@@ -64,13 +64,13 @@ func NewFrameDeformatter() *FrameDeformatter {
 }
 
 // Attachments
-func (d *FrameDeformatter) SetIDStream(id uint8, stream interfaces.TrcDataIn) {
+func (d *FrameDeformatter) SetIDStream(id uint8, stream ocsd.TrcDataIn) {
 	if id < 128 {
 		d.idStreams[id] = stream
 	}
 }
 
-func (d *FrameDeformatter) SetRawTraceFrame(stream interfaces.TrcRawFrameIn) {
+func (d *FrameDeformatter) SetRawTraceFrame(stream ocsd.TrcRawFrameIn) {
 	d.rawTraceFrame = stream
 }
 

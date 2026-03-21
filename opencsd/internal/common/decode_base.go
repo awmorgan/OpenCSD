@@ -1,7 +1,7 @@
 package common
 
 import (
-	"opencsd/internal/interfaces"
+	
 	"opencsd/internal/ocsd"
 )
 
@@ -62,7 +62,7 @@ type PktProcBadPacketHook interface{ IsBadPacket() bool }
 type PktDecodeI struct {
 	TraceComponent
 
-	TraceElemOut AttachPt[interfaces.TrcGenElemIn]
+	TraceElemOut AttachPt[ocsd.TrcGenElemIn]
 	MemAccess    AttachPt[TargetMemAccess]
 	InstrDecode  AttachPt[InstrDecode]
 
@@ -75,7 +75,7 @@ type PktDecodeI struct {
 	traceIDProvider PktDecodeTraceIDProvider
 }
 
-func (p *PktDecodeI) TraceElemOutAttachPt() *AttachPt[interfaces.TrcGenElemIn] {
+func (p *PktDecodeI) TraceElemOutAttachPt() *AttachPt[ocsd.TrcGenElemIn] {
 	return &p.TraceElemOut
 }
 func (p *PktDecodeI) InstrDecodeAttachPt() *AttachPt[InstrDecode] { return &p.InstrDecode }
@@ -160,7 +160,7 @@ type PktDecodeBase[P any, Pc any] struct {
 
 func (pb *PktDecodeBase[P, Pc]) InitPktDecodeBase(name string) {
 	pb.InitTraceComponent(name)
-	pb.TraceElemOut = *NewAttachPt[interfaces.TrcGenElemIn]()
+	pb.TraceElemOut = *NewAttachPt[ocsd.TrcGenElemIn]()
 	pb.MemAccess = *NewAttachPt[TargetMemAccess]()
 	pb.InstrDecode = *NewAttachPt[InstrDecode]()
 	pb.usesMemAccess = true

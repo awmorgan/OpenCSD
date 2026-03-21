@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"opencsd/internal/common"
-	"opencsd/internal/interfaces"
+	
 	"opencsd/internal/ocsd"
 )
 
@@ -111,7 +111,7 @@ type elemRes struct {
 	Discard    bool
 }
 
-// Ensure PktDecode implements interfaces.TrcDataIn
+// Ensure PktDecode implements ocsd.TrcDataIn
 // And also we extend PktDecodeBase
 type PktDecode struct {
 	common.PktDecodeBase[TracePacket, Config]
@@ -1965,7 +1965,7 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, ocs
 	return proc, decoder, ocsd.OK
 }
 
-func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
+func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil, nil, ocsd.ErrInvalidParamVal
@@ -1977,7 +1977,7 @@ func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (interfaces.
 	return proc, proc, ocsd.OK
 }
 
-func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
+func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil, nil, ocsd.ErrInvalidParamVal

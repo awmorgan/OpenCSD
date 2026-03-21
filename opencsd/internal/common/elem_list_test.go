@@ -3,7 +3,6 @@ package common
 import (
 	"testing"
 
-	"opencsd/internal/interfaces"
 	"opencsd/internal/ocsd"
 )
 
@@ -18,7 +17,7 @@ func (d *dummySendIf) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem 
 
 func TestGenElemList(t *testing.T) {
 	list := NewGenElemList()
-	sendAttached := NewAttachPt[interfaces.TrcGenElemIn]()
+	sendAttached := NewAttachPt[ocsd.TrcGenElemIn]()
 	dummy := &dummySendIf{}
 	sendAttached.Attach(dummy)
 
@@ -72,7 +71,7 @@ func TestGenElemList(t *testing.T) {
 
 func TestGenElemListPendLastPartialWindow(t *testing.T) {
 	list := NewGenElemList()
-	sendAttached := NewAttachPt[interfaces.TrcGenElemIn]()
+	sendAttached := NewAttachPt[ocsd.TrcGenElemIn]()
 	dummy := &dummySendIf{}
 	sendAttached.Attach(dummy)
 
@@ -111,7 +110,7 @@ func TestGenElemListPendLastPartialWindow(t *testing.T) {
 
 func TestGenElemStack(t *testing.T) {
 	stack := NewGenElemStack()
-	sendAttached := NewAttachPt[interfaces.TrcGenElemIn]()
+	sendAttached := NewAttachPt[ocsd.TrcGenElemIn]()
 	dummy := &dummySendIf{}
 	sendAttached.Attach(dummy)
 

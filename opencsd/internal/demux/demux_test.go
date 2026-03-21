@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"opencsd/internal/common"
-	"opencsd/internal/interfaces"
 	"opencsd/internal/ocsd"
 )
 
@@ -146,7 +145,7 @@ func (m *mockDataSink) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, data
 }
 
 // Ensure mockDataSink implements TrcDataIn
-var _ interfaces.TrcDataIn = (*mockDataSink)(nil)
+var _ ocsd.TrcDataIn = (*mockDataSink)(nil)
 
 type mockDataSinkWait struct{}
 
@@ -161,7 +160,7 @@ func (m *mockDataSinkWait) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, 
 }
 
 // Ensure mockDataSinkWait implements TrcDataIn
-var _ interfaces.TrcDataIn = (*mockDataSinkWait)(nil)
+var _ ocsd.TrcDataIn = (*mockDataSinkWait)(nil)
 
 type mockRawSink struct {
 	out *bytes.Buffer

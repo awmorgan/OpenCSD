@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"opencsd/internal/interfaces"
+	
 	"opencsd/internal/ocsd"
 )
 
@@ -24,13 +24,13 @@ type fakeManager struct {
 	protocol ocsd.TraceProtocol
 }
 
-func (m *fakeManager) CreateTypedPktProc(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
+func (m *fakeManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
 	proc := &fakeDataIn{}
 	return proc, proc, ocsd.OK
 
 }
 
-func (m *fakeManager) CreateTypedDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
+func (m *fakeManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
 	return &fakeDataIn{}, struct{}{}, ocsd.OK
 }
 
@@ -44,13 +44,13 @@ type fakeTypedManager struct {
 	typedDecoderCalled bool
 }
 
-func (m *fakeTypedManager) CreateTypedPktProc(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
+func (m *fakeTypedManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
 	m.typedPktProcCalled = true
 	proc := &fakeDataIn{}
 	return proc, proc, ocsd.OK
 }
 
-func (m *fakeTypedManager) CreateTypedDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
+func (m *fakeTypedManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, ocsd.Err) {
 	m.typedDecoderCalled = true
 	return &fakeDataIn{}, struct{}{}, ocsd.OK
 }

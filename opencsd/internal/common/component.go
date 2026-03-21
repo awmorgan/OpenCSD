@@ -102,7 +102,7 @@ func (a *AttachPt[T]) Next() T {
 	return empty
 }
 
-// NumAttached returns the number of attached interfaces.
+// NumAttached returns the number of attached ocsd.
 func (a *AttachPt[T]) NumAttached() int {
 	if isNilAttachment(a.comp) {
 		return 0

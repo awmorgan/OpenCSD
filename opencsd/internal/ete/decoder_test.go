@@ -3,7 +3,6 @@ package ete
 import (
 	"testing"
 
-	"opencsd/internal/interfaces"
 	"opencsd/internal/ocsd"
 )
 
@@ -44,7 +43,7 @@ func TestDecoderManagerCreateDecoder(t *testing.T) {
 	if in == nil || handle == nil {
 		t.Fatalf("CreateTypedDecoder returned nil outputs")
 	}
-	if _, ok := in.(interfaces.TrcDataIn); !ok {
+	if _, ok := in.(ocsd.TrcDataIn); !ok {
 		t.Fatalf("CreateTypedDecoder input does not implement TrcDataIn")
 	}
 }

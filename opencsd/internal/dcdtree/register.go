@@ -3,7 +3,7 @@ package dcdtree
 import (
 	"errors"
 	"fmt"
-	"opencsd/internal/interfaces"
+	
 	"opencsd/internal/ocsd"
 	"sort"
 	"sync"
@@ -19,8 +19,8 @@ var (
 // DecoderRegister manages decoder protocol factories for the library.
 type DecoderRegister struct {
 	mu           sync.RWMutex
-	decoderMngrs map[string]interfaces.DecoderMngr
-	typedMngrs   map[ocsd.TraceProtocol]interfaces.DecoderMngr
+	decoderMngrs map[string]ocsd.DecoderMngr
+	typedMngrs   map[ocsd.TraceProtocol]ocsd.DecoderMngr
 	nextCustomID ocsd.TraceProtocol
 }
 
@@ -34,8 +34,8 @@ func DefaultDecoderRegister() *DecoderRegister {
 // NewDecoderRegister creates a new decoder registry instance.
 func NewDecoderRegister() *DecoderRegister {
 	return &DecoderRegister{
-		decoderMngrs: make(map[string]interfaces.DecoderMngr),
-		typedMngrs:   make(map[ocsd.TraceProtocol]interfaces.DecoderMngr),
+		decoderMngrs: make(map[string]ocsd.DecoderMngr),
+		typedMngrs:   make(map[ocsd.TraceProtocol]ocsd.DecoderMngr),
 		nextCustomID: ocsd.ProtocolCustom0,
 	}
 }
@@ -48,7 +48,7 @@ func NewBuiltinDecoderRegister() *DecoderRegister {
 }
 
 // RegisterDecoderTypeByName registers a decoder manager factory under a specific name.
-func (r *DecoderRegister) RegisterDecoderTypeByName(name string, mngr interfaces.DecoderMngr) ocsd.Err {
+func (r *DecoderRegister) RegisterDecoderTypeByName(name string, mngr ocsd.DecoderMngr) ocsd.Err {
 	if mngr == nil {
 		return ocsd.ErrInvalidParamVal
 	}
@@ -68,7 +68,7 @@ func (r *DecoderRegister) RegisterDecoderTypeByName(name string, mngr interfaces
 }
 
 // Register registers a decoder manager and returns a Go error.
-func (r *DecoderRegister) Register(name string, mngr interfaces.DecoderMngr) error {
+func (r *DecoderRegister) Register(name string, mngr ocsd.DecoderMngr) error {
 	err := r.RegisterDecoderTypeByName(name, mngr)
 	if err == ocsd.OK {
 		return nil
@@ -77,7 +77,7 @@ func (r *DecoderRegister) Register(name string, mngr interfaces.DecoderMngr) err
 }
 
 // DecoderMngrByName retrieves a decoder factory by its registered name string.
-func (r *DecoderRegister) DecoderMngrByName(name string) (interfaces.DecoderMngr, ocsd.Err) {
+func (r *DecoderRegister) DecoderMngrByName(name string) (ocsd.DecoderMngr, ocsd.Err) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if mngr, exists := r.decoderMngrs[name]; exists {
@@ -87,7 +87,7 @@ func (r *DecoderRegister) DecoderMngrByName(name string) (interfaces.DecoderMngr
 }
 
 // DecoderManagerByName retrieves a decoder manager by name and returns a Go error.
-func (r *DecoderRegister) DecoderManagerByName(name string) (interfaces.DecoderMngr, error) {
+func (r *DecoderRegister) DecoderManagerByName(name string) (ocsd.DecoderMngr, error) {
 	mngr, err := r.DecoderMngrByName(name)
 	if err == ocsd.OK {
 		return mngr, nil
@@ -96,7 +96,7 @@ func (r *DecoderRegister) DecoderManagerByName(name string) (interfaces.DecoderM
 }
 
 // DecoderMngrByType retrieves a decoder factory by its protocol enum value.
-func (r *DecoderRegister) DecoderMngrByType(dcdType ocsd.TraceProtocol) (interfaces.DecoderMngr, ocsd.Err) {
+func (r *DecoderRegister) DecoderMngrByType(dcdType ocsd.TraceProtocol) (ocsd.DecoderMngr, ocsd.Err) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if mngr, exists := r.typedMngrs[dcdType]; exists {
@@ -106,7 +106,7 @@ func (r *DecoderRegister) DecoderMngrByType(dcdType ocsd.TraceProtocol) (interfa
 }
 
 // DecoderManagerByType retrieves a decoder manager by protocol and returns a Go error.
-func (r *DecoderRegister) DecoderManagerByType(dcdType ocsd.TraceProtocol) (interfaces.DecoderMngr, error) {
+func (r *DecoderRegister) DecoderManagerByType(dcdType ocsd.TraceProtocol) (ocsd.DecoderMngr, error) {
 	mngr, err := r.DecoderMngrByType(dcdType)
 	if err == ocsd.OK {
 		return mngr, nil

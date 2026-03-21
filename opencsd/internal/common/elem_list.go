@@ -1,7 +1,7 @@
 package common
 
 import (
-	"opencsd/internal/interfaces"
+	
 	"opencsd/internal/ocsd"
 )
 
@@ -19,7 +19,7 @@ type GenElemList struct {
 	numUsed   int
 	numPend   int
 	csID      uint8
-	sendIf    *AttachPt[interfaces.TrcGenElemIn]
+	sendIf    *AttachPt[ocsd.TrcGenElemIn]
 }
 
 // NewGenElemList creates a new list with an initial capacity.
@@ -33,7 +33,7 @@ func NewGenElemList() *GenElemList {
 	return l
 }
 
-func (l *GenElemList) InitSendIf(sendIf *AttachPt[interfaces.TrcGenElemIn]) {
+func (l *GenElemList) InitSendIf(sendIf *AttachPt[ocsd.TrcGenElemIn]) {
 	l.sendIf = sendIf
 }
 
@@ -137,7 +137,7 @@ type GenElemStack struct {
 	currElemIdx int
 	sendElemIdx int
 	csID        uint8
-	sendIf      *AttachPt[interfaces.TrcGenElemIn]
+	sendIf      *AttachPt[ocsd.TrcGenElemIn]
 	bIsInit     bool
 }
 
@@ -162,7 +162,7 @@ func (s *GenElemStack) isInit() bool {
 	return s.bIsInit
 }
 
-func (s *GenElemStack) InitSendIf(sendIf *AttachPt[interfaces.TrcGenElemIn]) {
+func (s *GenElemStack) InitSendIf(sendIf *AttachPt[ocsd.TrcGenElemIn]) {
 	s.sendIf = sendIf
 }
 
