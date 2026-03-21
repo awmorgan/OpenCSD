@@ -334,8 +334,10 @@ func TestDecoderAllPackets(t *testing.T) {
 }
 
 func setupDecFast(config *Config) (*PktDecode, *testTrcElemIn) {
-	manager := NewDecoderManager()
-	dec := manager.CreatePktDecode(0, config).(*PktDecode)
+	dec, err := NewConfiguredPktDecode(0, config)
+	if err != ocsd.OK {
+		panic(err)
+	}
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
 	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}

@@ -92,3 +92,21 @@ func TestETMv3TypedConstructors(t *testing.T) {
 		t.Fatalf("expected nil-config decode constructor failure, got dec=%v err=%v", dec, err)
 	}
 }
+
+func mustNewConfiguredPktProc(tb testing.TB, config *Config) *PktProc {
+	tb.Helper()
+	proc, err := NewConfiguredPktProc(0, config)
+	if err != ocsd.OK {
+		tb.Fatalf("NewConfiguredPktProc failed: %v", err)
+	}
+	return proc
+}
+
+func mustNewConfiguredPktDecode(tb testing.TB, config *Config) *PktDecode {
+	tb.Helper()
+	dec, err := NewConfiguredPktDecode(0, config)
+	if err != ocsd.OK {
+		tb.Fatalf("NewConfiguredPktDecode failed: %v", err)
+	}
+	return dec
+}
