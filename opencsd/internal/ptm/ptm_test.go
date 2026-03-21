@@ -76,10 +76,10 @@ func makeAsyncBlock() []byte {
 }
 
 func setupProcDec(config *Config) (*PktProc, *PktDecode, *testTrcElemIn) {
-	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config).(*PktProc)
-	dec := manager.CreatePktDecode(0, config).(*PktDecode)
-	proc.PktOutI.Attach(dec)
+	proc, dec, err := NewConfiguredPipeline(0, config)
+	if err != ocsd.OK {
+		panic(err)
+	}
 	dec.MemAccess.Attach(&mockMemAcc{})
 	dec.InstrDecode.Attach(idec.NewDecoder())
 	out := &testTrcElemIn{}
@@ -96,17 +96,19 @@ func (n *noopPktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, p
 
 // setupProcOnly creates a processor with a no-op sink (doesn't decode packets)
 func setupProcOnly(config *Config) *PktProc {
-	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config).(*PktProc)
+	proc, err := NewConfiguredPktProc(0, config)
+	if err != ocsd.OK {
+		panic(err)
+	}
 	proc.PktOutI.Attach(&noopPktSink{})
 	return proc
 }
 
 func setupProcDecFull(config *Config, memAcc common.TargetMemAccess, instrDec common.InstrDecode) (*PktProc, *PktDecode, *testTrcElemIn) {
-	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config).(*PktProc)
-	dec := manager.CreatePktDecode(0, config).(*PktDecode)
-	proc.PktOutI.Attach(dec)
+	proc, dec, err := NewConfiguredPipeline(0, config)
+	if err != ocsd.OK {
+		panic(err)
+	}
 	dec.MemAccess.Attach(memAcc)
 	dec.InstrDecode.Attach(instrDec)
 	out := &testTrcElemIn{}
@@ -148,6 +150,62 @@ func TestPtmConfig(t *testing.T) {
 	if config.TSBinEnc() {
 		t.Errorf("TSBinEnc should be false if MinorRev==0")
 	}
+}
+
+func TestPTMTypedConstructors(t *testing.T) {
+	t.Run("ConfiguredPktProc", func(t *testing.T) {
+		cfg := NewConfig()
+		cfg.RegTrcID = 0x41
+
+		proc, err := NewConfiguredPktProc(1, cfg)
+		if err != ocsd.OK {
+			t.Fatalf("NewConfiguredPktProc failed: %v", err)
+		}
+		if proc == nil || proc.Config != cfg {
+			t.Fatal("expected typed processor constructor to retain config")
+		}
+	})
+
+	t.Run("ConfiguredPktDecode", func(t *testing.T) {
+		cfg := NewConfig()
+		cfg.RegTrcID = 0x42
+
+		dec, err := NewConfiguredPktDecode(2, cfg)
+		if err != ocsd.OK {
+			t.Fatalf("NewConfiguredPktDecode failed: %v", err)
+		}
+		if dec == nil || dec.Config != cfg {
+			t.Fatal("expected typed decoder constructor to retain config")
+		}
+	})
+
+	t.Run("ConfiguredPipeline", func(t *testing.T) {
+		cfg := NewConfig()
+		cfg.RegTrcID = 0x43
+
+		proc, dec, err := NewConfiguredPipeline(3, cfg)
+		if err != ocsd.OK {
+			t.Fatalf("NewConfiguredPipeline failed: %v", err)
+		}
+		if proc == nil || dec == nil {
+			t.Fatal("expected non-nil processor and decoder")
+		}
+		if got := proc.PktOutI.First(); got != dec {
+			t.Fatal("expected pipeline constructor to wire processor output to decoder")
+		}
+	})
+
+	t.Run("RejectNilConfig", func(t *testing.T) {
+		if proc, err := NewConfiguredPktProc(0, nil); err != ocsd.ErrInvalidParamVal || proc != nil {
+			t.Fatalf("expected nil-config proc constructor to fail, got proc=%v err=%v", proc, err)
+		}
+		if dec, err := NewConfiguredPktDecode(0, nil); err != ocsd.ErrInvalidParamVal || dec != nil {
+			t.Fatalf("expected nil-config decode constructor to fail, got dec=%v err=%v", dec, err)
+		}
+		if proc, dec, err := NewConfiguredPipeline(0, nil); err != ocsd.ErrInvalidParamVal || proc != nil || dec != nil {
+			t.Fatalf("expected nil-config pipeline constructor to fail, got proc=%v dec=%v err=%v", proc, dec, err)
+		}
+	})
 }
 
 // --- Processor: Comprehensive byte stream tests ---
