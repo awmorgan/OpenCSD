@@ -42,7 +42,7 @@ func NewPktDecode(instIDNum int) *PktDecode {
 	d := &PktDecode{}
 	d.ConfigurePktDecodeBase(fmt.Sprintf("%s_%d", "DCD_STM", instIDNum))
 
-	d.initDecoder()
+	d.configureDecoder()
 	return d
 }
 
@@ -132,7 +132,7 @@ func (d *PktDecode) TraceID() uint8 {
 	return d.csID
 }
 
-func (d *PktDecode) initDecoder() {
+func (d *PktDecode) configureDecoder() {
 	d.numPktCorrelation = 1
 	d.csID = 0
 
@@ -149,10 +149,10 @@ func (d *PktDecode) resetDecoder() {
 	d.payloadOddNibble = false
 	d.outputElem.Init()
 	d.swtPacketInfo = ocsd.SWTInfo{}
-	d.initPayloadBuffer()
+	d.resetPayloadBuffer()
 }
 
-func (d *PktDecode) initPayloadBuffer() {
+func (d *PktDecode) resetPayloadBuffer() {
 	d.payloadBuffer = make([]byte, d.numPktCorrelation*8)
 }
 

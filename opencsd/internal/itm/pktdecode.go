@@ -37,7 +37,7 @@ func NewPktDecode(instID int) *PktDecode {
 	d := &PktDecode{}
 	d.ConfigurePktDecodeBase("DCD_ITM")
 
-	d.initDecoder()
+	d.configureDecoder()
 	return d
 }
 
@@ -129,7 +129,7 @@ func (d *PktDecode) TraceID() uint8 {
 	return d.csID
 }
 
-func (d *PktDecode) initDecoder() {
+func (d *PktDecode) configureDecoder() {
 	d.csID = 0
 
 	// base decoder state - ITM requires no memory and instruction decode.
