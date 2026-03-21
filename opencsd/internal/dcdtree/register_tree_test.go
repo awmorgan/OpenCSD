@@ -355,4 +355,14 @@ func TestDecodeTreeCreateDecoderCompatibilityWrapper(t *testing.T) {
 	if err := tree.CreateDecoder(name, 0, testConfig{id: 0x17}); err != ocsd.ErrInvalidParamType {
 		t.Fatalf("expected ErrInvalidParamType for zero create flags, got %v", err)
 	}
+
+	bothFlags := int(ocsd.CreateFlgFullDecoder | ocsd.CreateFlgPacketProc)
+	if err := tree.CreateDecoder(name, bothFlags, testConfig{id: 0x17}); err != ocsd.ErrInvalidParamType {
+		t.Fatalf("expected ErrInvalidParamType for conflicting create flags, got %v", err)
+	}
+
+	unknownFlag := int(ocsd.CreateFlgFullDecoder) | 0x40
+	if err := tree.CreateDecoder(name, unknownFlag, testConfig{id: 0x17}); err != ocsd.ErrInvalidParamType {
+		t.Fatalf("expected ErrInvalidParamType for unknown create flags, got %v", err)
+	}
 }

@@ -95,10 +95,18 @@ func (dt *DecodeTree) CreatePacketProcessor(decoderName string, config any) ocsd
 
 // CreateDecoder preserves the original flag-based construction API.
 func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config any) ocsd.Err {
-	if (createFlags & ocsd.CreateFlgFullDecoder) != 0 {
+	modeFlags := createFlags & int(ocsd.CreateFlgFullDecoder|ocsd.CreateFlgPacketProc)
+	if modeFlags == 0 || modeFlags == int(ocsd.CreateFlgFullDecoder|ocsd.CreateFlgPacketProc) {
+		return ocsd.ErrInvalidParamType
+	}
+	if createFlags != modeFlags {
+		return ocsd.ErrInvalidParamType
+	}
+
+	if modeFlags == int(ocsd.CreateFlgFullDecoder) {
 		return dt.CreateFullDecoder(decoderName, config)
 	}
-	if (createFlags & ocsd.CreateFlgPacketProc) != 0 {
+	if modeFlags == int(ocsd.CreateFlgPacketProc) {
 		return dt.CreatePacketProcessor(decoderName, config)
 	}
 	return ocsd.ErrInvalidParamType
