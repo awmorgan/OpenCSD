@@ -27,6 +27,14 @@ type fakeProtocolOnlyManager struct {
 	protocol ocsd.TraceProtocol
 }
 
+type fakeLegacyDecoderOnlyManager struct {
+	protocol ocsd.TraceProtocol
+}
+
+type fakeLegacyPktProcOnlyManager struct {
+	protocol ocsd.TraceProtocol
+}
+
 func (m *fakeManager) CreatePktProc(instID int, config any) any {
 	return &fakeDataIn{}
 }
@@ -40,6 +48,22 @@ func (m *fakeManager) ProtocolType() ocsd.TraceProtocol {
 }
 
 func (m *fakeProtocolOnlyManager) ProtocolType() ocsd.TraceProtocol {
+	return m.protocol
+}
+
+func (m *fakeLegacyDecoderOnlyManager) CreateDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
+	return &fakeDataIn{}, struct{}{}, ocsd.OK
+}
+
+func (m *fakeLegacyDecoderOnlyManager) ProtocolType() ocsd.TraceProtocol {
+	return m.protocol
+}
+
+func (m *fakeLegacyPktProcOnlyManager) CreatePktProc(instID int, config any) any {
+	return &fakeDataIn{}
+}
+
+func (m *fakeLegacyPktProcOnlyManager) ProtocolType() ocsd.TraceProtocol {
 	return m.protocol
 }
 
@@ -274,5 +298,31 @@ func TestDecodeTreeRejectsManagerWithoutConstructionPath(t *testing.T) {
 	err := tree.CreateDecoder(name, int(ocsd.CreateFlgFullDecoder), testConfig{id: 0x13})
 	if err != ocsd.ErrInvalidParamType {
 		t.Fatalf("expected ErrInvalidParamType for manager without construction path, got %v", err)
+	}
+}
+
+func TestDecodeTreeUsesLegacyDecoderOnlyManager(t *testing.T) {
+	const name = "TEST_LEGACY_DECODER_ONLY_MANAGER"
+	reg := NewDecoderRegister()
+	if err := reg.RegisterDecoderTypeByName(name, &fakeLegacyDecoderOnlyManager{protocol: ocsd.ProtocolSTM}); err != ocsd.OK {
+		t.Fatalf("register manager failed: %v", err)
+	}
+
+	tree := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
+	if err := tree.CreateDecoder(name, int(ocsd.CreateFlgFullDecoder), testConfig{id: 0x14}); err != ocsd.OK {
+		t.Fatalf("CreateDecoder failed: %v", err)
+	}
+}
+
+func TestDecodeTreeUsesLegacyPktProcOnlyManager(t *testing.T) {
+	const name = "TEST_LEGACY_PKTPROC_ONLY_MANAGER"
+	reg := NewDecoderRegister()
+	if err := reg.RegisterDecoderTypeByName(name, &fakeLegacyPktProcOnlyManager{protocol: ocsd.ProtocolSTM}); err != ocsd.OK {
+		t.Fatalf("register manager failed: %v", err)
+	}
+
+	tree := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
+	if err := tree.CreateDecoder(name, int(ocsd.CreateFlgPacketProc), testConfig{id: 0x15}); err != ocsd.OK {
+		t.Fatalf("CreateDecoder packet-proc path failed: %v", err)
 	}
 }

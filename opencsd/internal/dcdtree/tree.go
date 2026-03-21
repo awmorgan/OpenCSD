@@ -118,14 +118,15 @@ func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config 
 	var pktIn interfaces.TrcDataIn
 	var handle any
 	typedMngr, hasTypedPath := mngr.(interfaces.TypedDecoderMngr)
-	legacyMngr, hasLegacyPath := mngr.(interfaces.LegacyDecoderMngr)
+	legacyDecoderFactory, hasLegacyDecoderPath := mngr.(interfaces.LegacyDecoderFactory)
+	legacyPktProcMngr, hasLegacyPktProcPath := mngr.(interfaces.LegacyPktProcMngr)
 
 	if (createFlags & ocsd.CreateFlgFullDecoder) != 0 {
 		var err2 ocsd.Err
 		if hasTypedPath {
 			pktIn, handle, err2 = typedMngr.CreateTypedDecoder(int(routeID), config)
-		} else if hasLegacyPath {
-			pktIn, handle, err2 = legacyMngr.CreateDecoder(int(routeID), config)
+		} else if hasLegacyDecoderPath {
+			pktIn, handle, err2 = legacyDecoderFactory.CreateDecoder(int(routeID), config)
 		} else {
 			return ocsd.ErrInvalidParamType
 		}
@@ -139,8 +140,8 @@ func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config 
 			if err2 != ocsd.OK {
 				return err2
 			}
-		} else if hasLegacyPath {
-			h := legacyMngr.CreatePktProc(int(routeID), config)
+		} else if hasLegacyPktProcPath {
+			h := legacyPktProcMngr.CreatePktProc(int(routeID), config)
 			if h == nil {
 				return ocsd.ErrInvalidParamType
 			}

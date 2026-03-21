@@ -8,10 +8,15 @@ type DecoderMngr interface {
 	ProtocolType() ocsd.TraceProtocol
 }
 
-// LegacyDecoderMngr is the compatibility interface for the original any-based
-// constructor API.
-type LegacyDecoderMngr interface {
+// LegacyPktProcMngr is the compatibility interface for the original any-based
+// packet-processor factory API.
+type LegacyPktProcMngr interface {
 	CreatePktProc(instID int, config any) any
+	}
+
+// LegacyDecoderFactory is the compatibility interface for the original any-based
+// full-decoder factory API.
+type LegacyDecoderFactory interface {
 	CreateDecoder(instID int, config any) (TrcDataIn, any, ocsd.Err)
 }
 
