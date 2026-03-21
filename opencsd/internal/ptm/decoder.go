@@ -101,24 +101,21 @@ func NewPktDecode(instIDNum int) *PktDecode {
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if !d.ConfigInitOK { fmt.Printf("ConfigInitOK false\n") }
-	if d.UsesMemAccess() && !d.MemAccess.HasAttachedAndEnabled() { fmt.Printf("MemAccess not attached\n") }
-	if d.UsesIDecode() && !d.InstrDecode.HasAttachedAndEnabled() { fmt.Printf("InstrDecode not attached\n") }
 
 
 	if !d.ConfigInitOK {
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No decoder configuration information"))
 		return ocsd.RespFatalNotInit
 	}
-	if !d.TraceElemOut.HasAttachedAndEnabled() {
+	if !d.TraceElemOut.IsActive() {
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No element output interface attached and enabled"))
 		return ocsd.RespFatalNotInit
 	}
-	if d.UsesMemAccess() && !d.MemAccess.HasAttachedAndEnabled() {
+	if d.UsesMemAccess() && !d.MemAccess.IsActive() {
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No memory access interface attached and enabled"))
 		return ocsd.RespFatalNotInit
 	}
-	if d.UsesIDecode() && !d.InstrDecode.HasAttachedAndEnabled() {
+	if d.UsesIDecode() && !d.InstrDecode.IsActive() {
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No instruction decoder interface attached and enabled"))
 		return ocsd.RespFatalNotInit
 	}
@@ -213,9 +210,6 @@ func (d *PktDecode) SetProtocolConfig(config *Config) ocsd.Err {
 
 func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if !d.ConfigInitOK { fmt.Printf("ConfigInitOK false\n") }
-	if d.UsesMemAccess() && !d.MemAccess.HasAttachedAndEnabled() { fmt.Printf("MemAccess not attached\n") }
-	if d.UsesIDecode() && !d.InstrDecode.HasAttachedAndEnabled() { fmt.Printf("InstrDecode not attached\n") }
 
 
 	for ocsd.DataRespIsCont(resp) && (d.processStateIsCont() || d.memNaccPending || d.atoms.numAtoms() > 0) {
@@ -259,9 +253,6 @@ func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 
 func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if !d.ConfigInitOK { fmt.Printf("ConfigInitOK false\n") }
-	if d.UsesMemAccess() && !d.MemAccess.HasAttachedAndEnabled() { fmt.Printf("MemAccess not attached\n") }
-	if d.UsesIDecode() && !d.InstrDecode.HasAttachedAndEnabled() { fmt.Printf("InstrDecode not attached\n") }
 
 	bPktDone := false
 
@@ -304,9 +295,6 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 
 func (d *PktDecode) contProcess() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if !d.ConfigInitOK { fmt.Printf("ConfigInitOK false\n") }
-	if d.UsesMemAccess() && !d.MemAccess.HasAttachedAndEnabled() { fmt.Printf("MemAccess not attached\n") }
-	if d.UsesIDecode() && !d.InstrDecode.HasAttachedAndEnabled() { fmt.Printf("InstrDecode not attached\n") }
 
 	switch d.currState {
 	case decodeContISync:
@@ -327,9 +315,6 @@ func (d *PktDecode) contProcess() ocsd.DatapathResp {
 
 func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if !d.ConfigInitOK { fmt.Printf("ConfigInitOK false\n") }
-	if d.UsesMemAccess() && !d.MemAccess.HasAttachedAndEnabled() { fmt.Printf("MemAccess not attached\n") }
-	if d.UsesIDecode() && !d.InstrDecode.HasAttachedAndEnabled() { fmt.Printf("InstrDecode not attached\n") }
 
 	pkt := d.CurrPacketIn
 
@@ -401,9 +386,6 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 
 func (d *PktDecode) processIsync() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if !d.ConfigInitOK { fmt.Printf("ConfigInitOK false\n") }
-	if d.UsesMemAccess() && !d.MemAccess.HasAttachedAndEnabled() { fmt.Printf("MemAccess not attached\n") }
-	if d.UsesIDecode() && !d.InstrDecode.HasAttachedAndEnabled() { fmt.Printf("InstrDecode not attached\n") }
 
 	pkt := d.CurrPacketIn
 
@@ -466,9 +448,6 @@ func (d *PktDecode) processIsync() ocsd.DatapathResp {
 
 func (d *PktDecode) processBranch() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if !d.ConfigInitOK { fmt.Printf("ConfigInitOK false\n") }
-	if d.UsesMemAccess() && !d.MemAccess.HasAttachedAndEnabled() { fmt.Printf("MemAccess not attached\n") }
-	if d.UsesIDecode() && !d.InstrDecode.HasAttachedAndEnabled() { fmt.Printf("InstrDecode not attached\n") }
 
 	pkt := d.CurrPacketIn
 
@@ -506,9 +485,6 @@ func (d *PktDecode) processBranch() ocsd.DatapathResp {
 
 func (d *PktDecode) processWPUpdate() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if !d.ConfigInitOK { fmt.Printf("ConfigInitOK false\n") }
-	if d.UsesMemAccess() && !d.MemAccess.HasAttachedAndEnabled() { fmt.Printf("MemAccess not attached\n") }
-	if d.UsesIDecode() && !d.InstrDecode.HasAttachedAndEnabled() { fmt.Printf("InstrDecode not attached\n") }
 
 	if d.currPeState.valid {
 		resp = d.processAtomRange(ocsd.AtomE, "WP update", traceToAddrIncl, d.CurrPacketIn.AddrVal)
@@ -524,9 +500,6 @@ func (d *PktDecode) processWPUpdate() ocsd.DatapathResp {
 
 func (d *PktDecode) processAtom() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if !d.ConfigInitOK { fmt.Printf("ConfigInitOK false\n") }
-	if d.UsesMemAccess() && !d.MemAccess.HasAttachedAndEnabled() { fmt.Printf("MemAccess not attached\n") }
-	if d.UsesIDecode() && !d.InstrDecode.HasAttachedAndEnabled() { fmt.Printf("InstrDecode not attached\n") }
 
 
 	for d.atoms.numAtoms() > 0 && d.currPeState.valid && ocsd.DataRespIsCont(resp) {
@@ -563,9 +536,6 @@ func (d *PktDecode) checkPendingNacc(resp *ocsd.DatapathResp) {
 
 func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp waypointTraceOp, nextAddrMatch ocsd.VAddr) ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if !d.ConfigInitOK { fmt.Printf("ConfigInitOK false\n") }
-	if d.UsesMemAccess() && !d.MemAccess.HasAttachedAndEnabled() { fmt.Printf("MemAccess not attached\n") }
-	if d.UsesIDecode() && !d.InstrDecode.HasAttachedAndEnabled() { fmt.Printf("InstrDecode not attached\n") }
 
 	bWPFound := false
 	err := ocsd.OK
