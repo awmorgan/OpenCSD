@@ -260,23 +260,26 @@ func (c *Cache) incSequence() {
 	}
 }
 
-func (c *Cache) ReadBytesFromCache(acc Accessor, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, numBytes *uint32, byteBuffer []byte) ocsd.Err {
+// Read reads up to reqBytes into buffer from cache-backed accessor state.
+func (c *Cache) Read(acc Accessor, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) (uint32, error) {
+	if reqBytes > uint32(len(buffer)) {
+		reqBytes = uint32(len(buffer))
+	}
+
 	if !c.enabled {
-		return ocsd.ErrFail
+		return 0, ocsd.ToError(ocsd.ErrFail)
 	}
 
 	bytesRead := uint32(0)
-	reqBytes := *numBytes
 
 	// Check if block is in cache
 	if c.blockInCache(address, reqBytes, trcID) {
 		// Found in page (mruIdx set by blockInCache)
 		offset := address - c.blocks[c.mruIdx].StAddr
-		copy(byteBuffer, c.blocks[c.mruIdx].Data[offset:offset+ocsd.VAddr(reqBytes)])
+		copy(buffer, c.blocks[c.mruIdx].Data[offset:offset+ocsd.VAddr(reqBytes)])
 		bytesRead = reqBytes
 		c.incSequence()
-		*numBytes = bytesRead
-		return ocsd.OK
+		return bytesRead, nil
 	}
 
 	// Not in cache, load new page
@@ -294,16 +297,14 @@ func (c *Cache) ReadBytesFromCache(acc Accessor, address ocsd.VAddr, memSpace oc
 	// How many bytes can we read from this accessor?
 	avail := acc.BytesInRange(pageBase, uint32(c.pageSize))
 	if avail == 0 {
-		*numBytes = 0
-		return ocsd.OK
+		return 0, nil
 	}
 
 	// Read from accessor into cache page
 	read := acc.ReadBytes(pageBase, memSpace, trcID, avail, c.blocks[newIdx].Data)
 	if read > uint32(c.pageSize) {
 		c.blocks[newIdx].ValidLen = 0
-		*numBytes = 0
-		return ocsd.ErrMemAccBadLen
+		return 0, ocsd.ToError(ocsd.ErrMemAccBadLen)
 	}
 
 	c.blocks[newIdx].StAddr = pageBase
@@ -314,11 +315,18 @@ func (c *Cache) ReadBytesFromCache(acc Accessor, address ocsd.VAddr, memSpace oc
 	// Now try to satisfied the original request from the new page
 	if c.blockInPage(newIdx, address, reqBytes, trcID) {
 		offset := address - c.blocks[newIdx].StAddr
-		copy(byteBuffer, c.blocks[newIdx].Data[offset:offset+ocsd.VAddr(reqBytes)])
+		copy(buffer, c.blocks[newIdx].Data[offset:offset+ocsd.VAddr(reqBytes)])
 		bytesRead = reqBytes
 	}
+	return bytesRead, nil
+}
+
+// ReadBytesFromCache reads bytes from cache-backed accessor state.
+// Deprecated: use Read.
+func (c *Cache) ReadBytesFromCache(acc Accessor, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, numBytes *uint32, byteBuffer []byte) ocsd.Err {
+	bytesRead, err := c.Read(acc, address, memSpace, trcID, *numBytes, byteBuffer)
 	*numBytes = bytesRead
-	return ocsd.OK
+	return ocsd.AsErr(err)
 }
 
 func (c *Cache) blockInPage(idx int, address ocsd.VAddr, reqBytes uint32, trcID uint8) bool {

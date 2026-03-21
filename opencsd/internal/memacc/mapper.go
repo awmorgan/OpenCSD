@@ -82,9 +82,8 @@ func (m *GlobalMapper) ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpac
 
 	// Read from cache if enabled
 	if m.cache.EnabledForSize(*numBytes) {
-		readVal := *numBytes
-		err := m.cache.ReadBytesFromCache(m.accCurr, address, memSpace, trcID, &readVal, buffer)
-		if err == ocsd.OK {
+		readVal, err := m.cache.Read(m.accCurr, address, memSpace, trcID, *numBytes, buffer)
+		if err == nil {
 			*numBytes = readVal
 			return ocsd.OK
 		}

@@ -628,9 +628,9 @@ func TestMapper_ErrorAndCacheEdgePaths(t *testing.T) {
 	mapper.EnableCaching(true)
 	mapper.accCurr = accBuf // set back to valid buffer
 	numBytes = 4
-	err = mapper.cache.ReadBytesFromCache(accBuf, 0x1000, ocsd.MemSpaceEL1N, 0x10, &numBytes, readBuf) // out of bounds
-	if err != ocsd.OK {
-		t.Errorf("Expected OK on cache miss/out-of-range read, got %v", err)
+	numBytes, err2 := mapper.cache.Read(accBuf, 0x1000, ocsd.MemSpaceEL1N, 0x10, numBytes, readBuf) // out of bounds
+	if err2 != nil {
+		t.Errorf("Expected OK on cache miss/out-of-range read, got %v", err2)
 	}
 	if numBytes != 0 {
 		t.Errorf("Expected 0 bytes for cache miss/out-of-range read, got %d", numBytes)
@@ -646,9 +646,12 @@ func TestCacheReadBytesFromCache_ClampsPageBaseToAccessorStart(t *testing.T) {
 
 	numBytes := uint32(4)
 	readBuf := make([]byte, 4)
-	err := cache.ReadBytesFromCache(accBuf, 0x1004, ocsd.MemSpaceEL1N, 0x10, &numBytes, readBuf)
-	if err != ocsd.OK {
+	numBytes, err := cache.Read(accBuf, 0x1004, ocsd.MemSpaceEL1N, 0x10, numBytes, readBuf)
+	if err != nil {
 		t.Fatalf("Expected cache read OK for non-page-aligned accessor start, got %v", err)
+	}
+	if numBytes != 4 {
+		t.Fatalf("Expected 4 bytes read, got %d", numBytes)
 	}
 
 	expected := []byte{0x11, 0x22, 0x33, 0x44}
