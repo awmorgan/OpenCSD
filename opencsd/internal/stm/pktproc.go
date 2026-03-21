@@ -113,7 +113,7 @@ func NewPktProc(instIDNum int) *PktProc {
 	p := &PktProc{}
 	p.ConfigurePktProcBase(fmt.Sprintf("PKTP_STM_%d", instIDNum))
 
-	p.SetSupportedOpModes(ocsd.OpflgPktprocCommon)
+	p.ConfigureSupportedOpModes(ocsd.OpflgPktprocCommon)
 	p.resetProcessorState()
 	p.buildOpTables()
 	return p

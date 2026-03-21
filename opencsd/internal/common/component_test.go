@@ -151,7 +151,7 @@ func TestTraceComponent(t *testing.T) {
 		t.Errorf("expected NewName")
 	}
 
-	tc.SetSupportedOpModes(0x0F)
+	tc.ConfigureSupportedOpModes(0x0F)
 	err := tc.ConfigureComponentOpMode(0x01)
 	if err != ocsd.OK {
 		t.Errorf("expected OK")

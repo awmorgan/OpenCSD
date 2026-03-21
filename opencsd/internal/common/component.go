@@ -179,8 +179,8 @@ func (tc *TraceComponent) SupportedOpModes() uint32 {
 	return tc.supportedOpFlags
 }
 
-// SetSupportedOpModes sets the supported operational mode flags (used by derived structs).
-func (tc *TraceComponent) SetSupportedOpModes(flags uint32) {
+// ConfigureSupportedOpModes sets the supported operational mode flags (used by derived structs).
+func (tc *TraceComponent) ConfigureSupportedOpModes(flags uint32) {
 	tc.supportedOpFlags = flags
 }
 

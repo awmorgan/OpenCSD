@@ -53,7 +53,7 @@ func NewPktProc(instID int) *PktProc {
 	p := &PktProc{}
 	p.ConfigurePktProcBase("PKTP_ITM") // name
 
-	p.SetSupportedOpModes(ocsd.OpflgPktprocCommon)
+	p.ConfigureSupportedOpModes(ocsd.OpflgPktprocCommon)
 	p.resetProcessorState()
 	return p
 }

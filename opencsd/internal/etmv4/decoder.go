@@ -168,7 +168,7 @@ type PktDecode struct {
 func NewPktDecode(instIDNum int) *PktDecode {
 	d := &PktDecode{}
 	d.ConfigurePktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV4", instIDNum))
-	d.SetSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms | ocsd.OpflgPktdecAA64OpcodeChk)
+	d.ConfigureSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms | ocsd.OpflgPktdecAA64OpcodeChk)
 
 	d.configureDecoder()
 	return d
