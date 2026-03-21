@@ -1,6 +1,7 @@
 package dcdtree
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"opencsd/internal/common"
@@ -82,6 +83,19 @@ func (dt *DecodeTree) Destroy() {
 
 // TraceDataIn handles incoming raw byte trace streams into the tree.
 func (dt *DecodeTree) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, ocsd.DatapathResp, error) {
+	return dt.TraceDataInContext(context.Background(), op, index, data)
+}
+
+// TraceDataInContext handles incoming raw byte trace streams into the tree with cancellation support.
+func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, ocsd.DatapathResp, error) {
+	if ctx != nil {
+		select {
+		case <-ctx.Done():
+			return 0, ocsd.RespFatalSysErr, ctx.Err()
+		default:
+		}
+	}
+
 	if dt.decoderRoot != nil {
 		amt, resp, err := dt.decoderRoot.TraceDataIn(op, index, data)
 		return amt, resp, err

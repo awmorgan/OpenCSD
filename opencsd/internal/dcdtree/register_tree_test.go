@@ -1,10 +1,10 @@
 package dcdtree
 
 import (
+	"context"
 	"errors"
 	"testing"
 
-	
 	"opencsd/internal/ocsd"
 )
 
@@ -304,5 +304,27 @@ func TestDecodeTreeErrorWrappersExposeSentinels(t *testing.T) {
 		t.Fatal("expected CreatePacketProcessorError to fail for unknown decoder")
 	} else if !errors.Is(err, ErrCreatePacketProcessor) {
 		t.Fatalf("expected ErrCreatePacketProcessor sentinel, got %v", err)
+	}
+}
+
+func TestDecodeTreeTraceDataInContextCancelled(t *testing.T) {
+	tree := NewDefaultDecodeTree(ocsd.TrcSrcSingle, 0)
+	if tree == nil {
+		t.Fatal("NewDefaultDecodeTree returned nil")
+	}
+	defer tree.Destroy()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	processed, resp, err := tree.TraceDataInContext(ctx, ocsd.OpData, 0, []byte{0xAA})
+	if processed != 0 {
+		t.Fatalf("expected zero processed bytes, got %d", processed)
+	}
+	if resp != ocsd.RespFatalSysErr {
+		t.Fatalf("expected RespFatalSysErr, got %v", resp)
+	}
+	if err == nil {
+		t.Fatal("expected context cancellation error")
 	}
 }
