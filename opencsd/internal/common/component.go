@@ -14,14 +14,6 @@ type TraceErrorLog interface {
 	LogMessage(filterLevel ocsd.ErrSeverity, msg string)
 }
 
-type traceErrorLogVerbosity interface {
-	GetErrorLogVerbosity() ocsd.ErrSeverity
-}
-
-type traceErrorLogRegistrar interface {
-	RegisterErrorSource(componentName string) ocsd.HandleErrLog
-}
-
 // ComponentAttachNotifier is the notification interface for attachment.
 type ComponentAttachNotifier interface {
 	// AttachNotify is called whenever a component is attached or detached.
@@ -250,21 +242,13 @@ func (tc *TraceComponent) SetErrorLogLevel(level ocsd.ErrSeverity) {
 // AttachNotify is called whenever the error logger attach point changes.
 func (tc *TraceComponent) AttachNotify(numAttached int) {
 	if numAttached > 0 {
-		logger := tc.errorLogger.First()
-		if logger == nil {
+		if tc.errorLogger.First() == nil {
 			return
 		}
-		if registrar, ok := logger.(traceErrorLogRegistrar); ok {
-			tc.errLogHandle = registrar.RegisterErrorSource(tc.name)
-		} else {
-			tc.errLogHandle = 0
-		}
-		if verbosity, ok := logger.(traceErrorLogVerbosity); ok {
-			tc.errVerbosity = verbosity.GetErrorLogVerbosity()
-		}
-	} else {
-		tc.errLogHandle = ocsd.HandleErrLog(ocsd.InvalidHandle)
+		tc.errLogHandle = 0
+		return
 	}
+	tc.errLogHandle = ocsd.HandleErrLog(ocsd.InvalidHandle)
 }
 
 func isNilAttachment[T any](comp T) bool {
