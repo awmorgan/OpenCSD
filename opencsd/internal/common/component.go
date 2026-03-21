@@ -138,9 +138,9 @@ type TraceComponent struct {
 	assocComp        *TraceComponent
 }
 
-// InitTraceComponent initializes a TraceComponent. This is favored over a constructor
+// ConfigureTraceComponent initializes a TraceComponent. This is favored over a constructor
 // so it can be safely embedded and initialized in place.
-func (tc *TraceComponent) InitTraceComponent(name string) {
+func (tc *TraceComponent) ConfigureTraceComponent(name string) {
 	tc.name = name
 	tc.errLogHandle = ocsd.HandleErrLog(ocsd.InvalidHandle)
 	tc.errVerbosity = ocsd.ErrSevNone

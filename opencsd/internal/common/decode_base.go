@@ -127,7 +127,7 @@ type PktDecodeBase[P any, Pc any] struct {
 }
 
 func (pb *PktDecodeBase[P, Pc]) ConfigurePktDecodeBase(name string) {
-	pb.InitTraceComponent(name)
+	pb.ConfigureTraceComponent(name)
 	pb.TraceElemOut = *NewAttachPt[ocsd.TrcGenElemIn]()
 	pb.MemAccess = *NewAttachPt[TargetMemAccess]()
 	pb.InstrDecode = *NewAttachPt[InstrDecode]()
@@ -152,7 +152,7 @@ type PktProcBase[P any, Pt any, Pc any] struct {
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) ConfigurePktProcBase(name string) {
-	pb.InitTraceComponent(name)
+	pb.ConfigureTraceComponent(name)
 	pb.PktOutI = *NewAttachPt[PktDataIn[P]]()
 	pb.PktRawMonI = *NewAttachPt[PktRawDataMon[P]]()
 	pb.PktIndexerI = *NewAttachPt[TrcPktIndexer[Pt]]()

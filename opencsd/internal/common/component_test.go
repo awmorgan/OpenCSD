@@ -136,7 +136,7 @@ func TestAttachPt(t *testing.T) {
 
 func TestTraceComponent(t *testing.T) {
 	tc := &TraceComponent{}
-	tc.InitTraceComponent("TestComp")
+	tc.ConfigureTraceComponent("TestComp")
 
 	if tc.ErrorLogLevel() != ocsd.ErrSevNone {
 		t.Errorf("expected default error log level to be ErrSevNone")
