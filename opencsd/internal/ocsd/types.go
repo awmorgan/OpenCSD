@@ -80,6 +80,18 @@ const (
 	ErrLast                  Err = 47
 )
 
+func IsOK(err Err) bool {
+	return err == OK
+}
+
+func IsNotOK(err Err) bool {
+	return err != OK
+}
+
+func IsMemNacc(err Err) bool {
+	return err == ErrMemNacc
+}
+
 type HandleRdr uint32
 type HandleErrLog uint32
 

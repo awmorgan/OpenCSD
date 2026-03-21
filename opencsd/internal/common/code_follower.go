@@ -158,7 +158,7 @@ func (cf *CodeFollower) DecodeSingleOpCode() ocsd.Err {
 	// Read memory location for opcode
 	readBytes, pData, err := cf.memAccess.First().ReadTargetMemory(cf.instrInfo.InstrAddr, cf.csTraceID, cf.memSpace, bytesReq)
 
-	if err != ocsd.OK {
+	if ocsd.IsNotOK(err) {
 		return err
 	}
 
@@ -204,8 +204,8 @@ func (cf *CodeFollower) FollowSingleAtom(addrStart ocsd.VAddr, atom ocsd.AtmVal)
 	cf.instrInfo.InstrAddr = addrStart
 	err := cf.DecodeSingleOpCode()
 
-	if err != ocsd.OK {
-		if err == ocsd.ErrMemNacc {
+	if ocsd.IsNotOK(err) {
+		if ocsd.IsMemNacc(err) {
 			cf.naccErr = true
 			cf.naccAddr = cf.instrInfo.InstrAddr
 			cf.nextAddr = cf.instrInfo.InstrAddr
