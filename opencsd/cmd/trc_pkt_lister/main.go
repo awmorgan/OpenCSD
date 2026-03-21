@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -712,6 +713,26 @@ func configureOutput(opts options) (io.Writer, func(), error) {
 	return io.MultiWriter(outputs...), closeFn, nil
 }
 
+// idListValue implements flag.Value to allow multiple -id flags to be parsed into a slice.
+type idListValue []uint8
+
+func (i *idListValue) String() string {
+	return fmt.Sprintf("%v", *i)
+}
+
+func (i *idListValue) Set(value string) error {
+	v, err := strconv.ParseUint(value, 0, 8)
+	if err != nil {
+		return fmt.Errorf("invalid ID number %s", value)
+	}
+	id := uint8(v)
+	if !ocsd.IsValidCSSrcID(id) {
+		return fmt.Errorf("invalid ID number 0x%x", id)
+	}
+	*i = append(*i, id)
+	return nil
+}
+
 func parseOptions(args []string) (options, error) {
 	opts := options{
 		allSourceIDs: true,
@@ -720,126 +741,144 @@ func parseOptions(args []string) (options, error) {
 		logFileName:  defaultLogFile,
 	}
 
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch a {
-		case "-ss_dir":
-			i++
-			if i >= len(args) {
-				return opts, errors.New("Trace Packet Lister : Error: Missing directory string on -ss_dir option")
-			}
-			opts.ssDir = args[i]
-		case "-ss_verbose":
-			opts.ssVerbose = true
-		case "-id":
-			i++
-			if i >= len(args) {
-				return opts, errors.New("Trace Packet Lister : Error: No ID number on -id option")
-			}
-			v, err := strconv.ParseUint(args[i], 0, 8)
-			if err != nil {
-				return opts, fmt.Errorf("Trace Packet Lister : Error: invalid ID number %s on -id option", args[i])
-			}
-			id := uint8(v)
-			if !ocsd.IsValidCSSrcID(id) {
-				return opts, fmt.Errorf("Trace Packet Lister : Error: invalid ID number 0x%x on -id option", id)
-			}
-			opts.allSourceIDs = false
-			opts.idList = append(opts.idList, id)
-		case "-src_name":
-			i++
-			if i >= len(args) {
-				return opts, errors.New("Trace Packet Lister : Error: Missing source name string on -src_name option")
-			}
-			opts.srcName = args[i]
-		case "-multi_session":
-			opts.multiSession = true
-		case "-decode":
-			opts.decode = true
-		case "-decode_only":
-			opts.decodeOnly = true
-			opts.decode = true
-		case "-pkt_mon":
-			opts.pktMon = true
-		case "-stats":
-			opts.stats = true
-		case "-profile":
-			opts.profile = true
-		case "-no_time_print":
-			opts.noTimePrint = true
-		case "-o_raw_packed":
-			opts.outRawPacked = true
-		case "-o_raw_unpacked":
-			opts.outRawUnpacked = true
-		case "-dstream_format":
-			opts.dstreamFormat = true
-		case "-tpiu":
-			opts.tpiuFormat = true
-		case "-tpiu_hsync":
-			opts.tpiuFormat = true
-			opts.hasHSync = true
-		case "-direct_br_cond":
-			opts.additionalFlags |= ocsd.OpflgNUncondDirBrChk
-		case "-strict_br_cond":
-			opts.additionalFlags |= ocsd.OpflgStrictNUncondBrChk
-		case "-range_cont":
-			opts.additionalFlags |= ocsd.OpflgChkRangeContinue
-		case "-halt_err":
-			opts.additionalFlags |= ocsd.OpflgPktdecHaltBadPkts
-		case "-src_addr_n":
-			opts.additionalFlags |= ocsd.OpflgPktdecSrcAddrNAtoms
-		case "-aa64_opcode_chk":
-			opts.additionalFlags |= ocsd.OpflgPktdecAA64OpcodeChk
-		case "-test_waits":
-			i++
-			if i >= len(args) {
-				return opts, errors.New("Trace Packet Lister : Error: wait count value on -test_waits option")
-			}
-			v, _ := strconv.Atoi(args[i])
-			if v < 0 {
-				v = 0
-			}
-			opts.testWaits = v
-		case "-macc_cache_disable":
-			opts.memCacheDisable = true
-		case "-macc_cache_p_size":
-			i++
-			if i < len(args) {
-				v, _ := strconv.ParseUint(args[i], 0, 32)
-				opts.memCachePageSize = uint32(v)
-			}
-		case "-macc_cache_p_num":
-			i++
-			if i < len(args) {
-				v, _ := strconv.ParseUint(args[i], 0, 32)
-				opts.memCachePageNum = uint32(v)
-			}
-		case "-logstdout":
-			opts.logStdout = true
-			opts.logStderr = false
-			opts.logFile = false
-		case "-logstderr":
-			opts.logStdout = false
-			opts.logStderr = true
-			opts.logFile = false
-		case "-logfile":
-			opts.logStdout = false
-			opts.logStderr = false
-			opts.logFile = true
-		case "-logfilename":
-			i++
-			if i >= len(args) {
-				return opts, errors.New("Trace Packet Lister : Error: Missing file name string on -logfilename option")
-			}
-			opts.logFileName = args[i]
-			opts.logStdout = false
-			opts.logStderr = false
-			opts.logFile = true
-		case "-help", "--help", "-h":
+	// We use a local FlagSet instead of flag.CommandLine so we can pass in args manually.
+	// ContinueOnError allows us to handle errors gracefully rather than os.Exit.
+	fs := flag.NewFlagSet("Trace Packet Lister", flag.ContinueOnError)
+
+	// Override default usage to rely on your existing printHelp function
+	fs.Usage = func() {}
+
+	// Standard flags mapped directly to the options struct
+	fs.StringVar(&opts.ssDir, "ss_dir", "", "Set the directory path to a trace snapshot")
+	fs.BoolVar(&opts.ssVerbose, "ss_verbose", false, "Verbose output when reading the snapshot")
+	fs.StringVar(&opts.srcName, "src_name", "", "List packets from a given snapshot source name")
+	fs.BoolVar(&opts.multiSession, "multi_session", false, "Decode all source buffers with same config")
+	fs.BoolVar(&opts.decode, "decode", false, "Full decode of packets from snapshot")
+	fs.BoolVar(&opts.pktMon, "pkt_mon", false, "Enable packet monitor")
+	fs.BoolVar(&opts.stats, "stats", false, "Output packet processing statistics")
+	fs.BoolVar(&opts.profile, "profile", false, "Profile output")
+	fs.BoolVar(&opts.noTimePrint, "no_time_print", false, "Do not output elapsed time")
+	fs.BoolVar(&opts.outRawPacked, "o_raw_packed", false, "Output raw packed trace frames")
+	fs.BoolVar(&opts.outRawUnpacked, "o_raw_unpacked", false, "Output raw unpacked trace data per ID")
+	fs.BoolVar(&opts.dstreamFormat, "dstream_format", false, "Input is DSTREAM framed")
+	fs.IntVar(&opts.testWaits, "test_waits", 0, "Wait count value")
+	fs.BoolVar(&opts.memCacheDisable, "macc_cache_disable", false, "Disable memory cache")
+
+	// Custom flag for multiple IDs
+	var ids idListValue
+	fs.Var(&ids, "id", "Set an ID to list (may be used multiple times)")
+
+	// Intermediate variables for composite/complex logic
+	var decodeOnly, tpiu, tpiuHsync bool
+	fs.BoolVar(&decodeOnly, "decode_only", false, "Decode only, no packet printer output")
+	fs.BoolVar(&tpiu, "tpiu", false, "Input from TPIU - sync by FSYNC")
+	fs.BoolVar(&tpiuHsync, "tpiu_hsync", false, "Input from TPIU - sync by FSYNC and HSYNC")
+
+	// Bitfield flags mapping
+	var directBrCond, strictBrCond, rangeCont, haltErr, srcAddrN, aa64OpcodeChk bool
+	fs.BoolVar(&directBrCond, "direct_br_cond", false, "Additional flag: direct_br_cond")
+	fs.BoolVar(&strictBrCond, "strict_br_cond", false, "Additional flag: strict_br_cond")
+	fs.BoolVar(&rangeCont, "range_cont", false, "Additional flag: range_cont")
+	fs.BoolVar(&haltErr, "halt_err", false, "Additional flag: halt_err")
+	fs.BoolVar(&srcAddrN, "src_addr_n", false, "Additional flag: src_addr_n")
+	fs.BoolVar(&aa64OpcodeChk, "aa64_opcode_chk", false, "Additional flag: aa64_opcode_chk")
+
+	// Cache pagination mapped to uint instead of uint32 for the flag parser
+	var memCachePageSize, memCachePageNum uint
+	fs.UintVar(&memCachePageSize, "macc_cache_p_size", 0, "Memory cache page size")
+	fs.UintVar(&memCachePageNum, "macc_cache_p_num", 0, "Memory cache page number")
+
+	// Output routing flags
+	var logStdout, logStderr, logFile bool
+	var logFileName string
+	fs.BoolVar(&logStdout, "logstdout", false, "Output to stdout")
+	fs.BoolVar(&logStderr, "logstderr", false, "Output to stderr")
+	fs.BoolVar(&logFile, "logfile", false, "Output to default file")
+	fs.StringVar(&logFileName, "logfilename", "", "Output to specific file name")
+
+	// Help flags
+	var help bool
+	fs.BoolVar(&help, "help", false, "Show help")
+
+	// Parse the arguments
+	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
 			opts.help = true
-		default:
-			fmt.Fprintf(os.Stderr, "Trace Packet Lister : Warning: Ignored unknown option %s.\n", a)
+			return opts, nil
 		}
+		return opts, fmt.Errorf("Trace Packet Lister : Error parsing flags: %w", err)
+	}
+
+	if help {
+		opts.help = true
+		return opts, nil
+	}
+
+	if decodeOnly {
+		opts.decodeOnly = true
+		opts.decode = true
+	}
+
+	if tpiu {
+		opts.tpiuFormat = true
+	}
+	if tpiuHsync {
+		opts.tpiuFormat = true
+		opts.hasHSync = true
+	}
+
+	// Apply bitfield combinations
+	if directBrCond {
+		opts.additionalFlags |= ocsd.OpflgNUncondDirBrChk
+	}
+	if strictBrCond {
+		opts.additionalFlags |= ocsd.OpflgStrictNUncondBrChk
+	}
+	if rangeCont {
+		opts.additionalFlags |= ocsd.OpflgChkRangeContinue
+	}
+	if haltErr {
+		opts.additionalFlags |= ocsd.OpflgPktdecHaltBadPkts
+	}
+	if srcAddrN {
+		opts.additionalFlags |= ocsd.OpflgPktdecSrcAddrNAtoms
+	}
+	if aa64OpcodeChk {
+		opts.additionalFlags |= ocsd.OpflgPktdecAA64OpcodeChk
+	}
+
+	// Apply ID list
+	if len(ids) > 0 {
+		opts.allSourceIDs = false
+		opts.idList = append(opts.idList, ids...)
+	}
+
+	// Cast cache numbers back to uint32
+	if memCachePageSize > 0 {
+		opts.memCachePageSize = uint32(memCachePageSize)
+	}
+	if memCachePageNum > 0 {
+		opts.memCachePageNum = uint32(memCachePageNum)
+	}
+
+	// Apply mutual-exclusive logging rules
+	if logStdout {
+		opts.logStdout = true
+		opts.logStderr = false
+		opts.logFile = false
+	} else if logStderr {
+		opts.logStdout = false
+		opts.logStderr = true
+		opts.logFile = false
+	} else if logFileName != "" {
+		opts.logFileName = logFileName
+		opts.logStdout = false
+		opts.logStderr = false
+		opts.logFile = true
+	} else if logFile {
+		opts.logStdout = false
+		opts.logStderr = false
+		opts.logFile = true
 	}
 
 	return opts, nil
