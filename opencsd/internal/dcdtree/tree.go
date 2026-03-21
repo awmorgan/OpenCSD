@@ -156,9 +156,9 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 		return ocsd.ToError(ocsd.ErrNotInit)
 	}
 
-	mngr, err := registry.DecoderMngrByName(decoderName)
-	if ocsd.IsNotOK(err) {
-		return ocsd.ToError(err)
+	manager, err := registry.DecoderManagerByName(decoderName)
+	if err != nil {
+		return err
 	}
 
 	type configWithID interface {
@@ -186,13 +186,13 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 
 	if fullDecoder {
 		var err2 error
-		pktIn, handle, err2 = mngr.CreateTypedDecoder(int(routeID), config)
+		pktIn, handle, err2 = manager.CreateTypedDecoder(int(routeID), config)
 		if err2 != nil {
 			return err2
 		}
 	} else {
 		var err2 error
-		pktIn, handle, err2 = mngr.CreateTypedPktProc(int(routeID), config)
+		pktIn, handle, err2 = manager.CreateTypedPktProc(int(routeID), config)
 		if err2 != nil {
 			return err2
 		}
@@ -202,7 +202,7 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 		return ocsd.ToError(ocsd.ErrFail)
 	}
 
-	elem := NewDecodeTreeElement(decoderName, mngr, handle, pktIn, true)
+	elem := NewDecodeTreeElement(decoderName, manager, handle, pktIn, true)
 	dt.decodeElements[routeID] = elem
 
 	if dt.frameDeformatter != nil && pktIn != nil {

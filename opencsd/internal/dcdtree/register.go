@@ -53,8 +53,8 @@ func NewBuiltinDecoderRegister() *DecoderRegister {
 	return reg
 }
 
-// RegisterDecoderTypeByName registers a decoder manager factory under a specific name.
-func (r *DecoderRegister) RegisterDecoderTypeByName(name string, mngr ocsd.DecoderManager) ocsd.Err {
+// RegisterDecoderManagerByName registers a decoder manager factory under a specific name.
+func (r *DecoderRegister) RegisterDecoderManagerByName(name string, mngr ocsd.DecoderManager) ocsd.Err {
 	if mngr == nil {
 		return ocsd.ErrInvalidParamVal
 	}
@@ -73,9 +73,15 @@ func (r *DecoderRegister) RegisterDecoderTypeByName(name string, mngr ocsd.Decod
 	return ocsd.OK
 }
 
+// RegisterDecoderTypeByName registers a decoder manager factory under a specific name.
+// Deprecated: use RegisterDecoderManagerByName.
+func (r *DecoderRegister) RegisterDecoderTypeByName(name string, mngr ocsd.DecoderManager) ocsd.Err {
+	return r.RegisterDecoderManagerByName(name, mngr)
+}
+
 // Register registers a decoder manager and returns a Go error.
 func (r *DecoderRegister) Register(name string, mngr ocsd.DecoderManager) error {
-	err := r.RegisterDecoderTypeByName(name, mngr)
+	err := r.RegisterDecoderManagerByName(name, mngr)
 	if err == ocsd.OK {
 		return nil
 	}
