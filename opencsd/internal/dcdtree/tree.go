@@ -6,7 +6,7 @@ import (
 	"opencsd/internal/common"
 	"opencsd/internal/demux"
 	"opencsd/internal/idec"
-	
+
 	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
 	"slices"
@@ -38,10 +38,10 @@ type DecodeTree struct {
 }
 
 // NewDecodeTree creates a new Trace Decode Tree using the supplied decoder registry.
-// If registry is nil, the package default registry is used.
+// A non-nil registry is required.
 func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32, registry *DecoderRegister) *DecodeTree {
 	if registry == nil {
-		registry = DefaultDecoderRegister()
+		return nil
 	}
 
 	dt := &DecodeTree{
@@ -139,7 +139,7 @@ func (dt *DecodeTree) CreatePacketProcessorError(decoderName string, config any)
 func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder bool) error {
 	registry := dt.registry
 	if registry == nil {
-		registry = DefaultDecoderRegister()
+		return ocsd.ToError(ocsd.ErrNotInit)
 	}
 
 	mngr, err := registry.DecoderMngrByName(decoderName)

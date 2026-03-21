@@ -113,6 +113,9 @@ func NewDecodeTreeBuilder(r *Reader) *DecodeTreeBuilder {
 // NewDecodeTreeBuilderWithRegistry creates a new builder with an explicit decoder registry.
 // If registry is nil, the package default registry is used when the tree is created.
 func NewDecodeTreeBuilderWithRegistry(r *Reader, registry *dcdtree.DecoderRegister) *DecodeTreeBuilder {
+	if registry == nil {
+		registry = dcdtree.DefaultDecoderRegister()
+	}
 	return &DecodeTreeBuilder{
 		reader:   r,
 		registry: registry,
