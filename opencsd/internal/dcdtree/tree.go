@@ -243,13 +243,13 @@ func (dt *DecodeTree) SetMemAccessI(memI common.TargetMemAccess) {
 	}
 }
 
-// GetFrameDeformatter returns the active frame demux.
-func (dt *DecodeTree) GetFrameDeformatter() *demux.FrameDeformatter {
+// FrameDeformatter returns the active frame demux.
+func (dt *DecodeTree) FrameDeformatter() *demux.FrameDeformatter {
 	return dt.frameDeformatter
 }
 
-// GetFirstElement provides iteration entry point.
-func (dt *DecodeTree) GetFirstElement() (uint8, *DecodeTreeElement) {
+// FirstElement provides iteration entry point.
+func (dt *DecodeTree) FirstElement() (uint8, *DecodeTreeElement) {
 	ids := dt.sortedElementIDs()
 	if len(ids) == 0 {
 		return 0, nil

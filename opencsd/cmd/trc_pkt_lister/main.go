@@ -391,7 +391,7 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 	buf := make([]byte, 1024)
 	pending := make([]byte, 0, 2048)
 	align := frameAlignment(tree)
-	isFramed := tree.GetFrameDeformatter() != nil
+	isFramed := tree.FrameDeformatter() != nil
 
 	pushPending := func() {
 		for len(pending) > 0 && !ocsd.DataRespIsFatal(dataPathResp) {
@@ -519,7 +519,7 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 }
 
 func frameAlignment(tree *dcdtree.DecodeTree) int {
-	deformatter := tree.GetFrameDeformatter()
+	deformatter := tree.FrameDeformatter()
 	if deformatter == nil {
 		return 1
 	}
@@ -616,7 +616,7 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 }
 
 func configureFrameDemux(tree *dcdtree.DecodeTree, out io.Writer, opts options) {
-	deformatter := tree.GetFrameDeformatter()
+	deformatter := tree.FrameDeformatter()
 	if deformatter == nil {
 		return
 	}

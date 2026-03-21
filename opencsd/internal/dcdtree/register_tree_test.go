@@ -197,7 +197,7 @@ func TestDecodeTreeElementIterationIsOrdered(t *testing.T) {
 	tree.decodeElements[2] = &DecodeTreeElement{}
 	tree.decodeElements[5] = &DecodeTreeElement{}
 
-	firstID, _ := tree.GetFirstElement()
+	firstID, _ := tree.FirstElement()
 	if firstID != 2 {
 		t.Fatalf("expected first element ID 2, got %d", firstID)
 	}

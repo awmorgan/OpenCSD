@@ -179,7 +179,7 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 		return nil, err
 	}
 
-	if df := b.tree.GetFrameDeformatter(); df != nil {
+	if df := b.tree.FrameDeformatter(); df != nil {
 		df.SetErrorLogger(&snapshotErrorLogger{reader: b.reader})
 	}
 

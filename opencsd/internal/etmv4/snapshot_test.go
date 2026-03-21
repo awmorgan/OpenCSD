@@ -289,7 +289,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 	}
 
 	errLog := &testErrLogger{}
-	if df := tree.GetFrameDeformatter(); df != nil {
+	if df := tree.FrameDeformatter(); df != nil {
 		df.SetErrorLogger(errLog)
 	}
 
