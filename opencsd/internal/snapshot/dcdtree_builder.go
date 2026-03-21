@@ -155,7 +155,7 @@ func (b *DecodeTreeBuilder) GetBufferFileName() string {
 
 // Build builds the tree for a specific named source buffer (e.g., "ETB_0").
 func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdtree.DecodeTree, error) {
-	if !b.reader.SnapshotReadOK() {
+	if !b.reader.ReadOK() {
 		err := fmt.Errorf("supplied snapshot reader has not correctly read the snapshot")
 		b.reader.logError(err.Error())
 		return nil, err
