@@ -23,6 +23,10 @@ type fakeManager struct {
 	protocol ocsd.TraceProtocol
 }
 
+type fakeProtocolOnlyManager struct {
+	protocol ocsd.TraceProtocol
+}
+
 func (m *fakeManager) CreatePktProc(instID int, config any) interfaces.TrcTypedBase {
 	return &fakeDataIn{}
 }
@@ -36,6 +40,10 @@ func (m *fakeManager) CreateDecoder(instID int, config any) (interfaces.TrcDataI
 }
 
 func (m *fakeManager) ProtocolType() ocsd.TraceProtocol {
+	return m.protocol
+}
+
+func (m *fakeProtocolOnlyManager) ProtocolType() ocsd.TraceProtocol {
 	return m.protocol
 }
 
@@ -256,5 +264,19 @@ func TestDecodeTreePrefersTypedManagerPath(t *testing.T) {
 	}
 	if !mgr.typedPktProcCalled {
 		t.Fatal("expected DecodeTree to prefer the typed packet-processor path")
+	}
+}
+
+func TestDecodeTreeRejectsManagerWithoutConstructionPath(t *testing.T) {
+	const name = "TEST_PROTOCOL_ONLY_MANAGER"
+	reg := NewDecoderRegister()
+	if err := reg.RegisterDecoderTypeByName(name, &fakeProtocolOnlyManager{protocol: ocsd.ProtocolSTM}); err != ocsd.OK {
+		t.Fatalf("register manager failed: %v", err)
+	}
+
+	tree := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
+	err := tree.CreateDecoder(name, int(ocsd.CreateFlgFullDecoder), testConfig{id: 0x13})
+	if err != ocsd.ErrInvalidParamType {
+		t.Fatalf("expected ErrInvalidParamType for manager without construction path, got %v", err)
 	}
 }

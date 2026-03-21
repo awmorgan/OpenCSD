@@ -7,13 +7,18 @@ import "opencsd/internal/ocsd"
 // at call sites.
 type TrcTypedBase any
 
-// DecoderMngr is the interface for a protocol trace decoder factory.
-// It creates packet processors and decoders for a specific trace protocol.
+// DecoderMngr identifies a registered decoder manager by protocol.
+// Construction capabilities are exposed through optional interfaces.
 type DecoderMngr interface {
+	ProtocolType() ocsd.TraceProtocol
+}
+
+// LegacyDecoderMngr is the compatibility interface for the original any-based
+// constructor API.
+type LegacyDecoderMngr interface {
 	CreatePktProc(instID int, config any) TrcTypedBase
 	CreatePktDecode(instID int, config any) TrcTypedBase
 	CreateDecoder(instID int, config any) (TrcDataIn, TrcTypedBase, ocsd.Err)
-	ProtocolType() ocsd.TraceProtocol
 }
 
 // TypedDecoderMngr is an optional Go-native constructor interface.
