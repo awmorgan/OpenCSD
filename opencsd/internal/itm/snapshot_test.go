@@ -172,7 +172,7 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			cfg.RegTCR = uint32(parseHexOrDec(val))
 		}
 
-		if err := tree.CreateDecoder(ocsd.BuiltinDcdITM, int(ocsd.CreateFlgFullDecoder), cfg); err != ocsd.OK {
+		if err := tree.CreateFullDecoder(ocsd.BuiltinDcdITM, cfg); err != ocsd.OK {
 			return nil, fmt.Errorf("create ITM decoder for %s failed: %v", srcDevName, err)
 		}
 		itmDecoders++

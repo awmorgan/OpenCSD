@@ -253,7 +253,7 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			cfg.RegCCER = uint32(parseHexOrDec(val))
 		}
 
-		if err := tree.CreateDecoder(ocsd.BuiltinDcdETMV3, int(ocsd.CreateFlgFullDecoder), cfg); err != ocsd.OK {
+		if err := tree.CreateFullDecoder(ocsd.BuiltinDcdETMV3, cfg); err != ocsd.OK {
 			return nil, fmt.Errorf("create ETMv3 decoder for %s failed: %v", srcDevName, err)
 		}
 		etmDecoders++

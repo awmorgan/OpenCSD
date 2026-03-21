@@ -146,7 +146,7 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 			cfg.RegTCSR = uint32(parseHexOrDec(val))
 		}
 
-		if err := tree.CreateDecoder(ocsd.BuiltinDcdSTM, int(ocsd.CreateFlgFullDecoder), cfg); err != ocsd.OK {
+		if err := tree.CreateFullDecoder(ocsd.BuiltinDcdSTM, cfg); err != ocsd.OK {
 			return nil, fmt.Errorf("create STM decoder for %s failed: %v", srcDevName, err)
 		}
 		stmDecoders++

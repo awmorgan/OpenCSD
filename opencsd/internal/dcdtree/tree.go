@@ -83,8 +83,28 @@ func (dt *DecodeTree) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, data 
 	return 0, ocsd.RespFatalNotInit, nil
 }
 
-// CreateDecoder creates a trace processor within the tree for a generic trace config.
+// CreateFullDecoder creates a full decoder within the tree for a generic trace config.
+func (dt *DecodeTree) CreateFullDecoder(decoderName string, config any) ocsd.Err {
+	return dt.createDecoder(decoderName, config, true)
+}
+
+// CreatePacketProcessor creates a packet processor within the tree for a generic trace config.
+func (dt *DecodeTree) CreatePacketProcessor(decoderName string, config any) ocsd.Err {
+	return dt.createDecoder(decoderName, config, false)
+}
+
+// CreateDecoder preserves the original flag-based construction API.
 func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config any) ocsd.Err {
+	if (createFlags & ocsd.CreateFlgFullDecoder) != 0 {
+		return dt.CreateFullDecoder(decoderName, config)
+	}
+	if (createFlags & ocsd.CreateFlgPacketProc) != 0 {
+		return dt.CreatePacketProcessor(decoderName, config)
+	}
+	return ocsd.ErrInvalidParamType
+}
+
+func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder bool) ocsd.Err {
 	registry := dt.registry
 	if registry == nil {
 		registry = DefaultDecoderRegister()
@@ -121,7 +141,7 @@ func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config 
 	legacyDecoderFactory, hasLegacyDecoderPath := mngr.(interfaces.LegacyDecoderFactory)
 	legacyPktProcMngr, hasLegacyPktProcPath := mngr.(interfaces.LegacyPktProcMngr)
 
-	if (createFlags & ocsd.CreateFlgFullDecoder) != 0 {
+	if fullDecoder {
 		var err2 ocsd.Err
 		if hasTypedPath {
 			pktIn, handle, err2 = typedMngr.CreateTypedDecoder(int(routeID), config)
@@ -133,7 +153,7 @@ func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config 
 		if err2 != ocsd.OK {
 			return err2
 		}
-	} else if (createFlags & ocsd.CreateFlgPacketProc) != 0 {
+	} else {
 		if hasTypedPath {
 			var err2 ocsd.Err
 			pktIn, handle, err2 = typedMngr.CreateTypedPktProc(int(routeID), config)

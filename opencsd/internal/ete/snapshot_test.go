@@ -213,7 +213,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 			continue
 		}
 
-		if err := tree.CreateDecoder(ocsd.BuiltinDcdETE, int(ocsd.CreateFlgFullDecoder), cfg); err != ocsd.OK {
+		if err := tree.CreateFullDecoder(ocsd.BuiltinDcdETE, cfg); err != ocsd.OK {
 			if err == ocsd.ErrAttachTooMany {
 				continue
 			}

@@ -164,7 +164,7 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			cfg.RegCCER = uint32(parseHexOrDec(val))
 		}
 
-		if err := tree.CreateDecoder(ocsd.BuiltinDcdPTM, int(ocsd.CreateFlgFullDecoder), cfg); err != ocsd.OK {
+		if err := tree.CreateFullDecoder(ocsd.BuiltinDcdPTM, cfg); err != ocsd.OK {
 			return nil, fmt.Errorf("create PTM decoder for %s failed: %v", srcDevName, err)
 		}
 		ptmDecoders++

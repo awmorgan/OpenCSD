@@ -348,12 +348,14 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		cfg.ArchVer = ocsd.ArchV8
 		cfg.CoreProf = ocsd.ProfileCortexA
 
-		createFlags := ocsd.CreateFlgFullDecoder
+		var err ocsd.Err
 		if packetOnly {
-			createFlags = ocsd.CreateFlgPacketProc
+			err = tree.CreatePacketProcessor(ocsd.BuiltinDcdETMV4I, cfg)
+		} else {
+			err = tree.CreateFullDecoder(ocsd.BuiltinDcdETMV4I, cfg)
 		}
 
-		if err := tree.CreateDecoder(ocsd.BuiltinDcdETMV4I, int(createFlags), cfg); err != ocsd.OK {
+		if err != ocsd.OK {
 			return nil, fmt.Errorf("create ETMv4 decoder for %s failed: %v", srcDevName, err)
 		}
 		etmv4Decoders++
