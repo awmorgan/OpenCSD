@@ -91,6 +91,35 @@ func TestDecoderRegisterTypeMapKeepsFirst(t *testing.T) {
 	}
 }
 
+func TestDecoderRegisterErrorReturningAPIs(t *testing.T) {
+	r := NewDecoderRegister()
+	mgr := &fakeManager{protocol: ocsd.ProtocolSTM}
+
+	if err := r.Register("STM", mgr); err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	gotByName, err := r.DecoderManagerByName("STM")
+	if err != nil {
+		t.Fatalf("DecoderManagerByName failed: %v", err)
+	}
+	if gotByName != mgr {
+		t.Fatalf("DecoderManagerByName returned wrong manager: got %p want %p", gotByName, mgr)
+	}
+
+	gotByType, err := r.DecoderManagerByType(ocsd.ProtocolSTM)
+	if err != nil {
+		t.Fatalf("DecoderManagerByType failed: %v", err)
+	}
+	if gotByType != mgr {
+		t.Fatalf("DecoderManagerByType returned wrong manager: got %p want %p", gotByType, mgr)
+	}
+
+	if _, err := r.DecoderManagerByName("UNKNOWN"); err == nil {
+		t.Fatal("DecoderManagerByName expected error for unknown manager")
+	}
+}
+
 func TestDecoderRegisterNamedIterationSorted(t *testing.T) {
 	r := NewDecoderRegister()
 	_ = r.RegisterDecoderTypeByName("ZED", &fakeManager{protocol: ocsd.ProtocolETMV3})

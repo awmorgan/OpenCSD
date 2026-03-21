@@ -1,6 +1,7 @@
 package dcdtree
 
 import (
+	"fmt"
 	"opencsd/internal/interfaces"
 	"opencsd/internal/ocsd"
 	"sort"
@@ -58,6 +59,15 @@ func (r *DecoderRegister) RegisterDecoderTypeByName(name string, mngr interfaces
 	return ocsd.OK
 }
 
+// Register registers a decoder manager and returns a Go error.
+func (r *DecoderRegister) Register(name string, mngr interfaces.DecoderMngr) error {
+	err := r.RegisterDecoderTypeByName(name, mngr)
+	if err == ocsd.OK {
+		return nil
+	}
+	return fmt.Errorf("register decoder %q failed: ocsd err %d", name, uint32(err))
+}
+
 // GetDecoderMngrByName retrieves a decoder factory by its registered name string.
 func (r *DecoderRegister) GetDecoderMngrByName(name string) (interfaces.DecoderMngr, ocsd.Err) {
 	r.mu.RLock()
@@ -68,6 +78,15 @@ func (r *DecoderRegister) GetDecoderMngrByName(name string) (interfaces.DecoderM
 	return nil, ocsd.ErrDcdregNameUnknown
 }
 
+// DecoderManagerByName retrieves a decoder manager by name and returns a Go error.
+func (r *DecoderRegister) DecoderManagerByName(name string) (interfaces.DecoderMngr, error) {
+	mngr, err := r.GetDecoderMngrByName(name)
+	if err == ocsd.OK {
+		return mngr, nil
+	}
+	return nil, fmt.Errorf("decoder manager %q not found: ocsd err %d", name, uint32(err))
+}
+
 // GetDecoderMngrByType retrieves a decoder factory by its protocol enum value.
 func (r *DecoderRegister) GetDecoderMngrByType(dcdType ocsd.TraceProtocol) (interfaces.DecoderMngr, ocsd.Err) {
 	r.mu.RLock()
@@ -76,6 +95,15 @@ func (r *DecoderRegister) GetDecoderMngrByType(dcdType ocsd.TraceProtocol) (inte
 		return mngr, ocsd.OK
 	}
 	return nil, ocsd.ErrDcdregTypeUnknown
+}
+
+// DecoderManagerByType retrieves a decoder manager by protocol and returns a Go error.
+func (r *DecoderRegister) DecoderManagerByType(dcdType ocsd.TraceProtocol) (interfaces.DecoderMngr, error) {
+	mngr, err := r.GetDecoderMngrByType(dcdType)
+	if err == ocsd.OK {
+		return mngr, nil
+	}
+	return nil, fmt.Errorf("decoder manager for protocol %v not found: ocsd err %d", dcdType, uint32(err))
 }
 
 // GetNextCustomProtocolID allocates the next custom protocol ID.
