@@ -386,8 +386,8 @@ func normalizePacketHeader(s, decoder string) string {
 		return ""
 	}
 	
-	// For ETMv4, stop truncating at semicolon to accurately test address strings
-	if decoder == "etmv4" {
+	// For ETMv4 and ETE, stop truncating at semicolon to accurately test address strings
+	if decoder == "etmv4" || decoder == "ete" {
 		return strings.Join(strings.Fields(s), " ")
 	}
 

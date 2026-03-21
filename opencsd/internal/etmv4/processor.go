@@ -702,6 +702,7 @@ func (p *Processor) iPktCycleCntF123(lastByte uint8) {
 		case PktCcntF3:
 			if !p.config.CommitOpt1() {
 				p.currPacket.CommitElements = (uint32(lastByte>>2) & 0x3) + 1
+				p.currPacket.Valid.CommitElem = true
 			}
 			p.currPacket.CycleCount = p.currPacket.CCThreshold + uint32(lastByte&0x3)
 			p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
@@ -731,6 +732,7 @@ func (p *Processor) iPktCycleCntF123(lastByte uint8) {
 			}
 			commitElements := int(lastByte>>4&0xF) + commitOffset
 			p.currPacket.CommitElements = uint32(commitElements)
+			p.currPacket.Valid.CommitElem = true
 		}
 		p.processState = SendPkt
 	} else {
@@ -748,6 +750,7 @@ func (p *Processor) iPktCycleCntF123(lastByte uint8) {
 			n := p.extractContField(p.currPacketData, idx, &fieldVal, 5)
 			idx += n
 			p.currPacket.CommitElements = fieldVal
+			p.currPacket.Valid.CommitElem = true
 		}
 		if p.hasCount {
 			p.extractContField(p.currPacketData, idx, &fieldVal, 3)
@@ -1099,7 +1102,9 @@ func (p *Processor) iPktQ(lastByte uint8) {
 				n := p.extract32BitLongAddr(p.currPacketData, idx, p.addrIS, &qAddr)
 				idx += n
 				p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, qAddr)
-				p.currPacket.VAddrValidBits = 32
+				if p.currPacket.VAddrValidBits < 32 {
+					p.currPacket.VAddrValidBits = 32
+				}
 				p.currPacket.VAddrISA = p.addrIS
 				p.currPacket.VAddrPktBits = 32
 			}

@@ -612,8 +612,16 @@ func (p *TracePacket) HeaderString() string {
 		if p.TraceInfo.CCEnabled {
 			ccEnabled = 1
 		}
-		details += fmt.Sprintf(" { CC.%d }", ccEnabled)
-		if p.TraceInfo.CCEnabled {
+		if p.isETE() {
+			tstate := 0
+			if p.TraceInfo.InTransState {
+				tstate = 1
+			}
+			details += fmt.Sprintf(" { CC.%d, TSTATE.%d }", ccEnabled, tstate)
+		} else {
+			details += fmt.Sprintf(" { CC.%d }", ccEnabled)
+		}
+		if p.Valid.CCThreshold {
 			details += fmt.Sprintf("; CC_THRESHOLD=0x%x", p.CCThreshold)
 		}
 		if p.TraceInfo.InitialTInfo && p.Valid.SpecDepthValid && p.TraceInfo.SpecFieldPresent {
@@ -673,15 +681,21 @@ func (p *TracePacket) HeaderString() string {
 	case PktCancelF2:
 		details += "; "
 		if p.Atom.Num > 0 {
-			details += "Atom: " + p.getAtomStr() + ", "
+			details += fmt.Sprintf("Atom: %s, ", p.getAtomStr())
 		}
 		details += "Cancel(1), Mispredict"
 	case PktCancelF3:
 		details += "; "
 		if p.Atom.Num > 0 {
-			details += "Atom: E, "
+			details += fmt.Sprintf("Atom: %s, ", p.getAtomStr())
 		}
-		details += fmt.Sprintf("Cancel(%d), Mispredict", p.CancelElements)
+		details += "Cancel(1)"
+	case PktMispredict:
+		details += "; "
+		if p.Atom.Num > 0 {
+			details += fmt.Sprintf("Atom: %s, ", p.getAtomStr())
+		}
+		details += "Mispredict"
 	case PktCommit:
 		details += fmt.Sprintf("; Commit(%d)", p.CommitElements)
 	case PktQ:
@@ -694,7 +708,11 @@ func (p *TracePacket) HeaderString() string {
 			details += fmt.Sprintf("; [%d]", p.AddrExactMatchIdx)
 		}
 		if p.QPkt.AddrPresent || p.QPkt.AddrMatch {
-			details += "; Addr=" + addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, p.VAddrPktBits)
+			updateBits := uint8(0)
+			if p.VAddrPktBits < 64 {
+				updateBits = p.VAddrPktBits
+			}
+			details += "; Addr=" + addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits)
 		}
 	case ETE_PktITE:
 		details += fmt.Sprintf("; EL%d; Payload=0x%x", p.ITEPkt.EL, p.ITEPkt.Value)
@@ -835,6 +853,10 @@ func (p *TracePacket) getAtomStr() string {
 		bitPattern >>= 1
 	}
 	return sb.String()
+}
+
+func (p *TracePacket) isETE() bool {
+	return (p.ProtocolVersion & 0xF0) == 0x50
 }
 
 func (p *TracePacket) contextStr() string {
