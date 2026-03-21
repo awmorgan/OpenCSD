@@ -127,39 +127,21 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 	var pktIn interfaces.TrcDataIn
 	var handle any
 	typedMngr, hasTypedPath := mngr.(interfaces.TypedDecoderMngr)
-	legacyDecoderFactory, hasLegacyDecoderPath := mngr.(interfaces.LegacyDecoderFactory)
-	legacyPktProcMngr, hasLegacyPktProcPath := mngr.(interfaces.LegacyPktProcMngr)
+	if !hasTypedPath {
+		return ocsd.ErrInvalidParamType
+	}
 
 	if fullDecoder {
 		var err2 ocsd.Err
-		if hasTypedPath {
-			pktIn, handle, err2 = typedMngr.CreateTypedDecoder(int(routeID), config)
-		} else if hasLegacyDecoderPath {
-			pktIn, handle, err2 = legacyDecoderFactory.CreateDecoder(int(routeID), config)
-		} else {
-			return ocsd.ErrInvalidParamType
-		}
+		pktIn, handle, err2 = typedMngr.CreateTypedDecoder(int(routeID), config)
 		if err2 != ocsd.OK {
 			return err2
 		}
 	} else {
-		if hasTypedPath {
-			var err2 ocsd.Err
-			pktIn, handle, err2 = typedMngr.CreateTypedPktProc(int(routeID), config)
-			if err2 != ocsd.OK {
-				return err2
-			}
-		} else if hasLegacyPktProcPath {
-			h := legacyPktProcMngr.CreatePktProc(int(routeID), config)
-			if h == nil {
-				return ocsd.ErrInvalidParamType
-			}
-			handle = h
-			if in, ok := h.(interfaces.TrcDataIn); ok {
-				pktIn = in
-			}
-		} else {
-			return ocsd.ErrInvalidParamType
+		var err2 ocsd.Err
+		pktIn, handle, err2 = typedMngr.CreateTypedPktProc(int(routeID), config)
+		if err2 != ocsd.OK {
+			return err2
 		}
 	}
 
