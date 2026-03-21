@@ -1965,7 +1965,7 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, ocs
 	return proc, decoder, ocsd.OK
 }
 
-func (m *DecoderManager) CreatePktProc(instID int, config any) interfaces.TrcTypedBase {
+func (m *DecoderManager) CreatePktProc(instID int, config any) any {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil
@@ -1977,7 +1977,7 @@ func (m *DecoderManager) CreatePktProc(instID int, config any) interfaces.TrcTyp
 	return proc
 }
 
-func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {
+func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil, nil, ocsd.ErrInvalidParamVal
@@ -1989,7 +1989,7 @@ func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (interfaces.
 	return proc, proc, ocsd.OK
 }
 
-func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {
+func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil, nil, ocsd.ErrInvalidParamVal
@@ -2001,7 +2001,7 @@ func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (interfaces.
 	return proc, decoder, ocsd.OK
 }
 
-func (m *DecoderManager) CreateDecoder(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {
+func (m *DecoderManager) CreateDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil, nil, ocsd.ErrInvalidParamVal

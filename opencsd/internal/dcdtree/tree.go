@@ -116,7 +116,7 @@ func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config 
 	}
 
 	var pktIn interfaces.TrcDataIn
-	var handle interfaces.TrcTypedBase
+	var handle any
 	typedMngr, hasTypedPath := mngr.(interfaces.TypedDecoderMngr)
 	legacyMngr, hasLegacyPath := mngr.(interfaces.LegacyDecoderMngr)
 

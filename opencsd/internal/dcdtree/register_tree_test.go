@@ -27,11 +27,11 @@ type fakeProtocolOnlyManager struct {
 	protocol ocsd.TraceProtocol
 }
 
-func (m *fakeManager) CreatePktProc(instID int, config any) interfaces.TrcTypedBase {
+func (m *fakeManager) CreatePktProc(instID int, config any) any {
 	return &fakeDataIn{}
 }
 
-func (m *fakeManager) CreateDecoder(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {
+func (m *fakeManager) CreateDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
 	return &fakeDataIn{}, struct{}{}, ocsd.OK
 }
 
@@ -49,13 +49,13 @@ type fakeTypedManager struct {
 	typedDecoderCalled bool
 }
 
-func (m *fakeTypedManager) CreateTypedPktProc(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {
+func (m *fakeTypedManager) CreateTypedPktProc(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
 	m.typedPktProcCalled = true
 	proc := &fakeDataIn{}
 	return proc, proc, ocsd.OK
 }
 
-func (m *fakeTypedManager) CreateTypedDecoder(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {
+func (m *fakeTypedManager) CreateTypedDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
 	m.typedDecoderCalled = true
 	return &fakeDataIn{}, struct{}{}, ocsd.OK
 }
