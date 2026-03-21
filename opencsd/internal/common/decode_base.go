@@ -23,15 +23,11 @@ type TrcPktIndexer[Pt any] interface {
 	TracePktIndex(indexSOP ocsd.TrcIndex, pktType Pt)
 }
 
-// PktDataIn represents IPktDataIn<P>.
-type PktDataIn[P any] interface {
-	PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *P) ocsd.DatapathResp
-}
+// PktDataIn aliases the canonical packet input interface.
+type PktDataIn[P any] = ocsd.PktDataIn[P]
 
-// PktRawDataMon represents IPktRawDataMon<P>.
-type PktRawDataMon[P any] interface {
-	RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *P, rawData []byte)
-}
+// PktRawDataMon aliases the canonical raw packet monitor interface.
+type PktRawDataMon[P any] = ocsd.PktRawDataMon[P]
 
 // PktDecodeI represents TrcPktDecodeI.
 type PktDecodeI struct {
