@@ -18,11 +18,17 @@ type DecoderRegister struct {
 	iterPos      int
 }
 
-var defaultRegister = NewDecoderRegister()
+var defaultRegister = NewBuiltinDecoderRegister()
+
+// DefaultDecoderRegister returns the package-level registry populated with built-in decoders.
+func DefaultDecoderRegister() *DecoderRegister {
+	return defaultRegister
+}
 
 // GetDecoderRegister returns the library's global singleton decoder registry.
+// Prefer passing a registry explicitly where practical.
 func GetDecoderRegister() *DecoderRegister {
-	return defaultRegister
+	return DefaultDecoderRegister()
 }
 
 // NewDecoderRegister creates a new decoder registry instance.
@@ -32,6 +38,13 @@ func NewDecoderRegister() *DecoderRegister {
 		typedMngrs:   make(map[ocsd.TraceProtocol]interfaces.DecoderMngr),
 		nextCustomID: ocsd.ProtocolCustom0,
 	}
+}
+
+// NewBuiltinDecoderRegister creates a registry populated with the standard built-in decoders.
+func NewBuiltinDecoderRegister() *DecoderRegister {
+	reg := NewDecoderRegister()
+	registerBuiltinDecoders(reg)
+	return reg
 }
 
 // RegisterDecoderTypeByName registers a decoder manager factory under a specific name.
@@ -114,15 +127,27 @@ func (r *DecoderRegister) IsRegisteredDecoderType(dcdType ocsd.TraceProtocol) bo
 	return exists
 }
 
+// Names returns a sorted snapshot of all registered decoder names.
+func (r *DecoderRegister) Names() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.namesLocked()
+}
+
+func (r *DecoderRegister) namesLocked() []string {
+	names := make([]string, 0, len(r.decoderMngrs))
+	for name := range r.decoderMngrs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // GetFirstNamedDecoder starts iteration over registered decoder names.
 func (r *DecoderRegister) GetFirstNamedDecoder() (string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.iterNames = r.iterNames[:0]
-	for name := range r.decoderMngrs {
-		r.iterNames = append(r.iterNames, name)
-	}
-	sort.Strings(r.iterNames)
+	r.iterNames = r.namesLocked()
 	r.iterPos = 0
 	return r.getNextNamedDecoderLocked()
 }

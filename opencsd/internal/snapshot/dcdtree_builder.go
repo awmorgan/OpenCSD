@@ -99,6 +99,7 @@ func mapDumpMemSpace(space string) ocsd.MemSpaceAcc {
 // CreateDcdTreeFromSnapShot mimics the C++ class CreateDcdTreeFromSnapShot.
 type CreateDcdTreeFromSnapShot struct {
 	reader          *Reader
+	registry        *dcdtree.DecoderRegister
 	dcdTree         *dcdtree.DecodeTree
 	bPacketProcOnly bool
 	bufferFileName  string
@@ -106,8 +107,15 @@ type CreateDcdTreeFromSnapShot struct {
 
 // NewCreateDcdTreeFromSnapShot creates a new builder for DecodeTree from a snapshot.
 func NewCreateDcdTreeFromSnapShot(r *Reader) *CreateDcdTreeFromSnapShot {
+	return NewCreateDcdTreeFromSnapShotWithRegistry(r, nil)
+}
+
+// NewCreateDcdTreeFromSnapShotWithRegistry creates a new builder with an explicit decoder registry.
+// If registry is nil, the package default registry is used when the tree is created.
+func NewCreateDcdTreeFromSnapShotWithRegistry(r *Reader, registry *dcdtree.DecoderRegister) *CreateDcdTreeFromSnapShot {
 	return &CreateDcdTreeFromSnapShot{
-		reader: r,
+		reader:   r,
+		registry: registry,
 	}
 }
 
@@ -147,7 +155,7 @@ func (b *CreateDcdTreeFromSnapShot) CreateDecodeTree(sourceName string, bPacketP
 			formatterFlags = ocsd.DfrmtrHasFsyncs
 		}
 
-		b.dcdTree = dcdtree.CreateDecodeTree(srcFormat, formatterFlags)
+		b.dcdTree = dcdtree.NewDecodeTree(srcFormat, formatterFlags, b.registry)
 		if b.dcdTree == nil {
 			b.reader.logError("Failed to create decode tree object")
 			return false

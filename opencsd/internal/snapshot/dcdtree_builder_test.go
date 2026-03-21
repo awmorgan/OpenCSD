@@ -57,3 +57,13 @@ func TestCreatePEDecoderRoutesETMv4(t *testing.T) {
 		t.Fatalf("createPEDecoder ETMv4 route failed: %v", err)
 	}
 }
+
+func TestNewCreateDcdTreeFromSnapShotWithRegistryStoresRegistry(t *testing.T) {
+	t.Parallel()
+
+	reg := dcdtree.NewDecoderRegister()
+	b := NewCreateDcdTreeFromSnapShotWithRegistry(NewReader(), reg)
+	if b.registry != reg {
+		t.Fatal("expected builder to keep the injected registry")
+	}
+}

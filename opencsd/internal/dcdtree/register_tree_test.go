@@ -82,6 +82,14 @@ func TestDecoderRegisterNamedIterationSorted(t *testing.T) {
 	_ = r.RegisterDecoderTypeByName("ALPHA", &fakeManager{protocol: ocsd.ProtocolPTM})
 	_ = r.RegisterDecoderTypeByName("MID", &fakeManager{protocol: ocsd.ProtocolITM})
 
+	names := r.Names()
+	want := []string{"ALPHA", "MID", "ZED"}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Fatalf("expected sorted names %v, got %v", want, names)
+		}
+	}
+
 	n, ok := r.GetFirstNamedDecoder()
 	if !ok || n != "ALPHA" {
 		t.Fatalf("expected first name ALPHA, got %q, ok=%v", n, ok)
@@ -96,6 +104,22 @@ func TestDecoderRegisterNamedIterationSorted(t *testing.T) {
 	}
 	if n, ok = r.GetNextNamedDecoder(); ok {
 		t.Fatalf("expected end of iteration, got %q", n)
+	}
+}
+
+func TestNewBuiltinDecoderRegisterIncludesBuiltins(t *testing.T) {
+	r := NewBuiltinDecoderRegister()
+	for _, name := range []string{
+		ocsd.BuiltinDcdSTM,
+		ocsd.BuiltinDcdITM,
+		ocsd.BuiltinDcdPTM,
+		ocsd.BuiltinDcdETMV3,
+		ocsd.BuiltinDcdETMV4I,
+		ocsd.BuiltinDcdETE,
+	} {
+		if !r.IsRegisteredDecoder(name) {
+			t.Fatalf("expected built-in decoder %q to be registered", name)
+		}
 	}
 }
 
@@ -168,5 +192,27 @@ func TestDecodeTreeCreateDecoderRejectsOutOfRangeRouteID(t *testing.T) {
 	err := tree.CreateDecoder(name, int(ocsd.CreateFlgFullDecoder), testConfig{id: 0x80})
 	if err != ocsd.ErrInvalidID {
 		t.Fatalf("expected ErrInvalidID for route ID 0x80, got %v", err)
+	}
+}
+
+func TestNewDecodeTreeUsesInjectedRegistry(t *testing.T) {
+	const name = "TEST_LOCAL_REGISTRY_ONLY"
+	reg := NewDecoderRegister()
+	if err := reg.RegisterDecoderTypeByName(name, &fakeManager{protocol: ocsd.ProtocolSTM}); err != ocsd.OK {
+		t.Fatalf("register manager failed: %v", err)
+	}
+
+	tree := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
+	if tree == nil {
+		t.Fatal("NewDecodeTree returned nil")
+	}
+	defer tree.Destroy()
+
+	if err := tree.CreateDecoder(name, int(ocsd.CreateFlgFullDecoder), testConfig{id: 0x11}); err != ocsd.OK {
+		t.Fatalf("CreateDecoder failed using injected registry: %v", err)
+	}
+
+	if _, ok := tree.decodeElements[0]; !ok {
+		t.Fatal("expected decoder created from injected registry")
 	}
 }

@@ -10,9 +10,10 @@ import (
 	"opencsd/internal/stm"
 )
 
-// init runs on package load to register standard decoders.
-func init() {
-	reg := GetDecoderRegister()
+func registerBuiltinDecoders(reg *DecoderRegister) {
+	if reg == nil {
+		return
+	}
 	_ = reg.RegisterDecoderTypeByName(ocsd.BuiltinDcdSTM, stm.NewDecoderManager())
 	_ = reg.RegisterDecoderTypeByName(ocsd.BuiltinDcdITM, itm.NewDecoderManager())
 	_ = reg.RegisterDecoderTypeByName(ocsd.BuiltinDcdPTM, ptm.NewDecoderManager())

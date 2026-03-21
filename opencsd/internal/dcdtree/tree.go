@@ -12,6 +12,7 @@ import (
 
 // DecodeTree manages the decoding of trace data from a single trace sink.
 type DecodeTree struct {
+	registry         *DecoderRegister
 	treeType         ocsd.DcdTreeSrc
 	frameDeformatter *demux.FrameDeformatter
 	decodeElements   map[uint8]*DecodeTreeElement
@@ -27,9 +28,15 @@ type DecodeTree struct {
 	demuxStats ocsd.DemuxStats
 }
 
-// CreateDecodeTree creates a new Trace Decode Tree.
-func CreateDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) *DecodeTree {
+// NewDecodeTree creates a new Trace Decode Tree using the supplied decoder registry.
+// If registry is nil, the package default registry is used.
+func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32, registry *DecoderRegister) *DecodeTree {
+	if registry == nil {
+		registry = DefaultDecoderRegister()
+	}
+
 	dt := &DecodeTree{
+		registry:       registry,
 		treeType:       srcType,
 		decodeElements: make(map[uint8]*DecodeTreeElement),
 		iInstrDecode:   idec.NewDecoder(),
@@ -42,6 +49,11 @@ func CreateDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) *Decode
 	}
 
 	return dt
+}
+
+// CreateDecodeTree creates a new Trace Decode Tree using the package default registry.
+func CreateDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) *DecodeTree {
+	return NewDecodeTree(srcType, formatterCfgFlags, DefaultDecoderRegister())
 }
 
 // Destroy cleans up memory accessors (although GC does mostly).
@@ -73,7 +85,12 @@ func (dt *DecodeTree) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, data 
 
 // CreateDecoder creates a trace processor within the tree for a generic trace config.
 func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config any) ocsd.Err {
-	mngr, err := GetDecoderRegister().GetDecoderMngrByName(decoderName)
+	registry := dt.registry
+	if registry == nil {
+		registry = DefaultDecoderRegister()
+	}
+
+	mngr, err := registry.GetDecoderMngrByName(decoderName)
 	if err != ocsd.OK {
 		return err
 	}
