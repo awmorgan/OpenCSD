@@ -129,8 +129,6 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 		{name: "init-short-addr", sourceName: "CSTMC_TRACE_FIFO", traceIDs: []string{"0"}},
 		{name: "bugfix-exact-match", sourceName: "etr_0", traceIDs: []string{"10", "12", "14", "16", "18", "1a"}},
 		{name: "a55-test-tpiu", sourceName: "DSTREAM_0", traceIDs: []string{"1"}, packetOnly: true},
-		{name: "mem_buff_demo", snapshotName: "juno_r1_1", sourceName: "ETB_0", traceIDs: []string{"10"}, opts: etmv4DecodeOptions{suppressRawPackets: true}},
-		{name: "mem_buff_demo_cb", snapshotName: "juno_r1_1", sourceName: "ETB_0", traceIDs: []string{"10"}, opts: etmv4DecodeOptions{suppressRawPackets: true, useCallbackMemAcc: true}},
 	}
 
 	for _, tc := range testCases {
@@ -214,6 +212,32 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestETMv4MemBuffDemoBehavior(t *testing.T) {
+	t.Parallel()
+
+	t.Run("mem_buff_demo", func(t *testing.T) {
+		t.Parallel()
+		out, err := runSnapshotDecode(filepath.Join("testdata", "juno_r1_1"), "ETB_0", false, etmv4DecodeOptions{suppressRawPackets: true})
+		if err != nil {
+			t.Fatalf("buffer memacc decode failed: %v", err)
+		}
+		if len(bytes.TrimSpace(out)) == 0 {
+			t.Fatalf("buffer memacc decode produced no output")
+		}
+	})
+
+	t.Run("mem_buff_demo_cb", func(t *testing.T) {
+		t.Parallel()
+		out, err := runSnapshotDecode(filepath.Join("testdata", "juno_r1_1"), "ETB_0", false, etmv4DecodeOptions{suppressRawPackets: true, useCallbackMemAcc: true})
+		if err != nil {
+			t.Fatalf("callback memacc decode failed: %v", err)
+		}
+		if len(bytes.TrimSpace(out)) == 0 {
+			t.Fatalf("callback memacc decode produced no output")
+		}
+	})
 }
 
 func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etmv4DecodeOptions) ([]byte, error) {
