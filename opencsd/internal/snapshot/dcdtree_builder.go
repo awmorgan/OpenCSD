@@ -280,9 +280,8 @@ func (b *CreateDcdTreeFromSnapShot) createETMv3Decoder(coreName string, devSrc *
 
 	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
-	err := b.createDecoder(ocsd.BuiltinDcdETMV3, cfg)
-	if err != ocsd.OK {
-		return fmt.Errorf("dcdTree.CreateDecoder ETMv3 failed: %v", err)
+	if err := b.createDecoder(ocsd.BuiltinDcdETMV3, cfg); err != nil {
+		return fmt.Errorf("dcdTree.CreateDecoder ETMv3 failed: %w", err)
 	}
 	return nil
 }
@@ -305,9 +304,8 @@ func (b *CreateDcdTreeFromSnapShot) createPTMDecoder(coreName string, devSrc *Pa
 
 	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
-	err := b.createDecoder(ocsd.BuiltinDcdPTM, cfg)
-	if err != ocsd.OK {
-		return fmt.Errorf("dcdTree.CreateDecoder PTM failed: %v", err)
+	if err := b.createDecoder(ocsd.BuiltinDcdPTM, cfg); err != nil {
+		return fmt.Errorf("dcdTree.CreateDecoder PTM failed: %w", err)
 	}
 	return nil
 }
@@ -341,9 +339,8 @@ func (b *CreateDcdTreeFromSnapShot) createETEDecoder(coreName string, devSrc *Pa
 
 	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
-	err := b.createDecoder(ocsd.BuiltinDcdETE, cfg)
-	if err != ocsd.OK {
-		return fmt.Errorf("dcdTree.CreateDecoder ETE failed: %v", err)
+	if err := b.createDecoder(ocsd.BuiltinDcdETE, cfg); err != nil {
+		return fmt.Errorf("dcdTree.CreateDecoder ETE failed: %w", err)
 	}
 	return nil
 }
@@ -390,9 +387,8 @@ func (b *CreateDcdTreeFromSnapShot) createETMv4Decoder(coreName string, devSrc *
 
 	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
-	err := b.createDecoder(ocsd.BuiltinDcdETMV4I, cfg)
-	if err != ocsd.OK {
-		return fmt.Errorf("dcdTree.CreateDecoder ETMv4 failed: %v", err)
+	if err := b.createDecoder(ocsd.BuiltinDcdETMV4I, cfg); err != nil {
+		return fmt.Errorf("dcdTree.CreateDecoder ETMv4 failed: %w", err)
 	}
 	return nil
 }
@@ -402,9 +398,8 @@ func (b *CreateDcdTreeFromSnapShot) createSTMDecoder(devSrc *ParsedDevice) error
 	if val, ok := devSrc.GetRegValue("stmtcsr"); ok {
 		cfg.RegTCSR = uint32(parseUint(val))
 	}
-	err := b.createDecoder(ocsd.BuiltinDcdSTM, cfg)
-	if err != ocsd.OK {
-		return fmt.Errorf("dcdTree.CreateDecoder STM failed: %v", err)
+	if err := b.createDecoder(ocsd.BuiltinDcdSTM, cfg); err != nil {
+		return fmt.Errorf("dcdTree.CreateDecoder STM failed: %w", err)
 	}
 	return nil
 }
@@ -414,18 +409,25 @@ func (b *CreateDcdTreeFromSnapShot) createITMDecoder(devSrc *ParsedDevice) error
 	if val, ok := devSrc.GetRegValue("itmtcr"); ok {
 		cfg.RegTCR = uint32(parseUint(val))
 	}
-	err := b.createDecoder(ocsd.BuiltinDcdITM, cfg)
-	if err != ocsd.OK {
-		return fmt.Errorf("dcdTree.CreateDecoder ITM failed: %v", err)
+	if err := b.createDecoder(ocsd.BuiltinDcdITM, cfg); err != nil {
+		return fmt.Errorf("dcdTree.CreateDecoder ITM failed: %w", err)
 	}
 	return nil
 }
 
-func (b *CreateDcdTreeFromSnapShot) createDecoder(decoderName string, cfg any) ocsd.Err {
+func (b *CreateDcdTreeFromSnapShot) createDecoder(decoderName string, cfg any) error {
 	if b.bPacketProcOnly {
-		return b.dcdTree.CreatePacketProcessor(decoderName, cfg)
+		err := b.dcdTree.CreatePacketProcessor(decoderName, cfg)
+		if err != ocsd.OK {
+			return err
+		}
+		return nil
 	}
-	return b.dcdTree.CreateFullDecoder(decoderName, cfg)
+	err := b.dcdTree.CreateFullDecoder(decoderName, cfg)
+	if err != ocsd.OK {
+		return err
+	}
+	return nil
 }
 
 // addCoreDumpMemory adds memory region accessors from a core device's dump definitions.
