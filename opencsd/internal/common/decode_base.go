@@ -71,7 +71,6 @@ type PktDecodeI struct {
 
 	decodeInitOK  bool
 	configInitOK  bool
-	initErrMsg    string
 	usesMemAccess bool
 	usesIDecode   bool
 
@@ -100,24 +99,30 @@ func (p *PktDecodeI) GetUsesMemAccess() bool     { return p.usesMemAccess }
 func (p *PktDecodeI) SetUsesIDecode(uses bool) { p.usesIDecode = uses }
 func (p *PktDecodeI) GetUsesIDecode() bool     { return p.usesIDecode }
 
-func (p *PktDecodeI) CheckInit() bool {
-	if !p.decodeInitOK {
-		if !p.configInitOK {
-			p.initErrMsg = "No decoder configuration information"
-		} else if !p.TraceElemOut.HasAttachedAndEnabled() {
-			p.initErrMsg = "No element output interface attached and enabled"
-		} else if p.usesMemAccess && !p.MemAccess.HasAttachedAndEnabled() {
-			p.initErrMsg = "No memory access interface attached and enabled"
-		} else if p.usesIDecode && !p.InstrDecode.HasAttachedAndEnabled() {
-			p.initErrMsg = "No instruction decoder interface attached and enabled"
-		} else {
-			p.decodeInitOK = true
-		}
-		if p.decodeInitOK && p.onFirstInitOK != nil {
-			p.onFirstInitOK.OnFirstInitOK()
-		}
+func (p *PktDecodeI) ensureDecodeReady() (bool, string) {
+	if p.decodeInitOK {
+		return true, ""
 	}
-	return p.decodeInitOK
+
+	if !p.configInitOK {
+		return false, "No decoder configuration information"
+	}
+	if !p.TraceElemOut.HasAttachedAndEnabled() {
+		return false, "No element output interface attached and enabled"
+	}
+	if p.usesMemAccess && !p.MemAccess.HasAttachedAndEnabled() {
+		return false, "No memory access interface attached and enabled"
+	}
+	if p.usesIDecode && !p.InstrDecode.HasAttachedAndEnabled() {
+		return false, "No instruction decoder interface attached and enabled"
+	}
+
+	p.decodeInitOK = true
+	if p.onFirstInitOK != nil {
+		p.onFirstInitOK.OnFirstInitOK()
+	}
+
+	return true, ""
 }
 
 func (p *PktDecodeI) OutputTraceElement(elem *ocsd.TraceElement) ocsd.DatapathResp {
@@ -190,8 +195,8 @@ func (pb *PktDecodeBase[P, Pc]) SetStrategy(strategy PktDecodeStrategy[P, Pc]) {
 
 func (pb *PktDecodeBase[P, Pc]) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *P) ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if !pb.CheckInit() {
-		pb.LogError(NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, pb.initErrMsg))
+	if ready, reason := pb.ensureDecodeReady(); !ready {
+		pb.LogError(NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, reason))
 		return ocsd.RespFatalNotInit
 	}
 
