@@ -35,11 +35,21 @@ func (r *Reader) SetSnapshotDir(dir string) {
 
 // SnapshotFound returns true if snapshot.ini was found
 func (r *Reader) SnapshotFound() bool {
+	return r.Found()
+}
+
+// Found returns true if snapshot.ini was found.
+func (r *Reader) Found() bool {
 	return r.snapshotFound
 }
 
 // SnapshotReadOK returns true if the parse was fully successful
 func (r *Reader) SnapshotReadOK() bool {
+	return r.ReadOK()
+}
+
+// ReadOK returns true if the parse was fully successful.
+func (r *Reader) ReadOK() bool {
 	return r.readOK
 }
 

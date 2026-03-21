@@ -40,14 +40,14 @@ type snapshotErrorLogger struct {
 }
 
 func (l *snapshotErrorLogger) LogError(_ ocsd.HandleErrLog, err *common.Error) {
-	if l == nil || l.reader == nil || err == nil {
+	if l.reader == nil || err == nil {
 		return
 	}
 	l.reader.logError(err.Error())
 }
 
 func (l *snapshotErrorLogger) LogMessage(_ ocsd.HandleErrLog, sev ocsd.ErrSeverity, msg string) {
-	if l == nil || l.reader == nil {
+	if l.reader == nil {
 		return
 	}
 	if sev <= ocsd.ErrSevWarn {
