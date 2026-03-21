@@ -245,7 +245,7 @@ func run(args []string) error {
 	fmt.Fprintf(out, "Trace Packet Lister : reading snapshot from path %s\n", opts.ssDir)
 
 	reader := snapshot.NewReader()
-	reader.SetSnapshotDir(opts.ssDir)
+	reader.SetDir(opts.ssDir)
 	reader.Verbose = opts.ssVerbose
 	if err := reader.Read(); err != nil {
 		return fmt.Errorf("Trace Packet Lister : Failed to read snapshot: %w", err)

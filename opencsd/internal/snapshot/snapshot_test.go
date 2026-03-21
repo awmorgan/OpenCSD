@@ -261,7 +261,7 @@ ETM_0=cpu_0
 	}
 
 	reader := NewReader()
-	reader.SetSnapshotDir(tempDir)
+	reader.SetDir(tempDir)
 	reader.Verbose = true
 
 	if err := reader.Read(); err != nil {
@@ -304,13 +304,13 @@ func TestReader_Errors(t *testing.T) {
 	reader := NewReader()
 	reader.Verbose = true
 	// Invalid path
-	reader.SetSnapshotDir("/non/existent/path/for/sure")
+	reader.SetDir("/non/existent/path/for/sure")
 	if err := reader.Read(); err == nil {
 		t.Errorf("expected failure")
 	}
 
 	tempDir := t.TempDir()
-	reader.SetSnapshotDir(tempDir)
+	reader.SetDir(tempDir)
 
 	// missing device file
 	os.WriteFile(filepath.Join(tempDir, "snapshot.ini"), []byte(`
@@ -370,7 +370,7 @@ ETM_0=cpu_0
 	}
 
 	reader := NewReader()
-	reader.SetSnapshotDir(tempDir)
+	reader.SetDir(tempDir)
 	if err := reader.Read(); err != nil {
 		t.Fatalf("expected success: %v", err)
 	}
@@ -409,7 +409,7 @@ name=cpu_legacy_1
 	}
 
 	reader := NewReader()
-	reader.SetSnapshotDir(tempDir)
+	reader.SetDir(tempDir)
 	if err := reader.Read(); err != nil {
 		t.Fatalf("expected success: %v", err)
 	}

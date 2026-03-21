@@ -118,7 +118,7 @@ func TestITMSnapshotsAgainstGolden(t *testing.T) {
 
 func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	reader := snapshot.NewReader()
-	reader.SetSnapshotDir(snapshotDir)
+	reader.SetDir(snapshotDir)
 	if err := reader.Read(); err != nil {
 		return nil, fmt.Errorf("failed to read snapshot: %w", err)
 	}

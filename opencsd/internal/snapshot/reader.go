@@ -28,9 +28,15 @@ func NewReader() *Reader {
 	}
 }
 
-// SetSnapshotDir sets the directory to read from
-func (r *Reader) SetSnapshotDir(dir string) {
+// SetDir sets the directory to read from.
+func (r *Reader) SetDir(dir string) {
 	r.SnapshotPath = dir
+}
+
+// SetSnapshotDir sets the directory to read from.
+// Deprecated: prefer SetDir.
+func (r *Reader) SetSnapshotDir(dir string) {
+	r.SetDir(dir)
 }
 
 // SnapshotFound returns true if snapshot.ini was found
