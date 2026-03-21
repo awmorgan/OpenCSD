@@ -111,6 +111,29 @@ func TestErrorStandardMapping(t *testing.T) {
 	}
 }
 
+func TestErrHelpers(t *testing.T) {
+	if !IsOK(OK) {
+		t.Error("IsOK(OK) should be true")
+	}
+	if IsOK(ErrFail) {
+		t.Error("IsOK(ErrFail) should be false")
+	}
+
+	if IsNotOK(OK) {
+		t.Error("IsNotOK(OK) should be false")
+	}
+	if !IsNotOK(ErrInvalidParamVal) {
+		t.Error("IsNotOK(ErrInvalidParamVal) should be true")
+	}
+
+	if !IsMemNacc(ErrMemNacc) {
+		t.Error("IsMemNacc(ErrMemNacc) should be true")
+	}
+	if IsMemNacc(ErrMemAccOverlap) {
+		t.Error("IsMemNacc(ErrMemAccOverlap) should be false")
+	}
+}
+
 func TestEnumCombinations(t *testing.T) {
 	// MemSpaceAcc tests
 	inMemSpace := func(acc MemSpaceAcc, target MemSpaceAcc) bool {
