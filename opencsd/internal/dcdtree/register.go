@@ -1,11 +1,19 @@
 package dcdtree
 
 import (
+	"errors"
 	"fmt"
 	"opencsd/internal/interfaces"
 	"opencsd/internal/ocsd"
 	"sort"
 	"sync"
+)
+
+var (
+	// ErrDecoderRegistration indicates decoder registration failed.
+	ErrDecoderRegistration = errors.New("decoder registration failed")
+	// ErrDecoderManagerNotFound indicates decoder manager lookup failed.
+	ErrDecoderManagerNotFound = errors.New("decoder manager not found")
 )
 
 // DecoderRegister manages decoder protocol factories for the library.
@@ -65,7 +73,7 @@ func (r *DecoderRegister) Register(name string, mngr interfaces.DecoderMngr) err
 	if err == ocsd.OK {
 		return nil
 	}
-	return fmt.Errorf("register decoder %q failed: ocsd err %d", name, uint32(err))
+	return fmt.Errorf("%w: %q (ocsd err %d)", ErrDecoderRegistration, name, uint32(err))
 }
 
 // GetDecoderMngrByName retrieves a decoder factory by its registered name string.
@@ -84,7 +92,7 @@ func (r *DecoderRegister) DecoderManagerByName(name string) (interfaces.DecoderM
 	if err == ocsd.OK {
 		return mngr, nil
 	}
-	return nil, fmt.Errorf("decoder manager %q not found: ocsd err %d", name, uint32(err))
+	return nil, fmt.Errorf("%w: %q (ocsd err %d)", ErrDecoderManagerNotFound, name, uint32(err))
 }
 
 // GetDecoderMngrByType retrieves a decoder factory by its protocol enum value.
@@ -103,7 +111,7 @@ func (r *DecoderRegister) DecoderManagerByType(dcdType ocsd.TraceProtocol) (inte
 	if err == ocsd.OK {
 		return mngr, nil
 	}
-	return nil, fmt.Errorf("decoder manager for protocol %v not found: ocsd err %d", dcdType, uint32(err))
+	return nil, fmt.Errorf("%w: protocol %v (ocsd err %d)", ErrDecoderManagerNotFound, dcdType, uint32(err))
 }
 
 // GetNextCustomProtocolID allocates the next custom protocol ID.

@@ -1,6 +1,7 @@
 package dcdtree
 
 import (
+	"errors"
 	"testing"
 
 	"opencsd/internal/interfaces"
@@ -117,6 +118,14 @@ func TestDecoderRegisterErrorReturningAPIs(t *testing.T) {
 
 	if _, err := r.DecoderManagerByName("UNKNOWN"); err == nil {
 		t.Fatal("DecoderManagerByName expected error for unknown manager")
+	} else if !errors.Is(err, ErrDecoderManagerNotFound) {
+		t.Fatalf("expected ErrDecoderManagerNotFound, got %v", err)
+	}
+
+	if err := r.Register("STM", mgr); err == nil {
+		t.Fatal("expected duplicate register to fail")
+	} else if !errors.Is(err, ErrDecoderRegistration) {
+		t.Fatalf("expected ErrDecoderRegistration, got %v", err)
 	}
 }
 
