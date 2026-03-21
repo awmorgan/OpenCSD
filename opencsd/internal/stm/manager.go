@@ -83,18 +83,6 @@ func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (interfaces.
 	return proc, proc, ocsd.OK
 }
 
-func (m *DecoderManager) CreatePktDecode(instID int, config any) interfaces.TrcTypedBase {
-	cfg, ok := config.(*Config)
-	if !ok {
-		return nil
-	}
-	dec, err := NewConfiguredPktDecode(instID, cfg)
-	if err != ocsd.OK {
-		return nil
-	}
-	return dec
-}
-
 func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {
 	cfg, ok := config.(*Config)
 	if !ok {

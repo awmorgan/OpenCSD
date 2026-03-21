@@ -75,9 +75,6 @@ func TestDecoderManagerRejectsWrongConfigType(t *testing.T) {
 	if got := m.CreatePktProc(0, struct{}{}); got != nil {
 		t.Fatalf("CreatePktProc expected nil for wrong config type")
 	}
-	if got := m.CreatePktDecode(0, struct{}{}); got != nil {
-		t.Fatalf("CreatePktDecode expected nil for wrong config type")
-	}
 
 	in, handle, err := m.CreateDecoder(0, struct{}{})
 	if err != ocsd.ErrInvalidParamVal {

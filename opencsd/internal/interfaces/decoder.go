@@ -17,7 +17,6 @@ type DecoderMngr interface {
 // constructor API.
 type LegacyDecoderMngr interface {
 	CreatePktProc(instID int, config any) TrcTypedBase
-	CreatePktDecode(instID int, config any) TrcTypedBase
 	CreateDecoder(instID int, config any) (TrcDataIn, TrcTypedBase, ocsd.Err)
 }
 

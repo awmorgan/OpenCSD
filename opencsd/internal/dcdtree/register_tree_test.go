@@ -31,10 +31,6 @@ func (m *fakeManager) CreatePktProc(instID int, config any) interfaces.TrcTypedB
 	return &fakeDataIn{}
 }
 
-func (m *fakeManager) CreatePktDecode(instID int, config any) interfaces.TrcTypedBase {
-	return struct{}{}
-}
-
 func (m *fakeManager) CreateDecoder(instID int, config any) (interfaces.TrcDataIn, interfaces.TrcTypedBase, ocsd.Err) {
 	return &fakeDataIn{}, struct{}{}, ocsd.OK
 }
