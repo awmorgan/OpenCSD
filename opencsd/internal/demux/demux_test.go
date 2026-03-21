@@ -136,8 +136,8 @@ func (l *TestLogger) LogError(_ ocsd.HandleErrLog, err *common.Error) {
 
 func (l *TestLogger) LogMessage(_ ocsd.HandleErrLog, _ ocsd.ErrSeverity, _ string) {}
 
-func (l *TestLogger) GetLastError() *common.Error          { return nil }
-func (l *TestLogger) GetLastIDError(_ uint8) *common.Error { return nil }
+func (l *TestLogger) LastError() *common.Error          { return nil }
+func (l *TestLogger) LastIDError(_ uint8) *common.Error { return nil }
 
 type mockDataSink struct{}
 

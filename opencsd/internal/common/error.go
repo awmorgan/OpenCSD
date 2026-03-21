@@ -23,11 +23,11 @@ type Error struct {
 type ErrorLogger interface {
 	LogError(handle ocsd.HandleErrLog, err *Error)
 	LogMessage(handle ocsd.HandleErrLog, sev ocsd.ErrSeverity, msg string)
-	// GetLastError returns the most recently logged error, or nil if none.
-	GetLastError() *Error
-	// GetLastIDError returns the most recently logged error for the given
+	// LastError returns the most recently logged error, or nil if none.
+	LastError() *Error
+	// LastIDError returns the most recently logged error for the given
 	// CoreSight trace source channel ID, or nil if none.
-	GetLastIDError(chanID uint8) *Error
+	LastIDError(chanID uint8) *Error
 }
 
 func NewError(sev ocsd.ErrSeverity, code ocsd.Err) *Error {

@@ -57,8 +57,8 @@ func (l *snapshotErrorLogger) LogMessage(_ ocsd.HandleErrLog, sev ocsd.ErrSeveri
 	l.reader.logInfo(msg)
 }
 
-func (l *snapshotErrorLogger) GetLastError() *common.Error          { return nil }
-func (l *snapshotErrorLogger) GetLastIDError(_ uint8) *common.Error { return nil }
+func (l *snapshotErrorLogger) LastError() *common.Error          { return nil }
+func (l *snapshotErrorLogger) LastIDError(_ uint8) *common.Error { return nil }
 
 var dumpSpaceMap = map[string]ocsd.MemSpaceAcc{
 	"":           ocsd.MemSpaceAny,
