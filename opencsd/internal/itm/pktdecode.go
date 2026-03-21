@@ -133,8 +133,8 @@ func (d *PktDecode) initDecoder() {
 	d.csID = 0
 
 	// base decoder state - ITM requires no memory and instruction decode.
-	d.SetUsesMemAccess(false)
-	d.SetUsesIDecode(false)
+	d.SetNeedsMemAccess(false)
+	d.SetNeedsInstructionDecode(false)
 	d.unsyncInfo = common.UnsyncInitDecoder
 	d.resetDecoder()
 }

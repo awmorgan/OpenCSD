@@ -26,8 +26,8 @@ pb.InitPktDecodeBase("testDecode")
 elemIn := &myTrcGenElemIn{}
 pb.TraceElemOut.Attach(elemIn)
 pb.ConfigInitOK = true
-pb.SetUsesMemAccess(false)
-pb.SetUsesIDecode(false)
+pb.SetNeedsMemAccess(false)
+pb.SetNeedsInstructionDecode(false)
 
 elem := ocsd.NewTraceElement()
 resp := pb.OutputTraceElement(123, elem)
@@ -35,10 +35,10 @@ if resp != ocsd.RespCont || elemIn.lastIndex != 0 {
 t.Errorf("OutputTraceElement failed")
 }
 
-pb.SetUsesMemAccess(true)
-if !pb.UsesMemAccess() { t.Errorf("UsesMemAccess failed") }
-pb.SetUsesIDecode(true)
-if !pb.UsesIDecode() { t.Errorf("UsesIDecode failed") }
+pb.SetNeedsMemAccess(true)
+if !pb.NeedsMemAccess() { t.Errorf("NeedsMemAccess failed") }
+pb.SetNeedsInstructionDecode(true)
+if !pb.NeedsInstructionDecode() { t.Errorf("NeedsInstructionDecode failed") }
 
 pb.OutputTraceElementIdx(123, 123, elem)
 if elemIn.lastIndex != 123 { t.Errorf("OutputTraceElementIdx failed") }

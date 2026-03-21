@@ -182,11 +182,11 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No element output interface attached and enabled"))
 		return ocsd.RespFatalNotInit
 	}
-	if d.UsesMemAccess() && !d.MemAccAttachPt().IsActive() {
+	if d.NeedsMemAccess() && !d.MemAccAttachPt().IsActive() {
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No memory access interface attached and enabled"))
 		return ocsd.RespFatalNotInit
 	}
-	if d.UsesIDecode() && !d.InstrDecodeAttachPt().IsActive() {
+	if d.NeedsInstructionDecode() && !d.InstrDecodeAttachPt().IsActive() {
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No instruction decoder interface attached and enabled"))
 		return ocsd.RespFatalNotInit
 	}
@@ -215,7 +215,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 }
 
 func (d *PktDecode) accessMemory(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
-	if d.UsesMemAccess() {
+	if d.NeedsMemAccess() {
 		if d.MemAccAttachPt().IsActive() {
 			return d.MemAccAttachPt().First().ReadTargetMemory(address, d.TraceID(), memSpace, reqBytes)
 		}

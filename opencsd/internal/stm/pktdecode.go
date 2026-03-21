@@ -136,8 +136,8 @@ func (d *PktDecode) initDecoder() {
 	d.numPktCorrelation = 1
 	d.csID = 0
 
-	d.SetUsesMemAccess(false)
-	d.SetUsesIDecode(false)
+	d.SetNeedsMemAccess(false)
+	d.SetNeedsInstructionDecode(false)
 	d.unsyncInfo = common.UnsyncInitDecoder
 	d.resetDecoder()
 }

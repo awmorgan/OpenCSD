@@ -56,11 +56,11 @@ func (p *PktDecodeI) TraceElemOutAttachPt() *AttachPt[ocsd.TrcGenElemIn] {
 func (p *PktDecodeI) InstrDecodeAttachPt() *AttachPt[InstrDecode] { return &p.InstrDecode }
 func (p *PktDecodeI) MemAccAttachPt() *AttachPt[TargetMemAccess]  { return &p.MemAccess }
 
-func (p *PktDecodeI) SetUsesMemAccess(uses bool) { p.usesMemAccess = uses }
-func (p *PktDecodeI) UsesMemAccess() bool     { return p.usesMemAccess }
+func (p *PktDecodeI) SetNeedsMemAccess(needs bool) { p.usesMemAccess = needs }
+func (p *PktDecodeI) NeedsMemAccess() bool         { return p.usesMemAccess }
 
-func (p *PktDecodeI) SetUsesIDecode(uses bool) { p.usesIDecode = uses }
-func (p *PktDecodeI) UsesIDecode() bool     { return p.usesIDecode }
+func (p *PktDecodeI) SetNeedsInstructionDecode(needs bool) { p.usesIDecode = needs }
+func (p *PktDecodeI) NeedsInstructionDecode() bool         { return p.usesIDecode }
 
 func (p *PktDecodeI) DecodeNotReadyReason() string {
 	if !p.ConfigInitOK {
