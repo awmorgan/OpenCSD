@@ -59,7 +59,7 @@ func typedConfig(config any) (*Config, error) {
 	return cfg, nil
 }
 
-func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, error) {
+func (m *DecoderManager) CreatePacketProcessor(instID int, config any) (ocsd.TrcDataIn, any, error) {
 	cfg, err := typedConfig(config)
 	if err != nil {
 		return nil, nil, err
@@ -71,7 +71,7 @@ func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDat
 	return proc, proc, nil
 }
 
-func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, error) {
+func (m *DecoderManager) CreateDecoder(instID int, config any) (ocsd.TrcDataIn, any, error) {
 	cfg, err := typedConfig(config)
 	if err != nil {
 		return nil, nil, err

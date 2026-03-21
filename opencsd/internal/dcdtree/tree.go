@@ -179,13 +179,13 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 
 	if fullDecoder {
 		var err2 error
-		pktIn, handle, err2 = manager.CreateTypedDecoder(int(routeID), config)
+		pktIn, handle, err2 = manager.CreateDecoder(int(routeID), config)
 		if err2 != nil {
 			return err2
 		}
 	} else {
 		var err2 error
-		pktIn, handle, err2 = manager.CreateTypedPktProc(int(routeID), config)
+		pktIn, handle, err2 = manager.CreatePacketProcessor(int(routeID), config)
 		if err2 != nil {
 			return err2
 		}

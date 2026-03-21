@@ -36,15 +36,15 @@ func TestDecoderManagerCreatePktProcAndDecode(t *testing.T) {
 func TestDecoderManagerCreateDecoder(t *testing.T) {
 	cfg := NewConfig()
 
-	in, handle, err := NewDecoderManager().CreateTypedDecoder(3, cfg)
+	in, handle, err := NewDecoderManager().CreateDecoder(3, cfg)
 	if err != nil {
-		t.Fatalf("CreateTypedDecoder err=%v", err)
+		t.Fatalf("CreateDecoder err=%v", err)
 	}
 	if in == nil || handle == nil {
-		t.Fatalf("CreateTypedDecoder returned nil outputs")
+		t.Fatalf("CreateDecoder returned nil outputs")
 	}
 	if _, ok := in.(ocsd.TrcDataIn); !ok {
-		t.Fatalf("CreateTypedDecoder input does not implement TrcDataIn")
+		t.Fatalf("CreateDecoder input does not implement TrcDataIn")
 	}
 }
 
@@ -71,19 +71,19 @@ func TestTypedPipelineConstructors(t *testing.T) {
 func TestDecoderManagerRejectsWrongConfigType(t *testing.T) {
 	m := NewDecoderManager()
 
-	in, handle, err := m.CreateTypedPktProc(0, struct{}{})
+	in, handle, err := m.CreatePacketProcessor(0, struct{}{})
 	if got := ocsd.AsErr(err); got != ocsd.ErrInvalidParamVal {
-		t.Fatalf("CreateTypedPktProc err=%v want %v", err, ocsd.ErrInvalidParamVal)
+		t.Fatalf("CreatePacketProcessor err=%v want %v", err, ocsd.ErrInvalidParamVal)
 	}
 	if in != nil || handle != nil {
-		t.Fatalf("CreateTypedPktProc expected nil outputs for wrong config type")
+		t.Fatalf("CreatePacketProcessor expected nil outputs for wrong config type")
 	}
 
-	in, handle, err = m.CreateTypedDecoder(0, struct{}{})
+	in, handle, err = m.CreateDecoder(0, struct{}{})
 	if got := ocsd.AsErr(err); got != ocsd.ErrInvalidParamVal {
-		t.Fatalf("CreateTypedDecoder err=%v want %v", err, ocsd.ErrInvalidParamVal)
+		t.Fatalf("CreateDecoder err=%v want %v", err, ocsd.ErrInvalidParamVal)
 	}
 	if in != nil || handle != nil {
-		t.Fatalf("CreateTypedDecoder expected nil outputs for wrong config type")
+		t.Fatalf("CreateDecoder expected nil outputs for wrong config type")
 	}
 }

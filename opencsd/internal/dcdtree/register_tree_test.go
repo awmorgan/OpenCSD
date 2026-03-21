@@ -24,13 +24,13 @@ type fakeManager struct {
 	protocol ocsd.TraceProtocol
 }
 
-func (m *fakeManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, error) {
+func (m *fakeManager) CreatePacketProcessor(instID int, config any) (ocsd.TrcDataIn, any, error) {
 	proc := &fakeDataIn{}
 	return proc, proc, nil
 
 }
 
-func (m *fakeManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, error) {
+func (m *fakeManager) CreateDecoder(instID int, config any) (ocsd.TrcDataIn, any, error) {
 	return &fakeDataIn{}, struct{}{}, nil
 }
 
@@ -44,13 +44,13 @@ type fakeTypedManager struct {
 	typedDecoderCalled bool
 }
 
-func (m *fakeTypedManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDataIn, any, error) {
+func (m *fakeTypedManager) CreatePacketProcessor(instID int, config any) (ocsd.TrcDataIn, any, error) {
 	m.typedPktProcCalled = true
 	proc := &fakeDataIn{}
 	return proc, proc, nil
 }
 
-func (m *fakeTypedManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDataIn, any, error) {
+func (m *fakeTypedManager) CreateDecoder(instID int, config any) (ocsd.TrcDataIn, any, error) {
 	m.typedDecoderCalled = true
 	return &fakeDataIn{}, struct{}{}, nil
 }
