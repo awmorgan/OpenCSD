@@ -154,8 +154,8 @@ func TestPktProcBase(t *testing.T) {
 	}
 
 	pb.SetProtocolConfig(&dummyPc{})
-	if !pb.CheckInit() {
-		t.Errorf("PktProc should be initialized")
+	if pb.Config == nil {
+		t.Errorf("PktProc should retain protocol config")
 	}
 
 	pb.ResetStats()

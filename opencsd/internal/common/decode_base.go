@@ -260,7 +260,6 @@ type PktProcBase[P any, Pt any, Pc any] struct {
 	PktIndexerI AttachPt[TrcPktIndexer[Pt]]
 	Stats       ocsd.DecodeStats
 	statsInit   bool
-	isInit      bool
 	strategy    PktProcStrategy[P, Pt, Pc]
 }
 
@@ -407,15 +406,6 @@ func (pb *PktProcBase[P, Pt, Pc]) SetProtocolConfig(config *Pc) ocsd.Err {
 		return ocsd.OK
 	}
 	return ocsd.ErrInvalidParamVal
-}
-
-func (pb *PktProcBase[P, Pt, Pc]) CheckInit() bool {
-	if !pb.isInit {
-		if pb.Config != nil && (pb.PktOutI.HasAttached() || pb.PktRawMonI.HasAttached()) {
-			pb.isInit = true
-		}
-	}
-	return pb.isInit
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) GetStatsBlock() (*ocsd.DecodeStats, ocsd.Err) {
