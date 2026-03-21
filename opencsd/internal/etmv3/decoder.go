@@ -46,10 +46,10 @@ func NewPktDecode(instID int) *PktDecode {
 	d := &PktDecode{
 		peContext:      &ocsd.PEContext{},
 		outputElemList: common.NewGenElemList(),
-		codeFollower:   common.NewCodeFollower(),
 	}
 	d.PktDecodeBase = &common.PktDecodeBase[Packet, Config]{}
 	d.InitPktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV3", instID))
+	d.codeFollower = common.NewCodeFollowerWithInterfaces(&d.MemAccess, &d.InstrDecode)
 
 	d.initDecoder()
 	return d
@@ -103,8 +103,6 @@ func (d *PktDecode) initDecoder() {
 	d.resetDecoder()
 	d.unsyncInfo = common.UnsyncInitDecoder
 
-	// Need a cast / function property attachment in Go compared to C++ base classes
-	d.codeFollower.InitInterfaces(&d.MemAccess, &d.InstrDecode)
 	d.outputElemList.InitSendIf(&d.TraceElemOut)
 }
 

@@ -39,6 +39,13 @@ func NewCodeFollower() *CodeFollower {
 	return cf
 }
 
+// NewCodeFollowerWithInterfaces creates a CodeFollower and attaches live decoder interfaces.
+func NewCodeFollowerWithInterfaces(memAccess *AttachPt[TargetMemAccess], idDecode *AttachPt[InstrDecode]) *CodeFollower {
+	cf := NewCodeFollower()
+	cf.InitInterfaces(memAccess, idDecode)
+	return cf
+}
+
 func (cf *CodeFollower) InitInterfaces(memAccess *AttachPt[TargetMemAccess], idDecode *AttachPt[InstrDecode]) {
 	cf.memAccess = memAccess
 	cf.idDecode = idDecode
