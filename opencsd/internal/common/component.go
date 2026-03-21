@@ -104,7 +104,7 @@ func (a *AttachPt[T]) Next() T {
 
 // NumAttached returns the number of attached ocsd.
 func (a *AttachPt[T]) NumAttached() int {
-	if isNilAttachment(a.comp) {
+	if !a.hasAttached {
 		return 0
 	}
 	return 1
