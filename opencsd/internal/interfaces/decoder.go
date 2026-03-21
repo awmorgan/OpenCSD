@@ -12,7 +12,7 @@ type DecoderMngr interface {
 // packet-processor factory API.
 type LegacyPktProcMngr interface {
 	CreatePktProc(instID int, config any) any
-	}
+}
 
 // LegacyDecoderFactory is the compatibility interface for the original any-based
 // full-decoder factory API.
