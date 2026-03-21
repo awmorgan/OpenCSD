@@ -68,7 +68,7 @@ func TestPktDecodeBase(t *testing.T) {
 	pb.TraceElemOut.Attach(elemIn)
 
 	elem := ocsd.NewTraceElement()
-	resp = pb.OutputTraceElement(elem)
+	resp = pb.OutputTraceElement(123, elem)
 	if resp != ocsd.RespCont || elemIn.lastIndex != 10 {
 		t.Errorf("OutputTraceElement failed")
 	}
@@ -93,15 +93,15 @@ func TestPktDecodeBase(t *testing.T) {
 		t.Errorf("UsesIDecode failed")
 	}
 
-	pb.OutputTraceElementIdx(123, elem)
+	pb.OutputTraceElementIdx(123, 123, elem)
 	if elemIn.lastIndex != 123 {
 		t.Errorf("OutputTraceElementIdx failed")
 	}
 
 	var instr ocsd.InstrInfo
 	pb.InstrDecodeCall(&instr)
-	pb.AccessMemory(0x1000, ocsd.MemSpaceAny, 4)
-	pb.InvalidateMemAccCache()
+	pb.AccessMemory(0x1000, 123, ocsd.MemSpaceAny, 4)
+	pb.InvalidateMemAccCache(123)
 }
 
 type myPktDataIn struct {

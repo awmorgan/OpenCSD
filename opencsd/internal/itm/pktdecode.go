@@ -56,7 +56,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 		case dcdNoSync:
 			d.outputElem.SetType(ocsd.GenElemNoSync)
 			d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncInfo(d.unsyncInfo))
-			resp = d.OutputTraceElement(&d.outputElem)
+			resp = d.OutputTraceElement(d.csID, &d.outputElem)
 			d.currState = dcdWaitSync
 
 		case dcdWaitSync:
@@ -76,7 +76,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	d.outputElem.SetType(ocsd.GenElemEOTrace)
 	d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncEOT)
-	return d.OutputTraceElement(&d.outputElem)
+	return d.OutputTraceElement(d.csID, &d.outputElem)
 }
 
 func (d *PktDecode) OnReset() ocsd.DatapathResp {
@@ -231,7 +231,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 		}
 		d.outputElem.SetType(ocsd.GenElemITMTrace)
 		d.outputElem.SetSWTITMInfo(d.itmInfo)
-		resp = d.OutputTraceElement(&d.outputElem)
+		resp = d.OutputTraceElement(d.csID, &d.outputElem)
 	}
 
 	return resp

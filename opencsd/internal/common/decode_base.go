@@ -44,7 +44,6 @@ type PktDecodeEOTHook interface{ OnEOT() ocsd.DatapathResp }
 type PktDecodeResetHook interface{ OnReset() ocsd.DatapathResp }
 type PktDecodeFlushHook interface{ OnFlush() ocsd.DatapathResp }
 type PktDecodeProtocolConfigHook interface{ OnProtocolConfig() ocsd.Err }
-type PktDecodeTraceIDProvider interface{ TraceID() uint8 }
 
 // PktProcStrategy defines the core strategy for packet processing.
 type PktProcStrategy[P any, Pt any, Pc any] interface {
@@ -72,7 +71,6 @@ type PktDecodeI struct {
 	usesMemAccess bool
 	usesIDecode   bool
 
-	traceIDProvider PktDecodeTraceIDProvider
 }
 
 func (p *PktDecodeI) TraceElemOutAttachPt() *AttachPt[ocsd.TrcGenElemIn] {
@@ -104,16 +102,16 @@ func (p *PktDecodeI) decodeNotReadyReason() string {
 	return ""
 }
 
-func (p *PktDecodeI) OutputTraceElement(elem *ocsd.TraceElement) ocsd.DatapathResp {
-	if p.TraceElemOut.HasAttachedAndEnabled() && p.traceIDProvider != nil {
-		return p.TraceElemOut.First().TraceElemIn(p.IndexCurrPkt, p.traceIDProvider.TraceID(), elem)
+func (p *PktDecodeI) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
+	if p.TraceElemOut.HasAttachedAndEnabled() {
+		return p.TraceElemOut.First().TraceElemIn(p.IndexCurrPkt, traceID, elem)
 	}
 	return ocsd.RespFatalNotInit
 }
 
-func (p *PktDecodeI) OutputTraceElementIdx(idx ocsd.TrcIndex, elem *ocsd.TraceElement) ocsd.DatapathResp {
-	if p.TraceElemOut.HasAttachedAndEnabled() && p.traceIDProvider != nil {
-		return p.TraceElemOut.First().TraceElemIn(idx, p.traceIDProvider.TraceID(), elem)
+func (p *PktDecodeI) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
+	if p.TraceElemOut.HasAttachedAndEnabled() {
+		return p.TraceElemOut.First().TraceElemIn(idx, traceID, elem)
 	}
 	return ocsd.RespFatalNotInit
 }
@@ -127,21 +125,21 @@ func (p *PktDecodeI) InstrDecodeCall(instrInfo *ocsd.InstrInfo) ocsd.Err {
 	return ocsd.ErrDcdInterfaceUnused
 }
 
-func (p *PktDecodeI) AccessMemory(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
+func (p *PktDecodeI) AccessMemory(address ocsd.VAddr, traceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
 	if p.usesMemAccess {
-		if p.MemAccess.HasAttachedAndEnabled() && p.traceIDProvider != nil {
-			return p.MemAccess.First().ReadTargetMemory(address, p.traceIDProvider.TraceID(), memSpace, reqBytes)
+		if p.MemAccess.HasAttachedAndEnabled() {
+			return p.MemAccess.First().ReadTargetMemory(address, traceID, memSpace, reqBytes)
 		}
 	}
 	return 0, nil, ocsd.ErrDcdInterfaceUnused
 }
 
-func (p *PktDecodeI) InvalidateMemAccCache() ocsd.Err {
+func (p *PktDecodeI) InvalidateMemAccCache(traceID uint8) ocsd.Err {
 	if !p.usesMemAccess {
 		return ocsd.ErrDcdInterfaceUnused
 	}
-	if p.MemAccess.HasAttachedAndEnabled() && p.traceIDProvider != nil {
-		p.MemAccess.First().InvalidateMemAccCache(p.traceIDProvider.TraceID())
+	if p.MemAccess.HasAttachedAndEnabled() {
+		p.MemAccess.First().InvalidateMemAccCache(traceID)
 	}
 	return ocsd.OK
 }
@@ -169,16 +167,12 @@ func (pb *PktDecodeBase[P, Pc]) InitPktDecodeBase(name string) {
 
 func (pb *PktDecodeBase[P, Pc]) SetStrategy(strategy PktDecodeStrategy[P, Pc]) {
 	pb.strategy = strategy
-	pb.traceIDProvider = nil
 	pb.eotHook = nil
 	pb.resetHook = nil
 	pb.flushHook = nil
 	pb.protocolConfigHook = nil
 	if strategy == nil {
 		return
-	}
-	if traceIDProvider, ok := any(strategy).(PktDecodeTraceIDProvider); ok {
-		pb.traceIDProvider = traceIDProvider
 	}
 	if hook, ok := any(strategy).(PktDecodeEOTHook); ok {
 		pb.eotHook = hook

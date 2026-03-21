@@ -814,7 +814,7 @@ func (d *PktDecode) commitElements() ocsd.Err {
 					if err == ocsd.OK {
 						d.updateContext(pElem, d.outElem.CurrElem())
 						contextFlush = true
-						d.InvalidateMemAccCache()
+						d.InvalidateMemAccCache(d.TraceID())
 					}
 				}
 
