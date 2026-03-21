@@ -103,7 +103,7 @@ func (d *PktDecode) initDecoder() {
 	d.resetDecoder()
 	d.unsyncInfo = common.UnsyncInitDecoder
 
-	d.outputElemList.InitSendIf(&d.TraceElemOut)
+	d.outputElemList.SetSendIf(&d.TraceElemOut)
 }
 
 func (d *PktDecode) resetDecoder() {
@@ -147,7 +147,7 @@ func (d *PktDecode) SetProtocolConfig(config *Config) ocsd.Err {
 
 	d.codeFollower.SetArchProfile(archProfile)
 	d.codeFollower.SetTraceID(d.csID)
-	d.outputElemList.InitCSID(d.csID)
+	d.outputElemList.SetCSID(d.csID)
 
 	return ocsd.OK
 }

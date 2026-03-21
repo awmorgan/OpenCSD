@@ -21,8 +21,8 @@ func TestGenElemList(t *testing.T) {
 	dummy := &dummySendIf{}
 	sendAttached.Attach(dummy)
 
-	list.InitSendIf(sendAttached)
-	list.InitCSID(10)
+	list.SetSendIf(sendAttached)
+	list.SetCSID(10)
 
 	// Test array growth and insertion
 	for i := range 5 {
@@ -75,8 +75,8 @@ func TestGenElemListPendLastPartialWindow(t *testing.T) {
 	dummy := &dummySendIf{}
 	sendAttached.Attach(dummy)
 
-	list.InitSendIf(sendAttached)
-	list.InitCSID(12)
+	list.SetSendIf(sendAttached)
+	list.SetCSID(12)
 
 	for i := range 3 {
 		elem := list.NextElem(ocsd.TrcIndex(i))
@@ -114,8 +114,8 @@ func TestGenElemStack(t *testing.T) {
 	dummy := &dummySendIf{}
 	sendAttached.Attach(dummy)
 
-	stack.InitSendIf(sendAttached)
-	stack.InitCSID(11)
+	stack.SetSendIf(sendAttached)
+	stack.SetCSID(11)
 
 	// Add elems to grow array
 	for i := range 6 {

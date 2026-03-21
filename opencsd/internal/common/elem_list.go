@@ -31,11 +31,11 @@ func NewGenElemList() *GenElemList {
 	return l
 }
 
-func (l *GenElemList) InitSendIf(sendIf *AttachPt[ocsd.TrcGenElemIn]) {
+func (l *GenElemList) SetSendIf(sendIf *AttachPt[ocsd.TrcGenElemIn]) {
 	l.sendIf = sendIf
 }
 
-func (l *GenElemList) InitCSID(csID uint8) {
+func (l *GenElemList) SetCSID(csID uint8) {
 	l.csID = csID
 }
 
@@ -136,7 +136,6 @@ type GenElemStack struct {
 	sendElemIdx int
 	csID        uint8
 	sendIf      *AttachPt[ocsd.TrcGenElemIn]
-	bIsInit     bool
 }
 
 // NewGenElemStack creates a new trace element stack.
@@ -150,21 +149,16 @@ func NewGenElemStack() *GenElemStack {
 	return s
 }
 
-// isInit lazily checks that the stack is fully set up (matches C++ OcsdGenElemStack::isInit).
-func (s *GenElemStack) isInit() bool {
-	if !s.bIsInit {
-		if len(s.elemArray) > 0 && s.sendIf != nil {
-			s.bIsInit = true
-		}
-	}
-	return s.bIsInit
+// isReady checks that stack wiring is complete.
+func (s *GenElemStack) isReady() bool {
+	return len(s.elemArray) > 0 && s.sendIf != nil
 }
 
-func (s *GenElemStack) InitSendIf(sendIf *AttachPt[ocsd.TrcGenElemIn]) {
+func (s *GenElemStack) SetSendIf(sendIf *AttachPt[ocsd.TrcGenElemIn]) {
 	s.sendIf = sendIf
 }
 
-func (s *GenElemStack) InitCSID(csID uint8) {
+func (s *GenElemStack) SetCSID(csID uint8) {
 	s.csID = csID
 }
 
@@ -173,7 +167,7 @@ func (s *GenElemStack) CurrElem() *ocsd.TraceElement {
 }
 
 func (s *GenElemStack) ResetElemStack() ocsd.Err {
-	if !s.isInit() {
+	if !s.isReady() {
 		return ocsd.ErrNotInit
 	}
 	s.resetIndexes()
@@ -236,7 +230,7 @@ func (s *GenElemStack) NumElemToSend() int {
 }
 
 func (s *GenElemStack) SendElements() ocsd.DatapathResp {
-	if !s.isInit() {
+	if !s.isReady() {
 		return ocsd.RespFatalNotInit
 	}
 	resp := ocsd.RespCont

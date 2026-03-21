@@ -251,9 +251,9 @@ func (d *PktDecode) initDecoder() {
 	d.p0Stack = nil
 	d.poppedElems = nil
 	d.outElem = *common.NewGenElemStack()
-	d.outElem.InitSendIf(d.TraceElemOutAttachPt())
+	d.outElem.SetSendIf(d.TraceElemOutAttachPt())
 	if d.config != nil {
-		d.outElem.InitCSID(d.config.TraceID())
+		d.outElem.SetCSID(d.config.TraceID())
 	}
 	d.returnStack = *common.NewAddrReturnStack()
 	d.unsyncEOTInfo = ocsd.UnsyncInitDecoder
@@ -273,8 +273,8 @@ func (d *PktDecode) SetProtocolConfig(config *Config) ocsd.Err {
 	d.maxSpecDepth = int(d.config.MaxSpecDepth())
 	// d.InitDecoderCore()
 	d.initDecoder()
-	d.outElem.InitCSID(d.config.TraceID())
-	d.outElem.InitSendIf(d.TraceElemOutAttachPt())
+	d.outElem.SetCSID(d.config.TraceID())
+	d.outElem.SetSendIf(d.TraceElemOutAttachPt())
 
 	// Match C++ decoder behavior: enable the return stack only when configured.
 	if d.config.EnabledRetStack() {
@@ -1842,9 +1842,9 @@ func (d *PktDecode) resetDecoderState() {
 	if d.outElem.ResetElemStack() != ocsd.OK {
 		d.outElem = *common.NewGenElemStack()
 		if d.config != nil {
-			d.outElem.InitCSID(d.config.TraceID())
+			d.outElem.SetCSID(d.config.TraceID())
 		}
-		d.outElem.InitSendIf(d.TraceElemOutAttachPt())
+		d.outElem.SetSendIf(d.TraceElemOutAttachPt())
 	}
 
 	d.returnStack = *common.NewAddrReturnStack()
