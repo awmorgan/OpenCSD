@@ -552,6 +552,7 @@ func (p *Processor) iPktTraceInfo(lastByte uint8) {
 			var fieldVal uint32
 			n := p.extractContField(p.currPacketData, idx, &fieldVal, 5)
 			idx += n
+			p.currPacket.TraceInfo.Val = uint16(fieldVal)
 			p.currPacket.TraceInfo.CCEnabled = (fieldVal & 0x1) != 0
 			p.currPacket.TraceInfo.CondEnabled = uint8((fieldVal >> 1) & 0x7)
 			p.currPacket.TraceInfo.P0Load = (fieldVal & (1 << 4)) != 0
@@ -571,6 +572,7 @@ func (p *Processor) iPktTraceInfo(lastByte uint8) {
 			idx += n
 			p.currPacket.CurrSpecDepth = fieldVal
 			p.currPacket.TraceInfo.SpecFieldPresent = true
+			p.currPacket.Valid.SpecDepthValid = true
 		}
 		if presSect&uint8(TInfoCyctSect) != 0 && idx < len(p.currPacketData) {
 			var fieldVal uint32
@@ -927,6 +929,7 @@ func (p *Processor) iPktAddrCtxt(lastByte uint8) {
 				stIdx += n
 				p.currPacket.VAddr = ocsd.VAddr(val64)
 				p.currPacket.VAddrValidBits = 64
+				p.currPacket.VAddrPktBits = 64
 				p.currPacket.VAddrISA = p.addrIS
 			} else {
 				var val32 uint32
@@ -936,6 +939,7 @@ func (p *Processor) iPktAddrCtxt(lastByte uint8) {
 				if p.currPacket.VAddrValidBits < 32 {
 					p.currPacket.VAddrValidBits = 32
 				}
+				p.currPacket.VAddrPktBits = 32
 				p.currPacket.VAddrISA = p.addrIS
 			}
 			p.currPacket.PushVAddr()
@@ -961,6 +965,7 @@ func (p *Processor) iPktShortAddr(lastByte uint8) {
 		var bits int
 		p.extractShortAddrFromBuf(p.currPacketData, 1, p.addrIS, &addrVal, &bits)
 		p.currPacket.VAddr, p.currPacket.VAddrValidBits = p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, addrVal, p.addrIS, bits)
+		p.currPacket.VAddrPktBits = uint8(bits)
 		p.currPacket.VAddrISA = p.addrIS
 		p.currPacket.PushVAddr()
 		p.processState = SendPkt
@@ -993,6 +998,7 @@ func (p *Processor) iPktLongAddr(lastByte uint8) {
 			p.extract64BitLongAddr(p.currPacketData, stIdx, p.addrIS, &val64)
 			p.currPacket.VAddr = ocsd.VAddr(val64)
 			p.currPacket.VAddrValidBits = 64
+			p.currPacket.VAddrPktBits = 64
 		} else {
 			var val32 uint32
 			p.extract32BitLongAddr(p.currPacketData, stIdx, p.addrIS, &val32)
@@ -1000,6 +1006,7 @@ func (p *Processor) iPktLongAddr(lastByte uint8) {
 			if p.currPacket.VAddrValidBits < 32 {
 				p.currPacket.VAddrValidBits = 32
 			}
+			p.currPacket.VAddrPktBits = 32
 		}
 		p.currPacket.VAddrISA = p.addrIS
 		p.currPacket.PushVAddr()
@@ -1011,7 +1018,7 @@ func (p *Processor) update32BitAddress(currAddr ocsd.VAddr, newVal32 uint32) ocs
 	if p.currPacket.Valid.Context && p.currPacket.Context.SF {
 		// Context is 64-bit, keep upper 32 bits, replace lower 32 bits
 		mask := ocsd.VAddr(0xFFFFFFFF)
-		return (currAddr & ^mask) | (ocsd.VAddr(newVal32) & mask)
+		return (currAddr & ^mask) | ocsd.VAddr(newVal32)
 	}
 	return ocsd.VAddr(newVal32)
 }
@@ -1086,13 +1093,15 @@ func (p *Processor) iPktQ(lastByte uint8) {
 				idx += n
 				p.currPacket.VAddr, p.currPacket.VAddrValidBits = p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, qAddr, p.addrIS, bits)
 				p.currPacket.VAddrISA = p.addrIS
+				p.currPacket.VAddrPktBits = uint8(bits)
 			} else {
 				var qAddr uint32
 				n := p.extract32BitLongAddr(p.currPacketData, idx, p.addrIS, &qAddr)
 				idx += n
-				p.currPacket.VAddr = ocsd.VAddr(qAddr)
+				p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, qAddr)
 				p.currPacket.VAddrValidBits = 32
 				p.currPacket.VAddrISA = p.addrIS
+				p.currPacket.VAddrPktBits = 32
 			}
 			p.currPacket.Valid.VAddrValid = p.currPacket.VAddrValidBits > 0
 		}

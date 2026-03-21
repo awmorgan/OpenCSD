@@ -78,8 +78,8 @@ func TestTraceListerGoldens(t *testing.T) {
 				t.Fatalf("read golden %s: %v", tc.goldenPath, err)
 			}
 
-			got := sanitizeTraceListerPPL(string(gotBytes))
-			want := sanitizeTraceListerPPL(string(wantBytes))
+			got := sanitizeTraceListerPPL(string(gotBytes), tc.decoder)
+			want := sanitizeTraceListerPPL(string(wantBytes), tc.decoder)
 
 			if got != want {
 				gotLines := strings.Split(got, "\n")
@@ -211,7 +211,7 @@ func extractSourceName(ppl string) string {
 	return ""
 }
 
-func sanitizeTraceListerPPL(ppl string) string {
+func sanitizeTraceListerPPL(ppl, decoder string) string {
 	lines := strings.Split(normalizeNewlines(ppl), "\n")
 	out := make([]string, 0, len(lines))
 	for _, raw := range lines {
@@ -232,7 +232,7 @@ func sanitizeTraceListerPPL(ppl string) string {
 
 		records := splitIdxRecords(raw)
 		for _, rec := range records {
-			normalized := normalizeTraceListerIdxRecord(rec)
+			normalized := normalizeTraceListerIdxRecord(rec, decoder)
 			if normalized != "" {
 				out = append(out, normalized)
 			}
@@ -354,7 +354,7 @@ func splitIdxRecords(line string) []string {
 	return records
 }
 
-func normalizeTraceListerIdxRecord(rec string) string {
+func normalizeTraceListerIdxRecord(rec, decoder string) string {
 	id, ok := extractLineID(rec)
 	if !ok {
 		return ""
@@ -375,22 +375,28 @@ func normalizeTraceListerIdxRecord(rec string) string {
 	if packetType == "" {
 		return ""
 	}
-	packetHeader := normalizePacketHeader(right)
-	packetDesc := extractPacketDescription(packetHeader)
+	packetHeader := normalizePacketHeader(right, decoder)
+	packetDesc := extractPacketDescription(packetHeader, decoder)
 	return fmt.Sprintf("ID:%s; PKT:%s; HDR:%s; DESC:%s", id, packetType, packetHeader, packetDesc)
 }
 
-func normalizePacketHeader(s string) string {
+func normalizePacketHeader(s, decoder string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return ""
 	}
+	
+	// For ETMv4, stop truncating at semicolon to accurately test address strings
+	if decoder == "etmv4" {
+		return strings.Join(strings.Fields(s), " ")
+	}
+
 	before, _, _ := strings.Cut(s, ";")
 	hdr := strings.Join(strings.Fields(strings.TrimSpace(before)), " ")
 	return hdr
 }
 
-func extractPacketDescription(header string) string {
+func extractPacketDescription(header, decoder string) string {
 	header = strings.TrimSpace(header)
 	_, desc, ok := strings.Cut(header, ":")
 	if !ok {

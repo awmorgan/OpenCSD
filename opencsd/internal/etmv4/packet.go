@@ -141,11 +141,12 @@ var (
 
 // Info for TINFO packet.
 type TraceInfo struct {
+	Val          uint16
 	CCEnabled    bool  // 1 if cycle count enabled
 	CondEnabled  uint8 // conditional trace enabled type.
 	P0Load       bool  // 1 if tracing with P0 load elements (for data trace)
 	P0Store      bool  // 1 if tracing with P0 store elements (for data trace)
-	InTransState bool  // 1 if starting trace when in a transactional state (ETE trace).
+	InTransState bool  // Is in transaction state (ETE)
 
 	// internal decoder info for processing TINFO packets
 	InitialTInfo     bool // 1 if this tinfo is the initial one used to start decode
@@ -223,6 +224,7 @@ type Valid struct {
 	CancelElem         bool
 	CondInstr          bool
 	CondResult         bool
+	SpecDepthValid     bool
 }
 
 // Trace packet element.
@@ -232,13 +234,15 @@ type TracePacket struct {
 	ErrHdrVal uint8
 
 	// intra-packet data - valid across packets.
-	VAddr               ocsd.VAddr
-	VAddrISA            uint8
-	VAddrValidBits      uint8
-	VAddrStack          [3]ocsd.VAddr
-	VAddrValidBitsStack [3]uint8
-	VAddrISAStack       [3]uint8
-	Context             Context
+	VAddr                  ocsd.VAddr
+	VAddrISA               uint8
+	VAddrValidBits         uint8
+	VAddrPktBits           uint8
+	VAddrStack             [3]ocsd.VAddr
+	VAddrValidBitsStack    [3]uint8
+	VAddrPktBitsStack      [3]uint8
+	VAddrISAStack          [3]uint8
+	Context                Context
 
 	Timestamp     uint64
 	TSBitsChanged uint8
@@ -599,7 +603,172 @@ func (p *TracePacket) HeaderString() string {
 		// For I_BAD_SEQUENCE and I_RESERVED_CFG, ErrType holds the original type.
 		desc = fmt.Sprintf("%s[%s]", desc, p.ErrType.String())
 	}
-	return fmt.Sprintf("%s : %s", et.String(), desc)
+
+	details := ""
+	switch et {
+	case PktTraceInfo:
+		details += fmt.Sprintf("; INFO=0x%x", p.TraceInfo.Val&0xFF)
+		ccEnabled := 0
+		if p.TraceInfo.CCEnabled {
+			ccEnabled = 1
+		}
+		details += fmt.Sprintf(" { CC.%d }", ccEnabled)
+		if p.TraceInfo.CCEnabled {
+			details += fmt.Sprintf("; CC_THRESHOLD=0x%x", p.CCThreshold)
+		}
+		if p.TraceInfo.InitialTInfo && p.Valid.SpecDepthValid && p.TraceInfo.SpecFieldPresent {
+			details += fmt.Sprintf("; INIT SPEC DEPTH=%d", p.CurrSpecDepth)
+		}
+		if p.TraceInfo.InitialTInfo {
+			details += "; Decoder Sync point TINFO"
+		}
+	case PktAddrCtxtL_32IS0, PktAddrCtxtL_32IS1:
+		updateBits := uint8(0)
+		if p.VAddrPktBits < 32 {
+			updateBits = p.VAddrPktBits
+		}
+		details += "; Addr=" + addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits) + "; " + p.contextStr()
+	case PktAddrL_32IS0, PktAddrL_32IS1, ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1:
+		updateBits := uint8(0)
+		if p.VAddrPktBits < 32 {
+			updateBits = p.VAddrPktBits
+		}
+		details += "; Addr=" + addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits) + "; "
+	case PktAddrCtxtL_64IS0, PktAddrCtxtL_64IS1:
+		updateBits := uint8(0)
+		if p.VAddrPktBits < 64 {
+			updateBits = p.VAddrPktBits
+		}
+		details += "; Addr=" + addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits) + "; " + p.contextStr()
+	case PktAddrL_64IS0, PktAddrL_64IS1, ETE_PktSrcAddrL_64IS0, ETE_PktSrcAddrL_64IS1:
+		updateBits := uint8(0)
+		if p.VAddrPktBits < 64 {
+			updateBits = p.VAddrPktBits
+		}
+		details += "; Addr=" + addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits) + "; "
+	case PktCtxt:
+		details += "; " + p.contextStr()
+	case PktAddrS_IS0, PktAddrS_IS1, ETE_PktSrcAddrS_IS0, ETE_PktSrcAddrS_IS1:
+		details += "; Addr=" + addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, p.VAddrPktBits)
+	case PktAddrMatch, ETE_PktSrcAddrMatch:
+		details += fmt.Sprintf("; Addr=%s; ", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, 0))
+	case PktAtomF1, PktAtomF2, PktAtomF3, PktAtomF4, PktAtomF5, PktAtomF6:
+		details += "; " + p.getAtomStr()
+	case PktExcept:
+		details += "; " + p.getExceptionStr()
+	case PktTimestamp:
+		details += fmt.Sprintf("; Updated val = 0x%x", p.Timestamp)
+		if p.Valid.CycleCount {
+			details += fmt.Sprintf("; CC=0x%x", p.CycleCount)
+		}
+	case PktCcntF1, PktCcntF2, PktCcntF3:
+		details += fmt.Sprintf("; Count=0x%x", p.CycleCount)
+		if p.Valid.CommitElem {
+			details += fmt.Sprintf("; Commit(%d)", p.CommitElements)
+		}
+	case PktCancelF1:
+		details += fmt.Sprintf("; Cancel(%d)", p.CancelElements)
+	case PktCancelF1Mispred:
+		details += fmt.Sprintf("; Cancel(%d), Mispredict", p.CancelElements)
+	case PktCancelF2:
+		details += "; "
+		if p.Atom.Num > 0 {
+			details += "Atom: " + p.getAtomStr() + ", "
+		}
+		details += "Cancel(1), Mispredict"
+	case PktCancelF3:
+		details += "; "
+		if p.Atom.Num > 0 {
+			details += "Atom: E, "
+		}
+		details += fmt.Sprintf("Cancel(%d), Mispredict", p.CancelElements)
+	case PktCommit:
+		details += fmt.Sprintf("; Commit(%d)", p.CommitElements)
+	case PktQ:
+		if p.QPkt.CountPresent {
+			details += fmt.Sprintf("; Count(%d)", p.QPkt.QCount)
+		} else {
+			details += "; Count(Unknown)"
+		}
+		if p.QPkt.AddrMatch {
+			details += fmt.Sprintf("; [%d]", p.AddrExactMatchIdx)
+		}
+		if p.QPkt.AddrPresent || p.QPkt.AddrMatch {
+			details += "; Addr=" + addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, p.VAddrPktBits)
+		}
+	case ETE_PktITE:
+		details += fmt.Sprintf("; EL%d; Payload=0x%x", p.ITEPkt.EL, p.ITEPkt.Value)
+	}
+
+	desc += details
+	return fmt.Sprintf("%s : %s", et.String(), strings.TrimSpace(desc))
+}
+
+func addrValStr(addr uint64, is64 bool, updateBits uint8) string {
+	s := ""
+	if is64 {
+		s = fmt.Sprintf("0x%016X", uint64(addr))
+	} else {
+		s = fmt.Sprintf("0x%08X", uint32(addr))
+	}
+
+	if updateBits > 0 {
+		mask := uint64((1 << updateBits) - 1)
+		s += fmt.Sprintf(" ~[0x%X]", uint64(addr)&mask)
+	}
+	return s
+}
+
+func (p *TracePacket) getExceptionStr() string {
+	var sb strings.Builder
+	arv8Excep := []string{
+		"PE Reset", "Debug Halt", "Call", "Trap",
+		"System Error", "Reserved", "Inst Debug", "Data Debug",
+		"Reserved", "Reserved", "Alignment", "Inst Fault",
+		"Data Fault", "Reserved", "IRQ", "FIQ",
+	}
+	mExcep := []string{
+		"Reserved", "PE Reset", "NMI", "HardFault",
+		"MemManage", "BusFault", "UsageFault", "Reserved",
+		"Reserved", "Reserved", "Reserved", "SVC",
+		"DebugMonitor", "Reserved", "PendSV", "SysTick",
+		"IRQ0", "IRQ1", "IRQ2", "IRQ3",
+		"IRQ4", "IRQ5", "IRQ6", "IRQ7",
+		"DebugHalt", "LazyFP Push", "Lockup", "Reserved",
+		"Reserved", "Reserved", "Reserved", "Reserved",
+	}
+
+	if !p.ExceptionInfo.MType {
+		if p.ExceptionInfo.ExceptionType < 0x10 {
+			sb.WriteString(arv8Excep[p.ExceptionInfo.ExceptionType] + ";")
+		} else {
+			sb.WriteString("Reserved;")
+		}
+	} else {
+		if p.ExceptionInfo.ExceptionType < 0x20 {
+			sb.WriteString(mExcep[p.ExceptionInfo.ExceptionType] + ";")
+		} else if p.ExceptionInfo.ExceptionType >= 0x208 && p.ExceptionInfo.ExceptionType <= 0x3EF {
+			sb.WriteString(fmt.Sprintf("IRQ%d;", p.ExceptionInfo.ExceptionType-0x200))
+		} else {
+			sb.WriteString("Reserved;")
+		}
+		if p.ExceptionInfo.MFaultPending {
+			sb.WriteString(" Fault Pending;")
+		}
+	}
+
+	if p.ExceptionInfo.AddrInterp == 0x1 {
+		sb.WriteString(" Ret Addr Follows;")
+	} else if p.ExceptionInfo.AddrInterp == 0x2 {
+		sb.WriteString(" Ret Addr Follows, Match Prev;")
+	}
+
+	res := sb.String()
+	if strings.HasSuffix(res, ";") {
+		// Actually the C++ code outputs spaces and semicolons exact. We'll strip the leading/trailing as needed or leave as is if the test requires it.
+		// `oss << " " << ARv8Excep[exception_info.exceptionType] << ";";`
+	}
+	return " " + res // Add the leading space to match C++
 }
 
 // PushVAddr pushes the current VAddr and VAddrISA to the top of the history stack
@@ -610,6 +779,9 @@ func (p *TracePacket) PushVAddr() {
 	p.VAddrValidBitsStack[2] = p.VAddrValidBitsStack[1]
 	p.VAddrValidBitsStack[1] = p.VAddrValidBitsStack[0]
 	p.VAddrValidBitsStack[0] = p.VAddrValidBits
+	p.VAddrPktBitsStack[2] = p.VAddrPktBitsStack[1]
+	p.VAddrPktBitsStack[1] = p.VAddrPktBitsStack[0]
+	p.VAddrPktBitsStack[0] = p.VAddrPktBits
 	p.VAddrISAStack[2] = p.VAddrISAStack[1]
 	p.VAddrISAStack[1] = p.VAddrISAStack[0]
 	p.VAddrISAStack[0] = p.VAddrISA
@@ -621,6 +793,7 @@ func (p *TracePacket) PopVAddrIdx(idx uint8) {
 	if idx < 3 {
 		p.VAddr = p.VAddrStack[idx]
 		p.VAddrValidBits = p.VAddrValidBitsStack[idx]
+		p.VAddrPktBits = p.VAddrPktBitsStack[idx]
 		p.VAddrISA = p.VAddrISAStack[idx]
 		p.Valid.VAddrValid = p.VAddrValidBits > 0
 	}
@@ -640,10 +813,12 @@ func (p *TracePacket) ClearTraceInfo() {
 	for i := range 3 {
 		p.VAddrStack[i] = 0
 		p.VAddrValidBitsStack[i] = ocsd.MaxVABitsize
+		p.VAddrPktBitsStack[i] = 0
 		p.VAddrISAStack[i] = 0
 	}
 	p.VAddr = p.VAddrStack[0]
 	p.VAddrValidBits = p.VAddrValidBitsStack[0]
+	p.VAddrPktBits = p.VAddrPktBitsStack[0]
 	p.VAddrISA = p.VAddrISAStack[0]
 	p.Valid.VAddrValid = p.VAddrValidBits > 0
 }
@@ -676,7 +851,7 @@ func (p *TracePacket) contextStr() string {
 	if p.Context.SF {
 		sb.WriteString("AArch64,")
 	} else {
-		sb.WriteString("AArch32,")
+		sb.WriteString("AArch32, ")
 	}
 	sb.WriteString(fmt.Sprintf("EL%d, ", p.Context.EL))
 
@@ -698,7 +873,7 @@ func (p *TracePacket) contextStr() string {
 		sb.WriteString(fmt.Sprintf("CID=0x%08x; ", p.Context.CtxtID))
 	}
 	if p.Context.UpdatedV {
-		sb.WriteString(fmt.Sprintf("VMID=0x%08x; ", p.Context.VMID))
+		sb.WriteString(fmt.Sprintf("VMID=0x%04x; ", p.Context.VMID))
 	}
 
 	return sb.String()
