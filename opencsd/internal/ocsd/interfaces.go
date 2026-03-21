@@ -55,10 +55,14 @@ type TrcRawFrameIn interface {
 	TraceRawFrameIn(op DatapathOp, index TrcIndex, frameElem RawframeElem, data []byte, traceID uint8) DatapathResp
 }
 
-// DecoderMngr identifies a registered decoder manager by protocol.
+// DecoderManager identifies a registered decoder manager by protocol.
 // It provides typed construction of packet processors and full decoders.
-type DecoderMngr interface {
+type DecoderManager interface {
 	CreateTypedPktProc(instID int, config any) (TrcDataIn, any, error)
 	CreateTypedDecoder(instID int, config any) (TrcDataIn, any, error)
 	ProtocolType() TraceProtocol
 }
+
+// DecoderMngr is kept as a compatibility alias for existing call sites.
+// Deprecated: use DecoderManager.
+type DecoderMngr = DecoderManager

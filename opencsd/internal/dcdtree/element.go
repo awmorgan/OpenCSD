@@ -2,7 +2,7 @@ package dcdtree
 
 import (
 	"opencsd/internal/common"
-	
+
 	"opencsd/internal/ocsd"
 )
 
@@ -20,22 +20,22 @@ type memAccAttachOwner interface {
 
 // DecodeTreeElement represents a registered decoder instance within the trace decode tree.
 type DecodeTreeElement struct {
-	DecoderTypeName string                 // Registered name of the decoder
-	DecoderMngr     ocsd.DecoderMngr // Factory interface that created it
-	DataIn          ocsd.TrcDataIn   // Interface for feeding trace data
-	DecoderHandle   any                    // Pointer to the decoder processor (PktDecode)
+	DecoderTypeName string              // Registered name of the decoder
+	DecoderManager  ocsd.DecoderManager // Factory interface that created it
+	DataIn          ocsd.TrcDataIn      // Interface for feeding trace data
+	DecoderHandle   any                 // Pointer to the decoder processor (PktDecode)
 	TraceElemAttach *common.AttachPt[ocsd.TrcGenElemIn]
 	InstrDecAttach  *common.AttachPt[common.InstrDecode]
 	MemAccAttach    *common.AttachPt[common.TargetMemAccess]
-	Protocol        ocsd.TraceProtocol     // Protocol type
-	Created         bool                   // True if decode tree created this element
+	Protocol        ocsd.TraceProtocol // Protocol type
+	Created         bool               // True if decode tree created this element
 }
 
 // NewDecodeTreeElement creates a new DecodeTreeElement record.
-func NewDecodeTreeElement(name string, dcdMngr ocsd.DecoderMngr, dcdHandle any, dataIn ocsd.TrcDataIn, created bool) *DecodeTreeElement {
+func NewDecodeTreeElement(name string, decoderManager ocsd.DecoderManager, dcdHandle any, dataIn ocsd.TrcDataIn, created bool) *DecodeTreeElement {
 	protocol := ocsd.ProtocolUnknown
-	if dcdMngr != nil {
-		protocol = dcdMngr.ProtocolType()
+	if decoderManager != nil {
+		protocol = decoderManager.ProtocolType()
 	}
 
 	var traceElemAttach *common.AttachPt[ocsd.TrcGenElemIn]
@@ -55,7 +55,7 @@ func NewDecodeTreeElement(name string, dcdMngr ocsd.DecoderMngr, dcdHandle any, 
 
 	return &DecodeTreeElement{
 		DecoderTypeName: name,
-		DecoderMngr:     dcdMngr,
+		DecoderManager:  decoderManager,
 		DataIn:          dataIn,
 		DecoderHandle:   dcdHandle,
 		TraceElemAttach: traceElemAttach,
