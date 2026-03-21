@@ -101,7 +101,7 @@ type DecodeTreeBuilder struct {
 	reader          *Reader
 	registry        *dcdtree.DecoderRegister
 	dcdTree         *dcdtree.DecodeTree
-	bPacketProcOnly bool
+	packetProcOnly  bool
 	bufferFileName  string
 }
 
@@ -161,7 +161,7 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 		return nil, err
 	}
 
-	b.bPacketProcOnly = packetProcOnly
+	b.packetProcOnly = packetProcOnly
 	tree := NewTraceBufferSourceTree()
 	if !ExtractSourceTree(sourceName, b.reader.ParsedTrace, tree) {
 		err := fmt.Errorf("failed to get parsed source tree for buffer %s", sourceName)
@@ -247,8 +247,8 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 
 // CreateDecodeTree builds the tree for a specific named source buffer (e.g., "ETB_0").
 // Deprecated: prefer Build, which returns an error.
-func (b *DecodeTreeBuilder) CreateDecodeTree(sourceName string, bPacketProcOnly bool) bool {
-	_, err := b.Build(sourceName, bPacketProcOnly)
+func (b *DecodeTreeBuilder) CreateDecodeTree(sourceName string, packetProcOnly bool) bool {
+	_, err := b.Build(sourceName, packetProcOnly)
 	return err == nil
 }
 
@@ -448,7 +448,7 @@ func (b *DecodeTreeBuilder) createITMDecoder(devSrc *ParsedDevice) error {
 }
 
 func (b *DecodeTreeBuilder) createDecoder(decoderName string, cfg any) error {
-	if b.bPacketProcOnly {
+	if b.packetProcOnly {
 		return b.dcdTree.CreatePacketProcessorError(decoderName, cfg)
 	}
 	return b.dcdTree.CreateFullDecoderError(decoderName, cfg)
