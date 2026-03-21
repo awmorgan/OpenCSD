@@ -51,7 +51,7 @@ type PktProc struct {
 // NewPktProc creates a new ITM packet processor.
 func NewPktProc(instID int) *PktProc {
 	p := &PktProc{}
-	p.InitPktProcBase("PKTP_ITM") // name
+	p.ConfigurePktProcBase("PKTP_ITM") // name
 
 	p.SetSupportedOpModes(ocsd.OpflgPktprocCommon)
 	p.initProcessorState()

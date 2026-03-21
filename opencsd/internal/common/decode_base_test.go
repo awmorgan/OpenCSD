@@ -22,7 +22,7 @@ func (m *myTrcGenElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, el
 
 func TestPktDecodeBase(t *testing.T) {
 	pb := &PktDecodeBase[dummyPkt, dummyPc]{}
-	pb.InitPktDecodeBase("testDecode")
+	pb.ConfigurePktDecodeBase("testDecode")
 
 	elemIn := &myTrcGenElemIn{}
 	pb.TraceElemOut.Attach(elemIn)
@@ -65,7 +65,7 @@ func (p *myPktDataIn) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, p
 
 func TestPktProcBase(t *testing.T) {
 	pb := &PktProcBase[dummyPkt, dummyPt, dummyPc]{}
-	pb.InitPktProcBase("testProc")
+	pb.ConfigurePktProcBase("testProc")
 
 	outI := &myPktDataIn{}
 	pb.PktOutI.Attach(outI)

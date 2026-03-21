@@ -126,7 +126,7 @@ type PktDecodeBase[P any, Pc any] struct {
 	CurrPacketIn *P
 }
 
-func (pb *PktDecodeBase[P, Pc]) InitPktDecodeBase(name string) {
+func (pb *PktDecodeBase[P, Pc]) ConfigurePktDecodeBase(name string) {
 	pb.InitTraceComponent(name)
 	pb.TraceElemOut = *NewAttachPt[ocsd.TrcGenElemIn]()
 	pb.MemAccess = *NewAttachPt[TargetMemAccess]()
@@ -151,7 +151,7 @@ type PktProcBase[P any, Pt any, Pc any] struct {
 	statsInit   bool
 }
 
-func (pb *PktProcBase[P, Pt, Pc]) InitPktProcBase(name string) {
+func (pb *PktProcBase[P, Pt, Pc]) ConfigurePktProcBase(name string) {
 	pb.InitTraceComponent(name)
 	pb.PktOutI = *NewAttachPt[PktDataIn[P]]()
 	pb.PktRawMonI = *NewAttachPt[PktRawDataMon[P]]()

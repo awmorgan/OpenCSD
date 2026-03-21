@@ -40,7 +40,7 @@ type PktDecode struct {
 // NewPktDecode creates a new STM packet decoder.
 func NewPktDecode(instIDNum int) *PktDecode {
 	d := &PktDecode{}
-	d.InitPktDecodeBase(fmt.Sprintf("%s_%d", "DCD_STM", instIDNum))
+	d.ConfigurePktDecodeBase(fmt.Sprintf("%s_%d", "DCD_STM", instIDNum))
 
 	d.initDecoder()
 	return d

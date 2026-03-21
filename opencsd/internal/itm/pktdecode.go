@@ -35,7 +35,7 @@ type PktDecode struct {
 // NewPktDecode creates a new ITM packet decoder.
 func NewPktDecode(instID int) *PktDecode {
 	d := &PktDecode{}
-	d.InitPktDecodeBase("DCD_ITM")
+	d.ConfigurePktDecodeBase("DCD_ITM")
 
 	d.initDecoder()
 	return d

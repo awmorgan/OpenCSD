@@ -111,7 +111,7 @@ type PktProc struct {
 
 func NewPktProc(instIDNum int) *PktProc {
 	p := &PktProc{}
-	p.InitPktProcBase(fmt.Sprintf("PKTP_STM_%d", instIDNum))
+	p.ConfigurePktProcBase(fmt.Sprintf("PKTP_STM_%d", instIDNum))
 
 	p.SetSupportedOpModes(ocsd.OpflgPktprocCommon)
 	p.initProcessorState()

@@ -48,7 +48,7 @@ func NewPktDecode(instID int) *PktDecode {
 		outputElemList: common.NewGenElemList(),
 	}
 	d.PktDecodeBase = &common.PktDecodeBase[Packet, Config]{}
-	d.InitPktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV3", instID))
+	d.ConfigurePktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV3", instID))
 	d.codeFollower = common.NewCodeFollowerWithInterfaces(&d.MemAccess, &d.InstrDecode)
 
 	d.initDecoder()

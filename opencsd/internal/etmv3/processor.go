@@ -53,7 +53,7 @@ type PktProc struct {
 func NewPktProc(instID int) *PktProc {
 	p := &PktProc{}
 	p.PktProcBase = &common.PktProcBase[Packet, PktType, Config]{}
-	p.InitPktProcBase(fmt.Sprintf("%s_%d", "PKTP_ETMV3", instID))
+	p.ConfigurePktProcBase(fmt.Sprintf("%s_%d", "PKTP_ETMV3", instID))
 
 	// Initialise configuration
 	p.initProcessorState()

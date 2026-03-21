@@ -96,7 +96,7 @@ type PktProc struct {
 
 func NewPktProc(instIDNum int) *PktProc {
 	p := &PktProc{}
-	p.InitPktProcBase(fmt.Sprintf("%s_%d", "PKTP_PTM", instIDNum))
+	p.ConfigurePktProcBase(fmt.Sprintf("%s_%d", "PKTP_PTM", instIDNum))
 
 	p.initProcessorState()
 	p.buildIPacketTable()
