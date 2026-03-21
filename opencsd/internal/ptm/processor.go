@@ -170,7 +170,7 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, o
 	var ok bool
 
 	p.dataInProcessed = 0
-	if !p.CheckInit() {
+	if p.Config == nil {
 		return 0, ocsd.RespFatalNotInit, nil
 	}
 
@@ -279,7 +279,7 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 }
 
 func (p *PktProc) OnEOT() ocsd.DatapathResp {
-	if !p.CheckInit() {
+	if p.Config == nil {
 		return ocsd.RespFatalNotInit
 	}
 	resp := ocsd.RespCont
@@ -292,7 +292,7 @@ func (p *PktProc) OnEOT() ocsd.DatapathResp {
 }
 
 func (p *PktProc) OnReset() ocsd.DatapathResp {
-	if !p.CheckInit() {
+	if p.Config == nil {
 		return ocsd.RespFatalNotInit
 	}
 	p.initProcessorState()
@@ -300,7 +300,7 @@ func (p *PktProc) OnReset() ocsd.DatapathResp {
 }
 
 func (p *PktProc) OnFlush() ocsd.DatapathResp {
-	if !p.CheckInit() {
+	if p.Config == nil {
 		return ocsd.RespFatalNotInit
 	}
 	return ocsd.RespCont
