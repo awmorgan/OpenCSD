@@ -68,7 +68,6 @@ type PktDecodeI struct {
 
 	IndexCurrPkt ocsd.TrcIndex
 
-	decodeInitOK  bool
 	configInitOK  bool
 	usesMemAccess bool
 	usesIDecode   bool
@@ -88,27 +87,21 @@ func (p *PktDecodeI) GetUsesMemAccess() bool     { return p.usesMemAccess }
 func (p *PktDecodeI) SetUsesIDecode(uses bool) { p.usesIDecode = uses }
 func (p *PktDecodeI) GetUsesIDecode() bool     { return p.usesIDecode }
 
-func (p *PktDecodeI) ensureDecodeReady() (bool, string) {
-	if p.decodeInitOK {
-		return true, ""
-	}
-
+func (p *PktDecodeI) decodeNotReadyReason() string {
 	if !p.configInitOK {
-		return false, "No decoder configuration information"
+		return "No decoder configuration information"
 	}
 	if !p.TraceElemOut.HasAttachedAndEnabled() {
-		return false, "No element output interface attached and enabled"
+		return "No element output interface attached and enabled"
 	}
 	if p.usesMemAccess && !p.MemAccess.HasAttachedAndEnabled() {
-		return false, "No memory access interface attached and enabled"
+		return "No memory access interface attached and enabled"
 	}
 	if p.usesIDecode && !p.InstrDecode.HasAttachedAndEnabled() {
-		return false, "No instruction decoder interface attached and enabled"
+		return "No instruction decoder interface attached and enabled"
 	}
 
-	p.decodeInitOK = true
-
-	return true, ""
+	return ""
 }
 
 func (p *PktDecodeI) OutputTraceElement(elem *ocsd.TraceElement) ocsd.DatapathResp {
@@ -181,7 +174,7 @@ func (pb *PktDecodeBase[P, Pc]) SetStrategy(strategy PktDecodeStrategy[P, Pc]) {
 
 func (pb *PktDecodeBase[P, Pc]) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *P) ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if ready, reason := pb.ensureDecodeReady(); !ready {
+	if reason := pb.decodeNotReadyReason(); reason != "" {
 		pb.LogError(NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, reason))
 		return ocsd.RespFatalNotInit
 	}

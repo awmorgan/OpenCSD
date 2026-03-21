@@ -60,6 +60,13 @@ func TestPktDecodeBase(t *testing.T) {
 		t.Errorf("Packet not processed correctly")
 	}
 
+	pb.TraceElemOut.DetachAll()
+	resp = pb.PacketDataIn(ocsd.OpData, 11, &dummyPkt{3})
+	if resp != ocsd.RespFatalNotInit {
+		t.Errorf("Expected NotInit after detaching trace output, got %v", resp)
+	}
+	pb.TraceElemOut.Attach(elemIn)
+
 	elem := ocsd.NewTraceElement()
 	resp = pb.OutputTraceElement(elem)
 	if resp != ocsd.RespCont || elemIn.lastIndex != 10 {
