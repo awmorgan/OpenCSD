@@ -145,8 +145,14 @@ func TestSTMEndToEndDecode(t *testing.T) {
 	// We'll flush the existing to not mess up sequence
 	sb.Flush()
 
-	proc.TraceDataIn(ocsd.OpData, 0, sb.data)
-	proc.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(len(sb.data)), nil)
+	_, res1, err1 := proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	if !ocsd.DataRespIsCont(res1) || err1 != nil {
+		t.Logf("TraceDataIn Data returned %v, err %v", res1, err1)
+	}
+	_, res2, err2 := proc.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(len(sb.data)), nil)
+	if !ocsd.DataRespIsCont(res2) || err2 != nil {
+		t.Logf("TraceDataIn EOT returned %v, err %v", res2, err2)
+	}
 
 	if len(outReceiver.elements) == 0 {
 		t.Error("Expected to receive parsed trace elements")

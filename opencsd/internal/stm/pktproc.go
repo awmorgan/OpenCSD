@@ -109,16 +109,57 @@ type PktProc struct {
 	syncIndex   ocsd.TrcIndex
 }
 
-// NewPktProc creates a new STM packet processor.
 func NewPktProc(instIDNum int) *PktProc {
 	p := &PktProc{}
 	p.InitPktProcBase(fmt.Sprintf("PKTP_STM_%d", instIDNum))
-	p.SetStrategy(p)
 
 	p.SetSupportedOpModes(ocsd.OpflgPktprocCommon)
 	p.initProcessorState()
 	p.buildOpTables()
 	return p
+}
+
+func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
+	resp := ocsd.RespCont
+	var processed uint32 = 0
+	var err error
+
+	switch op {
+	case ocsd.OpData:
+		if len(dataBlock) == 0 {
+			p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor: Zero length data block error"))
+			resp = ocsd.RespFatalInvalidParam
+		} else {
+			processed, resp, err = p.ProcessData(index, dataBlock)
+		}
+	case ocsd.OpEOT:
+		resp = p.OnEOT()
+		if p.PktOutI.HasAttachedAndEnabled() && !ocsd.DataRespIsFatal(resp) {
+			resp = p.PktOutI.First().PacketDataIn(ocsd.OpEOT, 0, nil)
+		}
+		if p.PktRawMonI.HasAttachedAndEnabled() {
+			p.PktRawMonI.First().RawPacketDataMon(ocsd.OpEOT, 0, nil, nil)
+		}
+	case ocsd.OpFlush:
+		resp = p.OnFlush()
+		if ocsd.DataRespIsCont(resp) && p.PktOutI.HasAttachedAndEnabled() {
+			resp = p.PktOutI.First().PacketDataIn(ocsd.OpFlush, 0, nil)
+		}
+	case ocsd.OpReset:
+		if p.PktOutI.HasAttachedAndEnabled() {
+			resp = p.PktOutI.First().PacketDataIn(ocsd.OpReset, index, nil)
+		}
+		if !ocsd.DataRespIsFatal(resp) {
+			resp = p.OnReset()
+		}
+		if p.PktRawMonI.HasAttachedAndEnabled() {
+			p.PktRawMonI.First().RawPacketDataMon(ocsd.OpReset, index, nil, nil)
+		}
+	default:
+		p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
+		resp = ocsd.RespFatalInvalidOp
+	}
+	return processed, resp, err
 }
 
 func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
@@ -216,7 +257,8 @@ func (p *PktProc) OnFlush() ocsd.DatapathResp {
 	return ocsd.RespCont
 }
 
-func (p *PktProc) OnProtocolConfig() ocsd.Err {
+func (p *PktProc) SetProtocolConfig(config *Config) ocsd.Err {
+	p.Config = config
 	return ocsd.OK
 }
 
