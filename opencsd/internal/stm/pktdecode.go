@@ -41,10 +41,50 @@ type PktDecode struct {
 func NewPktDecode(instIDNum int) *PktDecode {
 	d := &PktDecode{}
 	d.InitPktDecodeBase(fmt.Sprintf("%s_%d", "DCD_STM", instIDNum))
-	d.SetStrategy(d)
 
 	d.initDecoder()
 	return d
+}
+
+// SetProtocolConfig sets the STM hardware configuration.
+func (d *PktDecode) SetProtocolConfig(config *Config) ocsd.Err {
+	d.Config = config
+	if d.Config == nil {
+		return ocsd.ErrNotInit
+	}
+	d.csID = d.Config.TraceID()
+	d.ConfigInitOK = true
+	return ocsd.OK
+}
+
+func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) ocsd.DatapathResp {
+	resp := ocsd.RespCont
+	if reason := d.DecodeNotReadyReason(); reason != "" {
+		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, reason))
+		return ocsd.RespFatalNotInit
+	}
+
+	switch op {
+	case ocsd.OpData:
+		if pktIn == nil {
+			d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
+			resp = ocsd.RespFatalInvalidParam
+		} else {
+			d.CurrPacketIn = pktIn
+			d.IndexCurrPkt = indexSOP
+			resp = d.ProcessPacket()
+		}
+	case ocsd.OpEOT:
+		resp = d.OnEOT()
+	case ocsd.OpFlush:
+		resp = d.OnFlush()
+	case ocsd.OpReset:
+		resp = d.OnReset()
+	default:
+		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
+		resp = ocsd.RespFatalInvalidOp
+	}
+	return resp
 }
 
 func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
@@ -86,14 +126,6 @@ func (d *PktDecode) OnReset() ocsd.DatapathResp {
 
 func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 	return ocsd.RespCont
-}
-
-func (d *PktDecode) OnProtocolConfig() ocsd.Err {
-	if d.Config == nil {
-		return ocsd.ErrNotInit
-	}
-	d.csID = d.Config.TraceID()
-	return ocsd.OK
 }
 
 func (d *PktDecode) TraceID() uint8 {

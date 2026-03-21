@@ -52,11 +52,61 @@ type PktProc struct {
 func NewPktProc(instID int) *PktProc {
 	p := &PktProc{}
 	p.InitPktProcBase("PKTP_ITM") // name
-	p.SetStrategy(p)
 
 	p.SetSupportedOpModes(ocsd.OpflgPktprocCommon)
 	p.initProcessorState()
 	return p
+}
+
+func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
+	resp := ocsd.RespCont
+	var processed uint32 = 0
+	var err error
+
+	switch op {
+	case ocsd.OpData:
+		if len(dataBlock) == 0 {
+			p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor: Zero length data block error"))
+			resp = ocsd.RespFatalInvalidParam
+		} else {
+			processed, resp, err = p.ProcessData(index, dataBlock)
+		}
+	case ocsd.OpEOT:
+		resp = p.OnEOT()
+		if p.PktOutI.HasAttachedAndEnabled() && !ocsd.DataRespIsFatal(resp) {
+			resp = p.PktOutI.First().PacketDataIn(ocsd.OpEOT, 0, nil)
+		}
+		if p.PktRawMonI.HasAttachedAndEnabled() {
+			p.PktRawMonI.First().RawPacketDataMon(ocsd.OpEOT, 0, nil, nil)
+		}
+	case ocsd.OpFlush:
+		resp = p.OnFlush()
+		if ocsd.DataRespIsCont(resp) && p.PktOutI.HasAttachedAndEnabled() {
+			resp = p.PktOutI.First().PacketDataIn(ocsd.OpFlush, 0, nil)
+		}
+	case ocsd.OpReset:
+		if p.PktOutI.HasAttachedAndEnabled() {
+			resp = p.PktOutI.First().PacketDataIn(ocsd.OpReset, index, nil)
+		}
+		if !ocsd.DataRespIsFatal(resp) {
+			resp = p.OnReset()
+		}
+		if p.PktRawMonI.HasAttachedAndEnabled() {
+			p.PktRawMonI.First().RawPacketDataMon(ocsd.OpReset, index, nil, nil)
+		}
+	default:
+		p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
+		resp = ocsd.RespFatalInvalidOp
+	}
+	return processed, resp, err
+}
+
+func (p *PktProc) SetProtocolConfig(config *Config) ocsd.Err {
+	if config != nil {
+		p.Config = config
+		return ocsd.OK
+	}
+	return ocsd.ErrInvalidParamVal
 }
 
 func (p *PktProc) initProcessorState() {
@@ -183,10 +233,6 @@ func (p *PktProc) OnReset() ocsd.DatapathResp {
 
 func (p *PktProc) OnFlush() ocsd.DatapathResp {
 	return ocsd.RespCont
-}
-
-func (p *PktProc) OnProtocolConfig() ocsd.Err {
-	return ocsd.OK
 }
 
 func (p *PktProc) IsBadPacket() bool {

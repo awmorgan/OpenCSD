@@ -329,7 +329,7 @@ func TestITMErrorCases(t *testing.T) {
 
 	// Decoder missing config test
 	dec := NewPktDecode(0)
-	dec.OnProtocolConfig()
+	dec.SetProtocolConfig(nil)
 	dec.OnFlush()
 	dec.OnReset()
 }
