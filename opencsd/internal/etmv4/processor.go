@@ -2,7 +2,7 @@ package etmv4
 
 import (
 	"opencsd/internal/common"
-	
+
 	"opencsd/internal/ocsd"
 )
 
