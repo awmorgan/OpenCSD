@@ -126,7 +126,7 @@ func TestNewBuiltinDecoderRegisterIncludesBuiltins(t *testing.T) {
 }
 
 func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
-	reg := GetDecoderRegister()
+	reg := DefaultDecoderRegister()
 	name := "TEST_SINGLE_REMOVE_DECODER"
 	if !reg.IsRegisteredDecoder(name) {
 		if err := reg.RegisterDecoderTypeByName(name, &fakeManager{protocol: ocsd.ProtocolSTM}); err != ocsd.OK {
@@ -177,7 +177,7 @@ func TestDecodeTreeElementIterationIsOrdered(t *testing.T) {
 }
 
 func TestDecodeTreeCreateDecoderRejectsOutOfRangeRouteID(t *testing.T) {
-	reg := GetDecoderRegister()
+	reg := DefaultDecoderRegister()
 	name := "TEST_INVALID_ROUTE_ID"
 	if !reg.IsRegisteredDecoder(name) {
 		if err := reg.RegisterDecoderTypeByName(name, &fakeManager{protocol: ocsd.ProtocolSTM}); err != ocsd.OK {

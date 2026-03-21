@@ -22,12 +22,6 @@ func DefaultDecoderRegister() *DecoderRegister {
 	return defaultRegister
 }
 
-// GetDecoderRegister returns the library's global singleton decoder registry.
-// Prefer passing a registry explicitly where practical.
-func GetDecoderRegister() *DecoderRegister {
-	return DefaultDecoderRegister()
-}
-
 // NewDecoderRegister creates a new decoder registry instance.
 func NewDecoderRegister() *DecoderRegister {
 	return &DecoderRegister{
