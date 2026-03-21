@@ -74,11 +74,7 @@ func (cf *CodeFollower) SetDSBDMBasWP() {
 	cf.instrInfo.DsbDmbWaypoints = 1
 }
 
-func (cf *CodeFollower) HasNextInstr() bool {
-	return cf.bHasNxt
-}
-
-func (cf *CodeFollower) HasNextAddr() bool {
+func (cf *CodeFollower) HasNext() bool {
 	return cf.bHasNxt
 }
 
@@ -86,19 +82,11 @@ func (cf *CodeFollower) HasRange() bool {
 	return cf.stAddr < cf.enAddr
 }
 
-func (cf *CodeFollower) IsNaccErr() bool {
+func (cf *CodeFollower) HasNaccError() bool {
 	return cf.naccErr
 }
 
-func (cf *CodeFollower) HasError() bool {
-	return cf.naccErr
-}
-
-func (cf *CodeFollower) ClearError() {
-	cf.naccErr = false
-}
-
-func (cf *CodeFollower) ClearNacc() {
+func (cf *CodeFollower) ClearNaccError() {
 	cf.naccErr = false
 }
 

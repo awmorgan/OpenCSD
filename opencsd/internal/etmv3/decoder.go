@@ -760,7 +760,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					d.iAddr = uint64(d.codeFollower.NextAddr())
 					isa = instrInfo.NextIsa
 
-					if !d.codeFollower.HasNextAddr() {
+					if !d.codeFollower.HasNext() {
 						d.setNeedAddr(true)
 					}
 				}
@@ -780,7 +780,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 						pElem.Payload.ExceptionNum = uint32(memSpace)
 					}
 					d.setNeedAddr(true)
-					d.codeFollower.ClearError()
+					d.codeFollower.ClearNaccError()
 				}
 			} else if d.Config.IsCycleAcc() {
 				// CC only packet (atomsNum == 0)

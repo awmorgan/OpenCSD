@@ -51,7 +51,7 @@ func TestCodeFollower(t *testing.T) {
 	cf.SetMemSpace(ocsd.MemSpaceAny)
 
 	err = cf.FollowSingleAtom(0x1000, ocsd.AtomE)
-	if err != ocsd.OK || !cf.HasNextAddr() {
+	if err != ocsd.OK || !cf.HasNext() {
 		t.Errorf("FollowSingleAtom failed")
 	}
 	if !cf.HasRange() {
@@ -85,7 +85,7 @@ func TestCodeFollower(t *testing.T) {
 	mockMem.errToReturn = ocsd.ErrMemNacc
 	mockMem.dataToReturn = nil
 	err = cf.FollowSingleAtom(0x2000, ocsd.AtomN)
-	if err != ocsd.ErrMemNacc || !cf.IsNaccErr() || !cf.HasError() {
+	if err != ocsd.ErrMemNacc || !cf.HasNaccError() {
 		t.Errorf("MemNacc error not tracked properly")
 	}
 	if cf.NaccAddr() != 0x2000 {
@@ -100,12 +100,12 @@ func TestCodeFollower(t *testing.T) {
 		t.Errorf("Expected DSB/DMB waypoint mode to be enabled")
 	}
 
-	cf.ClearError()
-	if cf.HasError() {
+	cf.ClearNaccError()
+	if cf.HasNaccError() {
 		t.Errorf("ClearError failed")
 	}
-	cf.ClearNacc()
-	if cf.IsNaccErr() {
+	cf.ClearNaccError()
+	if cf.HasNaccError() {
 		t.Errorf("ClearNacc failed")
 	}
 }

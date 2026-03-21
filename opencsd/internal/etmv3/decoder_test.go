@@ -439,7 +439,7 @@ func TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr(t *testing.T) {
 	if !dec.bNeedAddr {
 		t.Logf("InstrType from follower: %v", dec.codeFollower.InstrInfo().Type)
 		t.Logf("InstrOpcode from follower: %x", dec.codeFollower.InstrInfo().Opcode)
-		t.Logf("HasNextAddr: %v", dec.codeFollower.HasNextAddr())
+		t.Logf("HasNext: %v", dec.codeFollower.HasNext())
 		t.Error("expected bNeedAddr=true after IndirectBr E-atom")
 	}
 	_ = out
