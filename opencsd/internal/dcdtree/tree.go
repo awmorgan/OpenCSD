@@ -126,20 +126,16 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 
 	var pktIn interfaces.TrcDataIn
 	var handle any
-	typedMngr, hasTypedPath := mngr.(interfaces.TypedDecoderMngr)
-	if !hasTypedPath {
-		return ocsd.ErrInvalidParamType
-	}
 
 	if fullDecoder {
 		var err2 ocsd.Err
-		pktIn, handle, err2 = typedMngr.CreateTypedDecoder(int(routeID), config)
+		pktIn, handle, err2 = mngr.CreateTypedDecoder(int(routeID), config)
 		if err2 != ocsd.OK {
 			return err2
 		}
 	} else {
 		var err2 ocsd.Err
-		pktIn, handle, err2 = typedMngr.CreateTypedPktProc(int(routeID), config)
+		pktIn, handle, err2 = mngr.CreateTypedPktProc(int(routeID), config)
 		if err2 != ocsd.OK {
 			return err2
 		}
