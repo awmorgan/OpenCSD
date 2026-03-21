@@ -40,18 +40,18 @@ func (m *fakeManager) ProtocolType() ocsd.TraceProtocol {
 
 type fakeTypedManager struct {
 	fakeManager
-	typedPktProcCalled bool
-	typedDecoderCalled bool
+	packetProcessorCalled bool
+	decoderCalled         bool
 }
 
 func (m *fakeTypedManager) CreatePacketProcessor(instID int, config any) (ocsd.TrcDataIn, any, error) {
-	m.typedPktProcCalled = true
+	m.packetProcessorCalled = true
 	proc := &fakeDataIn{}
 	return proc, proc, nil
 }
 
 func (m *fakeTypedManager) CreateDecoder(instID int, config any) (ocsd.TrcDataIn, any, error) {
-	m.typedDecoderCalled = true
+	m.decoderCalled = true
 	return &fakeDataIn{}, struct{}{}, nil
 }
 
@@ -269,16 +269,16 @@ func TestDecodeTreePrefersTypedManagerPath(t *testing.T) {
 	if err := tree.CreateFullDecoder(name, testConfig{id: 0x12}); err != nil {
 		t.Fatalf("CreateDecoder failed: %v", err)
 	}
-	if !mgr.typedDecoderCalled {
-		t.Fatal("expected DecodeTree to prefer the typed full-decoder path")
+	if !mgr.decoderCalled {
+		t.Fatal("expected DecodeTree to prefer the full-decoder path")
 	}
 
 	tree.RemoveDecoder(0x12)
 	if err := tree.CreatePacketProcessor(name, testConfig{id: 0x12}); err != nil {
 		t.Fatalf("CreateDecoder packet-proc path failed: %v", err)
 	}
-	if !mgr.typedPktProcCalled {
-		t.Fatal("expected DecodeTree to prefer the typed packet-processor path")
+	if !mgr.packetProcessorCalled {
+		t.Fatal("expected DecodeTree to prefer the packet-processor path")
 	}
 }
 

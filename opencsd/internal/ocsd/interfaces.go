@@ -56,7 +56,7 @@ type TrcRawFrameIn interface {
 }
 
 // DecoderManager identifies a registered decoder manager by protocol.
-// It provides typed construction of packet processors and full decoders.
+// It provides construction of packet processors and full decoders.
 type DecoderManager interface {
 	CreatePacketProcessor(instID int, config any) (TrcDataIn, any, error)
 	CreateDecoder(instID int, config any) (TrcDataIn, any, error)
