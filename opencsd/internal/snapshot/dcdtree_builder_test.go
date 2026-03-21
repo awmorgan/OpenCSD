@@ -43,7 +43,7 @@ func TestMapDumpMemSpace(t *testing.T) {
 func TestCreatePEDecoderRoutesETMv4(t *testing.T) {
 	t.Parallel()
 
-	b := NewCreateDcdTreeFromSnapShot(NewReader())
+	b := NewDecodeTreeBuilder(NewReader())
 	b.dcdTree = dcdtree.CreateDecodeTree(ocsd.TrcSrcSingle, ocsd.DfrmtrFrameMemAlign)
 	if b.dcdTree == nil {
 		t.Fatal("CreateDecodeTree returned nil")
@@ -58,11 +58,11 @@ func TestCreatePEDecoderRoutesETMv4(t *testing.T) {
 	}
 }
 
-func TestNewCreateDcdTreeFromSnapShotWithRegistryStoresRegistry(t *testing.T) {
+func TestNewDecodeTreeBuilderWithRegistryStoresRegistry(t *testing.T) {
 	t.Parallel()
 
 	reg := dcdtree.NewDecoderRegister()
-	b := NewCreateDcdTreeFromSnapShotWithRegistry(NewReader(), reg)
+	b := NewDecodeTreeBuilderWithRegistry(NewReader(), reg)
 	if b.registry != reg {
 		t.Fatal("expected builder to keep the injected registry")
 	}

@@ -96,8 +96,8 @@ func mapDumpMemSpace(space string) ocsd.MemSpaceAcc {
 	return ocsd.MemSpaceAny
 }
 
-// CreateDcdTreeFromSnapShot mimics the C++ class CreateDcdTreeFromSnapShot.
-type CreateDcdTreeFromSnapShot struct {
+// DecodeTreeBuilder builds a decode tree from snapshot metadata.
+type DecodeTreeBuilder struct {
 	reader          *Reader
 	registry        *dcdtree.DecoderRegister
 	dcdTree         *dcdtree.DecodeTree
@@ -105,32 +105,56 @@ type CreateDcdTreeFromSnapShot struct {
 	bufferFileName  string
 }
 
-// NewCreateDcdTreeFromSnapShot creates a new builder for DecodeTree from a snapshot.
-func NewCreateDcdTreeFromSnapShot(r *Reader) *CreateDcdTreeFromSnapShot {
-	return NewCreateDcdTreeFromSnapShotWithRegistry(r, nil)
+// CreateDcdTreeFromSnapShot is a compatibility alias for the legacy C++-style type name.
+type CreateDcdTreeFromSnapShot = DecodeTreeBuilder
+
+// NewDecodeTreeBuilder creates a new builder for DecodeTree from a snapshot.
+func NewDecodeTreeBuilder(r *Reader) *DecodeTreeBuilder {
+	return NewDecodeTreeBuilderWithRegistry(r, nil)
 }
 
-// NewCreateDcdTreeFromSnapShotWithRegistry creates a new builder with an explicit decoder registry.
+// NewDecodeTreeBuilderWithRegistry creates a new builder with an explicit decoder registry.
 // If registry is nil, the package default registry is used when the tree is created.
-func NewCreateDcdTreeFromSnapShotWithRegistry(r *Reader, registry *dcdtree.DecoderRegister) *CreateDcdTreeFromSnapShot {
-	return &CreateDcdTreeFromSnapShot{
+func NewDecodeTreeBuilderWithRegistry(r *Reader, registry *dcdtree.DecoderRegister) *DecodeTreeBuilder {
+	return &DecodeTreeBuilder{
 		reader:   r,
 		registry: registry,
 	}
 }
 
-// GetDecodeTree returns the built properties.
-func (b *CreateDcdTreeFromSnapShot) GetDecodeTree() *dcdtree.DecodeTree {
+// NewCreateDcdTreeFromSnapShot creates a new builder for DecodeTree from a snapshot.
+func NewCreateDcdTreeFromSnapShot(r *Reader) *DecodeTreeBuilder {
+	return NewDecodeTreeBuilder(r)
+}
+
+// NewCreateDcdTreeFromSnapShotWithRegistry creates a new builder with an explicit decoder registry.
+// If registry is nil, the package default registry is used when the tree is created.
+func NewCreateDcdTreeFromSnapShotWithRegistry(r *Reader, registry *dcdtree.DecoderRegister) *DecodeTreeBuilder {
+	return NewDecodeTreeBuilderWithRegistry(r, registry)
+}
+
+// DecodeTree returns the built decode tree.
+func (b *DecodeTreeBuilder) DecodeTree() *dcdtree.DecodeTree {
 	return b.dcdTree
 }
 
-// GetBufferFileName returns the full path of the trace binary buffer file to load.
-func (b *CreateDcdTreeFromSnapShot) GetBufferFileName() string {
+// BufferFileName returns the full path of the trace binary buffer file to load.
+func (b *DecodeTreeBuilder) BufferFileName() string {
 	return b.bufferFileName
 }
 
+// GetDecodeTree returns the built properties.
+func (b *DecodeTreeBuilder) GetDecodeTree() *dcdtree.DecodeTree {
+	return b.DecodeTree()
+}
+
+// GetBufferFileName returns the full path of the trace binary buffer file to load.
+func (b *DecodeTreeBuilder) GetBufferFileName() string {
+	return b.BufferFileName()
+}
+
 // CreateDecodeTree builds the tree for a specific named source buffer (e.g., "ETB_0").
-func (b *CreateDcdTreeFromSnapShot) CreateDecodeTree(sourceName string, bPacketProcOnly bool) bool {
+func (b *DecodeTreeBuilder) CreateDecodeTree(sourceName string, bPacketProcOnly bool) bool {
 	if !b.reader.SnapshotReadOK() {
 		b.reader.logError("Supplied snapshot reader has not correctly read the snapshot.")
 		return false
@@ -229,7 +253,7 @@ func getCoreProfile(coreName string) (ocsd.ArchVersion, ocsd.CoreProfile) {
 	return ocsd.ArchUnknown, ocsd.ProfileUnknown
 }
 
-func (b *CreateDcdTreeFromSnapShot) createPEDecoder(devTypeName string, devSrc *ParsedDevice, coreName string) error {
+func (b *DecodeTreeBuilder) createPEDecoder(devTypeName string, devSrc *ParsedDevice, coreName string) error {
 	// Strip any trailing ".x" version suffix from the device type name (e.g. "ETM4.1" → "ETM4").
 	if pos := strings.IndexByte(devTypeName, '.'); pos >= 0 {
 		devTypeName = devTypeName[:pos]
@@ -247,7 +271,7 @@ func (b *CreateDcdTreeFromSnapShot) createPEDecoder(devTypeName string, devSrc *
 	return fmt.Errorf("unknown PE devType: %s", devTypeName)
 }
 
-func (b *CreateDcdTreeFromSnapShot) createSTDecoder(devSrc *ParsedDevice) error {
+func (b *DecodeTreeBuilder) createSTDecoder(devSrc *ParsedDevice) error {
 	devTypeName := devSrc.DeviceTypeName
 	// Strip any trailing ".x" version suffix (e.g. "STM.1" → "STM").
 	if pos := strings.IndexByte(devTypeName, '.'); pos >= 0 {
@@ -262,7 +286,7 @@ func (b *CreateDcdTreeFromSnapShot) createSTDecoder(devSrc *ParsedDevice) error 
 	return fmt.Errorf("unknown ST devType: %s", devTypeName)
 }
 
-func (b *CreateDcdTreeFromSnapShot) createETMv3Decoder(coreName string, devSrc *ParsedDevice) error {
+func (b *DecodeTreeBuilder) createETMv3Decoder(coreName string, devSrc *ParsedDevice) error {
 	cfg := &etmv3.Config{}
 
 	if val, ok := devSrc.GetRegValue("etmcr"); ok {
@@ -286,7 +310,7 @@ func (b *CreateDcdTreeFromSnapShot) createETMv3Decoder(coreName string, devSrc *
 	return nil
 }
 
-func (b *CreateDcdTreeFromSnapShot) createPTMDecoder(coreName string, devSrc *ParsedDevice) error {
+func (b *DecodeTreeBuilder) createPTMDecoder(coreName string, devSrc *ParsedDevice) error {
 	cfg := ptm.NewConfig()
 
 	if val, ok := devSrc.GetRegValue("etmcr"); ok {
@@ -310,7 +334,7 @@ func (b *CreateDcdTreeFromSnapShot) createPTMDecoder(coreName string, devSrc *Pa
 	return nil
 }
 
-func (b *CreateDcdTreeFromSnapShot) createETEDecoder(coreName string, devSrc *ParsedDevice) error {
+func (b *DecodeTreeBuilder) createETEDecoder(coreName string, devSrc *ParsedDevice) error {
 	cfg := ete.NewConfig()
 
 	if val, ok := devSrc.GetRegValue("trcidr0"); ok {
@@ -345,7 +369,7 @@ func (b *CreateDcdTreeFromSnapShot) createETEDecoder(coreName string, devSrc *Pa
 	return nil
 }
 
-func (b *CreateDcdTreeFromSnapShot) createETMv4Decoder(coreName string, devSrc *ParsedDevice) error {
+func (b *DecodeTreeBuilder) createETMv4Decoder(coreName string, devSrc *ParsedDevice) error {
 	cfg := &etmv4.Config{}
 
 	if val, ok := devSrc.GetRegValue("trcidr0"); ok {
@@ -393,7 +417,7 @@ func (b *CreateDcdTreeFromSnapShot) createETMv4Decoder(coreName string, devSrc *
 	return nil
 }
 
-func (b *CreateDcdTreeFromSnapShot) createSTMDecoder(devSrc *ParsedDevice) error {
+func (b *DecodeTreeBuilder) createSTMDecoder(devSrc *ParsedDevice) error {
 	cfg := stm.NewConfig()
 	if val, ok := devSrc.GetRegValue("stmtcsr"); ok {
 		cfg.RegTCSR = uint32(parseUint(val))
@@ -404,7 +428,7 @@ func (b *CreateDcdTreeFromSnapShot) createSTMDecoder(devSrc *ParsedDevice) error
 	return nil
 }
 
-func (b *CreateDcdTreeFromSnapShot) createITMDecoder(devSrc *ParsedDevice) error {
+func (b *DecodeTreeBuilder) createITMDecoder(devSrc *ParsedDevice) error {
 	cfg := itm.NewConfig()
 	if val, ok := devSrc.GetRegValue("itmtcr"); ok {
 		cfg.RegTCR = uint32(parseUint(val))
@@ -415,7 +439,7 @@ func (b *CreateDcdTreeFromSnapShot) createITMDecoder(devSrc *ParsedDevice) error
 	return nil
 }
 
-func (b *CreateDcdTreeFromSnapShot) createDecoder(decoderName string, cfg any) error {
+func (b *DecodeTreeBuilder) createDecoder(decoderName string, cfg any) error {
 	if b.bPacketProcOnly {
 		err := b.dcdTree.CreatePacketProcessor(decoderName, cfg)
 		if err != ocsd.OK {
@@ -432,7 +456,7 @@ func (b *CreateDcdTreeFromSnapShot) createDecoder(decoderName string, cfg any) e
 
 // addCoreDumpMemory adds memory region accessors from a core device's dump definitions.
 // It is called once per PE decoder that is successfully created, only in full-decoder mode.
-func (b *CreateDcdTreeFromSnapShot) addCoreDumpMemory(mapper memacc.Mapper, dev *ParsedDevice) {
+func (b *DecodeTreeBuilder) addCoreDumpMemory(mapper memacc.Mapper, dev *ParsedDevice) {
 	for _, dump := range dev.DumpDefs {
 		if strings.TrimSpace(dump.Path) == "" {
 			continue

@@ -290,13 +290,13 @@ func rotateSourceNames(sourceNames []string, first string) []string {
 }
 
 func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sourceNames []string) error {
-	builder := snapshot.NewCreateDcdTreeFromSnapShot(reader)
+	builder := snapshot.NewDecodeTreeBuilder(reader)
 	packetProcOnly := !opts.decode
 	if !builder.CreateDecodeTree(opts.srcName, packetProcOnly) {
 		return fmt.Errorf("Trace Packet Lister : Failed to create decode tree for source %s", opts.srcName)
 	}
 
-	tree := builder.GetDecodeTree()
+	tree := builder.DecodeTree()
 	if tree == nil {
 		return errors.New("Trace Packet Lister : No supported protocols found.")
 	}
@@ -355,7 +355,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 	}
 
 	if !opts.multiSession {
-		return processInputFile(out, tree, builder.GetBufferFileName(), genPrinter, opts)
+		return processInputFile(out, tree, builder.BufferFileName(), genPrinter, opts)
 	}
 
 	total := len(sourceNames)
