@@ -179,7 +179,7 @@ func TestTraceComponent(t *testing.T) {
 	if err := tc.AttachErrorLogger(logger); err != ocsd.OK {
 		t.Fatalf("AttachErrorLogger failed: %v", err)
 	}
-	tc.SetErrorLogLevel(ocsd.ErrSevInfo)
+	tc.ConfigureErrorLogLevel(ocsd.ErrSevInfo)
 
 	tc.LogMessage(ocsd.ErrSevWarn, "A warning")
 	if logger.lastMsg != "A warning" || logger.lastMsgSev != ocsd.ErrSevWarn {
@@ -187,13 +187,13 @@ func TestTraceComponent(t *testing.T) {
 	}
 
 	// This shouldn't log because severity is none
-	tc.SetErrorLogLevel(ocsd.ErrSevNone)
+	tc.ConfigureErrorLogLevel(ocsd.ErrSevNone)
 	tc.LogMessage(ocsd.ErrSevError, "Should not log")
 	if logger.lastMsg == "Should not log" {
 		t.Errorf("expected message to be filtered")
 	}
 
-	tc.SetErrorLogLevel(ocsd.ErrSevError)
+	tc.ConfigureErrorLogLevel(ocsd.ErrSevError)
 	tc.LogDefMessage("Default error")
 	if logger.lastMsg != "Default error" || logger.lastMsgSev != ocsd.ErrSevError {
 		t.Errorf("default log message failed")

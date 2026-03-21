@@ -225,8 +225,8 @@ func (tc *TraceComponent) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
 	return level <= tc.errVerbosity
 }
 
-// SetErrorLogLevel sets the verbosity of error logging.
-func (tc *TraceComponent) SetErrorLogLevel(level ocsd.ErrSeverity) {
+// ConfigureErrorLogLevel sets the verbosity of error logging.
+func (tc *TraceComponent) ConfigureErrorLogLevel(level ocsd.ErrSeverity) {
 	tc.errVerbosity = level
 }
 
