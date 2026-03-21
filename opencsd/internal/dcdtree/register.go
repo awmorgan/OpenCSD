@@ -13,7 +13,6 @@ type DecoderRegister struct {
 	decoderMngrs map[string]interfaces.DecoderMngr
 	typedMngrs   map[ocsd.TraceProtocol]interfaces.DecoderMngr
 	nextCustomID ocsd.TraceProtocol
-	lastTyped    interfaces.DecoderMngr
 }
 
 var defaultRegister = NewBuiltinDecoderRegister()
@@ -77,13 +76,9 @@ func (r *DecoderRegister) GetDecoderMngrByName(name string) (interfaces.DecoderM
 
 // GetDecoderMngrByType retrieves a decoder factory by its protocol enum value.
 func (r *DecoderRegister) GetDecoderMngrByType(dcdType ocsd.TraceProtocol) (interfaces.DecoderMngr, ocsd.Err) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.lastTyped != nil && r.lastTyped.ProtocolType() == dcdType {
-		return r.lastTyped, ocsd.OK
-	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	if mngr, exists := r.typedMngrs[dcdType]; exists {
-		r.lastTyped = mngr
 		return mngr, ocsd.OK
 	}
 	return nil, ocsd.ErrDcdregTypeUnknown
