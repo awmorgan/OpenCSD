@@ -92,12 +92,12 @@ type mappedRange struct {
 type filteredGenElemPrinter struct {
 	printer      *printers.GenericElementPrinter
 	allSourceIDs bool
-	ids          map[uint8]struct{}
+	validIDs     [256]bool
 }
 
 func (g *filteredGenElemPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
 	if !g.allSourceIDs {
-		if _, ok := g.ids[trcChanID]; !ok {
+		if !g.validIDs[trcChanID] {
 			return ocsd.RespCont
 		}
 	}
@@ -246,7 +246,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 	genAdapter := &filteredGenElemPrinter{
 		printer:      genPrinter,
 		allSourceIDs: opts.allSourceIDs,
-		ids:          makeIDSet(opts.idList),
+		validIDs:     makeIDSet(opts.idList),
 	}
 
 	printersAttached := 0
@@ -503,7 +503,7 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 		csID := ref.id
 		elem := ref.elem
 		if !opts.allSourceIDs {
-			if _, ok := idFilter[csID]; !ok {
+			if !idFilter[csID] {
 				continue
 			}
 		}
@@ -946,12 +946,12 @@ func getSourceNames(reader *snapshot.Reader) []string {
 	return result
 }
 
-func makeIDSet(ids []uint8) map[uint8]struct{} {
-	set := make(map[uint8]struct{}, len(ids))
+func makeIDSet(ids []uint8) [256]bool {
+	var validIDs [256]bool
 	for _, id := range ids {
-		set[id] = struct{}{}
+		validIDs[id] = true
 	}
-	return set
+	return validIDs
 }
 
 func parseMemSpace(space string) ocsd.MemSpaceAcc {
