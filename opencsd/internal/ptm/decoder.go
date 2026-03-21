@@ -100,7 +100,7 @@ func NewPktDecode(instIDNum int) *PktDecode {
 	return d
 }
 
-func (d *PktDecode) GetTraceID() uint8 {
+func (d *PktDecode) TraceID() uint8 {
 	return d.csID
 }
 

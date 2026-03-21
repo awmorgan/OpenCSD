@@ -176,7 +176,7 @@ func NewPktDecode(instIDNum int) *PktDecode {
 	return d
 }
 
-func (d *PktDecode) GetTraceID() uint8 {
+func (d *PktDecode) TraceID() uint8 {
 	if d.config != nil {
 		return d.config.TraceID()
 	}
@@ -1157,7 +1157,7 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, pElem *p0Elem) ocsd.Err {
 		if err == ocsd.ErrUnsupportedISA {
 			d.needAddr = true
 			d.needCtxt = true
-			d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevWarn, err, pElem.rootIndex, d.GetTraceID(), "Warning: unsupported instruction set processing atom packet."))
+			d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevWarn, err, pElem.rootIndex, d.TraceID(), "Warning: unsupported instruction set processing atom packet."))
 			return ocsd.OK
 		}
 		return d.handlePacketSeqErr(err, pElem.rootIndex, "Error processing atom packet.")
@@ -1303,9 +1303,9 @@ func (d *PktDecode) processException(pElem *p0Elem) ocsd.Err {
 				if err == ocsd.ErrUnsupportedISA {
 					d.needAddr = true
 					d.needCtxt = true
-					d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevWarn, err, excepPktIndex, d.GetTraceID(), "Warning: unsupported instruction set processing exception packet."))
+					d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevWarn, err, excepPktIndex, d.TraceID(), "Warning: unsupported instruction set processing exception packet."))
 				} else {
-					d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, err, excepPktIndex, d.GetTraceID(), "Error processing exception packet."))
+					d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, err, excepPktIndex, d.TraceID(), "Error processing exception packet."))
 				}
 				return err
 			}
@@ -1374,7 +1374,7 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) ocsd.Err {
 	bytesReq := uint32(4)
 	bytesRead, memData, errMem := d.AccessMemory(srcAddr, d.getCurrMemSpace(), bytesReq)
 	if errMem != ocsd.OK {
-		d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, errMem, pElem.rootIndex, d.GetTraceID(), "Mem access error processing source address packet."))
+		d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, errMem, pElem.rootIndex, d.TraceID(), "Mem access error processing source address packet."))
 		return errMem
 	}
 
@@ -1390,7 +1390,7 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) ocsd.Err {
 	d.instrInfo.InstrAddr = srcAddr
 	err = d.InstrDecodeCall(&d.instrInfo)
 	if err != ocsd.OK {
-		d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, err, pElem.rootIndex, d.GetTraceID(), "Instruction decode error processing source address packet."))
+		d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, err, pElem.rootIndex, d.TraceID(), "Instruction decode error processing source address packet."))
 		return err
 	}
 	d.instrInfo.InstrAddr += ocsd.VAddr(d.instrInfo.InstrSize)
@@ -1495,7 +1495,7 @@ func (d *PktDecode) processQElement(pElem *p0Elem) ocsd.Err {
 		}
 
 		if idx >= len(d.p0Stack) || d.p0Stack[idx].p0Type != p0Addr {
-			d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, pElem.rootIndex, d.GetTraceID(), "Address missing in Q packet."))
+			d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, pElem.rootIndex, d.TraceID(), "Address missing in Q packet."))
 			return ocsd.ErrBadPacketSeq
 		}
 		pAddressElem = d.p0Stack[idx]
@@ -1597,7 +1597,7 @@ func (d *PktDecode) processQElement(pElem *p0Elem) ocsd.Err {
 		d.setInstrInfoInAddrISA(qAddr, qIs)
 		d.needAddr = false
 	} else {
-		d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, err, pElem.rootIndex, d.GetTraceID(), "Error processing Q packet"))
+		d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, err, pElem.rootIndex, d.TraceID(), "Error processing Q packet"))
 	}
 
 	return err
@@ -1744,7 +1744,7 @@ func (d *PktDecode) doTraceInfoPacket() {
 }
 
 func (d *PktDecode) handlePacketSeqErr(err ocsd.Err, idx ocsd.TrcIndex, reason string) ocsd.Err {
-	d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, err, idx, d.GetTraceID(), reason))
+	d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, err, idx, d.TraceID(), reason))
 	d.resetDecoderState()
 	d.currState = noSync
 	d.unsyncEOTInfo = ocsd.UnsyncBadPacket
@@ -1753,7 +1753,7 @@ func (d *PktDecode) handlePacketSeqErr(err ocsd.Err, idx ocsd.TrcIndex, reason s
 }
 
 func (d *PktDecode) handleBadPacket(idx ocsd.TrcIndex, reason string) {
-	d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevWarn, ocsd.ErrBadDecodePkt, idx, d.GetTraceID(), reason))
+	d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevWarn, ocsd.ErrBadDecodePkt, idx, d.TraceID(), reason))
 	d.resetDecoderState()
 	d.currState = noSync
 	d.unsyncEOTInfo = ocsd.UnsyncBadPacket
@@ -1761,7 +1761,7 @@ func (d *PktDecode) handleBadPacket(idx ocsd.TrcIndex, reason string) {
 }
 
 func (d *PktDecode) handleBadImageError(idx ocsd.TrcIndex, reason string) ocsd.Err {
-	d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadDecodeImage, idx, d.GetTraceID(), reason))
+	d.LogError(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadDecodeImage, idx, d.TraceID(), reason))
 	d.resetDecoderState()
 	d.currState = noSync
 	d.unsyncEOTInfo = ocsd.UnsyncBadImage

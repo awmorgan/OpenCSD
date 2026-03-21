@@ -96,7 +96,7 @@ func (d *PktDecode) OnProtocolConfig() ocsd.Err {
 	return ocsd.OK
 }
 
-func (d *PktDecode) GetTraceID() uint8 {
+func (d *PktDecode) TraceID() uint8 {
 	return d.csID
 }
 

@@ -28,7 +28,7 @@ func (s *testDecodeStrategy) ProcessPacket() ocsd.DatapathResp {
 }
 
 func (s *testDecodeStrategy) OnEOT() ocsd.DatapathResp { return ocsd.RespWarnCont }
-func (s *testDecodeStrategy) GetTraceID() uint8        { return 42 }
+func (s *testDecodeStrategy) TraceID() uint8        { return 42 }
 
 func (m *myTrcGenElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
 	m.lastIndex = indexSOP

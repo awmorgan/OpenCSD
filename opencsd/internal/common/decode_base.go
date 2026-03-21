@@ -44,7 +44,7 @@ type PktDecodeEOTHook interface{ OnEOT() ocsd.DatapathResp }
 type PktDecodeResetHook interface{ OnReset() ocsd.DatapathResp }
 type PktDecodeFlushHook interface{ OnFlush() ocsd.DatapathResp }
 type PktDecodeProtocolConfigHook interface{ OnProtocolConfig() ocsd.Err }
-type PktDecodeTraceIDProvider interface{ GetTraceID() uint8 }
+type PktDecodeTraceIDProvider interface{ TraceID() uint8 }
 
 // PktProcStrategy defines the core strategy for packet processing.
 type PktProcStrategy[P any, Pt any, Pc any] interface {
@@ -106,14 +106,14 @@ func (p *PktDecodeI) decodeNotReadyReason() string {
 
 func (p *PktDecodeI) OutputTraceElement(elem *ocsd.TraceElement) ocsd.DatapathResp {
 	if p.TraceElemOut.HasAttachedAndEnabled() && p.traceIDProvider != nil {
-		return p.TraceElemOut.First().TraceElemIn(p.IndexCurrPkt, p.traceIDProvider.GetTraceID(), elem)
+		return p.TraceElemOut.First().TraceElemIn(p.IndexCurrPkt, p.traceIDProvider.TraceID(), elem)
 	}
 	return ocsd.RespFatalNotInit
 }
 
 func (p *PktDecodeI) OutputTraceElementIdx(idx ocsd.TrcIndex, elem *ocsd.TraceElement) ocsd.DatapathResp {
 	if p.TraceElemOut.HasAttachedAndEnabled() && p.traceIDProvider != nil {
-		return p.TraceElemOut.First().TraceElemIn(idx, p.traceIDProvider.GetTraceID(), elem)
+		return p.TraceElemOut.First().TraceElemIn(idx, p.traceIDProvider.TraceID(), elem)
 	}
 	return ocsd.RespFatalNotInit
 }
@@ -130,7 +130,7 @@ func (p *PktDecodeI) InstrDecodeCall(instrInfo *ocsd.InstrInfo) ocsd.Err {
 func (p *PktDecodeI) AccessMemory(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
 	if p.usesMemAccess {
 		if p.MemAccess.HasAttachedAndEnabled() && p.traceIDProvider != nil {
-			return p.MemAccess.First().ReadTargetMemory(address, p.traceIDProvider.GetTraceID(), memSpace, reqBytes)
+			return p.MemAccess.First().ReadTargetMemory(address, p.traceIDProvider.TraceID(), memSpace, reqBytes)
 		}
 	}
 	return 0, nil, ocsd.ErrDcdInterfaceUnused
@@ -141,7 +141,7 @@ func (p *PktDecodeI) InvalidateMemAccCache() ocsd.Err {
 		return ocsd.ErrDcdInterfaceUnused
 	}
 	if p.MemAccess.HasAttachedAndEnabled() && p.traceIDProvider != nil {
-		p.MemAccess.First().InvalidateMemAccCache(p.traceIDProvider.GetTraceID())
+		p.MemAccess.First().InvalidateMemAccCache(p.traceIDProvider.TraceID())
 	}
 	return ocsd.OK
 }
