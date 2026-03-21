@@ -281,3 +281,28 @@ func TestDecodeTreePrefersTypedManagerPath(t *testing.T) {
 		t.Fatal("expected DecodeTree to prefer the typed packet-processor path")
 	}
 }
+
+func TestDecodeTreeErrorWrappersExposeSentinels(t *testing.T) {
+	reg := NewDecoderRegister()
+	if err := reg.Register("STM", &fakeManager{protocol: ocsd.ProtocolSTM}); err != nil {
+		t.Fatalf("register manager failed: %v", err)
+	}
+
+	tree := NewDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign, reg)
+	if tree == nil {
+		t.Fatal("NewDecodeTree returned nil")
+	}
+	defer tree.Destroy()
+
+	if err := tree.CreateFullDecoderError("STM", testConfig{id: 0x80}); err == nil {
+		t.Fatal("expected CreateFullDecoderError to fail for out-of-range route id")
+	} else if !errors.Is(err, ErrCreateFullDecoder) {
+		t.Fatalf("expected ErrCreateFullDecoder sentinel, got %v", err)
+	}
+
+	if err := tree.CreatePacketProcessorError("UNKNOWN_DECODER", testConfig{id: 0x10}); err == nil {
+		t.Fatal("expected CreatePacketProcessorError to fail for unknown decoder")
+	} else if !errors.Is(err, ErrCreatePacketProcessor) {
+		t.Fatalf("expected ErrCreatePacketProcessor sentinel, got %v", err)
+	}
+}

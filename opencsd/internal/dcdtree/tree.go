@@ -1,6 +1,7 @@
 package dcdtree
 
 import (
+	"errors"
 	"fmt"
 	"opencsd/internal/common"
 	"opencsd/internal/demux"
@@ -9,6 +10,13 @@ import (
 	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
 	"slices"
+)
+
+var (
+	// ErrCreateFullDecoder indicates full decoder creation failed.
+	ErrCreateFullDecoder = errors.New("create full decoder failed")
+	// ErrCreatePacketProcessor indicates packet processor creation failed.
+	ErrCreatePacketProcessor = errors.New("create packet processor failed")
 )
 
 // DecodeTree manages the decoding of trace data from a single trace sink.
@@ -101,7 +109,7 @@ func (dt *DecodeTree) CreateFullDecoderError(decoderName string, config any) err
 	if err == ocsd.OK {
 		return nil
 	}
-	return fmt.Errorf("create full decoder %q failed: ocsd err %d", decoderName, uint32(err))
+	return fmt.Errorf("%w: %q (ocsd err %d)", ErrCreateFullDecoder, decoderName, uint32(err))
 }
 
 // CreatePacketProcessor creates a packet processor within the tree for a generic trace config.
@@ -115,7 +123,7 @@ func (dt *DecodeTree) CreatePacketProcessorError(decoderName string, config any)
 	if err == ocsd.OK {
 		return nil
 	}
-	return fmt.Errorf("create packet processor %q failed: ocsd err %d", decoderName, uint32(err))
+	return fmt.Errorf("%w: %q (ocsd err %d)", ErrCreatePacketProcessor, decoderName, uint32(err))
 }
 
 func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder bool) ocsd.Err {
