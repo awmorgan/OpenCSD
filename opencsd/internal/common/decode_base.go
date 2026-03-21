@@ -1,7 +1,6 @@
 package common
 
 import (
-	
 	"opencsd/internal/ocsd"
 )
 
@@ -47,7 +46,6 @@ type PktDecodeI struct {
 	ConfigInitOK  bool
 	usesMemAccess bool
 	usesIDecode   bool
-
 }
 
 func (p *PktDecodeI) TraceElemOutAttachPt() *AttachPt[ocsd.TrcGenElemIn] {
@@ -145,12 +143,12 @@ type PktProcI struct {
 // PktProcBase represents TrcPktProcBase<P, Pt, Pc>.
 type PktProcBase[P any, Pt any, Pc any] struct {
 	PktProcI
-	Config             *Pc
-	PktOutI            AttachPt[PktDataIn[P]]
-	PktRawMonI         AttachPt[PktRawDataMon[P]]
-	PktIndexerI        AttachPt[TrcPktIndexer[Pt]]
-	Stats              ocsd.DecodeStats
-	statsInit          bool
+	Config      *Pc
+	PktOutI     AttachPt[PktDataIn[P]]
+	PktRawMonI  AttachPt[PktRawDataMon[P]]
+	PktIndexerI AttachPt[TrcPktIndexer[Pt]]
+	Stats       ocsd.DecodeStats
+	statsInit   bool
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) InitPktProcBase(name string) {

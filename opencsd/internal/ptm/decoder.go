@@ -102,7 +102,6 @@ func NewPktDecode(instIDNum int) *PktDecode {
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) ocsd.DatapathResp {
 	resp := ocsd.RespCont
 
-
 	if !d.ConfigInitOK {
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No decoder configuration information"))
 		return ocsd.RespFatalNotInit
@@ -210,7 +209,6 @@ func (d *PktDecode) SetProtocolConfig(config *Config) ocsd.Err {
 
 func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-
 
 	for ocsd.DataRespIsCont(resp) && (d.processStateIsCont() || d.memNaccPending || d.atoms.numAtoms() > 0) {
 		if d.processStateIsCont() {
@@ -500,7 +498,6 @@ func (d *PktDecode) processWPUpdate() ocsd.DatapathResp {
 
 func (d *PktDecode) processAtom() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-
 
 	for d.atoms.numAtoms() > 0 && d.currPeState.valid && ocsd.DataRespIsCont(resp) {
 		resp = d.processAtomRange(d.atoms.getCurrAtomVal(), "atom", traceWaypoint, 0)
