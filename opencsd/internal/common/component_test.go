@@ -90,7 +90,7 @@ func TestAttachPt(t *testing.T) {
 
 	// Test notifier
 	notifier := &mockNotifier{}
-	pt.SetNotifier(notifier)
+	pt.AttachNotifier(notifier)
 
 	pt.DetachAll()
 	if notifier.called && notifier.numAttached != 0 {
@@ -125,7 +125,7 @@ func TestAttachPt(t *testing.T) {
 	}
 
 	// Test disable
-	pt.SetEnabled(false)
+	pt.Enable(false)
 	if pt.IsActive() {
 		t.Errorf("expected IsActive to be false")
 	}

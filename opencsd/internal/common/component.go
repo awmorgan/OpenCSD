@@ -101,8 +101,8 @@ func (a *AttachPt[T]) First() T {
 	return a.comp
 }
 
-// SetNotifier sets the notification interface.
-func (a *AttachPt[T]) SetNotifier(notifier ComponentAttachNotifier) {
+// AttachNotifier sets the notification interface.
+func (a *AttachPt[T]) AttachNotifier(notifier ComponentAttachNotifier) {
 	a.notifier = notifier
 }
 
@@ -111,8 +111,8 @@ func (a *AttachPt[T]) Enabled() bool {
 	return a.enabled
 }
 
-// SetEnabled sets the enabled state.
-func (a *AttachPt[T]) SetEnabled(enable bool) {
+// Enable sets the enabled state.
+func (a *AttachPt[T]) Enable(enable bool) {
 	a.enabled = enable
 }
 
@@ -145,7 +145,7 @@ func (tc *TraceComponent) ConfigureTraceComponent(name string) {
 	tc.errLogHandle = ocsd.HandleErrLog(ocsd.InvalidHandle)
 	tc.errVerbosity = ocsd.ErrSevNone
 	tc.errorLogger.enabled = true
-	tc.errorLogger.SetNotifier(tc)
+	tc.errorLogger.AttachNotifier(tc)
 }
 
 // ComponentName returns the component's name.
