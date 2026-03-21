@@ -65,9 +65,9 @@ func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32, registry *
 	return dt
 }
 
-// NewDefaultDecodeTree creates a new Trace Decode Tree using the package default registry.
+// NewDefaultDecodeTree creates a new Trace Decode Tree using a fresh built-in registry.
 func NewDefaultDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) *DecodeTree {
-	return NewDecodeTree(srcType, formatterCfgFlags, DefaultDecoderRegister())
+	return NewDecodeTree(srcType, formatterCfgFlags, NewBuiltinDecoderRegister())
 }
 
 // CreateDecodeTree creates a new Trace Decode Tree using the package default registry.
