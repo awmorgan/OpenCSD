@@ -114,7 +114,7 @@ func NewPktProc(instIDNum int) *PktProc {
 	p.ConfigurePktProcBase(fmt.Sprintf("PKTP_STM_%d", instIDNum))
 
 	p.SetSupportedOpModes(ocsd.OpflgPktprocCommon)
-	p.initProcessorState()
+	p.resetProcessorState()
 	p.buildOpTables()
 	return p
 }
@@ -249,7 +249,7 @@ func (p *PktProc) OnEOT() ocsd.DatapathResp {
 }
 
 func (p *PktProc) OnReset() ocsd.DatapathResp {
-	p.initProcessorState()
+	p.resetProcessorState()
 	return ocsd.RespCont
 }
 
@@ -269,7 +269,7 @@ func (p *PktProc) IsBadPacket() bool {
 func (p *PktProc) outputPacket() ocsd.DatapathResp {
 	resp := p.OutputOnAllInterfaces(p.packetIndex, &p.currPacket, p.currPacket.Type, p.packetData)
 	p.packetData = p.packetData[:0]
-	p.initNextPacket()
+	p.resetNextPacket()
 	if p.nibble2ndValid {
 		p.savePacketByte(p.nibble2nd << 4)
 	}
@@ -303,17 +303,17 @@ func (p *PktProc) setReservedHdrError(msg string) error {
 	return common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, p.packetIndex, trcID, msg)
 }
 
-func (p *PktProc) initProcessorState() {
+func (p *PktProc) resetProcessorState() {
 	p.setProcUnsynced()
 	p.clearSyncCount()
 	p.currPacket.ResetStartState()
 	p.nibble2ndValid = false
-	p.initNextPacket()
+	p.resetNextPacket()
 	p.bWaitSyncSaveSuppressed = false
 	p.packetData = nil
 }
 
-func (p *PktProc) initNextPacket() {
+func (p *PktProc) resetNextPacket() {
 	p.bNeedsTS = false
 	p.bIsMarker = false
 	p.numNibbles = 0

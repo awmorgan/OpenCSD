@@ -54,7 +54,7 @@ func NewPktProc(instID int) *PktProc {
 	p.ConfigurePktProcBase("PKTP_ITM") // name
 
 	p.SetSupportedOpModes(ocsd.OpflgPktprocCommon)
-	p.initProcessorState()
+	p.resetProcessorState()
 	return p
 }
 
@@ -109,15 +109,15 @@ func (p *PktProc) SetProtocolConfig(config *Config) ocsd.Err {
 	return ocsd.ErrInvalidParamVal
 }
 
-func (p *PktProc) initProcessorState() {
+func (p *PktProc) resetProcessorState() {
 	p.setProcUnsynced()
-	p.initNextPacket()
+	p.resetNextPacket()
 	p.sentNotSyncPacket = false
 	p.syncStart = false
 	p.dumpUnsyncedBytes = 0
 }
 
-func (p *PktProc) initNextPacket() {
+func (p *PktProc) resetNextPacket() {
 	p.packetData = p.packetData[:0] // clear
 	p.currPacket.Reset()
 	p.decodeState = decodeNone
@@ -227,7 +227,7 @@ func (p *PktProc) OnEOT() ocsd.DatapathResp {
 }
 
 func (p *PktProc) OnReset() ocsd.DatapathResp {
-	p.initProcessorState()
+	p.resetProcessorState()
 	return ocsd.RespCont
 }
 
@@ -242,7 +242,7 @@ func (p *PktProc) IsBadPacket() bool {
 func (p *PktProc) outputPacket() ocsd.DatapathResp {
 	resp := p.OutputOnAllInterfaces(p.packetIndex, &p.currPacket, p.currPacket.Type, p.packetData)
 	p.packetData = p.packetData[:0]
-	p.initNextPacket()
+	p.resetNextPacket()
 	if p.bStreamSync {
 		p.procState = procHdr
 	} else {
