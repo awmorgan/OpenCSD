@@ -3,7 +3,7 @@ package dcdtree
 import (
 	"errors"
 	"fmt"
-	
+
 	"opencsd/internal/ocsd"
 	"sort"
 	"sync"
@@ -24,10 +24,16 @@ type DecoderRegister struct {
 	nextCustomID ocsd.TraceProtocol
 }
 
-var defaultRegister = NewBuiltinDecoderRegister()
+var (
+	defaultRegisterOnce sync.Once
+	defaultRegister     *DecoderRegister
+)
 
 // DefaultDecoderRegister returns the package-level registry populated with built-in decoders.
 func DefaultDecoderRegister() *DecoderRegister {
+	defaultRegisterOnce.Do(func() {
+		defaultRegister = NewBuiltinDecoderRegister()
+	})
 	return defaultRegister
 }
 
