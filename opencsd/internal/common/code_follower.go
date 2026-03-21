@@ -7,34 +7,34 @@ import "opencsd/internal/ocsd"
 // memAccess and idDecode are pointers to the decoder's live attachment points,
 // so subsequent Attach calls on the decoder are immediately visible here.
 type CodeFollower struct {
-	instrInfo ocsd.InstrInfo
-	memAccess *AttachPt[TargetMemAccess]
-	idDecode  *AttachPt[InstrDecode]
-	startAddr ocsd.VAddr
-	endAddr   ocsd.VAddr
-	nextAddr  ocsd.VAddr
+	instrInfo    ocsd.InstrInfo
+	memAccess    *AttachPt[TargetMemAccess]
+	idDecode     *AttachPt[InstrDecode]
+	startAddr    ocsd.VAddr
+	endAddr      ocsd.VAddr
+	nextAddr     ocsd.VAddr
 	noAccessAddr ocsd.VAddr
-	memSpace  ocsd.MemSpaceAcc
-	traceID   uint8
-	arch      ocsd.ArchProfile
-	isa       ocsd.ISA
-	hasNext   bool
-	hasNaccErr bool
-	instructs uint32
-	valid     bool
+	memSpace     ocsd.MemSpaceAcc
+	traceID      uint8
+	arch         ocsd.ArchProfile
+	isa          ocsd.ISA
+	hasNext      bool
+	hasNaccErr   bool
+	instructs    uint32
+	valid        bool
 }
 
 // NewCodeFollower creates a new CodeFollower.
 func NewCodeFollower() *CodeFollower {
 	cf := &CodeFollower{
-		startAddr: ocsd.VAddr(ocsd.VAMask),
-		endAddr:   ocsd.VAddr(ocsd.VAMask),
-		nextAddr:  ocsd.VAddr(ocsd.VAMask),
+		startAddr:    ocsd.VAddr(ocsd.VAMask),
+		endAddr:      ocsd.VAddr(ocsd.VAMask),
+		nextAddr:     ocsd.VAddr(ocsd.VAMask),
 		noAccessAddr: ocsd.VAddr(ocsd.VAMask),
-		hasNext:   false,
-		hasNaccErr: false,
-		instructs: 0,
-		valid:     false,
+		hasNext:      false,
+		hasNaccErr:   false,
+		instructs:    0,
+		valid:        false,
 	}
 	return cf
 }
