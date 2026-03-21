@@ -37,7 +37,7 @@ func (m *mockNotifier) AttachNotify(numAttached int) {
 func TestAttachPt(t *testing.T) {
 	// Test basic attach
 	pt := NewAttachPt[TraceErrorLog]()
-	if pt.HasAttached() {
+	if pt.IsAttached() {
 		t.Errorf("expected no attachment initially")
 	}
 
@@ -46,7 +46,7 @@ func TestAttachPt(t *testing.T) {
 	if err != ocsd.OK {
 		t.Errorf("expected OK, got %v", err)
 	}
-	if !pt.HasAttached() {
+	if !pt.IsAttached() {
 		t.Errorf("expected attachment")
 	}
 	if !pt.IsActive() {
@@ -65,7 +65,7 @@ func TestAttachPt(t *testing.T) {
 	if err != ocsd.OK {
 		t.Errorf("expected OK, got %v", err)
 	}
-	if pt.HasAttached() {
+	if pt.IsAttached() {
 		t.Errorf("expected no attachment after detach")
 	}
 
@@ -117,7 +117,7 @@ func TestAttachPt(t *testing.T) {
 	if err != ocsd.OK {
 		t.Errorf("expected OK replacing with nil")
 	}
-	if pt.HasAttached() {
+	if pt.IsAttached() {
 		t.Errorf("expected no attachment after ReplaceFirst(nil)")
 	}
 	if pt.NumAttached() != 0 {
