@@ -94,6 +94,7 @@ func (dt *DecodeTree) CreatePacketProcessor(decoderName string, config any) ocsd
 }
 
 // CreateDecoder preserves the original flag-based construction API.
+// Deprecated: use CreateFullDecoder or CreatePacketProcessor.
 func (dt *DecodeTree) CreateDecoder(decoderName string, createFlags int, config any) ocsd.Err {
 	modeFlags := createFlags & int(ocsd.CreateFlgFullDecoder|ocsd.CreateFlgPacketProc)
 	if modeFlags == 0 || modeFlags == int(ocsd.CreateFlgFullDecoder|ocsd.CreateFlgPacketProc) {
