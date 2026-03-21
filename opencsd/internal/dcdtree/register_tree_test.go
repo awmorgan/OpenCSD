@@ -83,9 +83,9 @@ func TestDecoderRegisterTypeMapKeepsFirst(t *testing.T) {
 		t.Fatalf("register second failed: %v", err)
 	}
 
-	m, err := r.DecoderManagerByTypeStatus(ocsd.ProtocolSTM)
-	if err != ocsd.OK {
-		t.Fatalf("DecoderManagerByTypeStatus failed: %v", err)
+	m, err := r.DecoderManagerByType(ocsd.ProtocolSTM)
+	if err != nil {
+		t.Fatalf("DecoderManagerByType failed: %v", err)
 	}
 	if m != first {
 		t.Fatalf("expected first manager to stay registered for type, got %p want %p", m, first)
