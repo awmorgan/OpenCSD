@@ -152,23 +152,16 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 		dt.frameDeformatter.SetIDStream(routeID, pktIn)
 	}
 
-	// Try auto-wire interfaces
-	if comp, ok := handle.(interface {
-		GetTraceElemOutAttachPt() *common.AttachPt[interfaces.TrcGenElemIn]
-	}); ok && dt.iGenElemOut != nil {
-		comp.GetTraceElemOutAttachPt().ReplaceFirst(dt.iGenElemOut)
+	if elem.TraceElemAttach != nil && dt.iGenElemOut != nil {
+		elem.TraceElemAttach.ReplaceFirst(dt.iGenElemOut)
 	}
 
-	if comp, ok := handle.(interface {
-		GetInstrDecodeAttachPt() *common.AttachPt[common.InstrDecode]
-	}); ok && dt.iInstrDecode != nil {
-		comp.GetInstrDecodeAttachPt().ReplaceFirst(dt.iInstrDecode)
+	if elem.InstrDecAttach != nil && dt.iInstrDecode != nil {
+		elem.InstrDecAttach.ReplaceFirst(dt.iInstrDecode)
 	}
 
-	if comp, ok := handle.(interface {
-		GetMemAccAttachPt() *common.AttachPt[common.TargetMemAccess]
-	}); ok && dt.iMemAccess != nil {
-		comp.GetMemAccAttachPt().ReplaceFirst(dt.iMemAccess)
+	if elem.MemAccAttach != nil && dt.iMemAccess != nil {
+		elem.MemAccAttach.ReplaceFirst(dt.iMemAccess)
 	}
 
 	return ocsd.OK
@@ -191,10 +184,8 @@ func (dt *DecodeTree) RemoveDecoder(csID uint8) {
 func (dt *DecodeTree) SetGenTraceElemOutI(outI interfaces.TrcGenElemIn) {
 	dt.iGenElemOut = outI
 	for _, elem := range dt.decodeElements {
-		if comp, ok := elem.DecoderHandle.(interface {
-			GetTraceElemOutAttachPt() *common.AttachPt[interfaces.TrcGenElemIn]
-		}); ok {
-			comp.GetTraceElemOutAttachPt().ReplaceFirst(outI)
+		if elem.TraceElemAttach != nil {
+			elem.TraceElemAttach.ReplaceFirst(outI)
 		}
 	}
 }
@@ -203,10 +194,8 @@ func (dt *DecodeTree) SetGenTraceElemOutI(outI interfaces.TrcGenElemIn) {
 func (dt *DecodeTree) SetInstrDecoder(instrDec common.InstrDecode) {
 	dt.iInstrDecode = instrDec
 	for _, elem := range dt.decodeElements {
-		if comp, ok := elem.DecoderHandle.(interface {
-			GetInstrDecodeAttachPt() *common.AttachPt[common.InstrDecode]
-		}); ok {
-			comp.GetInstrDecodeAttachPt().ReplaceFirst(instrDec)
+		if elem.InstrDecAttach != nil {
+			elem.InstrDecAttach.ReplaceFirst(instrDec)
 		}
 	}
 }
@@ -215,10 +204,8 @@ func (dt *DecodeTree) SetInstrDecoder(instrDec common.InstrDecode) {
 func (dt *DecodeTree) SetMemAccessI(memI common.TargetMemAccess) {
 	dt.iMemAccess = memI
 	for _, elem := range dt.decodeElements {
-		if comp, ok := elem.DecoderHandle.(interface {
-			GetMemAccAttachPt() *common.AttachPt[common.TargetMemAccess]
-		}); ok {
-			comp.GetMemAccAttachPt().ReplaceFirst(memI)
+		if elem.MemAccAttach != nil {
+			elem.MemAccAttach.ReplaceFirst(memI)
 		}
 	}
 }
