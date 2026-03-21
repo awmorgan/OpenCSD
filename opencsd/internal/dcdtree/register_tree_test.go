@@ -76,16 +76,16 @@ func TestDecoderRegisterTypeMapKeepsFirst(t *testing.T) {
 	first := &fakeManager{protocol: ocsd.ProtocolSTM}
 	second := &fakeManager{protocol: ocsd.ProtocolSTM}
 
-	if err := r.RegisterDecoderTypeByName("FIRST", first); err != ocsd.OK {
+	if err := r.RegisterDecoderManagerByName("FIRST", first); err != ocsd.OK {
 		t.Fatalf("register first failed: %v", err)
 	}
-	if err := r.RegisterDecoderTypeByName("SECOND", second); err != ocsd.OK {
+	if err := r.RegisterDecoderManagerByName("SECOND", second); err != ocsd.OK {
 		t.Fatalf("register second failed: %v", err)
 	}
 
-	m, err := r.DecoderMngrByType(ocsd.ProtocolSTM)
+	m, err := r.DecoderManagerByTypeStatus(ocsd.ProtocolSTM)
 	if err != ocsd.OK {
-		t.Fatalf("DecoderMngrByType failed: %v", err)
+		t.Fatalf("DecoderManagerByTypeStatus failed: %v", err)
 	}
 	if m != first {
 		t.Fatalf("expected first manager to stay registered for type, got %p want %p", m, first)
@@ -131,9 +131,9 @@ func TestDecoderRegisterErrorReturningAPIs(t *testing.T) {
 
 func TestDecoderRegisterNamedIterationSorted(t *testing.T) {
 	r := NewDecoderRegister()
-	_ = r.RegisterDecoderTypeByName("ZED", &fakeManager{protocol: ocsd.ProtocolETMV3})
-	_ = r.RegisterDecoderTypeByName("ALPHA", &fakeManager{protocol: ocsd.ProtocolPTM})
-	_ = r.RegisterDecoderTypeByName("MID", &fakeManager{protocol: ocsd.ProtocolITM})
+	_ = r.RegisterDecoderManagerByName("ZED", &fakeManager{protocol: ocsd.ProtocolETMV3})
+	_ = r.RegisterDecoderManagerByName("ALPHA", &fakeManager{protocol: ocsd.ProtocolPTM})
+	_ = r.RegisterDecoderManagerByName("MID", &fakeManager{protocol: ocsd.ProtocolITM})
 
 	names := r.Names()
 	want := []string{"ALPHA", "MID", "ZED"}
@@ -167,7 +167,7 @@ func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 	reg := DefaultDecoderRegister()
 	name := "TEST_SINGLE_REMOVE_DECODER"
 	if !reg.IsRegisteredDecoder(name) {
-		if err := reg.RegisterDecoderTypeByName(name, &fakeManager{protocol: ocsd.ProtocolSTM}); err != ocsd.OK {
+		if err := reg.RegisterDecoderManagerByName(name, &fakeManager{protocol: ocsd.ProtocolSTM}); err != ocsd.OK {
 			t.Fatalf("register manager failed: %v", err)
 		}
 	}
@@ -218,7 +218,7 @@ func TestDecodeTreeCreateDecoderRejectsOutOfRangeRouteID(t *testing.T) {
 	reg := DefaultDecoderRegister()
 	name := "TEST_INVALID_ROUTE_ID"
 	if !reg.IsRegisteredDecoder(name) {
-		if err := reg.RegisterDecoderTypeByName(name, &fakeManager{protocol: ocsd.ProtocolSTM}); err != ocsd.OK {
+		if err := reg.RegisterDecoderManagerByName(name, &fakeManager{protocol: ocsd.ProtocolSTM}); err != ocsd.OK {
 			t.Fatalf("register manager failed: %v", err)
 		}
 	}
@@ -238,7 +238,7 @@ func TestDecodeTreeCreateDecoderRejectsOutOfRangeRouteID(t *testing.T) {
 func TestNewDecodeTreeUsesInjectedRegistry(t *testing.T) {
 	const name = "TEST_LOCAL_REGISTRY_ONLY"
 	reg := NewDecoderRegister()
-	if err := reg.RegisterDecoderTypeByName(name, &fakeManager{protocol: ocsd.ProtocolSTM}); err != ocsd.OK {
+	if err := reg.RegisterDecoderManagerByName(name, &fakeManager{protocol: ocsd.ProtocolSTM}); err != ocsd.OK {
 		t.Fatalf("register manager failed: %v", err)
 	}
 
@@ -261,7 +261,7 @@ func TestDecodeTreePrefersTypedManagerPath(t *testing.T) {
 	const name = "TEST_TYPED_MANAGER_PATH"
 	reg := NewDecoderRegister()
 	mgr := &fakeTypedManager{fakeManager: fakeManager{protocol: ocsd.ProtocolSTM}}
-	if err := reg.RegisterDecoderTypeByName(name, mgr); err != ocsd.OK {
+	if err := reg.RegisterDecoderManagerByName(name, mgr); err != ocsd.OK {
 		t.Fatalf("register manager failed: %v", err)
 	}
 
