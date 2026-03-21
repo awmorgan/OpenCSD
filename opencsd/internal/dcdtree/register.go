@@ -53,8 +53,7 @@ func NewBuiltinDecoderRegister() *DecoderRegister {
 	return reg
 }
 
-// RegisterDecoderManagerByName registers a decoder manager factory under a specific name.
-func (r *DecoderRegister) RegisterDecoderManagerByName(name string, mngr ocsd.DecoderManager) ocsd.Err {
+func (r *DecoderRegister) registerDecoderManagerByNameStatus(name string, mngr ocsd.DecoderManager) ocsd.Err {
 	if mngr == nil {
 		return ocsd.ErrInvalidParamVal
 	}
@@ -73,13 +72,23 @@ func (r *DecoderRegister) RegisterDecoderManagerByName(name string, mngr ocsd.De
 	return ocsd.OK
 }
 
-// Register registers a decoder manager and returns a Go error.
-func (r *DecoderRegister) Register(name string, mngr ocsd.DecoderManager) error {
-	err := r.RegisterDecoderManagerByName(name, mngr)
+// RegisterDecoderManagerByName registers a decoder manager factory under a specific name.
+func (r *DecoderRegister) RegisterDecoderManagerByName(name string, mngr ocsd.DecoderManager) error {
+	err := r.registerDecoderManagerByNameStatus(name, mngr)
 	if err == ocsd.OK {
 		return nil
 	}
 	return fmt.Errorf("%w: %q (ocsd err %d)", ErrDecoderRegistration, name, uint32(err))
+}
+
+// RegisterDecoderManagerByNameStatus registers a decoder manager and returns legacy status code.
+func (r *DecoderRegister) RegisterDecoderManagerByNameStatus(name string, mngr ocsd.DecoderManager) ocsd.Err {
+	return r.registerDecoderManagerByNameStatus(name, mngr)
+}
+
+// Register registers a decoder manager and returns a Go error.
+func (r *DecoderRegister) Register(name string, mngr ocsd.DecoderManager) error {
+	return r.RegisterDecoderManagerByName(name, mngr)
 }
 
 // DecoderManagerByNameStatus retrieves a decoder manager by name and returns status code.
