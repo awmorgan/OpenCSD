@@ -177,9 +177,14 @@ func (tc *TraceComponent) SetComponentName(name string) {
 	tc.name = name
 }
 
-// ErrorLogAttachPt returns the error logger attachment point.
-func (tc *TraceComponent) ErrorLogAttachPt() *AttachPt[TraceErrorLog] {
-	return &tc.errorLogger
+// AttachErrorLogger attaches an error logger implementation.
+func (tc *TraceComponent) AttachErrorLogger(logger TraceErrorLog) ocsd.Err {
+	return tc.errorLogger.Attach(logger)
+}
+
+// DetachErrorLogger detaches the currently attached error logger.
+func (tc *TraceComponent) DetachErrorLogger() ocsd.Err {
+	return tc.errorLogger.Detach()
 }
 
 // SetComponentOpMode sets the operational mode for the component.

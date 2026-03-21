@@ -176,7 +176,9 @@ func TestTraceComponent(t *testing.T) {
 
 	// Test logging
 	logger := &mockErrorLog{}
-	tc.ErrorLogAttachPt().Attach(logger)
+	if err := tc.AttachErrorLogger(logger); err != ocsd.OK {
+		t.Fatalf("AttachErrorLogger failed: %v", err)
+	}
 	tc.SetErrorLogLevel(ocsd.ErrSevInfo)
 
 	tc.LogMessage(ocsd.ErrSevWarn, "A warning")
