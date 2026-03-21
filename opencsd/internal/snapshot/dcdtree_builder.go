@@ -100,7 +100,7 @@ func mapDumpMemSpace(space string) ocsd.MemSpaceAcc {
 type DecodeTreeBuilder struct {
 	reader          *Reader
 	registry        *dcdtree.DecoderRegister
-	dcdTree         *dcdtree.DecodeTree
+	tree            *dcdtree.DecodeTree
 	packetProcOnly  bool
 	bufferFileName  string
 }
@@ -135,7 +135,7 @@ func NewCreateDcdTreeFromSnapShotWithRegistry(r *Reader, registry *dcdtree.Decod
 
 // DecodeTree returns the built decode tree.
 func (b *DecodeTreeBuilder) DecodeTree() *dcdtree.DecodeTree {
-	return b.dcdTree
+	return b.tree
 }
 
 // BufferFileName returns the full path of the trace binary buffer file to load.
@@ -181,14 +181,14 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 		formatterFlags = ocsd.DfrmtrHasFsyncs
 	}
 
-	b.dcdTree = dcdtree.NewDecodeTree(srcFormat, formatterFlags, b.registry)
-	if b.dcdTree == nil {
+	b.tree = dcdtree.NewDecodeTree(srcFormat, formatterFlags, b.registry)
+	if b.tree == nil {
 		err := fmt.Errorf("failed to create decode tree object")
 		b.reader.logError(err.Error())
 		return nil, err
 	}
 
-	if df := b.dcdTree.GetFrameDeformatter(); df != nil {
+	if df := b.tree.GetFrameDeformatter(); df != nil {
 		df.SetErrorLogger(&snapshotErrorLogger{reader: b.reader})
 	}
 
@@ -196,7 +196,7 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 	var mapper memacc.Mapper
 	if !packetProcOnly {
 		mapper = memacc.NewGlobalMapper()
-		b.dcdTree.SetMemAccessI(&mapperAdapter{mapper: mapper})
+		b.tree.SetMemAccessI(&mapperAdapter{mapper: mapper})
 	}
 
 	numDecodersCreated := 0
@@ -236,13 +236,13 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 	}
 
 	if numDecodersCreated == 0 {
-		b.dcdTree = nil
+		b.tree = nil
 		err := fmt.Errorf("no supported protocols found")
 		b.reader.logError(err.Error())
 		return nil, err
 	}
 
-	return b.dcdTree, nil
+	return b.tree, nil
 }
 
 // CreateDecodeTree builds the tree for a specific named source buffer (e.g., "ETB_0").
@@ -449,9 +449,9 @@ func (b *DecodeTreeBuilder) createITMDecoder(devSrc *ParsedDevice) error {
 
 func (b *DecodeTreeBuilder) createDecoder(decoderName string, cfg any) error {
 	if b.packetProcOnly {
-		return b.dcdTree.CreatePacketProcessorError(decoderName, cfg)
+		return b.tree.CreatePacketProcessorError(decoderName, cfg)
 	}
-	return b.dcdTree.CreateFullDecoderError(decoderName, cfg)
+	return b.tree.CreateFullDecoderError(decoderName, cfg)
 }
 
 // addCoreDumpMemory adds memory region accessors from a core device's dump definitions.

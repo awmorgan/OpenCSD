@@ -44,8 +44,8 @@ func TestCreatePEDecoderRoutesETMv4(t *testing.T) {
 	t.Parallel()
 
 	b := NewDecodeTreeBuilder(NewReader())
-	b.dcdTree = dcdtree.NewDefaultDecodeTree(ocsd.TrcSrcSingle, ocsd.DfrmtrFrameMemAlign)
-	if b.dcdTree == nil {
+	b.tree = dcdtree.NewDefaultDecodeTree(ocsd.TrcSrcSingle, ocsd.DfrmtrFrameMemAlign)
+	if b.tree == nil {
 		t.Fatal("CreateDecodeTree returned nil")
 	}
 
