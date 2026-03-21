@@ -24,10 +24,9 @@ type ComponentAttachNotifier interface {
 // AttachPt is a generic component attachment point.
 // T represents the interface type being attached.
 type AttachPt[T any] struct {
-	enabled     bool
-	hasAttached bool
-	notifier    ComponentAttachNotifier
-	comp        T
+	enabled  bool
+	notifier ComponentAttachNotifier
+	comp     T
 }
 
 // NewAttachPt creates a new attachment point.
@@ -39,11 +38,10 @@ func NewAttachPt[T any]() *AttachPt[T] {
 
 // Attach attaches an interface of type T to the attachment point.
 func (a *AttachPt[T]) Attach(comp T) ocsd.Err {
-	if a.hasAttached {
+	if a.IsAttached() {
 		return ocsd.ErrAttachTooMany
 	}
 	a.comp = comp
-	a.hasAttached = true
 	if a.notifier != nil {
 		a.notifier.AttachNotify(1)
 	}
@@ -52,12 +50,11 @@ func (a *AttachPt[T]) Attach(comp T) ocsd.Err {
 
 // Detach detaches the current component from the attachment point.
 func (a *AttachPt[T]) Detach() ocsd.Err {
-	if !a.hasAttached {
+	if !a.IsAttached() {
 		return ocsd.ErrAttachCompNotFound
 	}
 	var empty T
 	a.comp = empty
-	a.hasAttached = false
 	if a.notifier != nil {
 		a.notifier.AttachNotify(0)
 	}
@@ -66,7 +63,7 @@ func (a *AttachPt[T]) Detach() ocsd.Err {
 
 // Replace detaches any currently attached component and attaches the new one.
 func (a *AttachPt[T]) Replace(comp T) ocsd.Err {
-	if a.hasAttached {
+	if a.IsAttached() {
 		_ = a.Detach()
 	}
 	if isNilAttachment(comp) {
@@ -77,10 +74,9 @@ func (a *AttachPt[T]) Replace(comp T) ocsd.Err {
 
 // DetachAll detaches all components.
 func (a *AttachPt[T]) DetachAll() {
-	if a.hasAttached {
+	if a.IsAttached() {
 		var empty T
 		a.comp = empty
-		a.hasAttached = false
 	}
 	if a.notifier != nil {
 		a.notifier.AttachNotify(0)
@@ -89,7 +85,7 @@ func (a *AttachPt[T]) DetachAll() {
 
 // NumAttached returns the number of attached ocsd.
 func (a *AttachPt[T]) NumAttached() int {
-	if !a.hasAttached {
+	if !a.IsAttached() {
 		return 0
 	}
 	return 1
@@ -122,12 +118,12 @@ func (a *AttachPt[T]) SetEnabled(enable bool) {
 
 // IsAttached returns true if there is an attached interface.
 func (a *AttachPt[T]) IsAttached() bool {
-	return a.hasAttached
+	return !isNilAttachment(a.comp)
 }
 
 // IsActive returns true if there is an attachment and it is enabled.
 func (a *AttachPt[T]) IsActive() bool {
-	return a.hasAttached && a.enabled
+	return a.IsAttached() && a.enabled
 }
 
 // TraceComponent is the base struct for all decode components in the library.
