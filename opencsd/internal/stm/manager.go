@@ -59,18 +59,6 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, ocsd.
 // Normally we'd register this in lib_dcd_register, but since the port uses Go idiomatic registries,
 // we just provide the factory methods.
 
-func (m *DecoderManager) CreatePktProc(instID int, config any) any {
-	cfg, ok := config.(*Config)
-	if !ok {
-		return nil
-	}
-	proc, err := NewConfiguredPktProc(instID, cfg)
-	if err != ocsd.OK {
-		return nil
-	}
-	return proc
-}
-
 func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
 	cfg, ok := config.(*Config)
 	if !ok {
@@ -84,18 +72,6 @@ func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (interfaces.
 }
 
 func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
-	cfg, ok := config.(*Config)
-	if !ok {
-		return nil, nil, ocsd.ErrInvalidParamType
-	}
-	proc, dec, err := NewConfiguredPipeline(instID, cfg)
-	if err != ocsd.OK {
-		return nil, nil, err
-	}
-	return proc, dec, ocsd.OK
-}
-
-func (m *DecoderManager) CreateDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil, nil, ocsd.ErrInvalidParamType

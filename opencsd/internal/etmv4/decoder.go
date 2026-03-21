@@ -1965,18 +1965,6 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, ocs
 	return proc, decoder, ocsd.OK
 }
 
-func (m *DecoderManager) CreatePktProc(instID int, config any) any {
-	cfg, ok := config.(*Config)
-	if !ok {
-		return nil
-	}
-	proc, err := NewConfiguredProcessor(cfg)
-	if err != ocsd.OK {
-		return nil
-	}
-	return proc
-}
-
 func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
 	cfg, ok := config.(*Config)
 	if !ok {
@@ -1990,18 +1978,6 @@ func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (interfaces.
 }
 
 func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
-	cfg, ok := config.(*Config)
-	if !ok {
-		return nil, nil, ocsd.ErrInvalidParamVal
-	}
-	proc, decoder, err := NewConfiguredPipeline(instID, cfg)
-	if err != ocsd.OK {
-		return nil, nil, err
-	}
-	return proc, decoder, ocsd.OK
-}
-
-func (m *DecoderManager) CreateDecoder(instID int, config any) (interfaces.TrcDataIn, any, ocsd.Err) {
 	cfg, ok := config.(*Config)
 	if !ok {
 		return nil, nil, ocsd.ErrInvalidParamVal
