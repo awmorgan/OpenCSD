@@ -442,7 +442,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 				return
 			}
 			if proc.PktRawMonI != nil {
-				_ = proc.PktRawMonI.ReplaceFirst(&etmv4RawPacketPrinter{writer: &out, traceID: csID})
+				_ = proc.PktRawMonI.Replace(&etmv4RawPacketPrinter{writer: &out, traceID: csID})
 			}
 		})
 	}

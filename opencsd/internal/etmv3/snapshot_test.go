@@ -301,7 +301,7 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		if !ok || proc == nil {
 			return
 		}
-		_ = proc.PktRawMonI.ReplaceFirst(&etmv3RawPacketPrinter{writer: &out, traceID: csID})
+		_ = proc.PktRawMonI.Replace(&etmv3RawPacketPrinter{writer: &out, traceID: csID})
 	})
 
 	// Read and feed trace data.

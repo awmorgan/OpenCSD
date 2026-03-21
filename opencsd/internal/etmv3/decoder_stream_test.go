@@ -108,7 +108,7 @@ func TestDecoderMemNacc(t *testing.T) {
 	config := &Config{}
 	dec, out := setupDecFast(config)
 	mem := &mockMemAcc{failAfter: 1, hitAfter: -1} // fail on 2nd read, never find branch
-	dec.MemAccess.ReplaceFirst(mem)
+	dec.MemAccess.Replace(mem)
 	dec.InstrDecode.Attach(idec.NewDecoder())
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
@@ -251,7 +251,7 @@ func TestDecoderAtomUsage(t *testing.T) {
 	config := &Config{}
 	dec, out := setupDecFast(config)
 	mem := &mockMemAcc{failAfter: 10, hitAfter: 0, instrType: ocsd.InstrBr}
-	dec.MemAccess.ReplaceFirst(mem)
+	dec.MemAccess.Replace(mem)
 	dec.InstrDecode.Attach(idec.NewDecoder()) // conditional branch consumes atoms!
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)

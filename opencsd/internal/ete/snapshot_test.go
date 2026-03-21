@@ -266,7 +266,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 			return
 		}
 		if proc.PktRawMonI != nil {
-			_ = proc.PktRawMonI.ReplaceFirst(&eteRawPacketPrinter{writer: &out, traceID: csID})
+			_ = proc.PktRawMonI.Replace(&eteRawPacketPrinter{writer: &out, traceID: csID})
 		}
 	})
 

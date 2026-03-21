@@ -210,7 +210,7 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		if !ok || proc == nil {
 			return
 		}
-		_ = proc.PktRawMonI.ReplaceFirst(&ptmRawPacketPrinter{writer: &out, traceID: csID})
+		_ = proc.PktRawMonI.Replace(&ptmRawPacketPrinter{writer: &out, traceID: csID})
 	})
 
 	binFile := filepath.Join(snapshotDir, sourceTree.BufferInfo.DataFileName)

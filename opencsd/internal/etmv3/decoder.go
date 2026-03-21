@@ -864,7 +864,7 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, ocsd.
 	if ocsd.IsNotOK(err) {
 		return nil, nil, err
 	}
-	if err := proc.PktOutI.ReplaceFirst(dec); ocsd.IsNotOK(err) {
+	if err := proc.PktOutI.Replace(dec); ocsd.IsNotOK(err) {
 		return nil, nil, err
 	}
 	return proc, dec, ocsd.OK

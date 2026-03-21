@@ -76,11 +76,11 @@ func TestAttachPt(t *testing.T) {
 	}
 
 	// Test replace first
-	err = pt.ReplaceFirst(logger)
+	err = pt.Replace(logger)
 	if err != ocsd.OK {
 		t.Errorf("expected OK, got %v", err)
 	}
-	err = pt.ReplaceFirst(logger2)
+	err = pt.Replace(logger2)
 	if err != ocsd.OK {
 		t.Errorf("expected OK, got %v", err)
 	}
@@ -113,15 +113,15 @@ func TestAttachPt(t *testing.T) {
 		t.Errorf("expected NumAttached 1")
 	}
 
-	err = pt.ReplaceFirst(nil)
+	err = pt.Replace(nil)
 	if err != ocsd.OK {
 		t.Errorf("expected OK replacing with nil")
 	}
 	if pt.IsAttached() {
-		t.Errorf("expected no attachment after ReplaceFirst(nil)")
+		t.Errorf("expected no attachment after Replace(nil)")
 	}
 	if pt.NumAttached() != 0 {
-		t.Errorf("expected NumAttached 0 after ReplaceFirst(nil)")
+		t.Errorf("expected NumAttached 0 after Replace(nil)")
 	}
 
 	// Test disable

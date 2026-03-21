@@ -164,7 +164,7 @@ func TestProcessBranchAddr_CancelPendElem(t *testing.T) {
 
 	// First send an atom to create a pending InstrRange element
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBr}
-	dec.MemAccess.ReplaceFirst(mem)
+	dec.MemAccess.Replace(mem)
 	dec.InstrDecode.Attach(idec.NewDecoder())
 
 	phdrPkt := &Packet{}
@@ -303,7 +303,7 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, config)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBr}
-	dec.MemAccess.ReplaceFirst(mem)
+	dec.MemAccess.Replace(mem)
 	dec.InstrDecode.Attach(idec.NewDecoder())
 
 	out := &testTrcElemIn{}
@@ -402,7 +402,7 @@ func TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr(t *testing.T) {
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
 	// Attach IndirectBr mock directly (before any other InstrDecode is attached)
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBrIndirect}
-	dec.MemAccess.ReplaceFirst(mem)
+	dec.MemAccess.Replace(mem)
 	dec.InstrDecode.Attach(idec.NewDecoder())
 
 	out := &testTrcElemIn{}
@@ -453,7 +453,7 @@ func TestProcessPHdr_CCFmt3_WithAtoms(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, config)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBr}
-	dec.MemAccess.ReplaceFirst(mem)
+	dec.MemAccess.Replace(mem)
 	dec.InstrDecode.Attach(idec.NewDecoder())
 
 	out := &testTrcElemIn{}
@@ -575,7 +575,7 @@ func TestProcessPHdr_NeedAddr_SentUnknown_Skips(t *testing.T) {
 
 	dec, out := buildDecInDecodePkts(config)
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBrIndirect}
-	dec.MemAccess.ReplaceFirst(mem)
+	dec.MemAccess.Replace(mem)
 	dec.InstrDecode.Attach(idec.NewDecoder())
 
 	// First PHdr: bNeedAddr=true, bSentUnknown=false → emits AddrUnknown, bSentUnknown=true
@@ -658,7 +658,7 @@ func TestProcessPHdr_MemSpaceSecure(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, config)
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBr}
-	dec.MemAccess.ReplaceFirst(mem)
+	dec.MemAccess.Replace(mem)
 	dec.InstrDecode.Attach(idec.NewDecoder())
 
 	out := &testTrcElemIn{}
