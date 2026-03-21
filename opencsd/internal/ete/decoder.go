@@ -2,7 +2,6 @@ package ete
 
 import (
 	"opencsd/internal/etmv4"
-	
 	"opencsd/internal/ocsd"
 )
 
@@ -41,11 +40,11 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, ocsd.Err) {
 // NewConfiguredPipeline creates and wires a typed ETE processor/decoder pair.
 func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, ocsd.Err) {
 	proc, err := NewConfiguredProcessor(cfg)
-	if err != ocsd.OK {
+	if ocsd.IsNotOK(err) {
 		return nil, nil, err
 	}
 	decoder, err := NewConfiguredPktDecode(instID, cfg)
-	if err != ocsd.OK {
+	if ocsd.IsNotOK(err) {
 		return nil, nil, err
 	}
 	proc.SetPktOut(decoder)
@@ -58,7 +57,7 @@ func (m *DecoderManager) CreateTypedPktProc(instID int, config any) (ocsd.TrcDat
 		return nil, nil, ocsd.ErrInvalidParamVal
 	}
 	proc, err := NewConfiguredProcessor(cfg)
-	if err != ocsd.OK {
+	if ocsd.IsNotOK(err) {
 		return nil, nil, err
 	}
 	return proc, proc, ocsd.OK
@@ -70,7 +69,7 @@ func (m *DecoderManager) CreateTypedDecoder(instID int, config any) (ocsd.TrcDat
 		return nil, nil, ocsd.ErrInvalidParamVal
 	}
 	proc, decoder, err := NewConfiguredPipeline(instID, cfg)
-	if err != ocsd.OK {
+	if ocsd.IsNotOK(err) {
 		return nil, nil, err
 	}
 	return proc, decoder, ocsd.OK
