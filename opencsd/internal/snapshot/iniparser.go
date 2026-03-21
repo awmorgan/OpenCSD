@@ -72,8 +72,8 @@ func ParseIni(r io.Reader) *IniFile {
 	return ini
 }
 
-// GetSection returns the key-value map for a given section, or nil if not found
-func (ini *IniFile) GetSection(sectionName string) map[string]string {
+// Section returns the key-value map for a given section, or nil if not found
+func (ini *IniFile) Section(sectionName string) map[string]string {
 	return ini.Sections[sectionName]
 }
 

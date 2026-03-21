@@ -38,8 +38,8 @@ func NewParsedDevice() *ParsedDevice {
 	}
 }
 
-// GetRegValue is a helper to get register value case-insensitively
-func (p *ParsedDevice) GetRegValue(key string) (string, bool) {
+// RegValue is a helper to get register value case-insensitively
+func (p *ParsedDevice) RegValue(key string) (string, bool) {
 	keyLower := strings.ToLower(key)
 	if val, ok := p.RegDefs[keyLower]; ok {
 		return val, true

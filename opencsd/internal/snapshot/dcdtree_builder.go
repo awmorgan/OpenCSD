@@ -143,15 +143,6 @@ func (b *DecodeTreeBuilder) BufferFileName() string {
 	return b.bufferFileName
 }
 
-// GetDecodeTree returns the built properties.
-func (b *DecodeTreeBuilder) GetDecodeTree() *dcdtree.DecodeTree {
-	return b.DecodeTree()
-}
-
-// GetBufferFileName returns the full path of the trace binary buffer file to load.
-func (b *DecodeTreeBuilder) GetBufferFileName() string {
-	return b.BufferFileName()
-}
 
 // Build builds the tree for a specific named source buffer (e.g., "ETB_0").
 func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdtree.DecodeTree, error) {
@@ -297,16 +288,16 @@ func (b *DecodeTreeBuilder) createSTDecoder(devSrc *ParsedDevice) error {
 func (b *DecodeTreeBuilder) createETMv3Decoder(coreName string, devSrc *ParsedDevice) error {
 	cfg := &etmv3.Config{}
 
-	if val, ok := devSrc.GetRegValue("etmcr"); ok {
+	if val, ok := devSrc.RegValue("etmcr"); ok {
 		cfg.RegCtrl = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("etmtraceidr"); ok {
+	if val, ok := devSrc.RegValue("etmtraceidr"); ok {
 		cfg.RegTrcID = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("etmidr"); ok {
+	if val, ok := devSrc.RegValue("etmidr"); ok {
 		cfg.RegIDR = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("etmccer"); ok {
+	if val, ok := devSrc.RegValue("etmccer"); ok {
 		cfg.RegCCER = uint32(parseUint(val))
 	}
 
@@ -321,16 +312,16 @@ func (b *DecodeTreeBuilder) createETMv3Decoder(coreName string, devSrc *ParsedDe
 func (b *DecodeTreeBuilder) createPTMDecoder(coreName string, devSrc *ParsedDevice) error {
 	cfg := ptm.NewConfig()
 
-	if val, ok := devSrc.GetRegValue("etmcr"); ok {
+	if val, ok := devSrc.RegValue("etmcr"); ok {
 		cfg.RegCtrl = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("etmtraceidr"); ok {
+	if val, ok := devSrc.RegValue("etmtraceidr"); ok {
 		cfg.RegTrcID = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("etmidr"); ok {
+	if val, ok := devSrc.RegValue("etmidr"); ok {
 		cfg.RegIDR = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("etmccer"); ok {
+	if val, ok := devSrc.RegValue("etmccer"); ok {
 		cfg.RegCCER = uint32(parseUint(val))
 	}
 
@@ -345,27 +336,27 @@ func (b *DecodeTreeBuilder) createPTMDecoder(coreName string, devSrc *ParsedDevi
 func (b *DecodeTreeBuilder) createETEDecoder(coreName string, devSrc *ParsedDevice) error {
 	cfg := ete.NewConfig()
 
-	if val, ok := devSrc.GetRegValue("trcidr0"); ok {
+	if val, ok := devSrc.RegValue("trcidr0"); ok {
 		cfg.RegIdr0 = uint32(parseUint(val))
 	}
 	// TRCIDR1: use snapshot value if present; ete.NewConfig() already sets the correct ETE default.
-	if val, ok := devSrc.GetRegValue("trcidr1"); ok {
+	if val, ok := devSrc.RegValue("trcidr1"); ok {
 		cfg.RegIdr1 = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("trcidr2"); ok {
+	if val, ok := devSrc.RegValue("trcidr2"); ok {
 		cfg.RegIdr2 = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("trcidr8"); ok {
+	if val, ok := devSrc.RegValue("trcidr8"); ok {
 		cfg.RegIdr8 = uint32(parseUint(val))
 	}
 	// TRCDEVARCH: use snapshot value if present; ete.NewConfig() already sets the correct default.
-	if val, ok := devSrc.GetRegValue("trcdevarch"); ok {
+	if val, ok := devSrc.RegValue("trcdevarch"); ok {
 		cfg.RegDevArch = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("trcconfigr"); ok {
+	if val, ok := devSrc.RegValue("trcconfigr"); ok {
 		cfg.RegConfigr = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("trctraceidr"); ok {
+	if val, ok := devSrc.RegValue("trctraceidr"); ok {
 		cfg.RegTraceidr = uint32(parseUint(val))
 	}
 
@@ -380,40 +371,40 @@ func (b *DecodeTreeBuilder) createETEDecoder(coreName string, devSrc *ParsedDevi
 func (b *DecodeTreeBuilder) createETMv4Decoder(coreName string, devSrc *ParsedDevice) error {
 	cfg := &etmv4.Config{}
 
-	if val, ok := devSrc.GetRegValue("trcidr0"); ok {
+	if val, ok := devSrc.RegValue("trcidr0"); ok {
 		cfg.RegIdr0 = uint32(parseUint(val))
 	}
 	// TRCIDR1: use snapshot value if present, otherwise fall back to the C++ default 0x4100F403.
-	if val, ok := devSrc.GetRegValue("trcidr1"); ok {
+	if val, ok := devSrc.RegValue("trcidr1"); ok {
 		cfg.RegIdr1 = uint32(parseUint(val))
 	} else {
 		cfg.RegIdr1 = 0x4100F403
 	}
-	if val, ok := devSrc.GetRegValue("trcidr2"); ok {
+	if val, ok := devSrc.RegValue("trcidr2"); ok {
 		cfg.RegIdr2 = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("trcidr8"); ok {
+	if val, ok := devSrc.RegValue("trcidr8"); ok {
 		cfg.RegIdr8 = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("trcidr9"); ok {
+	if val, ok := devSrc.RegValue("trcidr9"); ok {
 		cfg.RegIdr9 = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("trcidr10"); ok {
+	if val, ok := devSrc.RegValue("trcidr10"); ok {
 		cfg.RegIdr10 = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("trcidr11"); ok {
+	if val, ok := devSrc.RegValue("trcidr11"); ok {
 		cfg.RegIdr11 = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("trcidr12"); ok {
+	if val, ok := devSrc.RegValue("trcidr12"); ok {
 		cfg.RegIdr12 = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("trcidr13"); ok {
+	if val, ok := devSrc.RegValue("trcidr13"); ok {
 		cfg.RegIdr13 = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("trcconfigr"); ok {
+	if val, ok := devSrc.RegValue("trcconfigr"); ok {
 		cfg.RegConfigr = uint32(parseUint(val))
 	}
-	if val, ok := devSrc.GetRegValue("trctraceidr"); ok {
+	if val, ok := devSrc.RegValue("trctraceidr"); ok {
 		cfg.RegTraceidr = uint32(parseUint(val))
 	}
 
@@ -427,7 +418,7 @@ func (b *DecodeTreeBuilder) createETMv4Decoder(coreName string, devSrc *ParsedDe
 
 func (b *DecodeTreeBuilder) createSTMDecoder(devSrc *ParsedDevice) error {
 	cfg := stm.NewConfig()
-	if val, ok := devSrc.GetRegValue("stmtcsr"); ok {
+	if val, ok := devSrc.RegValue("stmtcsr"); ok {
 		cfg.RegTCSR = uint32(parseUint(val))
 	}
 	if err := b.createDecoder(ocsd.BuiltinDcdSTM, cfg); err != nil {
@@ -438,7 +429,7 @@ func (b *DecodeTreeBuilder) createSTMDecoder(devSrc *ParsedDevice) error {
 
 func (b *DecodeTreeBuilder) createITMDecoder(devSrc *ParsedDevice) error {
 	cfg := itm.NewConfig()
-	if val, ok := devSrc.GetRegValue("itmtcr"); ok {
+	if val, ok := devSrc.RegValue("itmtcr"); ok {
 		cfg.RegTCR = uint32(parseUint(val))
 	}
 	if err := b.createDecoder(ocsd.BuiltinDcdITM, cfg); err != nil {

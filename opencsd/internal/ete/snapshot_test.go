@@ -187,25 +187,25 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 		}
 
 		cfg := ete.NewConfig()
-		if val, ok := dev.GetRegValue("trcidr0"); ok {
+		if val, ok := dev.RegValue("trcidr0"); ok {
 			cfg.RegIdr0 = uint32(parseHexOrDec(val))
 		}
-		if val, ok := dev.GetRegValue("trcidr1"); ok {
+		if val, ok := dev.RegValue("trcidr1"); ok {
 			cfg.RegIdr1 = uint32(parseHexOrDec(val))
 		}
-		if val, ok := dev.GetRegValue("trcidr2"); ok {
+		if val, ok := dev.RegValue("trcidr2"); ok {
 			cfg.RegIdr2 = uint32(parseHexOrDec(val))
 		}
-		if val, ok := dev.GetRegValue("trcidr8"); ok {
+		if val, ok := dev.RegValue("trcidr8"); ok {
 			cfg.RegIdr8 = uint32(parseHexOrDec(val))
 		}
-		if val, ok := dev.GetRegValue("trcdevarch"); ok {
+		if val, ok := dev.RegValue("trcdevarch"); ok {
 			cfg.RegDevArch = uint32(parseHexOrDec(val))
 		}
-		if val, ok := dev.GetRegValue("trcconfigr"); ok {
+		if val, ok := dev.RegValue("trcconfigr"); ok {
 			cfg.RegConfigr = uint32(parseHexOrDec(val))
 		}
-		if val, ok := dev.GetRegValue("trctraceidr"); ok {
+		if val, ok := dev.RegValue("trctraceidr"); ok {
 			cfg.RegTraceidr = uint32(parseHexOrDec(val))
 		}
 		traceID := cfg.TraceID()

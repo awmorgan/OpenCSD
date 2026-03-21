@@ -142,7 +142,7 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 		}
 
 		cfg := stm.NewConfig()
-		if val, ok := dev.GetRegValue("stmtcsr"); ok {
+		if val, ok := dev.RegValue("stmtcsr"); ok {
 			cfg.RegTCSR = uint32(parseHexOrDec(val))
 		}
 

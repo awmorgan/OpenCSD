@@ -151,16 +151,16 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		}
 
 		cfg := ptm.NewConfig()
-		if val, ok := dev.GetRegValue("etmcr"); ok {
+		if val, ok := dev.RegValue("etmcr"); ok {
 			cfg.RegCtrl = uint32(parseHexOrDec(val))
 		}
-		if val, ok := dev.GetRegValue("etmtraceidr"); ok {
+		if val, ok := dev.RegValue("etmtraceidr"); ok {
 			cfg.RegTrcID = uint32(parseHexOrDec(val))
 		}
-		if val, ok := dev.GetRegValue("etmidr"); ok {
+		if val, ok := dev.RegValue("etmidr"); ok {
 			cfg.RegIDR = uint32(parseHexOrDec(val))
 		}
-		if val, ok := dev.GetRegValue("etmccer"); ok {
+		if val, ok := dev.RegValue("etmccer"); ok {
 			cfg.RegCCER = uint32(parseHexOrDec(val))
 		}
 

@@ -25,13 +25,13 @@ metadata=trace.ini
 
 	iniFile := ParseIni(strings.NewReader(iniData))
 
-	if iniFile.GetSection("snapshot")["version"] != "1.0" {
-		t.Errorf("expected version 1.0, got %s", iniFile.GetSection("snapshot")["version"])
+	if iniFile.Section("snapshot")["version"] != "1.0" {
+		t.Errorf("expected version 1.0, got %s", iniFile.Section("snapshot")["version"])
 	}
-	if iniFile.GetSection("snapshot")["description"] != "Test Snapshot" {
+	if iniFile.Section("snapshot")["description"] != "Test Snapshot" {
 		t.Errorf("expected inline comment to be stripped from description")
 	}
-	if iniFile.GetSection("device_list")["cpu_0"] != "cpu_0.ini" {
+	if iniFile.Section("device_list")["cpu_0"] != "cpu_0.ini" {
 		t.Errorf("expected cpu_0.ini")
 	}
 }
@@ -86,7 +86,7 @@ length=0x1000
 	if dev.DeviceName != "cpu_0" {
 		t.Errorf("expected name cpu_0")
 	}
-	val, ok := dev.GetRegValue("trcconfigr")
+	val, ok := dev.RegValue("trcconfigr")
 	if !ok || val != "0x00000001" {
 		t.Errorf("expected TRCCONFIGR=0x00000001")
 	}
