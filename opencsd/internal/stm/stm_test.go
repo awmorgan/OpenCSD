@@ -48,16 +48,18 @@ func TestSTMEndToEndDecode(t *testing.T) {
 	config := NewConfig()
 	config.SetTraceID(0x10)
 
-	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config).(*PktProc)
-	dec := manager.CreatePktDecode(0, config).(*PktDecode)
+	proc, dec, err := NewConfiguredPipeline(0, config)
+	if err != ocsd.OK {
+		t.Fatalf("NewConfiguredPipeline failed: %v", err)
+	}
 
 	// Op mode test
 	proc.SetComponentOpMode(ocsd.OpflgPktprocUnsyncOnBadPkts)
 
-	proc.PktOutI.Attach(dec)
 	outReceiver := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(outReceiver)
+	if err := dec.TraceElemOut.Attach(outReceiver); err != ocsd.OK {
+		t.Fatalf("TraceElemOut.Attach failed: %v", err)
+	}
 
 	sb := &StmStreamBuilder{}
 
@@ -289,9 +291,14 @@ func TestSTMConfig(t *testing.T) {
 
 func TestSTMFlushResetAndBadPacketClassification(t *testing.T) {
 	config := NewConfig()
-	manager := NewDecoderManager()
-	proc := manager.CreatePktProc(0, config).(*PktProc)
-	dec := manager.CreatePktDecode(0, config).(*PktDecode)
+	proc, err := NewConfiguredPktProc(0, config)
+	if err != ocsd.OK {
+		t.Fatalf("NewConfiguredPktProc failed: %v", err)
+	}
+	dec, err := NewConfiguredPktDecode(0, config)
+	if err != ocsd.OK {
+		t.Fatalf("NewConfiguredPktDecode failed: %v", err)
+	}
 
 	_, resp, _ := proc.TraceDataIn(ocsd.OpFlush, 0, nil)
 	if ocsd.DataRespIsFatal(resp) {
@@ -317,4 +324,44 @@ func TestSTMFlushResetAndBadPacketClassification(t *testing.T) {
 	if !pkt.IsBadPacket() {
 		t.Errorf("Expected IsBadPacket to be true")
 	}
+}
+
+func TestSTMTypedConstructors(t *testing.T) {
+	t.Run("ConfiguredPktProc", func(t *testing.T) {
+		cfg := NewConfig()
+		cfg.SetTraceID(0x31)
+
+		proc, err := NewConfiguredPktProc(1, cfg)
+		if err != ocsd.OK {
+			t.Fatalf("NewConfiguredPktProc failed: %v", err)
+		}
+		if proc == nil || proc.Config != cfg {
+			t.Fatal("expected typed processor constructor to retain config")
+		}
+	})
+
+	t.Run("ConfiguredPktDecode", func(t *testing.T) {
+		cfg := NewConfig()
+		cfg.SetTraceID(0x32)
+
+		dec, err := NewConfiguredPktDecode(2, cfg)
+		if err != ocsd.OK {
+			t.Fatalf("NewConfiguredPktDecode failed: %v", err)
+		}
+		if dec == nil || dec.Config != cfg {
+			t.Fatal("expected typed decoder constructor to retain config")
+		}
+	})
+
+	t.Run("RejectNilConfig", func(t *testing.T) {
+		if proc, err := NewConfiguredPktProc(0, nil); err != ocsd.ErrInvalidParamVal || proc != nil {
+			t.Fatalf("expected nil-config proc constructor to fail, got proc=%v err=%v", proc, err)
+		}
+		if dec, err := NewConfiguredPktDecode(0, nil); err != ocsd.ErrInvalidParamVal || dec != nil {
+			t.Fatalf("expected nil-config decode constructor to fail, got dec=%v err=%v", dec, err)
+		}
+		if proc, dec, err := NewConfiguredPipeline(0, nil); err != ocsd.ErrInvalidParamVal || proc != nil || dec != nil {
+			t.Fatalf("expected nil-config pipeline constructor to fail, got proc=%v dec=%v err=%v", proc, dec, err)
+		}
+	})
 }
