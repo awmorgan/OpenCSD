@@ -149,9 +149,13 @@ func (p *PktDecodeI) InvalidateMemAccCache() ocsd.Err {
 // PktDecodeBase represents TrcPktDecodeBase<P, Pc>.
 type PktDecodeBase[P any, Pc any] struct {
 	PktDecodeI
-	Config       *Pc
-	CurrPacketIn *P
-	strategy     PktDecodeStrategy[P, Pc]
+	Config             *Pc
+	CurrPacketIn       *P
+	strategy           PktDecodeStrategy[P, Pc]
+	eotHook            PktDecodeEOTHook
+	resetHook          PktDecodeResetHook
+	flushHook          PktDecodeFlushHook
+	protocolConfigHook PktDecodeProtocolConfigHook
 }
 
 func (pb *PktDecodeBase[P, Pc]) InitPktDecodeBase(name string) {
@@ -165,10 +169,28 @@ func (pb *PktDecodeBase[P, Pc]) InitPktDecodeBase(name string) {
 
 func (pb *PktDecodeBase[P, Pc]) SetStrategy(strategy PktDecodeStrategy[P, Pc]) {
 	pb.strategy = strategy
+	pb.traceIDProvider = nil
+	pb.eotHook = nil
+	pb.resetHook = nil
+	pb.flushHook = nil
+	pb.protocolConfigHook = nil
+	if strategy == nil {
+		return
+	}
 	if traceIDProvider, ok := any(strategy).(PktDecodeTraceIDProvider); ok {
 		pb.traceIDProvider = traceIDProvider
-	} else {
-		pb.traceIDProvider = nil
+	}
+	if hook, ok := any(strategy).(PktDecodeEOTHook); ok {
+		pb.eotHook = hook
+	}
+	if hook, ok := any(strategy).(PktDecodeResetHook); ok {
+		pb.resetHook = hook
+	}
+	if hook, ok := any(strategy).(PktDecodeFlushHook); ok {
+		pb.flushHook = hook
+	}
+	if hook, ok := any(strategy).(PktDecodeProtocolConfigHook); ok {
+		pb.protocolConfigHook = hook
 	}
 }
 
@@ -192,16 +214,16 @@ func (pb *PktDecodeBase[P, Pc]) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.T
 			}
 		}
 	case ocsd.OpEOT:
-		if hook, ok := any(pb.strategy).(PktDecodeEOTHook); ok {
-			resp = hook.OnEOT()
+		if pb.eotHook != nil {
+			resp = pb.eotHook.OnEOT()
 		}
 	case ocsd.OpFlush:
-		if hook, ok := any(pb.strategy).(PktDecodeFlushHook); ok {
-			resp = hook.OnFlush()
+		if pb.flushHook != nil {
+			resp = pb.flushHook.OnFlush()
 		}
 	case ocsd.OpReset:
-		if hook, ok := any(pb.strategy).(PktDecodeResetHook); ok {
-			resp = hook.OnReset()
+		if pb.resetHook != nil {
+			resp = pb.resetHook.OnReset()
 		}
 	default:
 		pb.LogError(NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
@@ -213,8 +235,8 @@ func (pb *PktDecodeBase[P, Pc]) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.T
 func (pb *PktDecodeBase[P, Pc]) SetProtocolConfig(config *Pc) ocsd.Err {
 	if config != nil {
 		pb.Config = config
-		if hook, ok := any(pb.strategy).(PktDecodeProtocolConfigHook); ok {
-			err := hook.OnProtocolConfig()
+		if pb.protocolConfigHook != nil {
+			err := pb.protocolConfigHook.OnProtocolConfig()
 			if err == ocsd.OK {
 				pb.configInitOK = true
 			}
@@ -234,13 +256,18 @@ type PktProcI struct {
 // PktProcBase represents TrcPktProcBase<P, Pt, Pc>.
 type PktProcBase[P any, Pt any, Pc any] struct {
 	PktProcI
-	Config      *Pc
-	PktOutI     AttachPt[PktDataIn[P]]
-	PktRawMonI  AttachPt[PktRawDataMon[P]]
-	PktIndexerI AttachPt[TrcPktIndexer[Pt]]
-	Stats       ocsd.DecodeStats
-	statsInit   bool
-	strategy    PktProcStrategy[P, Pt, Pc]
+	Config             *Pc
+	PktOutI            AttachPt[PktDataIn[P]]
+	PktRawMonI         AttachPt[PktRawDataMon[P]]
+	PktIndexerI        AttachPt[TrcPktIndexer[Pt]]
+	Stats              ocsd.DecodeStats
+	statsInit          bool
+	strategy           PktProcStrategy[P, Pt, Pc]
+	eotHook            PktProcEOTHook
+	resetHook          PktProcResetHook
+	flushHook          PktProcFlushHook
+	protocolConfigHook PktProcProtocolConfigHook
+	badPacketHook      PktProcBadPacketHook
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) InitPktProcBase(name string) {
@@ -253,6 +280,29 @@ func (pb *PktProcBase[P, Pt, Pc]) InitPktProcBase(name string) {
 
 func (pb *PktProcBase[P, Pt, Pc]) SetStrategy(strategy PktProcStrategy[P, Pt, Pc]) {
 	pb.strategy = strategy
+	pb.eotHook = nil
+	pb.resetHook = nil
+	pb.flushHook = nil
+	pb.protocolConfigHook = nil
+	pb.badPacketHook = nil
+	if strategy == nil {
+		return
+	}
+	if hook, ok := any(strategy).(PktProcEOTHook); ok {
+		pb.eotHook = hook
+	}
+	if hook, ok := any(strategy).(PktProcResetHook); ok {
+		pb.resetHook = hook
+	}
+	if hook, ok := any(strategy).(PktProcFlushHook); ok {
+		pb.flushHook = hook
+	}
+	if hook, ok := any(strategy).(PktProcProtocolConfigHook); ok {
+		pb.protocolConfigHook = hook
+	}
+	if hook, ok := any(strategy).(PktProcBadPacketHook); ok {
+		pb.badPacketHook = hook
+	}
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
@@ -289,8 +339,8 @@ func (pb *PktProcBase[P, Pt, Pc]) ResetFn(index ocsd.TrcIndex) ocsd.DatapathResp
 		resp = pb.PktOutI.First().PacketDataIn(ocsd.OpReset, index, nil)
 	}
 	if !ocsd.DataRespIsFatal(resp) {
-		if hook, ok := any(pb.strategy).(PktProcResetHook); ok {
-			resp = hook.OnReset()
+		if pb.resetHook != nil {
+			resp = pb.resetHook.OnReset()
 		}
 	}
 	if pb.PktRawMonI.HasAttachedAndEnabled() {
@@ -307,8 +357,8 @@ func (pb *PktProcBase[P, Pt, Pc]) Flush() ocsd.DatapathResp {
 
 	respLocal := ocsd.RespCont
 	if ocsd.DataRespIsCont(resp) {
-		if hook, ok := any(pb.strategy).(PktProcFlushHook); ok {
-			respLocal = hook.OnFlush()
+		if pb.flushHook != nil {
+			respLocal = pb.flushHook.OnFlush()
 		}
 	}
 
@@ -320,8 +370,8 @@ func (pb *PktProcBase[P, Pt, Pc]) Flush() ocsd.DatapathResp {
 
 func (pb *PktProcBase[P, Pt, Pc]) EOT() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if hook, ok := any(pb.strategy).(PktProcEOTHook); ok {
-		resp = hook.OnEOT()
+	if pb.eotHook != nil {
+		resp = pb.eotHook.OnEOT()
 	}
 
 	if pb.PktOutI.HasAttachedAndEnabled() && !ocsd.DataRespIsFatal(resp) {
@@ -338,7 +388,7 @@ func (pb *PktProcBase[P, Pt, Pc]) OutputDecodedPacket(indexSOP ocsd.TrcIndex, pk
 	resp := ocsd.RespCont
 
 	if (pb.ComponentOpMode() & ocsd.OpflgPktprocNofwdBadPkts) != 0 {
-		if hook, ok := any(pb.strategy).(PktProcBadPacketHook); ok && hook.IsBadPacket() {
+		if pb.badPacketHook != nil && pb.badPacketHook.IsBadPacket() {
 			return resp
 		}
 	}
@@ -354,7 +404,7 @@ func (pb *PktProcBase[P, Pt, Pc]) OutputRawPacketToMonitor(indexSOP ocsd.TrcInde
 		return
 	}
 	if (pb.ComponentOpMode() & ocsd.OpflgPktprocNomonBadPkts) != 0 {
-		if hook, ok := any(pb.strategy).(PktProcBadPacketHook); ok && hook.IsBadPacket() {
+		if pb.badPacketHook != nil && pb.badPacketHook.IsBadPacket() {
 			return
 		}
 	}
@@ -380,8 +430,8 @@ func (pb *PktProcBase[P, Pt, Pc]) OutputOnAllInterfaces(indexSOP ocsd.TrcIndex, 
 func (pb *PktProcBase[P, Pt, Pc]) SetProtocolConfig(config *Pc) ocsd.Err {
 	if config != nil {
 		pb.Config = config
-		if hook, ok := any(pb.strategy).(PktProcProtocolConfigHook); ok {
-			return hook.OnProtocolConfig()
+		if pb.protocolConfigHook != nil {
+			return pb.protocolConfigHook.OnProtocolConfig()
 		}
 		return ocsd.OK
 	}
