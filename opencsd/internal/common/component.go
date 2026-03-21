@@ -74,6 +74,11 @@ func (a *AttachPt[T]) Detach() ocsd.Err {
 
 // ReplaceFirst detaches any currently attached component and attaches the new one.
 func (a *AttachPt[T]) ReplaceFirst(comp T) ocsd.Err {
+	return a.Replace(comp)
+}
+
+// Replace detaches any currently attached component and attaches the new one.
+func (a *AttachPt[T]) Replace(comp T) ocsd.Err {
 	if a.hasAttached {
 		_ = a.Detach()
 	}
@@ -95,13 +100,6 @@ func (a *AttachPt[T]) DetachAll() {
 	}
 }
 
-// Next returns the next attached interface.
-// This single-attach-point implementation always returns the zero value.
-func (a *AttachPt[T]) Next() T {
-	var empty T
-	return empty
-}
-
 // NumAttached returns the number of attached ocsd.
 func (a *AttachPt[T]) NumAttached() int {
 	if !a.hasAttached {
@@ -111,7 +109,7 @@ func (a *AttachPt[T]) NumAttached() int {
 }
 
 // First returns the current attached interface.
-// Note: The caller should verify HasAttached() or HasAttachedAndEnabled() before using.
+// Note: The caller should verify IsAttached() or IsActive() before using.
 func (a *AttachPt[T]) First() T {
 	if !a.enabled {
 		var empty T
@@ -137,11 +135,21 @@ func (a *AttachPt[T]) SetEnabled(enable bool) {
 
 // HasAttached returns true if there is an attached interface.
 func (a *AttachPt[T]) HasAttached() bool {
+	return a.IsAttached()
+}
+
+// IsAttached returns true if there is an attached interface.
+func (a *AttachPt[T]) IsAttached() bool {
 	return a.hasAttached
 }
 
 // HasAttachedAndEnabled returns true if there is an attachment and it is enabled.
 func (a *AttachPt[T]) HasAttachedAndEnabled() bool {
+	return a.IsActive()
+}
+
+// IsActive returns true if there is an attachment and it is enabled.
+func (a *AttachPt[T]) IsActive() bool {
 	return a.hasAttached && a.enabled
 }
 
@@ -225,7 +233,7 @@ func (tc *TraceComponent) LogDefMessage(msg string) {
 
 // LogError logs an error if an error logger is attached.
 func (tc *TraceComponent) LogError(err *Error) {
-	if tc.errorLogger.HasAttachedAndEnabled() && tc.IsLoggingErrorLevel(err.Sev) {
+	if tc.errorLogger.IsActive() && tc.IsLoggingErrorLevel(err.Sev) {
 		// Create an error message directly or pass it to error logger.
 		// Since our TraceErrorLog interface takes severity and message, we pass those.
 		tc.errorLogger.First().LogError(err.Sev, err.Error())
@@ -234,7 +242,7 @@ func (tc *TraceComponent) LogError(err *Error) {
 
 // LogMessage logs a message if the level matches the verbosity and a logger is attached.
 func (tc *TraceComponent) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
-	if filterLevel <= tc.errVerbosity && tc.errorLogger.HasAttachedAndEnabled() {
+	if filterLevel <= tc.errVerbosity && tc.errorLogger.IsActive() {
 		tc.errorLogger.First().LogMessage(filterLevel, msg)
 	}
 }

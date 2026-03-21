@@ -49,7 +49,7 @@ func TestAttachPt(t *testing.T) {
 	if !pt.HasAttached() {
 		t.Errorf("expected attachment")
 	}
-	if !pt.HasAttachedAndEnabled() {
+	if !pt.IsActive() {
 		t.Errorf("expected attachment and enabled")
 	}
 
@@ -126,8 +126,8 @@ func TestAttachPt(t *testing.T) {
 
 	// Test disable
 	pt.SetEnabled(false)
-	if pt.HasAttachedAndEnabled() {
-		t.Errorf("expected HasAttachedAndEnabled to be false")
+	if pt.IsActive() {
+		t.Errorf("expected IsActive to be false")
 	}
 	if pt.First() != nil {
 		t.Errorf("expected nil First() when disabled")

@@ -189,7 +189,7 @@ func (cf *CodeFollower) initFollowerState() bool {
 	cf.naccAddr = cf.stAddr
 
 	cf.valid = cf.memAccess != nil && cf.idDecode != nil &&
-		cf.memAccess.HasAttachedAndEnabled() && cf.idDecode.HasAttachedAndEnabled()
+		cf.memAccess.IsActive() && cf.idDecode.IsActive()
 	return cf.valid
 }
 

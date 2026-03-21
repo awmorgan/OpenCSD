@@ -116,7 +116,7 @@ func (l *GenElemList) ElemToSend() bool {
 }
 
 func (l *GenElemList) SendElements() ocsd.DatapathResp {
-	if l.sendIf == nil || !l.sendIf.HasAttachedAndEnabled() {
+	if l.sendIf == nil || !l.sendIf.IsActive() {
 		return ocsd.RespFatalNotInit
 	}
 	resp := ocsd.RespCont
