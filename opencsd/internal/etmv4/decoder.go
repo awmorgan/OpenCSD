@@ -178,15 +178,15 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 	resp := ocsd.RespCont
 
 	// equivalent to decodeNotReadyReason
-	if !d.TraceElemOutAttachPt().HasAttachedAndEnabled() {
+	if !d.TraceElemOutAttachPt().IsActive() {
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No element output interface attached and enabled"))
 		return ocsd.RespFatalNotInit
 	}
-	if d.UsesMemAccess() && !d.MemAccAttachPt().HasAttachedAndEnabled() {
+	if d.UsesMemAccess() && !d.MemAccAttachPt().IsActive() {
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No memory access interface attached and enabled"))
 		return ocsd.RespFatalNotInit
 	}
-	if d.UsesIDecode() && !d.InstrDecodeAttachPt().HasAttachedAndEnabled() {
+	if d.UsesIDecode() && !d.InstrDecodeAttachPt().IsActive() {
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No instruction decoder interface attached and enabled"))
 		return ocsd.RespFatalNotInit
 	}
@@ -216,7 +216,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 
 func (d *PktDecode) accessMemory(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
 	if d.UsesMemAccess() {
-		if d.MemAccAttachPt().HasAttachedAndEnabled() {
+		if d.MemAccAttachPt().IsActive() {
 			return d.MemAccAttachPt().First().ReadTargetMemory(address, d.TraceID(), memSpace, reqBytes)
 		}
 	}
@@ -317,7 +317,7 @@ func (d *PktDecode) SetInstrRangeLimit(limit uint32) {
 
 func (d *PktDecode) syncAA64OpcodeCheckMode() {
 	enabled := d.aa64BadOpcode || (d.ComponentOpMode()&ocsd.OpflgPktdecAA64OpcodeChk) != 0
-	if !d.InstrDecodeAttachPt().HasAttachedAndEnabled() {
+	if !d.InstrDecodeAttachPt().IsActive() {
 		return
 	}
 	if setter, ok := d.InstrDecodeAttachPt().First().(interface{ SetAA64ErrOnBadOpcode(bool) }); ok {

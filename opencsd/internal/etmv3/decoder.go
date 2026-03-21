@@ -62,15 +62,15 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No decoder configuration information"))
 		return ocsd.RespFatalNotInit
 	}
-	if !d.TraceElemOut.HasAttachedAndEnabled() {
+	if !d.TraceElemOut.IsActive() {
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No element output interface attached and enabled"))
 		return ocsd.RespFatalNotInit
 	}
-	if d.UsesMemAccess() && !d.MemAccess.HasAttachedAndEnabled() {
+	if d.UsesMemAccess() && !d.MemAccess.IsActive() {
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No memory access interface attached and enabled"))
 		return ocsd.RespFatalNotInit
 	}
-	if d.UsesIDecode() && !d.InstrDecode.HasAttachedAndEnabled() {
+	if d.UsesIDecode() && !d.InstrDecode.IsActive() {
 		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, "No instruction decoder interface attached and enabled"))
 		return ocsd.RespFatalNotInit
 	}

@@ -366,7 +366,7 @@ func (p *Processor) runDecodeAction(lastByte uint8) {
 }
 
 func (p *Processor) outputPacket() ocsd.DatapathResp {
-	if p.PktRawMonI != nil && p.PktRawMonI.HasAttached() {
+	if p.PktRawMonI != nil && p.PktRawMonI.IsAttached() {
 		p.PktRawMonI.First().RawPacketDataMon(ocsd.OpData, p.packetIndex, &p.currPacket, p.currPacketData)
 	}
 	if p.pktOut == nil {
@@ -379,7 +379,7 @@ func (p *Processor) outputPacket() ocsd.DatapathResp {
 func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
 	n := p.dumpUnsyncedBytes
 
-	if p.PktRawMonI != nil && p.PktRawMonI.HasAttached() && n > 0 && len(p.currPacketData) > 0 {
+	if p.PktRawMonI != nil && p.PktRawMonI.IsAttached() && n > 0 && len(p.currPacketData) > 0 {
 		monBytes := min(n, len(p.currPacketData))
 		p.PktRawMonI.First().RawPacketDataMon(ocsd.OpData, p.packetIndex, &p.currPacket, p.currPacketData[:monBytes])
 	}

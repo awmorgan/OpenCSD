@@ -73,25 +73,25 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 		}
 	case ocsd.OpEOT:
 		resp = p.OnEOT()
-		if p.PktOutI.HasAttachedAndEnabled() && !ocsd.DataRespIsFatal(resp) {
+		if p.PktOutI.IsActive() && !ocsd.DataRespIsFatal(resp) {
 			resp = p.PktOutI.First().PacketDataIn(ocsd.OpEOT, 0, nil)
 		}
-		if p.PktRawMonI.HasAttachedAndEnabled() {
+		if p.PktRawMonI.IsActive() {
 			p.PktRawMonI.First().RawPacketDataMon(ocsd.OpEOT, 0, nil, nil)
 		}
 	case ocsd.OpFlush:
 		resp = p.OnFlush()
-		if ocsd.DataRespIsCont(resp) && p.PktOutI.HasAttachedAndEnabled() {
+		if ocsd.DataRespIsCont(resp) && p.PktOutI.IsActive() {
 			resp = p.PktOutI.First().PacketDataIn(ocsd.OpFlush, 0, nil)
 		}
 	case ocsd.OpReset:
-		if p.PktOutI.HasAttachedAndEnabled() {
+		if p.PktOutI.IsActive() {
 			resp = p.PktOutI.First().PacketDataIn(ocsd.OpReset, index, nil)
 		}
 		if !ocsd.DataRespIsFatal(resp) {
 			resp = p.OnReset()
 		}
-		if p.PktRawMonI.HasAttachedAndEnabled() {
+		if p.PktRawMonI.IsActive() {
 			p.PktRawMonI.First().RawPacketDataMon(ocsd.OpReset, index, nil, nil)
 		}
 	default:
