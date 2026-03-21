@@ -171,7 +171,7 @@ func (cf *CodeFollower) DecodeSingleOpCode() ocsd.Err {
 	return ocsd.ErrMemNacc
 }
 
-func (cf *CodeFollower) initFollowerState() bool {
+func (cf *CodeFollower) resetFollowerState() bool {
 	cf.hasNext = false
 	cf.hasNaccErr = false
 	cf.instructs = 0
@@ -186,7 +186,7 @@ func (cf *CodeFollower) initFollowerState() bool {
 
 // FollowSingleAtom decodes an instruction at a single location and calculates the next address.
 func (cf *CodeFollower) FollowSingleAtom(addrStart ocsd.VAddr, atom ocsd.AtmVal) ocsd.Err {
-	if !cf.initFollowerState() {
+	if !cf.resetFollowerState() {
 		return ocsd.ErrNotInit
 	}
 
