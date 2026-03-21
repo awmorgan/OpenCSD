@@ -146,7 +146,7 @@ func TestTraceComponent(t *testing.T) {
 		t.Errorf("expected name TestComp, got %s", tc.ComponentName())
 	}
 
-	tc.SetComponentName("NewName")
+	tc.ConfigureTraceComponent("NewName")
 	if tc.ComponentName() != "NewName" {
 		t.Errorf("expected NewName")
 	}

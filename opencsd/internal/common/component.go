@@ -153,11 +153,6 @@ func (tc *TraceComponent) ComponentName() string {
 	return tc.name
 }
 
-// SetComponentName sets the component's name.
-func (tc *TraceComponent) SetComponentName(name string) {
-	tc.name = name
-}
-
 // AttachErrorLogger attaches an error logger implementation.
 func (tc *TraceComponent) AttachErrorLogger(logger TraceErrorLog) ocsd.Err {
 	return tc.errorLogger.Attach(logger)
