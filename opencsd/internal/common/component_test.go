@@ -24,116 +24,6 @@ func (m *mockErrorLog) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
 	m.lastMsg = msg
 }
 
-type mockNotifier struct {
-	numAttached int
-	called      bool
-}
-
-func (m *mockNotifier) AttachNotify(numAttached int) {
-	m.numAttached = numAttached
-	m.called = true
-}
-
-func TestAttachPt(t *testing.T) {
-	// Test basic attach
-	pt := NewAttachPt[TraceErrorLog]()
-	if pt.IsAttached() {
-		t.Errorf("expected no attachment initially")
-	}
-
-	logger := &mockErrorLog{}
-	err := pt.Attach(logger)
-	if err != ocsd.OK {
-		t.Errorf("expected OK, got %v", err)
-	}
-	if !pt.IsAttached() {
-		t.Errorf("expected attachment")
-	}
-	if !pt.IsActive() {
-		t.Errorf("expected attachment and enabled")
-	}
-
-	// Test attaching again (should fail)
-	logger2 := &mockErrorLog{}
-	err = pt.Attach(logger2)
-	if err != ocsd.ErrAttachTooMany {
-		t.Errorf("expected ErrAttachTooMany, got %v", err)
-	}
-
-	// Test detach
-	err = pt.Detach()
-	if err != ocsd.OK {
-		t.Errorf("expected OK, got %v", err)
-	}
-	if pt.IsAttached() {
-		t.Errorf("expected no attachment after detach")
-	}
-
-	// Test detach when empty
-	err = pt.Detach()
-	if err != ocsd.ErrAttachCompNotFound {
-		t.Errorf("expected ErrAttachCompNotFound, got %v", err)
-	}
-
-	// Test replace first
-	err = pt.Replace(logger)
-	if err != ocsd.OK {
-		t.Errorf("expected OK, got %v", err)
-	}
-	err = pt.Replace(logger2)
-	if err != ocsd.OK {
-		t.Errorf("expected OK, got %v", err)
-	}
-	if pt.First() != logger2 {
-		t.Errorf("expected logger2 to be attached")
-	}
-
-	// Test notifier
-	notifier := &mockNotifier{}
-	pt.AttachNotifier(notifier)
-
-	pt.DetachAll()
-	if notifier.called && notifier.numAttached != 0 {
-		t.Errorf("expected numAttached 0")
-	}
-
-	notifier.called = false
-	pt.DetachAll()
-	if !notifier.called || notifier.numAttached != 0 {
-		t.Errorf("expected detach-all notification when already empty")
-	}
-
-	notifier.called = false
-	pt.Attach(logger)
-	if !notifier.called || notifier.numAttached != 1 {
-		t.Errorf("expected numAttached 1")
-	}
-
-	if pt.NumAttached() != 1 {
-		t.Errorf("expected NumAttached 1")
-	}
-
-	err = pt.Replace(nil)
-	if err != ocsd.OK {
-		t.Errorf("expected OK replacing with nil")
-	}
-	if pt.IsAttached() {
-		t.Errorf("expected no attachment after Replace(nil)")
-	}
-	if pt.NumAttached() != 0 {
-		t.Errorf("expected NumAttached 0 after Replace(nil)")
-	}
-
-	// Test disable
-	pt.Enable(false)
-	if pt.IsActive() {
-		t.Errorf("expected IsActive to be false")
-	}
-	if pt.First() != nil {
-		t.Errorf("expected nil First() when disabled")
-	}
-}
-
 func TestTraceComponent(t *testing.T) {
 	tc := &TraceComponent{}
 	tc.ConfigureTraceComponent("TestComp")
@@ -179,6 +69,9 @@ func TestTraceComponent(t *testing.T) {
 	if err := tc.AttachErrorLogger(logger); err != ocsd.OK {
 		t.Fatalf("AttachErrorLogger failed: %v", err)
 	}
+	if err := tc.AttachErrorLogger(&mockErrorLog{}); err != ocsd.ErrAttachTooMany {
+		t.Fatalf("second AttachErrorLogger should fail with ErrAttachTooMany, got: %v", err)
+	}
 	tc.ConfigureErrorLogLevel(ocsd.ErrSevInfo)
 
 	tc.LogMessage(ocsd.ErrSevWarn, "A warning")
@@ -206,5 +99,12 @@ func TestTraceComponent(t *testing.T) {
 	}
 	if logger.lastErrMsg == "" {
 		t.Errorf("log error failed to pass message")
+	}
+
+	if err := tc.DetachErrorLogger(); err != ocsd.OK {
+		t.Fatalf("DetachErrorLogger should succeed, got %v", err)
+	}
+	if err := tc.DetachErrorLogger(); err != ocsd.ErrAttachCompNotFound {
+		t.Fatalf("second DetachErrorLogger should fail with ErrAttachCompNotFound, got %v", err)
 	}
 }

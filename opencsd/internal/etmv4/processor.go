@@ -1,8 +1,6 @@
 package etmv4
 
 import (
-	"opencsd/internal/common"
-
 	"opencsd/internal/ocsd"
 )
 
@@ -75,7 +73,7 @@ type Processor struct {
 	pktOut ocsd.PktDataIn[TracePacket]
 
 	// raw packet monitor
-	PktRawMonI *common.AttachPt[ocsd.PktRawDataMon[TracePacket]]
+	PktRawMonI ocsd.PktRawDataMon[TracePacket]
 
 	processState ProcessState
 
@@ -145,7 +143,6 @@ func NewProcessor(config *Config) *Processor {
 	p := &Processor{
 		config:       *config,
 		processState: ProcHdr,
-		PktRawMonI:   common.NewAttachPt[ocsd.PktRawDataMon[TracePacket]](),
 	}
 	p.buildIPacketTable()
 	p.currPacket.ProtocolVersion = config.FullVersion()
@@ -159,10 +156,7 @@ func (p *Processor) SetPktOut(cb ocsd.PktDataIn[TracePacket]) {
 }
 
 func (p *Processor) SetPktRawMonitor(mon ocsd.PktRawDataMon[TracePacket]) {
-	if p.PktRawMonI == nil {
-		p.PktRawMonI = common.NewAttachPt[ocsd.PktRawDataMon[TracePacket]]()
-	}
-	_ = p.PktRawMonI.Replace(mon)
+	p.PktRawMonI = mon
 }
 
 // TraceDataIn implements ocsd.TrcDataIn.
@@ -373,8 +367,8 @@ func (p *Processor) runDecodeAction(lastByte uint8) {
 }
 
 func (p *Processor) outputPacket() ocsd.DatapathResp {
-	if p.PktRawMonI != nil && p.PktRawMonI.IsAttached() {
-		p.PktRawMonI.First().RawPacketDataMon(ocsd.OpData, p.packetIndex, &p.currPacket, p.currPacketData)
+	if p.PktRawMonI != nil {
+		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, p.packetIndex, &p.currPacket, p.currPacketData)
 	}
 	if p.pktOut == nil {
 		return ocsd.RespCont
@@ -386,9 +380,9 @@ func (p *Processor) outputPacket() ocsd.DatapathResp {
 func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
 	n := p.dumpUnsyncedBytes
 
-	if p.PktRawMonI != nil && p.PktRawMonI.IsAttached() && n > 0 && len(p.currPacketData) > 0 {
+	if p.PktRawMonI != nil && n > 0 && len(p.currPacketData) > 0 {
 		monBytes := min(n, len(p.currPacketData))
-		p.PktRawMonI.First().RawPacketDataMon(ocsd.OpData, p.packetIndex, &p.currPacket, p.currPacketData[:monBytes])
+		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, p.packetIndex, &p.currPacket, p.currPacketData[:monBytes])
 	}
 
 	resp := ocsd.RespCont

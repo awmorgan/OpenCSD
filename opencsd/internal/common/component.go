@@ -2,7 +2,6 @@ package common
 
 import (
 	"opencsd/internal/ocsd"
-	"reflect"
 )
 
 // TraceErrorLog represents ITraceErrorLog.
@@ -14,125 +13,12 @@ type TraceErrorLog interface {
 	LogMessage(filterLevel ocsd.ErrSeverity, msg string)
 }
 
-// ComponentAttachNotifier is the notification interface for attachment.
-type ComponentAttachNotifier interface {
-	// AttachNotify is called whenever a component is attached or detached.
-	// numAttached is the number of remaining components attached to the point.
-	AttachNotify(numAttached int)
-}
-
-// AttachPt is a generic component attachment point.
-// T represents the interface type being attached.
-type AttachPt[T any] struct {
-	enabled  bool
-	notifier ComponentAttachNotifier
-	comp     T
-}
-
-// NewAttachPt creates a new attachment point.
-func NewAttachPt[T any]() *AttachPt[T] {
-	return &AttachPt[T]{
-		enabled: true,
-	}
-}
-
-// Attach attaches an interface of type T to the attachment point.
-func (a *AttachPt[T]) Attach(comp T) ocsd.Err {
-	if a.IsAttached() {
-		return ocsd.ErrAttachTooMany
-	}
-	a.comp = comp
-	if a.notifier != nil {
-		a.notifier.AttachNotify(1)
-	}
-	return ocsd.OK
-}
-
-// Detach detaches the current component from the attachment point.
-func (a *AttachPt[T]) Detach() ocsd.Err {
-	if !a.IsAttached() {
-		return ocsd.ErrAttachCompNotFound
-	}
-	var empty T
-	a.comp = empty
-	if a.notifier != nil {
-		a.notifier.AttachNotify(0)
-	}
-	return ocsd.OK
-}
-
-// Replace detaches any currently attached component and attaches the new one.
-func (a *AttachPt[T]) Replace(comp T) ocsd.Err {
-	if a.IsAttached() {
-		_ = a.Detach()
-	}
-	if isNilAttachment(comp) {
-		return ocsd.OK
-	}
-	return a.Attach(comp)
-}
-
-// DetachAll detaches all components.
-func (a *AttachPt[T]) DetachAll() {
-	if a.IsAttached() {
-		var empty T
-		a.comp = empty
-	}
-	if a.notifier != nil {
-		a.notifier.AttachNotify(0)
-	}
-}
-
-// NumAttached returns the number of attached ocsd.
-func (a *AttachPt[T]) NumAttached() int {
-	if !a.IsAttached() {
-		return 0
-	}
-	return 1
-}
-
-// First returns the current attached interface.
-// Note: The caller should verify IsAttached() or IsActive() before using.
-func (a *AttachPt[T]) First() T {
-	if !a.enabled {
-		var empty T
-		return empty
-	}
-	return a.comp
-}
-
-// AttachNotifier sets the notification interface.
-func (a *AttachPt[T]) AttachNotifier(notifier ComponentAttachNotifier) {
-	a.notifier = notifier
-}
-
-// Enabled returns true if the attachment point is enabled.
-func (a *AttachPt[T]) Enabled() bool {
-	return a.enabled
-}
-
-// Enable sets the enabled state.
-func (a *AttachPt[T]) Enable(enable bool) {
-	a.enabled = enable
-}
-
-// IsAttached returns true if there is an attached interface.
-func (a *AttachPt[T]) IsAttached() bool {
-	return !isNilAttachment(a.comp)
-}
-
-// IsActive returns true if there is an attachment and it is enabled.
-func (a *AttachPt[T]) IsActive() bool {
-	return a.IsAttached() && a.enabled
-}
-
-// TraceComponent is the base struct for all decode components in the library.
 // It provides error logging attachment, component naming, and operational mode handling.
 type TraceComponent struct {
 	name             string
 	opFlags          uint32
 	supportedOpFlags uint32
-	errorLogger      AttachPt[TraceErrorLog]
+	errorLogger      TraceErrorLog
 	errLogHandle     ocsd.HandleErrLog
 	errVerbosity     ocsd.ErrSeverity
 	assocComp        *TraceComponent
@@ -144,8 +30,7 @@ func (tc *TraceComponent) ConfigureTraceComponent(name string) {
 	tc.name = name
 	tc.errLogHandle = ocsd.HandleErrLog(ocsd.InvalidHandle)
 	tc.errVerbosity = ocsd.ErrSevNone
-	tc.errorLogger.enabled = true
-	tc.errorLogger.AttachNotifier(tc)
+	tc.errorLogger = nil
 }
 
 // ComponentName returns the component's name.
@@ -155,12 +40,24 @@ func (tc *TraceComponent) ComponentName() string {
 
 // AttachErrorLogger attaches an error logger implementation.
 func (tc *TraceComponent) AttachErrorLogger(logger TraceErrorLog) ocsd.Err {
-	return tc.errorLogger.Attach(logger)
+	if tc.errorLogger != nil {
+		return ocsd.ErrAttachTooMany
+	}
+	tc.errorLogger = logger
+	if logger != nil {
+		tc.errLogHandle = 0
+	}
+	return ocsd.OK
 }
 
 // DetachErrorLogger detaches the currently attached error logger.
 func (tc *TraceComponent) DetachErrorLogger() ocsd.Err {
-	return tc.errorLogger.Detach()
+	if tc.errorLogger == nil {
+		return ocsd.ErrAttachCompNotFound
+	}
+	tc.errorLogger = nil
+	tc.errLogHandle = ocsd.HandleErrLog(ocsd.InvalidHandle)
+	return ocsd.OK
 }
 
 // ConfigureComponentOpMode sets the operational mode for the component.
@@ -201,17 +98,17 @@ func (tc *TraceComponent) LogDefMessage(msg string) {
 
 // LogError logs an error if an error logger is attached.
 func (tc *TraceComponent) LogError(err *Error) {
-	if tc.errorLogger.IsActive() && tc.IsLoggingErrorLevel(err.Sev) {
+	if tc.errorLogger != nil && tc.IsLoggingErrorLevel(err.Sev) {
 		// Create an error message directly or pass it to error logger.
 		// Since our TraceErrorLog interface takes severity and message, we pass those.
-		tc.errorLogger.First().LogError(err.Sev, err.Error())
+		tc.errorLogger.LogError(err.Sev, err.Error())
 	}
 }
 
 // LogMessage logs a message if the level matches the verbosity and a logger is attached.
 func (tc *TraceComponent) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
-	if filterLevel <= tc.errVerbosity && tc.errorLogger.IsActive() {
-		tc.errorLogger.First().LogMessage(filterLevel, msg)
+	if filterLevel <= tc.errVerbosity && tc.errorLogger != nil {
+		tc.errorLogger.LogMessage(filterLevel, msg)
 	}
 }
 
@@ -228,29 +125,4 @@ func (tc *TraceComponent) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
 // ConfigureErrorLogLevel sets the verbosity of error logging.
 func (tc *TraceComponent) ConfigureErrorLogLevel(level ocsd.ErrSeverity) {
 	tc.errVerbosity = level
-}
-
-// AttachNotify is called whenever the error logger attach point changes.
-func (tc *TraceComponent) AttachNotify(numAttached int) {
-	if numAttached > 0 {
-		if tc.errorLogger.First() == nil {
-			return
-		}
-		tc.errLogHandle = 0
-		return
-	}
-	tc.errLogHandle = ocsd.HandleErrLog(ocsd.InvalidHandle)
-}
-
-func isNilAttachment[T any](comp T) bool {
-	v := reflect.ValueOf(comp)
-	if !v.IsValid() {
-		return true
-	}
-	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return v.IsNil()
-	default:
-		return false
-	}
 }
