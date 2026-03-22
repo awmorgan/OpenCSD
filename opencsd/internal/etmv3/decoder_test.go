@@ -28,10 +28,10 @@ func buildDecInDecodePkts(config *Config) (*PktDecode, *testTrcElemIn) {
 	if err != nil {
 		panic(err)
 	}
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -77,10 +77,10 @@ func containsElemType(out *testTrcElemIn, want ocsd.GenElemType) bool {
 // noSync→sendUnsyncPacket → GenElemNoSync emitted, then transitions to waitAsync.
 func TestSendUnsyncPacket_EmitsNoSync(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, &Config{})
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 	// Do NOT call OpReset - decoder starts in noSync
 
 	pkt := &Packet{}
@@ -99,9 +99,9 @@ func TestSendUnsyncPacket_EmitsNoSync(t *testing.T) {
 func TestSendUnsyncPacket_UnsyncInfoPreserved(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, &Config{})
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetTraceElemOut(out)
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
+	dec.SetInstrDecode(idec.NewDecoder())
 
 	// NoSync state → any packet triggers sendUnsyncPacket → GenElemNoSync
 	pkt := &Packet{}
@@ -164,8 +164,8 @@ func TestProcessBranchAddr_CancelPendElem(t *testing.T) {
 
 	// First send an atom to create a pending InstrRange element
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBr}
-	dec.MemAccess.Replace(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder())
 
 	phdrPkt := &Packet{}
 	phdrPkt.ResetState()
@@ -301,13 +301,13 @@ func TestProcessBranchAddr_ExcepPresent_NumberZero(t *testing.T) {
 func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 	config := &Config{}
 	dec := mustNewConfiguredPktDecode(t, config)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBr}
-	dec.MemAccess.Replace(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder())
 
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	asyncPkt := &Packet{Type: PktASync}
@@ -364,12 +364,12 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 func TestProcessPHdr_NAtom_InstrOther(t *testing.T) {
 	config := &Config{}
 	dec := mustNewConfiguredPktDecode(t, config)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
 	// Setup memory mock with hitAfter to avoid infinite loop
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1, hitAfter: 5, instrType: ocsd.InstrBr})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1, hitAfter: 5, instrType: ocsd.InstrBr})
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	asyncPkt := &Packet{Type: PktASync}
@@ -399,14 +399,14 @@ func TestProcessPHdr_NAtom_InstrOther(t *testing.T) {
 func TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr(t *testing.T) {
 	config := &Config{}
 	dec := mustNewConfiguredPktDecode(t, config)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
 	// Attach IndirectBr mock directly (before any other InstrDecode is attached)
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBrIndirect}
-	dec.MemAccess.Replace(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder())
 
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	asyncPkt := &Packet{Type: PktASync}
@@ -451,13 +451,13 @@ func TestProcessPHdr_CCFmt3_WithAtoms(t *testing.T) {
 	config.RegCtrl = ctrlCycleAcc
 
 	dec := mustNewConfiguredPktDecode(t, config)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBr}
-	dec.MemAccess.Replace(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder())
 
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	asyncPkt := &Packet{Type: PktASync}
@@ -575,8 +575,8 @@ func TestProcessPHdr_NeedAddr_SentUnknown_Skips(t *testing.T) {
 
 	dec, out := buildDecInDecodePkts(config)
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBrIndirect}
-	dec.MemAccess.Replace(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder())
 
 	// First PHdr: bNeedAddr=true, bSentUnknown=false → emits AddrUnknown, bSentUnknown=true
 	phdrPkt := &Packet{}
@@ -610,11 +610,10 @@ func TestProcessPHdr_Nacc_ZeroInstructions(t *testing.T) {
 
 	dec := mustNewConfiguredPktDecode(t, config)
 	// failAfter:0 → fail on first call (after 0 successes)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: 0})
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrOther})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{failAfter: 0})
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	asyncPkt := &Packet{Type: PktASync}
@@ -656,13 +655,13 @@ func TestProcessPHdr_MemSpaceSecure(t *testing.T) {
 	config := &Config{}
 
 	dec := mustNewConfiguredPktDecode(t, config)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBr}
-	dec.MemAccess.Replace(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder())
 
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	asyncPkt := &Packet{Type: PktASync}
@@ -736,10 +735,10 @@ func TestProcessISync_WithCC_LSipAddr(t *testing.T) {
 	config.RegCtrl = ctrlCycleAcc
 
 	dec := mustNewConfiguredPktDecode(t, config)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	asyncPkt := &Packet{Type: PktASync}
@@ -814,10 +813,10 @@ func TestProcessISync_ContextUpdate_CtxAndVMID(t *testing.T) {
 func TestOnFlush_SendPktsState(t *testing.T) {
 	config := &Config{}
 	dec := mustNewConfiguredPktDecode(t, config)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -861,10 +860,10 @@ func TestOnFlush_SendPktsState(t *testing.T) {
 func TestOnFlush_SendPkts_WaitISync(t *testing.T) {
 	config := &Config{}
 	dec := mustNewConfiguredPktDecode(t, config)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	asyncPkt := &Packet{Type: PktASync}
@@ -928,10 +927,10 @@ func TestPreISyncValid_CycleCount_Emitted(t *testing.T) {
 	config.RegCtrl = ctrlCycleAcc
 
 	dec := mustNewConfiguredPktDecode(t, config)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	asyncPkt := &Packet{Type: PktASync}

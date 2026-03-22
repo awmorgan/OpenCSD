@@ -566,10 +566,10 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	dec.SetProtocolConfig(config)
 
 	mem := &mockMemAcc{}
-	dec.MemAccess.Attach(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -622,10 +622,10 @@ func TestDecoderWPUpdate(t *testing.T) {
 	dec.SetProtocolConfig(config)
 
 	mem := &mockMemAcc{}
-	dec.MemAccess.Attach(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -656,10 +656,10 @@ func TestDecoderBranchWithAtomRange(t *testing.T) {
 	dec.SetProtocolConfig(config)
 
 	mem := &mockMemAcc{}
-	dec.MemAccess.Attach(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -705,10 +705,10 @@ func TestDecoderMemNacc(t *testing.T) {
 	dec.SetProtocolConfig(config)
 
 	mem := &mockMemAcc{failAfter: 1, hitAfter: -1} // fail on 2nd read, never branch
-	dec.MemAccess.Attach(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -749,10 +749,10 @@ func TestDecoderMemNaccSecure(t *testing.T) {
 	dec.SetProtocolConfig(config)
 
 	mem := &mockMemAcc{failAfter: 1, hitAfter: -1}
-	dec.MemAccess.Attach(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -783,10 +783,10 @@ func TestDecoderIndirectBranch(t *testing.T) {
 	dec.SetProtocolConfig(config)
 
 	mem := &mockMemAcc{hitAfter: 0, isIndirect: true}
-	dec.MemAccess.Attach(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -815,10 +815,10 @@ func TestDecoderLinkBranch(t *testing.T) {
 	dec.SetProtocolConfig(config)
 
 	mem := &mockMemAcc{hitAfter: 0, isLink: true}
-	dec.MemAccess.Attach(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -846,7 +846,7 @@ func TestDecoderContProcess(t *testing.T) {
 	dec.SetNeedsMemAccess(false)
 	dec.SetNeedsInstructionDecode(false)
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	// Exercise onFlush when not in cont state
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
@@ -1125,10 +1125,10 @@ func newTestDec(hitAfter int) (*PktDecode, *testTrcElemIn) {
 	config := NewConfig()
 	dec := NewPktDecode(0)
 	dec.SetProtocolConfig(config)
-	dec.MemAccess.Attach(&mockMemAcc{hitAfter: hitAfter})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{hitAfter: hitAfter})
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 	return dec, out
 }
 
@@ -1194,10 +1194,10 @@ func TestDecoderAtomRange_NoWPFound(t *testing.T) {
 	config := NewConfig()
 	dec := NewPktDecode(0)
 	dec.SetProtocolConfig(config)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: 2, hitAfter: -1}) // fail after 2 reads, never branch
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{failAfter: 2, hitAfter: -1}) // fail after 2 reads, never branch
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	syncDec(dec, 0x2000)
@@ -1277,10 +1277,10 @@ func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	config := NewConfig()
 	dec := NewPktDecode(0)
 	dec.SetProtocolConfig(config)
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: 1, hitAfter: -1})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{failAfter: 1, hitAfter: -1})
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -1439,10 +1439,10 @@ func TestDecoderIndirectBranch_ActiveRetStack(t *testing.T) {
 	config.RegCtrl = ctrlRetStackEna
 	dec := NewPktDecode(0)
 	dec.SetProtocolConfig(config)
-	dec.MemAccess.Attach(&mockMemAcc{hitAfter: 0, isIndirect: true, isLink: true})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{hitAfter: 0, isIndirect: true, isLink: true})
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	syncDec(dec, 0x1000)
