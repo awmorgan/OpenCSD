@@ -49,14 +49,31 @@ func NewPktDecode(instID int) *PktDecode {
 	}
 	d.PktDecodeBase = &common.PktDecodeBase[Packet, Config]{}
 	d.ConfigurePktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV3", instID))
-	d.codeFollower = common.NewCodeFollowerWithInterfaces(&d.MemAccess, &d.InstrDecode)
+	d.codeFollower = common.NewCodeFollowerWithInterfaces(d.MemAccessIf(), d.InstrDecodeIf())
 
 	d.configureDecoder()
 	return d
 }
 
+func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) {
+	d.PktDecodeBase.SetMemAccess(mem)
+	if d.codeFollower != nil {
+		d.codeFollower.SetInterfaces(d.MemAccessIf(), d.InstrDecodeIf())
+	}
+}
+
+func (d *PktDecode) SetInstrDecode(decoder common.InstrDecode) {
+	d.PktDecodeBase.SetInstrDecode(decoder)
+	if d.codeFollower != nil {
+		d.codeFollower.SetInterfaces(d.MemAccessIf(), d.InstrDecodeIf())
+	}
+}
+
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) ocsd.DatapathResp {
 	resp := ocsd.RespCont
+	if d.codeFollower != nil {
+		d.codeFollower.SetInterfaces(d.MemAccessIf(), d.InstrDecodeIf())
+	}
 
 	if reason := d.DecodeNotReadyReason(); reason != "" {
 		d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrNotInit, "%v", reason))

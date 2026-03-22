@@ -4,12 +4,10 @@ import "opencsd/internal/ocsd"
 
 // CodeFollower follows the execution path by decoding instructions.
 // It interfaces with memory access and instruction decode.
-// memAccess and idDecode are pointers to the decoder's live attachment points,
-// so subsequent Attach calls on the decoder are immediately visible here.
 type CodeFollower struct {
 	instrInfo    ocsd.InstrInfo
-	memAccess    *AttachPt[TargetMemAccess]
-	idDecode     *AttachPt[InstrDecode]
+	memAccess    TargetMemAccess
+	idDecode     InstrDecode
 	startAddr    ocsd.VAddr
 	endAddr      ocsd.VAddr
 	nextAddr     ocsd.VAddr
@@ -39,13 +37,19 @@ func NewCodeFollower() *CodeFollower {
 	return cf
 }
 
-// NewCodeFollowerWithInterfaces creates a CodeFollower and attaches live decoder interfaces.
-func NewCodeFollowerWithInterfaces(memAccess *AttachPt[TargetMemAccess], idDecode *AttachPt[InstrDecode]) *CodeFollower {
+// NewCodeFollowerWithInterfaces creates a CodeFollower and attaches decoder interfaces.
+func NewCodeFollowerWithInterfaces(memAccess TargetMemAccess, idDecode InstrDecode) *CodeFollower {
 	cf := NewCodeFollower()
 	cf.memAccess = memAccess
 	cf.idDecode = idDecode
-	// valid is computed lazily in FollowSingleInstr so newly-attached mocks are seen
+	// valid is computed lazily in FollowSingleAtom.
 	return cf
+}
+
+// SetInterfaces updates the active memory and instruction decode interfaces.
+func (cf *CodeFollower) SetInterfaces(memAccess TargetMemAccess, idDecode InstrDecode) {
+	cf.memAccess = memAccess
+	cf.idDecode = idDecode
 }
 
 func (cf *CodeFollower) SetArchProfile(arch ocsd.ArchProfile) {
@@ -147,7 +151,7 @@ func (cf *CodeFollower) DecodeSingleOpCode() ocsd.Err {
 	var bytesReq uint32 = 4
 
 	// Read memory location for opcode
-	readBytes, pData, err := cf.memAccess.First().ReadTargetMemory(cf.instrInfo.InstrAddr, cf.traceID, cf.memSpace, bytesReq)
+	readBytes, pData, err := cf.memAccess.ReadTargetMemory(cf.instrInfo.InstrAddr, cf.traceID, cf.memSpace, bytesReq)
 
 	if err != ocsd.OK {
 		return err
@@ -159,7 +163,7 @@ func (cf *CodeFollower) DecodeSingleOpCode() ocsd.Err {
 			cf.instrInfo.Opcode |= uint32(pData[i]) << (i * 8)
 		}
 
-		err = cf.idDecode.First().DecodeInstruction(&cf.instrInfo)
+		err = cf.idDecode.DecodeInstruction(&cf.instrInfo)
 		return err
 	}
 
@@ -179,8 +183,7 @@ func (cf *CodeFollower) resetFollowerState() bool {
 	cf.nextAddr = cf.startAddr
 	cf.noAccessAddr = cf.startAddr
 
-	cf.valid = cf.memAccess != nil && cf.idDecode != nil &&
-		cf.memAccess.IsActive() && cf.idDecode.IsActive()
+	cf.valid = cf.memAccess != nil && cf.idDecode != nil
 	return cf.valid
 }
 

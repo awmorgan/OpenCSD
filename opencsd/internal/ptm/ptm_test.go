@@ -81,10 +81,10 @@ func setupProcDec(config *Config) (*PktProc, *PktDecode, *testTrcElemIn) {
 	if err != nil {
 		panic(err)
 	}
-	dec.MemAccess.Attach(&mockMemAcc{})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{})
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 	return proc, dec, out
 }
 
@@ -101,7 +101,7 @@ func setupProcOnly(config *Config) *PktProc {
 	if err != nil {
 		panic(err)
 	}
-	proc.PktOutI.Attach(&noopPktSink{})
+	proc.SetPktOut(&noopPktSink{})
 	return proc
 }
 
@@ -110,10 +110,10 @@ func setupProcDecFull(config *Config, memAcc common.TargetMemAccess, instrDec co
 	if err != nil {
 		panic(err)
 	}
-	dec.MemAccess.Attach(memAcc)
-	dec.InstrDecode.Attach(instrDec)
+	dec.SetMemAccess(memAcc)
+	dec.SetInstrDecode(instrDec)
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 	return proc, dec, out
 }
 
@@ -503,7 +503,7 @@ func TestProcWaitAsyncCarryOverRawTailByte(t *testing.T) {
 	proc := setupProcOnly(config)
 
 	rawCap := &rawPktCapture{}
-	proc.PktRawMonI.Attach(rawCap)
+	proc.SetPktRawMonitor(rawCap)
 
 	// First block leaves waitASyncSOPkt=true with a carry-over 0x00.
 	if _, resp, _ := proc.TraceDataIn(ocsd.OpData, 4669, []byte{0x00}); ocsd.DataRespIsFatal(resp) {
