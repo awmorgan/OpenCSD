@@ -1,6 +1,8 @@
 package itm
 
 import (
+	"fmt"
+
 	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
@@ -35,11 +37,17 @@ type PktDecode struct {
 }
 
 // NewPktDecode creates a new ITM packet decoder.
-func NewPktDecode(instID int) *PktDecode {
+func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 	d := &PktDecode{}
-	d.PktDecodeI.Init("DCD_ITM", nil)
-
+	instID := 0
+	if cfg != nil {
+		instID = int(cfg.TraceID())
+	}
+	d.PktDecodeI.Init(fmt.Sprintf("%s_%d", "DCD_ITM", instID), logger)
 	d.configureDecoder()
+	if cfg != nil {
+		_ = d.SetProtocolConfig(cfg)
+	}
 	return d
 }
 

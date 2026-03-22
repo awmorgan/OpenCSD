@@ -26,10 +26,8 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
 	if cfg == nil {
 		return nil, common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "PTM config cannot be nil")
 	}
-	dec := NewPktDecode(instID)
-	if err := dec.SetProtocolConfig(cfg); err != ocsd.OK {
-		return nil, ocsd.ToError(err)
-	}
+	_ = instID
+	dec := NewPktDecode(cfg, nil)
 	return dec, nil
 }
 

@@ -93,11 +93,17 @@ type PktDecode struct {
 	outputElem  ocsd.TraceElement
 }
 
-func NewPktDecode(instIDNum int) *PktDecode {
+func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 	d := &PktDecode{}
-	d.PktDecodeI.Init(fmt.Sprintf("%s_%d", "DCD_PTM", instIDNum), nil)
-
+	instIDNum := 0
+	if cfg != nil {
+		instIDNum = int(cfg.TraceID())
+	}
+	d.PktDecodeI.Init(fmt.Sprintf("%s_%d", "DCD_PTM", instIDNum), logger)
 	d.configureDecoder()
+	if cfg != nil {
+		_ = d.SetProtocolConfig(cfg)
+	}
 	return d
 }
 

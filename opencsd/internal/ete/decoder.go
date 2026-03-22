@@ -8,9 +8,11 @@ import (
 
 type PktDecode = etmv4.PktDecode
 
-func NewPktDecode(instID int) *PktDecode {
-	_ = instID
-	return etmv4.NewPktDecode(nil, nil)
+func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
+	if cfg == nil {
+		return etmv4.NewPktDecode(nil, logger)
+	}
+	return etmv4.NewPktDecode(cfg.ToETMv4Config(), logger)
 }
 
 type DecoderManager struct{}
@@ -28,10 +30,8 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
 	if cfg == nil {
 		return nil, common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "ETE config cannot be nil")
 	}
-	decoder := NewPktDecode(instID)
-	if err := decoder.SetProtocolConfig(cfg.ToETMv4Config()); err != ocsd.OK {
-		return nil, ocsd.ToError(err)
-	}
+	_ = instID
+	decoder := NewPktDecode(cfg, nil)
 	return decoder, nil
 }
 

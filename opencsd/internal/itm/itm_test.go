@@ -328,7 +328,7 @@ func TestITMErrorCases(t *testing.T) {
 	proc.IsBadPacket()
 
 	// Decoder missing config test
-	dec := NewPktDecode(0)
+	dec := NewPktDecode(nil, nil)
 	dec.SetProtocolConfig(nil)
 	dec.OnFlush()
 	dec.OnReset()
