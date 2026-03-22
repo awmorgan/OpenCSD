@@ -63,9 +63,7 @@ func TestProcessorExtractCondResultMasksResultNibble(t *testing.T) {
 	p := NewProcessor(&Config{})
 	buf := []byte{0xDA, 0x01}
 
-	var key uint32
-	var result uint8
-	consumed := p.extractCondResult(buf, 0, &key, &result)
+	key, result, consumed := p.extractCondResult(buf, 0)
 
 	if consumed != 2 {
 		t.Fatalf("expected 2 bytes consumed, got %d", consumed)

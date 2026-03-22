@@ -260,19 +260,20 @@ func TestDecoder_HelperClassificationAndDestinations(t *testing.T) {
 	}
 
 	var armDest uint32 = 0xDEADBEEF
-	if !InstARMBranchDestination(0x1000, 0x0a000004, &armDest) || armDest == 0xDEADBEEF {
+	if got, ok := InstARMBranchDestination(0x1000, 0x0a000004); !ok || got == 0xDEADBEEF {
 		t.Fatalf("expected ARM branch destination to be computed")
+	} else {
+		armDest = got
 	}
 	armDest = 0xCAFE
-	if InstARMBranchDestination(0x1000, 0xE0000000, &armDest) || armDest != 0xCAFE {
+	if _, ok := InstARMBranchDestination(0x1000, 0xE0000000); ok || armDest != 0xCAFE {
 		t.Fatalf("non-branch ARM opcode should not update destination")
 	}
 
-	var thumbDest uint32
-	if !InstThumbBranchDestination(0x1000, 0xd0000000, &thumbDest) || (thumbDest&1) == 0 {
+	if got, ok := InstThumbBranchDestination(0x1000, 0xd0000000); !ok || (got&1) == 0 {
 		t.Fatalf("expected Thumb conditional branch destination with Thumb bit set")
 	}
-	if !InstThumbBranchDestination(0x1000, 0xf000c001, &thumbDest) || (thumbDest&1) == 0 {
+	if got, ok := InstThumbBranchDestination(0x1000, 0xf000c001); !ok || (got&1) == 0 {
 		t.Fatalf("expected WLSTP Thumb destination")
 	}
 
@@ -310,11 +311,16 @@ func TestDecoder_HelperClassificationAndDestinations(t *testing.T) {
 		t.Fatalf("unexpected A64 v8.3 branch-link classification")
 	}
 
-	var isLink, isCond uint8
-	if !InstThumbIsDirectBranchLink(0xf00fc001, &isLink, &isCond, info) || !InstThumbIsDirectBranchLink(0xf040c001, &isLink, &isCond, info) {
+	if isBranch, _, _ := InstThumbIsDirectBranchLink(0xf00fc001, info); !isBranch {
 		t.Fatalf("expected Thumb direct branch-link classification")
 	}
-	if !InstA64IsIndirectBranchLink(0xd69f0bff, &isLink, info) || !InstA64IsIndirectBranchLink(0xd6ff03e0, &isLink, info) {
+	if isBranch, _, _ := InstThumbIsDirectBranchLink(0xf040c001, info); !isBranch {
+		t.Fatalf("expected Thumb direct branch-link classification")
+	}
+	if isBranch, _ := InstA64IsIndirectBranchLink(0xd69f0bff, info); !isBranch {
+		t.Fatalf("expected A64 indirect branch-link classification")
+	}
+	if isBranch, _ := InstA64IsIndirectBranchLink(0xd6ff03e0, info); !isBranch {
 		t.Fatalf("expected A64 indirect branch-link classification")
 	}
 	if InstThumbIsUDF(0x00000000) {

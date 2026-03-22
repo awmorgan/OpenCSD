@@ -212,8 +212,6 @@ func (p *PktProc) malformedPacketErr(msg string) error {
 func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
 	var err error
-	var currByte uint8
-	var ok bool
 
 	p.dataInProcessed = 0
 	if p.Config == nil {
@@ -225,7 +223,7 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, o
 	p.blockIdx = index
 
 	for ((p.dataInProcessed < p.dataInLen) || (p.dataInProcessed == p.dataInLen && p.processState == stateSendPkt)) && ocsd.DataRespIsCont(resp) {
-		resp, err = p.doProcessLoop(&currByte, &ok)
+		resp, _, _, err = p.doProcessLoop()
 		if ocsd.DataRespIsFatal(resp) {
 			break
 		}
@@ -237,8 +235,8 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, o
 	return p.dataInProcessed, resp, err
 }
 
-func (p *PktProc) doProcessLoop(currByte *uint8, ok *bool) (ocsd.DatapathResp, error) {
-	resp := ocsd.RespCont
+func (p *PktProc) doProcessLoop() (resp ocsd.DatapathResp, currByte uint8, ok bool, err error) {
+	resp = ocsd.RespCont
 	handleErr := func(err error) (ocsd.DatapathResp, error) {
 		if err == nil {
 			return ocsd.RespCont, nil
@@ -266,21 +264,23 @@ func (p *PktProc) doProcessLoop(currByte *uint8, ok *bool) (ocsd.DatapathResp, e
 
 	case stateProcHdr:
 		p.currPktIndex = p.blockIdx + ocsd.TrcIndex(p.dataInProcessed)
-		if *currByte, *ok = p.readByteVal(); *ok {
-			p.currDecode = p.iTable[*currByte].action
-			p.currPacket.Type = p.iTable[*currByte].pktType
+		if currByte, ok = p.readByteVal(); ok {
+			p.currDecode = p.iTable[currByte].action
+			p.currPacket.Type = p.iTable[currByte].pktType
 		} else {
 			e := common.Errorf(ocsd.ErrSevError, ocsd.ErrPktInterpFail, "Data Buffer Overrun")
 			e.Idx = p.currPktIndex
 			e.ChanID = p.chanIDCopy
-			return handleErr(e)
+			resp, err = handleErr(e)
+			return resp, currByte, ok, err
 		}
 		p.processState = stateProcData
 		fallthrough
 
 	case stateProcData:
 		if err := p.runDecodeAction(); err != nil {
-			return handleErr(err)
+			resp, err = handleErr(err)
+			return resp, currByte, ok, err
 		}
 
 	case stateSendPkt:
@@ -289,7 +289,7 @@ func (p *PktProc) doProcessLoop(currByte *uint8, ok *bool) (ocsd.DatapathResp, e
 		p.processState = stateProcHdr
 	}
 
-	return resp, nil
+	return resp, currByte, ok, nil
 }
 
 func (p *PktProc) runDecodeAction() error {

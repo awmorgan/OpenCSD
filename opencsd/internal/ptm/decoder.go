@@ -540,7 +540,7 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 
 	d.outputElem.SetType(ocsd.GenElemInstrRange)
 
-	err = d.traceInstrToWP(&bWPFound, traceWPOp, nextAddrMatch)
+	bWPFound, err = d.traceInstrToWP(traceWPOp, nextAddrMatch)
 	if err != ocsd.OK {
 		if err == ocsd.ErrUnsupportedISA {
 			d.currPeState.valid = false
@@ -620,8 +620,8 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 	return resp
 }
 
-func (d *PktDecode) traceInstrToWP(bWPFound *bool, traceWPOp waypointTraceOp, nextAddrMatch ocsd.VAddr) ocsd.Err {
-	err := ocsd.OK
+func (d *PktDecode) traceInstrToWP(traceWPOp waypointTraceOp, nextAddrMatch ocsd.VAddr) (bWPFound bool, err ocsd.Err) {
+	err = ocsd.OK
 	var bytesReq uint32
 	var currOpAddress ocsd.VAddr
 
@@ -634,9 +634,9 @@ func (d *PktDecode) traceInstrToWP(bWPFound *bool, traceWPOp waypointTraceOp, ne
 	d.outputElem.EnAddr = d.instrInfo.InstrAddr
 	d.outputElem.Payload.NumInstrRange = 0
 
-	*bWPFound = false
+	bWPFound = false
 
-	for !*bWPFound && !d.memNaccPending {
+	for !bWPFound && !d.memNaccPending {
 		bytesReq = 4
 		currOpAddress = d.instrInfo.InstrAddr
 		bytesRead, memData, errMem := d.AccessMemory(d.instrInfo.InstrAddr, d.csID, memSpace, bytesReq)
@@ -680,17 +680,17 @@ func (d *PktDecode) traceInstrToWP(bWPFound *bool, traceWPOp waypointTraceOp, ne
 
 			if traceWPOp != traceWaypoint {
 				if traceWPOp == traceToAddrExcl {
-					*bWPFound = d.outputElem.EnAddr == nextAddrMatch
+					bWPFound = d.outputElem.EnAddr == nextAddrMatch
 				} else {
-					*bWPFound = currOpAddress == nextAddrMatch
+					bWPFound = currOpAddress == nextAddrMatch
 				}
 			} else {
-				*bWPFound = d.instrInfo.Type != ocsd.InstrOther
+				bWPFound = d.instrInfo.Type != ocsd.InstrOther
 			}
 		} else {
 			d.memNaccPending = true
 			d.naccAddr = d.instrInfo.InstrAddr
 		}
 	}
-	return err
+	return bWPFound, err
 }

@@ -106,7 +106,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 			}
 			bPktDone = true
 		case dcdDecodePkts:
-			resp = d.decodePacket(&bPktDone)
+			resp, bPktDone = d.decodePacket()
 		}
 	}
 	return resp
@@ -156,11 +156,10 @@ func (d *PktDecode) resetPayloadBuffer() {
 	d.payloadBuffer = make([]byte, d.numPktCorrelation*8)
 }
 
-func (d *PktDecode) decodePacket(bPktDone *bool) ocsd.DatapathResp {
-	resp := ocsd.RespCont
+func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, bPktDone bool) {
+	resp = ocsd.RespCont
 	bSendPacket := false
-
-	*bPktDone = true
+	bPktDone = true
 	d.outputElem.SetType(ocsd.GenElemSWTrace)
 	d.clearSWTPerPcktInfo()
 
@@ -182,20 +181,20 @@ func (d *PktDecode) decodePacket(bPktDone *bool) ocsd.DatapathResp {
 		}
 	case PktFreq:
 		d.swtPacketInfo.SetFrequency(true)
-		d.updatePayload(&bSendPacket)
+		bSendPacket = d.updatePayload()
 	case PktTrig:
 		d.swtPacketInfo.SetTriggerEvent(true)
-		d.updatePayload(&bSendPacket)
+		bSendPacket = d.updatePayload()
 	case PktGErr:
 		d.swtPacketInfo.MasterID = uint16(d.CurrPacketIn.Master)
 		d.swtPacketInfo.ChannelID = uint16(d.CurrPacketIn.Channel)
 		d.swtPacketInfo.SetGlobalErr(true)
 		d.swtPacketInfo.SetIDValid(false)
-		d.updatePayload(&bSendPacket)
+		bSendPacket = d.updatePayload()
 	case PktMErr:
 		d.swtPacketInfo.ChannelID = uint16(d.CurrPacketIn.Channel)
 		d.swtPacketInfo.SetMasterErr(true)
-		d.updatePayload(&bSendPacket)
+		bSendPacket = d.updatePayload()
 	case PktM8:
 		d.swtPacketInfo.MasterID = uint16(d.CurrPacketIn.Master)
 		d.swtPacketInfo.ChannelID = uint16(d.CurrPacketIn.Channel)
@@ -206,7 +205,7 @@ func (d *PktDecode) decodePacket(bPktDone *bool) ocsd.DatapathResp {
 		d.swtPacketInfo.SetMarkerPacket(true)
 		bSendPacket = true
 	case PktD4, PktD8, PktD16, PktD32, PktD64:
-		d.updatePayload(&bSendPacket)
+		bSendPacket = d.updatePayload()
 	}
 
 	if bSendPacket {
@@ -218,15 +217,14 @@ func (d *PktDecode) decodePacket(bPktDone *bool) ocsd.DatapathResp {
 		resp = d.OutputTraceElement(d.csID, &d.outputElem)
 	}
 
-	return resp
+	return resp, bPktDone
 }
 
 func (d *PktDecode) clearSWTPerPcktInfo() {
 	d.swtPacketInfo.FlagBits &= ocsd.SwtIDValidMask
 }
 
-func (d *PktDecode) updatePayload(bSendPacket *bool) {
-	*bSendPacket = true
+func (d *PktDecode) updatePayload() bool {
 	d.swtPacketInfo.SetPayloadNumPackets(1)
 
 	switch d.CurrPacketIn.Type {
@@ -251,4 +249,5 @@ func (d *PktDecode) updatePayload(bSendPacket *bool) {
 	if d.CurrPacketIn.IsMarkerPkt() {
 		d.swtPacketInfo.SetMarkerPacket(true)
 	}
+	return true
 }

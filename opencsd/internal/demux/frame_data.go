@@ -52,12 +52,12 @@ func (d *FrameDeformatter) outputUnsyncedBytes(numBytes uint32) {
 	// Not implemented in C++ lib
 }
 
-func (d *FrameDeformatter) checkForResetFSyncPatterns(fSyncBytes *uint32, dataBlockSize uint32) ocsd.Err {
+func (d *FrameDeformatter) checkForResetFSyncPatterns(dataBlockSize uint32) (fSyncBytes uint32, err ocsd.Err) {
 	const FSYNC_PATTERN uint32 = 0x7FFFFFFF
 	checkForFsync := true
 	numFsyncs := 0
 	bytesProcessed := d.inBlockProcessed
-	err := ocsd.OK
+	err = ocsd.OK
 
 	for checkForFsync && (bytesProcessed < dataBlockSize) {
 		if bytesProcessed+3 < dataBlockSize && binary.LittleEndian.Uint32(d.inBlockBase[bytesProcessed:]) == FSYNC_PATTERN {
@@ -78,8 +78,8 @@ func (d *FrameDeformatter) checkForResetFSyncPatterns(fSyncBytes *uint32, dataBl
 			err = ocsd.ErrDfrmtrBadFhsync
 		}
 	}
-	*fSyncBytes += uint32(numFsyncs * 4)
-	return err
+	fSyncBytes += uint32(numFsyncs * 4)
+	return fSyncBytes, err
 }
 
 func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) (bool, *common.Error) {
@@ -97,7 +97,7 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) (bool, *common.Err
 
 	if d.cfgFlags&ocsd.DfrmtrFrameMemAlign != 0 {
 		if d.cfgFlags&ocsd.DfrmtrResetOn4xFsync != 0 {
-			err = d.checkForResetFSyncPatterns(&fSyncBytes, dataBlockSize)
+			fSyncBytes, err = d.checkForResetFSyncPatterns(dataBlockSize)
 
 			if fSyncBytes > 0 && (d.outPackedRaw || d.outUnpackedRaw) {
 				d.outputRawMonBytes(ocsd.OpData, d.trcCurrIdx, ocsd.FrmFsync, d.inBlockBase[d.inBlockProcessed:d.inBlockProcessed+fSyncBytes], 0)

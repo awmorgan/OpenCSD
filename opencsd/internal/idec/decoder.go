@@ -63,7 +63,7 @@ func (d *Decoder) decodeA32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) ocsd.Er
 			instrInfo.IsLink = 0
 		}
 	} else if InstARMIsDirectBranch(instrInfo.Opcode) {
-		InstARMBranchDestination(uint32(instrInfo.InstrAddr), instrInfo.Opcode, &branchAddr)
+		branchAddr, _ = InstARMBranchDestination(uint32(instrInfo.InstrAddr), instrInfo.Opcode)
 		instrInfo.Type = ocsd.InstrBr
 		if (branchAddr & 0x1) != 0 {
 			instrInfo.NextIsa = ocsd.ISAThumb2
@@ -114,9 +114,19 @@ func (d *Decoder) decodeA64(instrInfo *ocsd.InstrInfo, info *DecodeInfo) ocsd.Er
 		return ocsd.ErrInvalidOpcode
 	}
 
-	if InstA64IsIndirectBranchLink(instrInfo.Opcode, &instrInfo.IsLink, info) {
+	if isBranch, isLink := InstA64IsIndirectBranchLink(instrInfo.Opcode, info); isBranch {
+		if isLink {
+			instrInfo.IsLink = 1
+		} else {
+			instrInfo.IsLink = 0
+		}
 		instrInfo.Type = ocsd.InstrBrIndirect
-	} else if InstA64IsDirectBranchLink(instrInfo.Opcode, &instrInfo.IsLink, info) {
+	} else if isBranch, isLink := InstA64IsDirectBranchLink(instrInfo.Opcode, info); isBranch {
+		if isLink {
+			instrInfo.IsLink = 1
+		} else {
+			instrInfo.IsLink = 0
+		}
 		InstA64BranchDestination(uint64(instrInfo.InstrAddr), instrInfo.Opcode, &branchAddr)
 		instrInfo.Type = ocsd.InstrBr
 		instrInfo.BranchAddr = ocsd.VAddr(branchAddr)
@@ -166,14 +176,29 @@ func (d *Decoder) decodeT32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) ocsd.Er
 	instrInfo.IsLink = 0
 	instrInfo.IsConditional = 0
 
-	if InstThumbIsDirectBranchLink(instrInfo.Opcode, &instrInfo.IsLink, &instrInfo.IsConditional, info) {
-		InstThumbBranchDestination(uint32(instrInfo.InstrAddr), instrInfo.Opcode, &branchAddr)
+	if isBranch, isLink, isCond := InstThumbIsDirectBranchLink(instrInfo.Opcode, info); isBranch {
+		if isLink {
+			instrInfo.IsLink = 1
+		} else {
+			instrInfo.IsLink = 0
+		}
+		if isCond {
+			instrInfo.IsConditional = 1
+		} else {
+			instrInfo.IsConditional = 0
+		}
+		branchAddr, _ = InstThumbBranchDestination(uint32(instrInfo.InstrAddr), instrInfo.Opcode)
 		instrInfo.Type = ocsd.InstrBr
 		instrInfo.BranchAddr = ocsd.VAddr(branchAddr & ^uint32(0x1))
 		if (branchAddr & 0x1) == 0 {
 			instrInfo.NextIsa = ocsd.ISAArm
 		}
-	} else if InstThumbIsIndirectBranchLink(instrInfo.Opcode, &instrInfo.IsLink, info) {
+	} else if isBranch, isLink := InstThumbIsIndirectBranchLink(instrInfo.Opcode, info); isBranch {
+		if isLink {
+			instrInfo.IsLink = 1
+		} else {
+			instrInfo.IsLink = 0
+		}
 		instrInfo.Type = ocsd.InstrBrIndirect
 	} else if barrier = InstThumbBarrier(instrInfo.Opcode); barrier != ArmBarrierNone {
 		switch barrier {

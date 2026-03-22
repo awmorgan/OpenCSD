@@ -550,8 +550,7 @@ func (p *Processor) iPktTraceInfo(lastByte uint8) {
 		p.currPacket.ClearTraceInfo()
 
 		if presSect&uint8(TInfoInfoSect) != 0 && idx < len(p.currPacketData) {
-			var fieldVal uint32
-			n := p.extractContField(p.currPacketData, idx, &fieldVal, 5)
+			fieldVal, n := p.extractContField(p.currPacketData, idx, 5)
 			idx += n
 			p.currPacket.TraceInfo.Val = uint16(fieldVal)
 			p.currPacket.TraceInfo.CCEnabled = (fieldVal & 0x1) != 0
@@ -562,30 +561,26 @@ func (p *Processor) iPktTraceInfo(lastByte uint8) {
 			p.currPacket.Valid.TInfo = true
 		}
 		if presSect&uint8(TInfoKeySect) != 0 && idx < len(p.currPacketData) {
-			var fieldVal uint32
-			n := p.extractContField(p.currPacketData, idx, &fieldVal, 5)
+			fieldVal, n := p.extractContField(p.currPacketData, idx, 5)
 			idx += n
 			p.currPacket.P0Key = fieldVal
 		}
 		if presSect&uint8(TInfoSpecSect) != 0 && idx < len(p.currPacketData) {
-			var fieldVal uint32
-			n := p.extractContField(p.currPacketData, idx, &fieldVal, 5)
+			fieldVal, n := p.extractContField(p.currPacketData, idx, 5)
 			idx += n
 			p.currPacket.CurrSpecDepth = fieldVal
 			p.currPacket.TraceInfo.SpecFieldPresent = true
 			p.currPacket.Valid.SpecDepthValid = true
 		}
 		if presSect&uint8(TInfoCyctSect) != 0 && idx < len(p.currPacketData) {
-			var fieldVal uint32
-			n := p.extractContField(p.currPacketData, idx, &fieldVal, 5)
+			fieldVal, n := p.extractContField(p.currPacketData, idx, 5)
 			idx += n
 			p.currPacket.CCThreshold = fieldVal
 			p.currPacket.Valid.CCThreshold = true
 		}
 		// window section - unsupported in current ETE, consume but ignore.
 		if presSect&uint8(TInfoWndwSect) != 0 && idx < len(p.currPacketData) {
-			var fieldVal uint32
-			p.extractContField(p.currPacketData, idx, &fieldVal, 5)
+			_, _ = p.extractContField(p.currPacketData, idx, 5)
 		}
 		p.processState = SendPkt
 
@@ -625,9 +620,8 @@ func (p *Processor) iPktTimestamp(lastByte uint8) {
 		p.currPacket.Valid.Timestamp = true
 
 		if (p.currPacketData[0] & 0x1) == 0x1 {
-			var countVal uint32
 			idx := 1 + tsBytes
-			p.extractContField(p.currPacketData, idx, &countVal, 3)
+			countVal, _ := p.extractContField(p.currPacketData, idx, 3)
 			ccMask := (uint32(1) << p.config.CcSize()) - 1
 			countVal &= ccMask
 			p.currPacket.CycleCount = countVal
@@ -746,15 +740,16 @@ func (p *Processor) iPktCycleCntF123(lastByte uint8) {
 
 	if format == PktCcntF1 && p.commitDone && p.countDone {
 		idx := 1
+		var n int
 		var fieldVal uint32
 		if !p.config.CommitOpt1() {
-			n := p.extractContField(p.currPacketData, idx, &fieldVal, 5)
+			fieldVal, n = p.extractContField(p.currPacketData, idx, 5)
 			idx += n
 			p.currPacket.CommitElements = fieldVal
 			p.currPacket.Valid.CommitElem = true
 		}
 		if p.hasCount {
-			p.extractContField(p.currPacketData, idx, &fieldVal, 3)
+			fieldVal, _ = p.extractContField(p.currPacketData, idx, 3)
 			p.currPacket.CycleCount = fieldVal + p.currPacket.CCThreshold
 			p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
 		} else {
@@ -793,8 +788,7 @@ func (p *Processor) iPktSpeclRes(lastByte uint8) {
 		}
 	} else {
 		if (lastByte & 0x80) == 0x00 {
-			var fieldVal uint32
-			p.extractContField(p.currPacketData, 1, &fieldVal, 5)
+			fieldVal, _ := p.extractContField(p.currPacketData, 1, 5)
 			if p.currPacket.Type == PktCommit {
 				p.currPacket.CommitElements = fieldVal
 			} else {
@@ -936,8 +930,7 @@ func (p *Processor) iPktAddrCtxt(lastByte uint8) {
 				p.currPacket.VAddrPktBits = 64
 				p.currPacket.VAddrISA = p.addrIS
 			} else {
-				var val32 uint32
-				n := p.extract32BitLongAddr(p.currPacketData, stIdx, p.addrIS, &val32)
+				val32, n := p.extract32BitLongAddr(p.currPacketData, stIdx, p.addrIS)
 				stIdx += n
 				p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, val32)
 				if p.currPacket.VAddrValidBits < 32 {
@@ -965,9 +958,7 @@ func (p *Processor) iPktShortAddr(lastByte uint8) {
 	}
 
 	if p.addrDone {
-		var addrVal uint32
-		var bits int
-		p.extractShortAddrFromBuf(p.currPacketData, 1, p.addrIS, &addrVal, &bits)
+		addrVal, bits, _ := p.extractShortAddrFromBuf(p.currPacketData, 1, p.addrIS)
 		p.currPacket.VAddr, p.currPacket.VAddrValidBits = p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, addrVal, p.addrIS, bits)
 		p.currPacket.VAddrPktBits = uint8(bits)
 		p.currPacket.VAddrISA = p.addrIS
@@ -1004,8 +995,7 @@ func (p *Processor) iPktLongAddr(lastByte uint8) {
 			p.currPacket.VAddrValidBits = 64
 			p.currPacket.VAddrPktBits = 64
 		} else {
-			var val32 uint32
-			p.extract32BitLongAddr(p.currPacketData, stIdx, p.addrIS, &val32)
+			val32, _ := p.extract32BitLongAddr(p.currPacketData, stIdx, p.addrIS)
 			p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, val32)
 			if p.currPacket.VAddrValidBits < 32 {
 				p.currPacket.VAddrValidBits = 32
@@ -1091,16 +1081,13 @@ func (p *Processor) iPktQ(lastByte uint8) {
 			p.currPacket.Valid.ExactMatchIdxValid = true
 		} else if len(p.currPacketData) > 1 {
 			if p.addrShort {
-				var qAddr uint32
-				var bits int
-				n := p.extractShortAddrFromBuf(p.currPacketData, idx, p.addrIS, &qAddr, &bits)
+				qAddr, bits, n := p.extractShortAddrFromBuf(p.currPacketData, idx, p.addrIS)
 				idx += n
 				p.currPacket.VAddr, p.currPacket.VAddrValidBits = p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, qAddr, p.addrIS, bits)
 				p.currPacket.VAddrISA = p.addrIS
 				p.currPacket.VAddrPktBits = uint8(bits)
 			} else {
-				var qAddr uint32
-				n := p.extract32BitLongAddr(p.currPacketData, idx, p.addrIS, &qAddr)
+				qAddr, n := p.extract32BitLongAddr(p.currPacketData, idx, p.addrIS)
 				idx += n
 				p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, qAddr)
 				if p.currPacket.VAddrValidBits < 32 {
@@ -1113,8 +1100,7 @@ func (p *Processor) iPktQ(lastByte uint8) {
 		}
 
 		if p.qType != 0xF {
-			var qCount uint32
-			p.extractContField(p.currPacketData, idx, &qCount, 5)
+			qCount, _ := p.extractContField(p.currPacketData, idx, 5)
 			p.currPacket.QPkt = QPkt{
 				QCount:       qCount,
 				AddrPresent:  !p.addrMatch,
@@ -1200,16 +1186,14 @@ func (p *Processor) iPktCondInstr(lastByte uint8) {
 			p.currPacket.CondInstr.F3FinalElem = (lastByte & 0x1) == 0x1
 			p.processState = SendPkt
 		} else if (lastByte & 0x80) == 0x00 {
-			var condKey uint32
-			p.extractContField(p.currPacketData, 1, &condKey, 5)
+			condKey, _ := p.extractContField(p.currPacketData, 1, 5)
 			p.currPacket.CondInstr.CondCKey = condKey
 			p.currPacket.CondInstr.CondKeySet = true
 			p.processState = SendPkt
 		}
 	default:
 		if (lastByte & 0x80) == 0x00 {
-			var condKey uint32
-			p.extractContField(p.currPacketData, 1, &condKey, 5)
+			condKey, _ := p.extractContField(p.currPacketData, 1, 5)
 			p.currPacket.CondInstr.CondCKey = condKey
 			p.currPacket.CondInstr.CondKeySet = true
 			p.processState = SendPkt
@@ -1258,10 +1242,8 @@ func (p *Processor) iPktCondResult(lastByte uint8) {
 		}
 
 		if p.f1P1Done && p.f1P2Done {
-			var key0, key1 uint32
-			var res0, res1 uint8
 			stIdx := 1
-			n := p.extractCondResult(p.currPacketData, stIdx, &key0, &res0)
+			key0, res0, n := p.extractCondResult(p.currPacketData, stIdx)
 			stIdx += n
 			ci0 := p.currPacketData[0] & 0x1
 			p.currPacket.CondResult.CondRKey0 = key0
@@ -1269,7 +1251,7 @@ func (p *Processor) iPktCondResult(lastByte uint8) {
 			p.currPacket.CondResult.CI0 = ci0 != 0
 
 			if p.f1HasP2 {
-				p.extractCondResult(p.currPacketData, stIdx, &key1, &res1)
+				key1, res1, _ := p.extractCondResult(p.currPacketData, stIdx)
 				ci1 := (p.currPacketData[0] >> 1) & 0x1
 				p.currPacket.CondResult.CondRKey1 = key1
 				p.currPacket.CondResult.Res1 = res1
@@ -1284,22 +1266,21 @@ func (p *Processor) iPktCondResult(lastByte uint8) {
 
 // extractCondResult extracts a conditional result (key + result byte).
 // Returns number of bytes consumed.
-func (p *Processor) extractCondResult(buf []byte, stIdx int, key *uint32, result *uint8) int {
+func (p *Processor) extractCondResult(buf []byte, stIdx int) (key uint32, result uint8, consumed int) {
 	idx := 0
-	*key = 0
 	incr := 0
 
 	for idx < 6 {
 		if stIdx+idx >= len(buf) {
-			return idx
+			return key, result, idx
 		}
 		byteVal := buf[stIdx+idx]
 		if idx == 0 {
-			*result = byteVal & 0xF
-			*key = uint32((byteVal >> 4) & 0x7)
+			result = byteVal & 0xF
+			key = uint32((byteVal >> 4) & 0x7)
 			incr = 3
 		} else {
-			*key |= uint32(byteVal&0x7F) << incr
+			key |= uint32(byteVal&0x7F) << incr
 			incr += 7
 		}
 		if (byteVal & 0x80) == 0 {
@@ -1308,7 +1289,7 @@ func (p *Processor) extractCondResult(buf []byte, stIdx int, key *uint32, result
 		}
 		idx++
 	}
-	return idx
+	return key, result, idx
 }
 
 // ============================
@@ -1317,20 +1298,19 @@ func (p *Processor) extractCondResult(buf []byte, stIdx int, key *uint32, result
 
 // extractContField extracts a continuation-coded 32-bit value from the buffer starting at stIdx.
 // Returns number of bytes consumed.
-func (p *Processor) extractContField(buf []byte, stIdx int, value *uint32, byteLimit int) int {
+func (p *Processor) extractContField(buf []byte, stIdx int, byteLimit int) (value uint32, consumed int) {
 	idx := 0
 	lastByte := false
-	*value = 0
 	for !lastByte && idx < byteLimit {
 		if stIdx+idx >= len(buf) {
-			return idx
+			return value, idx
 		}
 		byteVal := buf[stIdx+idx]
 		lastByte = (byteVal & 0x80) != 0x80
-		*value |= uint32(byteVal&0x7F) << (idx * 7)
+		value |= uint32(byteVal&0x7F) << (idx * 7)
 		idx++
 	}
-	return idx
+	return value, idx
 }
 
 // extractTSField64 extracts a 64-bit timestamp from the buffer starting at stIdx.
@@ -1360,24 +1340,23 @@ func (p *Processor) extractTSField64(buf []byte, stIdx int, value *uint64) int {
 
 // extractShortAddrFromBuf extracts a short address from the buffer.
 // Returns number of bytes consumed.
-func (p *Processor) extractShortAddrFromBuf(buf []byte, stIdx int, IS uint8, value *uint32, bits *int) int {
+func (p *Processor) extractShortAddrFromBuf(buf []byte, stIdx int, IS uint8) (value uint32, bits int, consumed int) {
 	isShift := 2
 	if IS == 1 {
 		isShift = 1
 	}
 	idx := 0
-	*bits = 7
-	*value = 0
-	*value |= uint32(buf[stIdx+idx]&0x7F) << isShift
+	bits = 7
+	value |= uint32(buf[stIdx+idx]&0x7F) << isShift
 
 	if (buf[stIdx+idx] & 0x80) != 0 {
 		idx++
-		*value |= uint32(buf[stIdx+idx]) << (7 + isShift)
-		*bits += 8
+		value |= uint32(buf[stIdx+idx]) << (7 + isShift)
+		bits += 8
 	}
 	idx++
-	*bits += isShift
-	return idx
+	bits += isShift
+	return value, bits, idx
 }
 
 // updateShortAddress updates a VAddr with a short address value (clears lower bits, sets new ones).
@@ -1417,18 +1396,17 @@ func (p *Processor) extract64BitLongAddr(buf []byte, stIdx int, IS uint8, value 
 
 // extract32BitLongAddr extracts a 4-byte 32-bit long address.
 // Returns number of bytes consumed.
-func (p *Processor) extract32BitLongAddr(buf []byte, stIdx int, IS uint8, value *uint32) int {
-	*value = 0
+func (p *Processor) extract32BitLongAddr(buf []byte, stIdx int, IS uint8) (value uint32, consumed int) {
 	if IS == 0 {
-		*value |= uint32(buf[stIdx+0]&0x7F) << 2
-		*value |= uint32(buf[stIdx+1]&0x7F) << 9
+		value |= uint32(buf[stIdx+0]&0x7F) << 2
+		value |= uint32(buf[stIdx+1]&0x7F) << 9
 	} else {
-		*value |= uint32(buf[stIdx+0]&0x7F) << 1
-		*value |= uint32(buf[stIdx+1]) << 8
+		value |= uint32(buf[stIdx+0]&0x7F) << 1
+		value |= uint32(buf[stIdx+1]) << 8
 	}
-	*value |= uint32(buf[stIdx+2]) << 16
-	*value |= uint32(buf[stIdx+3]) << 24
-	return 4
+	value |= uint32(buf[stIdx+2]) << 16
+	value |= uint32(buf[stIdx+3]) << 24
+	return value, 4
 }
 
 // buildIPacketTable initialises p.iTable for header byte dispatch.

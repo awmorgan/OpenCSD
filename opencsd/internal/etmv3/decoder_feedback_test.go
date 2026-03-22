@@ -16,8 +16,7 @@ func TestDecodePacketPreservesWaitISyncWithoutOutput(t *testing.T) {
 	pkt.Type = PktIgnore
 	dec.CurrPacketIn = pkt
 
-	pktDone := false
-	resp := dec.decodePacket(&pktDone)
+	resp, pktDone := dec.decodePacket()
 	if resp != ocsd.RespCont {
 		t.Fatalf("expected RespCont, got %v", resp)
 	}

@@ -101,55 +101,51 @@ func InstARMIsIndirectBranch(inst uint32, info *DecodeInfo) bool {
 }
 
 func InstThumbIsDirectBranch(inst uint32, info *DecodeInfo) bool {
-	var link, cond uint8
-	return InstThumbIsDirectBranchLink(inst, &link, &cond, info)
+	isBranch, _, _ := InstThumbIsDirectBranchLink(inst, info)
+	return isBranch
 }
 
-func InstThumbIsDirectBranchLink(inst uint32, isLink *uint8, isCond *uint8, info *DecodeInfo) bool {
+func InstThumbIsDirectBranchLink(inst uint32, info *DecodeInfo) (isBranch, isLink, isCond bool) {
 	if (inst&0xf0000000) == 0xd0000000 && (inst&0x0e000000) != 0x0e000000 {
 		// B<c> (encoding T1)
-		*isCond = 1
-		return true
+		return true, false, true
 	} else if (inst & 0xf8000000) == 0xe0000000 {
 		// B (encoding T2)
-		return true
+		return true, false, false
 	} else if (inst&0xf800d000) == 0xf0008000 && (inst&0x03800000) != 0x03800000 {
 		// B (encoding T3)
-		*isCond = 1
-		return true
+		return true, false, true
 	} else if (inst & 0xf8009000) == 0xf0009000 {
 		// B (encoding T4); BL (encoding T1)
 		if (inst & 0x00004000) != 0 {
-			*isLink = 1
 			info.InstrSubType = ocsd.SInstrBrLink
+			return true, true, false
 		}
-		return true
+		return true, false, false
 	} else if (inst & 0xf800d001) == 0xf000c000 {
 		// BLX (imm) (encoding T2)
-		*isLink = 1
 		info.InstrSubType = ocsd.SInstrBrLink
-		return true
+		return true, true, false
 	} else if (inst & 0xf5000000) == 0xb1000000 {
 		// CB(NZ)
-		*isCond = 1
-		return true
+		return true, false, true
 	} else if (inst & 0xfffff001) == 0xf00fc001 {
 		// LE (encoding T1)
-		return true
+		return true, false, false
 	} else if (inst & 0xfffff001) == 0xf02fc001 {
 		// LE (encoding T2)
-		return true
+		return true, false, false
 	} else if (inst & 0xfffff001) == 0xf01fc001 {
 		// LETP (encoding T3)
-		return true
+		return true, false, false
 	} else if (inst & 0xfff0f001) == 0xf040c001 {
 		// WLS (encoding T1)
-		return true
+		return true, false, false
 	} else if (inst & 0xffc0f001) == 0xf000c001 {
 		// WLSTP (encoding T3)
-		return true
+		return true, false, false
 	}
-	return false
+	return false, false, false
 }
 
 func InstThumbWfiWfe(inst uint32) bool {
@@ -165,74 +161,74 @@ func InstThumbWfiWfe(inst uint32) bool {
 }
 
 func InstThumbIsIndirectBranch(inst uint32, info *DecodeInfo) bool {
-	var link uint8
-	return InstThumbIsIndirectBranchLink(inst, &link, info)
+	isBranch, _ := InstThumbIsIndirectBranchLink(inst, info)
+	return isBranch
 }
 
-func InstThumbIsIndirectBranchLink(inst uint32, isLink *uint8, info *DecodeInfo) bool {
+func InstThumbIsIndirectBranchLink(inst uint32, info *DecodeInfo) (isBranch, isLink bool) {
 	// See e.g. PFT Table 2-3 and Table 2-5
 	if (inst & 0xff000000) == 0x47000000 {
 		// BX, BLX (reg) [v8M includes BXNS, BLXNS]
 		if (inst & 0x00800000) != 0 {
-			*isLink = 1
 			info.InstrSubType = ocsd.SInstrBrLink
+			return true, true
 		} else if (inst & 0x00780000) == 0x00700000 {
 			info.InstrSubType = ocsd.SInstrV7ImpliedRet // BX LR
 		}
-		return true
+		return true, false
 	} else if (inst & 0xfff0d000) == 0xf3c08000 {
 		// BXJ: in v8 this behaves like BX
-		return true
+		return true, false
 	} else if (inst & 0xff000000) == 0xbd000000 {
 		// POP {pc}
 		info.InstrSubType = ocsd.SInstrV7ImpliedRet
-		return true
+		return true, false
 	} else if (inst & 0xfd870000) == 0x44870000 {
 		// MOV PC,reg or ADD PC,reg
 		if (inst & 0xffff0000) == 0x46f70000 {
 			info.InstrSubType = ocsd.SInstrV7ImpliedRet // MOV PC,LR
 		}
-		return true
+		return true, false
 	} else if (inst & 0xfff0ffe0) == 0xe8d0f000 {
 		// TBB/TBH
-		return true
+		return true, false
 	} else if (inst & 0xffd00000) == 0xe8100000 {
 		// RFE (T1)
-		return true
+		return true, false
 	} else if (inst & 0xffd00000) == 0xe9900000 {
 		// RFE (T2)
-		return true
+		return true, false
 	} else if (inst & 0xfff0d000) == 0xf3d08000 {
 		// SUBS PC,LR,#imm inc.ERET
-		return true
+		return true, false
 	} else if (inst & 0xfff0f000) == 0xf8d0f000 {
 		// LDR PC,imm (T3)
-		return true
+		return true, false
 	} else if (inst & 0xff7ff000) == 0xf85ff000 {
 		// LDR PC,literal (T2)
-		return true
+		return true, false
 	} else if (inst & 0xfff0f800) == 0xf850f800 {
 		// LDR PC,imm (T4)
 		if (inst & 0x000f0f00) == 0x000d0b00 {
 			info.InstrSubType = ocsd.SInstrV7ImpliedRet // LDR PC, [SP], #imm
 		}
-		return true
+		return true, false
 	} else if (inst & 0xfff0ffc0) == 0xf850f000 {
 		// LDR PC,reg (T2)
-		return true
+		return true, false
 	} else if (inst & 0xfe508000) == 0xe8108000 {
 		// LDM PC
 		if (inst & 0x0FFF0000) == 0x08BD0000 { // LDMIA [SP]!,
 			info.InstrSubType = ocsd.SInstrV7ImpliedRet // POP {...,pc}
 		}
-		return true
+		return true, false
 	}
-	return false
+	return false, false
 }
 
 func InstA64IsDirectBranch(inst uint32, info *DecodeInfo) bool {
-	var link uint8
-	return InstA64IsDirectBranchLink(inst, &link, info)
+	isBranch, _ := InstA64IsDirectBranchLink(inst, info)
+	return isBranch
 }
 
 func InstA64IsCmpBr(inst uint32) bool {
@@ -261,26 +257,26 @@ func InstA64CmpBrDestination(inst uint32, addr64 uint64) uint64 {
 	return addr64 + uint64(int64(int32((inst&0x00003fe0)<<18)>>21))
 }
 
-func InstA64IsDirectBranchLink(inst uint32, isLink *uint8, info *DecodeInfo) bool {
+func InstA64IsDirectBranchLink(inst uint32, info *DecodeInfo) (isBranch, isLink bool) {
 	if (inst & 0x7c000000) == 0x34000000 {
 		// CB, TB
-		return true
+		return true, false
 	} else if (inst & 0xff000000) == 0x54000000 {
 		// B<cond>
 		// BC<cond> 8.8 / 9.3 arch - bit 4 = 1'b1
-		return true
+		return true, false
 	} else if (inst & 0x7c000000) == 0x14000000 {
 		// B, BL imm
 		if (inst & 0x80000000) != 0 {
-			*isLink = 1
 			info.InstrSubType = ocsd.SInstrBrLink
+			return true, true
 		}
-		return true
+		return true, false
 	} else if InstA64IsCmpBr(inst) {
 		// CB <cc>, CBB <cc>, CBH <cc>
-		return true
+		return true, false
 	}
-	return false
+	return false, false
 }
 
 func InstA64WfiWfe(inst uint32, info *DecodeInfo) bool {
@@ -306,99 +302,90 @@ func InstA64Tstart(inst uint32) bool {
 }
 
 func InstA64IsIndirectBranch(inst uint32, info *DecodeInfo) bool {
-	var link uint8
-	return InstA64IsIndirectBranchLink(inst, &link, info)
+	isBranch, _ := InstA64IsIndirectBranchLink(inst, info)
+	return isBranch
 }
 
-func InstA64IsIndirectBranchLink(inst uint32, isLink *uint8, info *DecodeInfo) bool {
+func InstA64IsIndirectBranchLink(inst uint32, info *DecodeInfo) (isBranch, isLink bool) {
 	if (inst & 0xffdffc1f) == 0xd61f0000 {
 		// BR, BLR
 		if (inst & 0x00200000) != 0 {
-			*isLink = 1
 			info.InstrSubType = ocsd.SInstrBrLink
+			return true, true
 		}
-		return true
+		return true, false
 	} else if (inst & 0xfffffc1f) == 0xd65f0000 {
 		info.InstrSubType = ocsd.SInstrV8Ret
 		// RET
-		return true
+		return true, false
 	} else if (inst & 0xffffffff) == 0xd69f03e0 {
 		// ERET
 		info.InstrSubType = ocsd.SInstrV8Eret
-		return true
+		return true, false
 	} else if ocsd.IsArchMinVer(info.ArchVersion, ocsd.ArchV8r3) {
 		// new pointer auth instr for v8.3 arch
 		if (inst & 0xffdff800) == 0xd71f0800 {
 			// BRAA, BRAB, BLRAA, BLRBB
 			if (inst & 0x00200000) != 0 {
-				*isLink = 1
 				info.InstrSubType = ocsd.SInstrBrLink
+				return true, true
 			}
-			return true
+			return true, false
 		} else if (inst & 0xffdff81F) == 0xd61f081F {
 			// BRAAZ, BRABZ, BLRAAZ, BLRBBZ
 			if (inst & 0x00200000) != 0 {
-				*isLink = 1
 				info.InstrSubType = ocsd.SInstrBrLink
+				return true, true
 			}
-			return true
+			return true, false
 		} else if (inst & 0xfffffbff) == 0xd69f0bff {
 			// ERETAA, ERETAB
 			info.InstrSubType = ocsd.SInstrV8Eret
-			return true
+			return true, false
 		} else if (inst & 0xfffffbff) == 0xd65f0bff {
 			// RETAA, RETAB
 			info.InstrSubType = ocsd.SInstrV8Ret
-			return true
+			return true, false
 		} else if (inst & 0xffc0001f) == 0x5500001f {
 			// RETA<k>SPPC label
 			info.InstrSubType = ocsd.SInstrV8Ret
-			return true
+			return true, false
 		} else if ((inst & 0xfffffbe0) == 0xd65f0be0) && ((inst & 0x1f) != 0x1f) {
 			// RETA<k>SPPC <register>
 			info.InstrSubType = ocsd.SInstrV8Ret
-			return true
+			return true, false
 		} else if (inst == 0xd6ff03e0) || (inst == 0xd6ff07e0) {
 			// TEXIT - acts as ERET
 			info.InstrSubType = ocsd.SInstrV8Eret
-			return true
+			return true, false
 		}
 	}
-	return false
+	return false, false
 }
 
-func InstARMBranchDestination(addr uint32, inst uint32, pnpc *uint32) bool {
+func InstARMBranchDestination(addr uint32, inst uint32) (pnpc uint32, ok bool) {
 	if (inst & 0x0e000000) == 0x0a000000 {
-		npc := addr + 8 + uint32(int32((inst&0xffffff)<<8)>>6)
+		pnpc = addr + 8 + uint32(int32((inst&0xffffff)<<8)>>6)
 		if (inst & 0xf0000000) == 0xf0000000 {
-			npc |= 1                  // indicate ISA is now Thumb
-			npc |= ((inst >> 23) & 2) // apply the H bit
+			pnpc |= 1                  // indicate ISA is now Thumb
+			pnpc |= ((inst >> 23) & 2) // apply the H bit
 		}
-		if pnpc != nil {
-			*pnpc = npc
-		}
-		return true
+		return pnpc, true
 	}
-	return false
+	return 0, false
 }
 
-func InstThumbBranchDestination(addr uint32, inst uint32, pnpc *uint32) bool {
+func InstThumbBranchDestination(addr uint32, inst uint32) (pnpc uint32, ok bool) {
 	if (inst&0xf0000000) == 0xd0000000 && (inst&0x0e000000) != 0x0e000000 {
 		// B<c> (encoding T1)
-		npc := addr + 4 + uint32(int32((inst&0x00ff0000)<<8)>>23)
-		npc |= 1
-		if pnpc != nil {
-			*pnpc = npc
-		}
-		return true
+		pnpc = addr + 4 + uint32(int32((inst&0x00ff0000)<<8)>>23)
+		pnpc |= 1
+		return pnpc, true
 	} else if (inst & 0xf8000000) == 0xe0000000 {
 		// B (encoding T2)
-		npc := addr + 4 + uint32(int32((inst&0x07ff0000)<<5)>>20)
-		npc |= 1
-		if pnpc != nil {
-			*pnpc = npc
-		}
-		return true
+		pnpc = addr + 4 + uint32(int32((inst&0x07ff0000)<<5)>>20)
+		pnpc |= 1
+		return pnpc, true
 	} else if (inst&0xf800d000) == 0xf0008000 && (inst&0x03800000) != 0x03800000 {
 		// B (encoding T3)
 		var offset uint32 = ((inst & 0x04000000) << 5) |
@@ -406,12 +393,9 @@ func InstThumbBranchDestination(addr uint32, inst uint32, pnpc *uint32) bool {
 			((inst & 0x2000) << 16) |
 			((inst & 0x003f0000) << 7) |
 			((inst & 0x000007ff) << 12)
-		npc := addr + 4 + uint32(int32(offset)>>11)
-		npc |= 1
-		if pnpc != nil {
-			*pnpc = npc
-		}
-		return true
+		pnpc = addr + 4 + uint32(int32(offset)>>11)
+		pnpc |= 1
+		return pnpc, true
 	} else if (inst & 0xf8009000) == 0xf0009000 {
 		// B (encoding T4); BL (encoding T1)
 		S := ((inst & 0x04000000) >> 26) - 1 // ffffffff or 0 according to S bit
@@ -420,12 +404,9 @@ func InstThumbBranchDestination(addr uint32, inst uint32, pnpc *uint32) bool {
 			(((inst ^ S) & 0x0800) << 18) |
 			((inst & 0x03ff0000) << 3) |
 			((inst & 0x000007ff) << 8)
-		npc := addr + 4 + uint32(int32(offset)>>7)
-		npc |= 1
-		if pnpc != nil {
-			*pnpc = npc
-		}
-		return true
+		pnpc = addr + 4 + uint32(int32(offset)>>7)
+		pnpc |= 1
+		return pnpc, true
 	} else if (inst & 0xf800d001) == 0xf000c000 {
 		// BLX (encoding T2)
 		S := ((inst & 0x04000000) >> 26) - 1 // ffffffff or 0 according to S bit
@@ -435,63 +416,42 @@ func InstThumbBranchDestination(addr uint32, inst uint32, pnpc *uint32) bool {
 			(((inst ^ S) & 0x0800) << 18) |
 			((inst & 0x03ff0000) << 3) |
 			((inst & 0x000007fe) << 8)
-		npc := addr + 4 + uint32(int32(offset)>>7)
+		pnpc = addr + 4 + uint32(int32(offset)>>7)
 		// don't set the Thumb bit, as we're transferring to ARM
-		if pnpc != nil {
-			*pnpc = npc
-		}
-		return true
+		return pnpc, true
 	} else if (inst & 0xf5000000) == 0xb1000000 {
 		// CB(NZ)
 		// Note that it's zero-extended - always a forward branch
-		npc := addr + 4 + ((((inst & 0x02000000) << 6) | ((inst & 0x00f80000) << 7)) >> 25)
-		npc |= 1
-		if pnpc != nil {
-			*pnpc = npc
-		}
-		return true
+		pnpc = addr + 4 + ((((inst & 0x02000000) << 6) | ((inst & 0x00f80000) << 7)) >> 25)
+		pnpc |= 1
+		return pnpc, true
 	} else if (inst & 0xfffff001) == 0xf00fc001 {
 		// LE (encoding T1)
-		npc := addr + 4 - (((inst & 0x000007fe) << 1) | ((inst & 0x00000800) >> 10))
-		npc |= 1
-		if pnpc != nil {
-			*pnpc = npc
-		}
-		return true
+		pnpc = addr + 4 - (((inst & 0x000007fe) << 1) | ((inst & 0x00000800) >> 10))
+		pnpc |= 1
+		return pnpc, true
 	} else if (inst & 0xfffff001) == 0xf02fc001 {
 		// LE (encoding T2)
-		npc := addr + 4 - (((inst & 0x000007fe) << 1) | ((inst & 0x00000800) >> 10))
-		npc |= 1
-		if pnpc != nil {
-			*pnpc = npc
-		}
-		return true
+		pnpc = addr + 4 - (((inst & 0x000007fe) << 1) | ((inst & 0x00000800) >> 10))
+		pnpc |= 1
+		return pnpc, true
 	} else if (inst & 0xfffff001) == 0xf01fc001 {
 		// LETP (encoding T3)
-		npc := addr + 4 - (((inst & 0x000007fe) << 1) | ((inst & 0x00000800) >> 10))
-		npc |= 1
-		if pnpc != nil {
-			*pnpc = npc
-		}
-		return true
+		pnpc = addr + 4 - (((inst & 0x000007fe) << 1) | ((inst & 0x00000800) >> 10))
+		pnpc |= 1
+		return pnpc, true
 	} else if (inst & 0xfff0f001) == 0xf040c001 {
 		// WLS (encoding T1)
-		npc := addr + 4 + (((inst & 0x000007fe) << 1) | ((inst & 0x00000800) >> 10))
-		npc |= 1
-		if pnpc != nil {
-			*pnpc = npc
-		}
-		return true
+		pnpc = addr + 4 + (((inst & 0x000007fe) << 1) | ((inst & 0x00000800) >> 10))
+		pnpc |= 1
+		return pnpc, true
 	} else if (inst & 0xffc0f001) == 0xf000c001 {
 		// WLSTP (encoding T3)
-		npc := addr + 4 + (((inst & 0x000007fe) << 1) | ((inst & 0x00000800) >> 10))
-		npc |= 1
-		if pnpc != nil {
-			*pnpc = npc
-		}
-		return true
+		pnpc = addr + 4 + (((inst & 0x000007fe) << 1) | ((inst & 0x00000800) >> 10))
+		pnpc |= 1
+		return pnpc, true
 	}
-	return false
+	return 0, false
 }
 
 func InstA64BranchDestination(addr uint64, inst uint32, pnpc *uint64) bool {

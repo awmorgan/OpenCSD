@@ -242,12 +242,12 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 				d.currState = sendPkts
 				d.bWaitISync = false
 			} else if d.preISyncValid(packetIn.Type) {
-				resp = d.decodePacket(&pktDone)
+				resp, pktDone = d.decodePacket()
 			} else {
 				pktDone = true
 			}
 		case decodePkts:
-			resp = d.decodePacket(&pktDone)
+			resp, pktDone = d.decodePacket()
 		case sendPkts:
 			resp = d.outputElemList.SendElements()
 			if ocsd.DataRespIsCont(resp) {
@@ -339,9 +339,9 @@ func (d *PktDecode) sendUnsyncPacket() ocsd.DatapathResp {
 	return d.outputElemList.SendElements()
 }
 
-func (d *PktDecode) decodePacket(pktDone *bool) ocsd.DatapathResp {
-	resp := ocsd.RespCont
-	*pktDone = false
+func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, pktDone bool) {
+	resp = ocsd.RespCont
+	pktDone = false
 
 	packetIn := d.CurrPacketIn
 
@@ -349,8 +349,7 @@ func (d *PktDecode) decodePacket(pktDone *bool) ocsd.DatapathResp {
 		d.outputElemList.CommitAllPendElem()
 		resp = d.emitPendingNacc()
 		if !ocsd.DataRespIsCont(resp) {
-			*pktDone = true
-			return resp
+			return resp, true
 		}
 	}
 
@@ -362,8 +361,7 @@ func (d *PktDecode) decodePacket(pktDone *bool) ocsd.DatapathResp {
 		d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "Trace Packet Synchronisation Lost"))
 		d.unsyncInfo = common.UnsyncBadPacket
 		d.resetDecoder()
-		*pktDone = true
-		return ocsd.RespFatalSysErr
+		return ocsd.RespFatalSysErr, true
 
 	case PktIncompleteEOT, PktASync, PktIgnore:
 		// ignore
@@ -436,15 +434,13 @@ func (d *PktDecode) decodePacket(pktDone *bool) ocsd.DatapathResp {
 		d.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
 		d.unsyncInfo = common.UnsyncBadPacket
 		d.resetDecoder()
-		*pktDone = true
-		return ocsd.RespFatalSysErr
+		return ocsd.RespFatalSysErr, true
 	}
 
 	if resp == ocsd.RespFatalInvalidData {
 		d.unsyncInfo = common.UnsyncBadPacket
 		d.resetDecoder()
-		*pktDone = true
-		return resp
+		return resp, true
 	}
 
 	if d.outputElemList.ElemToSend() {
@@ -452,9 +448,8 @@ func (d *PktDecode) decodePacket(pktDone *bool) ocsd.DatapathResp {
 	} else {
 		d.currState = d.nextDecodeState()
 	}
-	*pktDone = !d.outputElemList.ElemToSend()
-
-	return resp
+	pktDone = !d.outputElemList.ElemToSend()
+	return resp, pktDone
 }
 
 func (d *PktDecode) setNeedAddr(bNeedAddr bool) {
