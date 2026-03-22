@@ -17,7 +17,7 @@ type GenElemList struct {
 	numUsed   int
 	numPend   int
 	csID      uint8
-	sendIf    *AttachPt[ocsd.TrcGenElemIn]
+	sendIf    func() ocsd.TrcGenElemIn
 }
 
 // NewGenElemList creates a new list with an initial capacity.
@@ -31,7 +31,7 @@ func NewGenElemList() *GenElemList {
 	return l
 }
 
-func (l *GenElemList) SetSendIf(sendIf *AttachPt[ocsd.TrcGenElemIn]) {
+func (l *GenElemList) SetSendIf(sendIf func() ocsd.TrcGenElemIn) {
 	l.sendIf = sendIf
 }
 
@@ -114,14 +114,18 @@ func (l *GenElemList) ElemToSend() bool {
 }
 
 func (l *GenElemList) SendElements() ocsd.DatapathResp {
-	if l.sendIf == nil || !l.sendIf.IsActive() {
+	if l.sendIf == nil {
+		return ocsd.RespFatalNotInit
+	}
+	out := l.sendIf()
+	if out == nil {
 		return ocsd.RespFatalNotInit
 	}
 	resp := ocsd.RespCont
 	for l.ElemToSend() && ocsd.DataRespIsCont(resp) {
 		idx := l.firstIdx
 		pPtr := &l.elemArray[idx]
-		resp = l.sendIf.First().TraceElemIn(pPtr.pktIndex, l.csID, pPtr.elem)
+		resp = out.TraceElemIn(pPtr.pktIndex, l.csID, pPtr.elem)
 		l.firstIdx = l.getAdjustedIdx(l.firstIdx + 1)
 		l.numUsed--
 	}
@@ -135,7 +139,7 @@ type GenElemStack struct {
 	currElemIdx int
 	sendElemIdx int
 	csID        uint8
-	sendIf      *AttachPt[ocsd.TrcGenElemIn]
+	sendIf      func() ocsd.TrcGenElemIn
 }
 
 // NewGenElemStack creates a new trace element stack.
@@ -154,7 +158,7 @@ func (s *GenElemStack) isReady() bool {
 	return len(s.elemArray) > 0 && s.sendIf != nil
 }
 
-func (s *GenElemStack) SetSendIf(sendIf *AttachPt[ocsd.TrcGenElemIn]) {
+func (s *GenElemStack) SetSendIf(sendIf func() ocsd.TrcGenElemIn) {
 	s.sendIf = sendIf
 }
 
@@ -233,10 +237,14 @@ func (s *GenElemStack) SendElements() ocsd.DatapathResp {
 	if !s.isReady() {
 		return ocsd.RespFatalNotInit
 	}
+	out := s.sendIf()
+	if out == nil {
+		return ocsd.RespFatalNotInit
+	}
 	resp := ocsd.RespCont
 	for s.elemToSend > 0 && ocsd.DataRespIsCont(resp) {
 		pPtr := &s.elemArray[s.sendElemIdx]
-		resp = s.sendIf.First().TraceElemIn(pPtr.pktIndex, s.csID, pPtr.elem)
+		resp = out.TraceElemIn(pPtr.pktIndex, s.csID, pPtr.elem)
 		s.elemToSend--
 		s.sendElemIdx++
 	}

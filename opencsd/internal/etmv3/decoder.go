@@ -108,7 +108,7 @@ func (d *PktDecode) configureDecoder() {
 	d.resetDecoder()
 	d.unsyncInfo = common.UnsyncInitDecoder
 
-	d.outputElemList.SetSendIf(&d.TraceElemOut)
+	d.outputElemList.SetSendIf(d.TraceElemOutIf)
 }
 
 func (d *PktDecode) resetDecoder() {

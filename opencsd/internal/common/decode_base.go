@@ -33,9 +33,9 @@ type PktRawDataMon[P any] = ocsd.PktRawDataMon[P]
 type PktDecodeI struct {
 	TraceComponent
 
-	TraceElemOut AttachPt[ocsd.TrcGenElemIn]
-	MemAccess    AttachPt[TargetMemAccess]
-	InstrDecode  AttachPt[InstrDecode]
+	TraceElemOut ocsd.TrcGenElemIn
+	MemAccess    TargetMemAccess
+	InstrDecode  InstrDecode
 
 	IndexCurrPkt ocsd.TrcIndex
 
@@ -44,43 +44,28 @@ type PktDecodeI struct {
 	usesIDecode   bool
 }
 
-func (p *PktDecodeI) TraceElemOutAttachPt() *AttachPt[ocsd.TrcGenElemIn] {
-	return &p.TraceElemOut
-}
-func (p *PktDecodeI) InstrDecodeAttachPt() *AttachPt[InstrDecode] { return &p.InstrDecode }
-func (p *PktDecodeI) MemAccAttachPt() *AttachPt[TargetMemAccess]  { return &p.MemAccess }
-
 func (p *PktDecodeI) SetTraceElemOut(out ocsd.TrcGenElemIn) {
-	_ = p.TraceElemOut.Replace(out)
+	p.TraceElemOut = out
 }
 
 func (p *PktDecodeI) TraceElemOutIf() ocsd.TrcGenElemIn {
-	if p.TraceElemOut.IsActive() {
-		return p.TraceElemOut.First()
-	}
-	return nil
+	return p.TraceElemOut
 }
 
 func (p *PktDecodeI) SetMemAccess(mem TargetMemAccess) {
-	_ = p.MemAccess.Replace(mem)
+	p.MemAccess = mem
 }
 
 func (p *PktDecodeI) MemAccessIf() TargetMemAccess {
-	if p.MemAccess.IsActive() {
-		return p.MemAccess.First()
-	}
-	return nil
+	return p.MemAccess
 }
 
 func (p *PktDecodeI) SetInstrDecode(decoder InstrDecode) {
-	_ = p.InstrDecode.Replace(decoder)
+	p.InstrDecode = decoder
 }
 
 func (p *PktDecodeI) InstrDecodeIf() InstrDecode {
-	if p.InstrDecode.IsActive() {
-		return p.InstrDecode.First()
-	}
-	return nil
+	return p.InstrDecode
 }
 
 func (p *PktDecodeI) SetNeedsMemAccess(needs bool) { p.usesMemAccess = needs }
@@ -157,9 +142,6 @@ type PktDecodeBase[P any, Pc any] struct {
 
 func (pb *PktDecodeBase[P, Pc]) ConfigurePktDecodeBase(name string) {
 	pb.ConfigureTraceComponent(name)
-	pb.TraceElemOut = *NewAttachPt[ocsd.TrcGenElemIn]()
-	pb.MemAccess = *NewAttachPt[TargetMemAccess]()
-	pb.InstrDecode = *NewAttachPt[InstrDecode]()
 	pb.usesMemAccess = true
 	pb.usesIDecode = true
 }
@@ -173,52 +155,40 @@ type PktProcI struct {
 type PktProcBase[P any, Pt any, Pc any] struct {
 	PktProcI
 	Config      *Pc
-	PktOutI     AttachPt[PktDataIn[P]]
-	PktRawMonI  AttachPt[PktRawDataMon[P]]
-	PktIndexerI AttachPt[TrcPktIndexer[Pt]]
+	PktOutI     PktDataIn[P]
+	PktRawMonI  PktRawDataMon[P]
+	PktIndexerI TrcPktIndexer[Pt]
 	Stats       ocsd.DecodeStats
 	statsInit   bool
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) ConfigurePktProcBase(name string) {
 	pb.ConfigureTraceComponent(name)
-	pb.PktOutI = *NewAttachPt[PktDataIn[P]]()
-	pb.PktRawMonI = *NewAttachPt[PktRawDataMon[P]]()
-	pb.PktIndexerI = *NewAttachPt[TrcPktIndexer[Pt]]()
 	pb.ResetStats()
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) SetPktOut(out PktDataIn[P]) {
-	_ = pb.PktOutI.Replace(out)
+	pb.PktOutI = out
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) PktOut() PktDataIn[P] {
-	if pb.PktOutI.IsActive() {
-		return pb.PktOutI.First()
-	}
-	return nil
+	return pb.PktOutI
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) SetPktRawMonitor(mon PktRawDataMon[P]) {
-	_ = pb.PktRawMonI.Replace(mon)
+	pb.PktRawMonI = mon
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) PktRawMonitor() PktRawDataMon[P] {
-	if pb.PktRawMonI.IsActive() {
-		return pb.PktRawMonI.First()
-	}
-	return nil
+	return pb.PktRawMonI
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) SetPktIndexer(indexer TrcPktIndexer[Pt]) {
-	_ = pb.PktIndexerI.Replace(indexer)
+	pb.PktIndexerI = indexer
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) PktIndexer() TrcPktIndexer[Pt] {
-	if pb.PktIndexerI.IsActive() {
-		return pb.PktIndexerI.First()
-	}
-	return nil
+	return pb.PktIndexerI
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) OutputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *P) ocsd.DatapathResp {

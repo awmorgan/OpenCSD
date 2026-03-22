@@ -17,11 +17,9 @@ func (d *dummySendIf) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem 
 
 func TestGenElemList(t *testing.T) {
 	list := NewGenElemList()
-	sendAttached := NewAttachPt[ocsd.TrcGenElemIn]()
 	dummy := &dummySendIf{}
-	sendAttached.Attach(dummy)
 
-	list.SetSendIf(sendAttached)
+	list.SetSendIf(func() ocsd.TrcGenElemIn { return dummy })
 	list.SetCSID(10)
 
 	// Test array growth and insertion
@@ -71,11 +69,9 @@ func TestGenElemList(t *testing.T) {
 
 func TestGenElemListPendLastPartialWindow(t *testing.T) {
 	list := NewGenElemList()
-	sendAttached := NewAttachPt[ocsd.TrcGenElemIn]()
 	dummy := &dummySendIf{}
-	sendAttached.Attach(dummy)
 
-	list.SetSendIf(sendAttached)
+	list.SetSendIf(func() ocsd.TrcGenElemIn { return dummy })
 	list.SetCSID(12)
 
 	for i := range 3 {
@@ -110,11 +106,9 @@ func TestGenElemListPendLastPartialWindow(t *testing.T) {
 
 func TestGenElemStack(t *testing.T) {
 	stack := NewGenElemStack()
-	sendAttached := NewAttachPt[ocsd.TrcGenElemIn]()
 	dummy := &dummySendIf{}
-	sendAttached.Attach(dummy)
 
-	stack.SetSendIf(sendAttached)
+	stack.SetSendIf(func() ocsd.TrcGenElemIn { return dummy })
 	stack.SetCSID(11)
 
 	// Add elems to grow array

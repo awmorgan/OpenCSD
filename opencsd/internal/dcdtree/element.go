@@ -6,18 +6,6 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-type traceElemAttachOwner interface {
-	TraceElemOutAttachPt() *common.AttachPt[ocsd.TrcGenElemIn]
-}
-
-type instrDecodeAttachOwner interface {
-	InstrDecodeAttachPt() *common.AttachPt[common.InstrDecode]
-}
-
-type memAccAttachOwner interface {
-	MemAccAttachPt() *common.AttachPt[common.TargetMemAccess]
-}
-
 type traceElemSetterOwner interface {
 	SetTraceElemOut(ocsd.TrcGenElemIn)
 }
@@ -39,9 +27,6 @@ type DecodeTreeElement struct {
 	SetTraceElemOut func(ocsd.TrcGenElemIn)
 	SetInstrDecode  func(common.InstrDecode)
 	SetMemAccess    func(common.TargetMemAccess)
-	TraceElemAttach *common.AttachPt[ocsd.TrcGenElemIn]
-	InstrDecAttach  *common.AttachPt[common.InstrDecode]
-	MemAccAttach    *common.AttachPt[common.TargetMemAccess]
 	Protocol        ocsd.TraceProtocol // Protocol type
 	Created         bool               // True if decode tree created this element
 }
@@ -51,21 +36,6 @@ func NewDecodeTreeElement(name string, decoderManager ocsd.DecoderManager, dcdHa
 	protocol := ocsd.ProtocolUnknown
 	if decoderManager != nil {
 		protocol = decoderManager.Protocol()
-	}
-
-	var traceElemAttach *common.AttachPt[ocsd.TrcGenElemIn]
-	if owner, ok := dcdHandle.(traceElemAttachOwner); ok {
-		traceElemAttach = owner.TraceElemOutAttachPt()
-	}
-
-	var instrDecAttach *common.AttachPt[common.InstrDecode]
-	if owner, ok := dcdHandle.(instrDecodeAttachOwner); ok {
-		instrDecAttach = owner.InstrDecodeAttachPt()
-	}
-
-	var memAccAttach *common.AttachPt[common.TargetMemAccess]
-	if owner, ok := dcdHandle.(memAccAttachOwner); ok {
-		memAccAttach = owner.MemAccAttachPt()
 	}
 
 	var setTraceElemOut func(ocsd.TrcGenElemIn)
@@ -91,9 +61,6 @@ func NewDecodeTreeElement(name string, decoderManager ocsd.DecoderManager, dcdHa
 		SetTraceElemOut: setTraceElemOut,
 		SetInstrDecode:  setInstrDecode,
 		SetMemAccess:    setMemAccess,
-		TraceElemAttach: traceElemAttach,
-		InstrDecAttach:  instrDecAttach,
-		MemAccAttach:    memAccAttach,
 		Protocol:        protocol,
 		Created:         created,
 	}

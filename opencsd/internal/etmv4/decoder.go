@@ -242,7 +242,7 @@ func (d *PktDecode) configureDecoder() {
 	d.p0Stack = nil
 	d.poppedElems = nil
 	d.outElem = *common.NewGenElemStack()
-	d.outElem.SetSendIf(d.TraceElemOutAttachPt())
+	d.outElem.SetSendIf(d.TraceElemOutIf)
 	if d.config != nil {
 		d.outElem.SetCSID(d.config.TraceID())
 	}
@@ -265,7 +265,7 @@ func (d *PktDecode) SetProtocolConfig(config *Config) ocsd.Err {
 	// d.InitDecoderCore()
 	d.configureDecoder()
 	d.outElem.SetCSID(d.config.TraceID())
-	d.outElem.SetSendIf(d.TraceElemOutAttachPt())
+	d.outElem.SetSendIf(d.TraceElemOutIf)
 
 	// Match C++ decoder behavior: enable the return stack only when configured.
 	if d.config.EnabledRetStack() {
@@ -1886,7 +1886,7 @@ func (d *PktDecode) resetDecoderState() {
 		if d.config != nil {
 			d.outElem.SetCSID(d.config.TraceID())
 		}
-		d.outElem.SetSendIf(d.TraceElemOutAttachPt())
+		d.outElem.SetSendIf(d.TraceElemOutIf)
 	}
 
 	d.returnStack = *common.NewAddrReturnStack()

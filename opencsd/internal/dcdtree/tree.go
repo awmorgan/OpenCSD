@@ -226,22 +226,16 @@ func (dt *DecodeTree) attachElementDependencies(elem *DecodeTreeElement) {
 	if dt.genElemOut != nil {
 		if elem.SetTraceElemOut != nil {
 			elem.SetTraceElemOut(dt.genElemOut)
-		} else if elem.TraceElemAttach != nil {
-			elem.TraceElemAttach.Replace(dt.genElemOut)
 		}
 	}
 	if dt.instrDecode != nil {
 		if elem.SetInstrDecode != nil {
 			elem.SetInstrDecode(dt.instrDecode)
-		} else if elem.InstrDecAttach != nil {
-			elem.InstrDecAttach.Replace(dt.instrDecode)
 		}
 	}
 	if dt.memAccess != nil {
 		if elem.SetMemAccess != nil {
 			elem.SetMemAccess(dt.memAccess)
-		} else if elem.MemAccAttach != nil {
-			elem.MemAccAttach.Replace(dt.memAccess)
 		}
 	}
 }
@@ -265,8 +259,6 @@ func (dt *DecodeTree) SetGenTraceElemOutI(outI ocsd.TrcGenElemIn) {
 	for _, elem := range dt.decodeElements {
 		if elem.SetTraceElemOut != nil {
 			elem.SetTraceElemOut(outI)
-		} else if elem.TraceElemAttach != nil {
-			elem.TraceElemAttach.Replace(outI)
 		}
 	}
 }
@@ -277,8 +269,6 @@ func (dt *DecodeTree) SetInstrDecoder(instrDec common.InstrDecode) {
 	for _, elem := range dt.decodeElements {
 		if elem.SetInstrDecode != nil {
 			elem.SetInstrDecode(instrDec)
-		} else if elem.InstrDecAttach != nil {
-			elem.InstrDecAttach.Replace(instrDec)
 		}
 	}
 }
@@ -289,8 +279,6 @@ func (dt *DecodeTree) SetMemAccessI(memI common.TargetMemAccess) {
 	for _, elem := range dt.decodeElements {
 		if elem.SetMemAccess != nil {
 			elem.SetMemAccess(memI)
-		} else if elem.MemAccAttach != nil {
-			elem.MemAccAttach.Replace(memI)
 		}
 	}
 }
