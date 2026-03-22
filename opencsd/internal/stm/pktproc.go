@@ -127,7 +127,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 	switch op {
 	case ocsd.OpData:
 		if len(dataBlock) == 0 {
-			p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor: Zero length data block error"))
+			p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor: Zero length data block error"))
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			processed, resp, err = p.ProcessData(index, dataBlock)
@@ -156,7 +156,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			p.PktRawMonI.First().RawPacketDataMon(ocsd.OpReset, index, nil, nil)
 		}
 	default:
-		p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
+		p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return processed, resp, err
@@ -289,7 +289,10 @@ func (p *PktProc) setBadSequenceError(msg string) error {
 	if p.Config != nil {
 		trcID = p.Config.TraceID()
 	}
-	return common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, p.packetIndex, trcID, msg)
+	e := common.Errorf(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "%s", msg)
+	e.Idx = p.packetIndex
+	e.ChanID = trcID
+	return e
 }
 
 // setReservedHdrError records a reserved-header error on the processor.
@@ -300,7 +303,10 @@ func (p *PktProc) setReservedHdrError(msg string) error {
 	if p.Config != nil {
 		trcID = p.Config.TraceID()
 	}
-	return common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, p.packetIndex, trcID, msg)
+	e := common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, "%s", msg)
+	e.Idx = p.packetIndex
+	e.ChanID = trcID
+	return e
 }
 
 func (p *PktProc) resetProcessorState() {

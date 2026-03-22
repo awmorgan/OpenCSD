@@ -55,14 +55,14 @@ func (d *PktDecode) SetProtocolConfig(cfg *Config) ocsd.Err {
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) ocsd.DatapathResp {
 	resp := ocsd.RespCont
 	if reason := d.DecodeNotReadyReason(); reason != "" {
-		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrNotInit, reason))
+		d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrNotInit, "%s", reason))
 		return ocsd.RespFatalNotInit
 	}
 
 	switch op {
 	case ocsd.OpData:
 		if pktIn == nil {
-			d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
+			d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			d.CurrPacketIn = pktIn
@@ -76,7 +76,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 	case ocsd.OpReset:
 		resp = d.OnReset()
 	default:
-		d.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
+		d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return resp

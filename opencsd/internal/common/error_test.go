@@ -13,47 +13,65 @@ func TestErrorStrings(t *testing.T) {
 	}{
 		{
 			name:     "Invalid SevNone",
-			err:      NewError(ocsd.ErrSevNone, ocsd.OK),
+			err:      Errorf(ocsd.ErrSevNone, ocsd.OK, ""),
 			expected: "LIBRARY INTERNAL ERROR: Invalid Error Object",
 		},
 		{
 			name:     "Invalid Sev Out of Bounds",
-			err:      NewError(ocsd.ErrSeverity(99), ocsd.OK),
+			err:      Errorf(ocsd.ErrSeverity(99), ocsd.OK, ""),
 			expected: "LIBRARY INTERNAL ERROR: Invalid Error Object",
 		},
 		{
 			name:     "Error Basic",
-			err:      NewError(ocsd.ErrSevError, ocsd.ErrFail),
+			err:      Errorf(ocsd.ErrSevError, ocsd.ErrFail, ""),
 			expected: "ERROR:0x0001 (OCSD_ERR_FAIL) [General failure.]; ",
 		},
 		{
-			name:     "Warning with index",
-			err:      NewErrorWithIdx(ocsd.ErrSevWarn, ocsd.ErrMem, 12345),
+			name: "Warning with index",
+			err: func() *Error {
+				e := Errorf(ocsd.ErrSevWarn, ocsd.ErrMem, "")
+				e.Idx = 12345
+				return e
+			}(),
 			expected: "WARN :0x0002 (OCSD_ERR_MEM) [Internal memory allocation error.]; TrcIdx=12345; ",
 		},
 		{
-			name:     "Info with index and chan",
-			err:      NewErrorWithIdxChan(ocsd.ErrSevInfo, ocsd.ErrNotInit, 987, 0x1A),
+			name: "Info with index and chan",
+			err: func() *Error {
+				e := Errorf(ocsd.ErrSevInfo, ocsd.ErrNotInit, "")
+				e.Idx = 987
+				e.ChanID = 0x1A
+				return e
+			}(),
 			expected: "INFO :0x0003 (OCSD_ERR_NOT_INIT) [Component not initialised.]; TrcIdx=987; CS ID=1a; ",
 		},
 		{
 			name:     "Error with msg",
-			err:      NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidID, "Custom message here"),
+			err:      Errorf(ocsd.ErrSevError, ocsd.ErrInvalidID, "Custom message here"),
 			expected: "ERROR:0x0004 (OCSD_ERR_INVALID_ID) [Invalid CoreSight Trace Source ID.]; Custom message here",
 		},
 		{
-			name:     "Error with Idx Msg",
-			err:      NewErrorWithIdxMsg(ocsd.ErrSevError, ocsd.ErrBadHandle, 42, "Bad handle msg"),
+			name: "Error with Idx Msg",
+			err: func() *Error {
+				e := Errorf(ocsd.ErrSevError, ocsd.ErrBadHandle, "Bad handle msg")
+				e.Idx = 42
+				return e
+			}(),
 			expected: "ERROR:0x0005 (OCSD_ERR_BAD_HANDLE) [Invalid handle passed to component.]; TrcIdx=42; Bad handle msg",
 		},
 		{
-			name:     "Error with Idx Chan Msg",
-			err:      NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, 10, 0x22, "Invalid param msg"),
+			name: "Error with Idx Chan Msg",
+			err: func() *Error {
+				e := Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Invalid param msg")
+				e.Idx = 10
+				e.ChanID = 0x22
+				return e
+			}(),
 			expected: "ERROR:0x0006 (OCSD_ERR_INVALID_PARAM_VAL) [Invalid value parameter passed to component.]; TrcIdx=10; CS ID=22; Invalid param msg",
 		},
 		{
 			name:     "Unknown error code",
-			err:      NewError(ocsd.ErrSevError, 9999),
+			err:      Errorf(ocsd.ErrSevError, 9999, ""),
 			expected: "ERROR:0x270f (unknown); ",
 		},
 	}

@@ -30,59 +30,19 @@ type ErrorLogger interface {
 	LastIDError(chanID uint8) *Error
 }
 
-func NewError(sev ocsd.ErrSeverity, code ocsd.Err) *Error {
-	return &Error{
-		Code:   code,
-		Sev:    sev,
-		Idx:    ocsd.BadTrcIndex,
-		ChanID: ocsd.BadCSSrcID,
+// Errorf creates a new library error with formatting.
+// Idx and ChanID default to their "Bad" sentinel values, but can be set
+// directly on the returned struct if needed.
+func Errorf(sev ocsd.ErrSeverity, code ocsd.Err, format string, args ...any) *Error {
+	msg := ""
+	if format != "" {
+		msg = fmt.Sprintf(format, args...)
 	}
-}
-
-func NewErrorWithIdx(sev ocsd.ErrSeverity, code ocsd.Err, idx ocsd.TrcIndex) *Error {
-	return &Error{
-		Code:   code,
-		Sev:    sev,
-		Idx:    idx,
-		ChanID: ocsd.BadCSSrcID,
-	}
-}
-
-func NewErrorWithIdxChan(sev ocsd.ErrSeverity, code ocsd.Err, idx ocsd.TrcIndex, chanID uint8) *Error {
-	return &Error{
-		Code:   code,
-		Sev:    sev,
-		Idx:    idx,
-		ChanID: chanID,
-	}
-}
-
-func NewErrorMsg(sev ocsd.ErrSeverity, code ocsd.Err, msg string) *Error {
 	return &Error{
 		Code:    code,
 		Sev:     sev,
 		Idx:     ocsd.BadTrcIndex,
 		ChanID:  ocsd.BadCSSrcID,
-		Message: msg,
-	}
-}
-
-func NewErrorWithIdxMsg(sev ocsd.ErrSeverity, code ocsd.Err, idx ocsd.TrcIndex, msg string) *Error {
-	return &Error{
-		Code:    code,
-		Sev:     sev,
-		Idx:     idx,
-		ChanID:  ocsd.BadCSSrcID,
-		Message: msg,
-	}
-}
-
-func NewErrorWithIdxChanMsg(sev ocsd.ErrSeverity, code ocsd.Err, idx ocsd.TrcIndex, chanID uint8, msg string) *Error {
-	return &Error{
-		Code:    code,
-		Sev:     sev,
-		Idx:     idx,
-		ChanID:  chanID,
 		Message: msg,
 	}
 }

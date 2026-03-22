@@ -1,7 +1,6 @@
 package demux
 
 import (
-	"fmt"
 	"opencsd/internal/common"
 
 	"opencsd/internal/ocsd"
@@ -96,7 +95,7 @@ func (d *FrameDeformatter) Configure(flags uint32) ocsd.Err {
 
 	if err != ocsd.OK {
 		if d.errorLogger != nil {
-			errObj := common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Invalid Config Flags")
+			errObj := common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Invalid Config Flags")
 			d.errorLogger.LogError(ocsd.HandleGenErr, errObj)
 		}
 	} else {
@@ -182,7 +181,7 @@ func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocs
 					if e, ok := err.(*common.Error); ok {
 						d.errorLogger.LogError(ocsd.HandleGenErr, e)
 					} else {
-						d.errorLogger.LogError(ocsd.HandleGenErr, common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrFail, err.Error()))
+						d.errorLogger.LogError(ocsd.HandleGenErr, common.Errorf(ocsd.ErrSevError, ocsd.ErrFail, "%v", err.Error()))
 					}
 				}
 			}
@@ -258,21 +257,24 @@ func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, 
 
 func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byte, numBytesProcessed *uint32) (resp ocsd.DatapathResp) {
 	if d.alignment == 0 {
-		errObj := common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrFail, "Deformatter not configured")
+		errObj := common.Errorf(ocsd.ErrSevError, ocsd.ErrFail, "Deformatter not configured")
 		return d.processTraceDataError(errObj, ocsd.RespFatalSysErr)
 	}
 
 	if len(d.pendingData) > 0 {
 		expected := d.pendingIndex + ocsd.TrcIndex(len(d.pendingData))
 		if expected != index {
-			return d.processTraceDataError(common.NewErrorWithIdxMsg(ocsd.ErrSevError, ocsd.ErrDfrmtrNotconttrace, index, "Not continuous trace data"), ocsd.RespFatalInvalidData)
+			err := common.Errorf(ocsd.ErrSevError, ocsd.ErrDfrmtrNotconttrace, "Not continuous trace data")
+			err.Idx = index
+			return d.processTraceDataError(err, ocsd.RespFatalInvalidData)
 		}
 	} else if d.firstData {
 		if d.trcCurrIdx != index {
-			return d.processTraceDataError(common.NewErrorWithIdxMsg(ocsd.ErrSevError, ocsd.ErrDfrmtrNotconttrace, index, "Not continuous trace data"), ocsd.RespFatalInvalidData)
+			err := common.Errorf(ocsd.ErrSevError, ocsd.ErrDfrmtrNotconttrace, "Not continuous trace data")
+			err.Idx = index
+			return d.processTraceDataError(err, ocsd.RespFatalInvalidData)
 		}
 	}
-
 	if len(d.pendingData) == 0 {
 		d.pendingIndex = index
 	}
@@ -321,7 +323,7 @@ func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBloc
 	dataBlockSize := uint32(len(dataBlock))
 
 	if dataBlockSize%d.alignment != 0 {
-		return d.processTraceDataError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, fmt.Sprintf("Input block incorrect size, must be %d byte multiple", d.alignment)), ocsd.RespFatalInvalidData)
+		return d.processTraceDataError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Input block incorrect size, must be %d byte multiple", d.alignment), ocsd.RespFatalInvalidData)
 	}
 
 	if d.checkForSync(dataBlockSize) {

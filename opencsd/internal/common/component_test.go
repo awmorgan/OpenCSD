@@ -199,7 +199,7 @@ func TestTraceComponent(t *testing.T) {
 		t.Errorf("default log message failed")
 	}
 
-	tc.LogError(NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidID, "test error"))
+	tc.LogError(Errorf(ocsd.ErrSevError, ocsd.ErrInvalidID, "test error"))
 	// Depending on your ocsd.Error format, we just check if it hit the logger
 	if logger.lastErrSev != ocsd.ErrSevError {
 		t.Errorf("log error failed to pass severity")

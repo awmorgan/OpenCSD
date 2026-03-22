@@ -68,7 +68,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 	switch op {
 	case ocsd.OpData:
 		if len(dataBlock) == 0 {
-			p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor: Zero length data block error"))
+			p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor: Zero length data block error"))
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			processed, resp, err = p.ProcessData(index, dataBlock)
@@ -97,7 +97,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			p.PktRawMonI.First().RawPacketDataMon(ocsd.OpReset, index, nil, nil)
 		}
 	default:
-		p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
+		p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return processed, resp, err
@@ -586,7 +586,7 @@ func (p *PktProc) processPayloadByte(by uint8) {
 		p.processState = sendPkt
 	default:
 		p.processState = procErr
-		p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrPktInterpFail, "Interpreter failed - cannot process payload for unexpected or unsupported packet."))
+		p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrPktInterpFail, "Interpreter failed - cannot process payload for unexpected or unsupported packet."))
 	}
 }
 
@@ -1110,10 +1110,10 @@ func (p *PktProc) extractTimestamp(tsBits *uint8) uint64 {
 
 func (p *PktProc) throwPacketHeaderErr(msg string) {
 	p.processState = procErr
-	p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, msg))
+	p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, "%v", msg))
 }
 
 func (p *PktProc) throwMalformedPacketErr(msg string) {
 	p.processState = procErr
-	p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, msg))
+	p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "%v", msg))
 }

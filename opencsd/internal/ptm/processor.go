@@ -111,7 +111,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 	switch op {
 	case ocsd.OpData:
 		if len(dataBlock) == 0 {
-			p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor: Zero length data block error"))
+			p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor: Zero length data block error"))
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			processed, resp, err = p.ProcessData(index, dataBlock)
@@ -140,7 +140,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			p.PktRawMonI.First().RawPacketDataMon(ocsd.OpReset, index, nil, nil)
 		}
 	default:
-		p.LogError(common.NewErrorMsg(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
+		p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return processed, resp, err
@@ -203,7 +203,10 @@ func (p *PktProc) isSync() bool {
 
 func (p *PktProc) malformedPacketErr(msg string) error {
 	p.currPacket.ErrType = PktBadSequence
-	return common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, p.currPktIndex, p.chanIDCopy, msg)
+	e := common.Errorf(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "%s", msg)
+	e.Idx = p.currPktIndex
+	e.ChanID = p.chanIDCopy
+	return e
 }
 
 func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, ocsd.DatapathResp, error) {
@@ -267,7 +270,10 @@ func (p *PktProc) doProcessLoop(currByte *uint8, ok *bool) (ocsd.DatapathResp, e
 			p.currDecode = p.iTable[*currByte].action
 			p.currPacket.Type = p.iTable[*currByte].pktType
 		} else {
-			return handleErr(common.NewErrorWithIdxChanMsg(ocsd.ErrSevError, ocsd.ErrPktInterpFail, p.currPktIndex, p.chanIDCopy, "Data Buffer Overrun"))
+			e := common.Errorf(ocsd.ErrSevError, ocsd.ErrPktInterpFail, "Data Buffer Overrun")
+			e.Idx = p.currPktIndex
+			e.ChanID = p.chanIDCopy
+			return handleErr(e)
 		}
 		p.processState = stateProcData
 		fallthrough
