@@ -1,8 +1,10 @@
 package itm
 
 import (
+	"errors"
 	"testing"
 
+	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -94,11 +96,11 @@ func (b *ItmStreamBuilder) AddExtension(srcHW bool, nSize uint8, val uint32, num
 
 func TestITMEndToEndDecode(t *testing.T) {
 	runDecode := func(stream []byte) []ocsd.TraceElement {
-		cfg := NewConfig()
+		cfg := &Config{}
 		cfg.SetTraceID(0x11)
 
 		proc, dec, err := NewConfiguredPipeline(0, cfg)
-		if err != ocsd.OK {
+		if err != nil {
 			t.Fatalf("NewConfiguredPipeline failed: %v", err)
 		}
 		outReceiver := &testTrcElemIn{}
@@ -187,11 +189,11 @@ func TestITMEndToEndDecode(t *testing.T) {
 
 func TestITMTypedConstructors(t *testing.T) {
 	t.Run("ConfiguredPktProc", func(t *testing.T) {
-		cfg := NewConfig()
+		cfg := &Config{}
 		cfg.SetTraceID(0x21)
 
 		proc, err := NewConfiguredPktProc(3, cfg)
-		if err != ocsd.OK {
+		if err != nil {
 			t.Fatalf("NewConfiguredPktProc failed: %v", err)
 		}
 		if proc == nil {
@@ -203,11 +205,11 @@ func TestITMTypedConstructors(t *testing.T) {
 	})
 
 	t.Run("ConfiguredPktDecode", func(t *testing.T) {
-		cfg := NewConfig()
+		cfg := &Config{}
 		cfg.SetTraceID(0x22)
 
 		dec, err := NewConfiguredPktDecode(4, cfg)
-		if err != ocsd.OK {
+		if err != nil {
 			t.Fatalf("NewConfiguredPktDecode failed: %v", err)
 		}
 		if dec == nil {
@@ -219,11 +221,11 @@ func TestITMTypedConstructors(t *testing.T) {
 	})
 
 	t.Run("ConfiguredPipeline", func(t *testing.T) {
-		cfg := NewConfig()
+		cfg := &Config{}
 		cfg.SetTraceID(0x23)
 
 		proc, dec, err := NewConfiguredPipeline(5, cfg)
-		if err != ocsd.OK {
+		if err != nil {
 			t.Fatalf("NewConfiguredPipeline failed: %v", err)
 		}
 		if proc == nil || dec == nil {
@@ -235,20 +237,20 @@ func TestITMTypedConstructors(t *testing.T) {
 	})
 
 	t.Run("RejectNilConfig", func(t *testing.T) {
-		if proc, err := NewConfiguredPktProc(0, nil); err != ocsd.ErrInvalidParamVal || proc != nil {
+		if proc, err := NewConfiguredPktProc(0, nil); proc != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 			t.Fatalf("expected nil-config proc constructor to fail with ErrInvalidParamVal, got proc=%v err=%v", proc, err)
 		}
-		if dec, err := NewConfiguredPktDecode(0, nil); err != ocsd.ErrInvalidParamVal || dec != nil {
+		if dec, err := NewConfiguredPktDecode(0, nil); dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 			t.Fatalf("expected nil-config decode constructor to fail with ErrInvalidParamVal, got dec=%v err=%v", dec, err)
 		}
-		if proc, dec, err := NewConfiguredPipeline(0, nil); err != ocsd.ErrInvalidParamVal || proc != nil || dec != nil {
+		if proc, dec, err := NewConfiguredPipeline(0, nil); proc != nil || dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 			t.Fatalf("expected nil-config pipeline constructor to fail with ErrInvalidParamVal, got proc=%v dec=%v err=%v", proc, dec, err)
 		}
 	})
 }
 
 func TestITMErrorCases(t *testing.T) {
-	cfg := NewConfig()
+	cfg := &Config{}
 	proc := NewPktProc(0)
 	proc.SetProtocolConfig(cfg)
 
@@ -332,6 +334,17 @@ func TestITMErrorCases(t *testing.T) {
 	dec.SetProtocolConfig(nil)
 	dec.OnFlush()
 	dec.OnReset()
+}
+
+func isErrorCode(err error, code ocsd.Err) bool {
+	if err == nil {
+		return false
+	}
+	var libErr *common.Error
+	if !errors.As(err, &libErr) {
+		return false
+	}
+	return libErr.Code == code
 }
 
 func TestITMPacketStringVariants(t *testing.T) {

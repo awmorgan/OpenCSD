@@ -415,7 +415,7 @@ func (b *DecodeTreeBuilder) createSTMDecoder(devSrc *ParsedDevice) error {
 }
 
 func (b *DecodeTreeBuilder) createITMDecoder(devSrc *ParsedDevice) error {
-	cfg := itm.NewConfig()
+	cfg := &itm.Config{}
 	if val, ok := devSrc.RegValue("itmtcr"); ok {
 		cfg.RegTCR = uint32(parseUint(val))
 	}

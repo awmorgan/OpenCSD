@@ -167,7 +167,7 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			continue
 		}
 
-		cfg := itm.NewConfig()
+		cfg := &itm.Config{}
 		if val, ok := dev.RegValue("itmtcr"); ok {
 			cfg.RegTCR = uint32(parseHexOrDec(val))
 		}

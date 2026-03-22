@@ -6,11 +6,6 @@ type Config struct {
 	RegTCR uint32 // Contains CoreSight trace ID, TS prescaler
 }
 
-// NewConfig creates a default configuration
-func NewConfig() *Config {
-	return &Config{}
-}
-
 // SetTraceID sets the CoreSight trace ID.
 func (c *Config) SetTraceID(traceID uint8) {
 	IDmask := uint32(0x007F0000)
