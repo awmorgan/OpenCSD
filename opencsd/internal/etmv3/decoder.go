@@ -836,10 +836,8 @@ func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, error) {
 	if cfg == nil {
 		return nil, common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "ETMv3 config cannot be nil")
 	}
-	proc := NewPktProc(instID)
-	if err := proc.SetProtocolConfig(cfg); err != ocsd.OK {
-		return nil, ocsd.ToError(err)
-	}
+	_ = instID
+	proc := NewPktProc(cfg, nil)
 	return proc, nil
 }
 

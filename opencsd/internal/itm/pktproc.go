@@ -1,6 +1,8 @@
 package itm
 
 import (
+	"fmt"
+
 	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
@@ -49,12 +51,18 @@ type PktProc struct {
 }
 
 // NewPktProc creates a new ITM packet processor.
-func NewPktProc(instID int) *PktProc {
+func NewPktProc(cfg *Config, logger ocsd.Logger) *PktProc {
 	p := &PktProc{}
-	p.ConfigurePktProcBase("PKTP_ITM") // name
-
+	instID := 0
+	if cfg != nil {
+		instID = int(cfg.TraceID())
+	}
+	p.ConfigurePktProcBase(fmt.Sprintf("PKTP_ITM_%d", instID), logger)
 	p.ConfigureSupportedOpModes(ocsd.OpflgPktprocCommon)
 	p.resetProcessorState()
+	if cfg != nil {
+		_ = p.SetProtocolConfig(cfg)
+	}
 	return p
 }
 

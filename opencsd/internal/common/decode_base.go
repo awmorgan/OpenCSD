@@ -277,8 +277,8 @@ type PktProcBase[P any, Pt any, Pc any] struct {
 	statsInit   bool
 }
 
-func (pb *PktProcBase[P, Pt, Pc]) ConfigurePktProcBase(name string) {
-	pb.PktProcI.Init(name, nil)
+func (pb *PktProcBase[P, Pt, Pc]) ConfigurePktProcBase(name string, logger ocsd.Logger) {
+	pb.PktProcI.Init(name, logger)
 	pb.ResetStats()
 }
 

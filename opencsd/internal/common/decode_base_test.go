@@ -65,7 +65,7 @@ func (p *myPktDataIn) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, p
 
 func TestPktProcBase(t *testing.T) {
 	pb := &PktProcBase[dummyPkt, dummyPt, dummyPc]{}
-	pb.ConfigurePktProcBase("testProc")
+	pb.ConfigurePktProcBase("testProc", nil)
 
 	outI := &myPktDataIn{}
 	pb.SetPktOut(outI)

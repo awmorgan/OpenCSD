@@ -249,7 +249,7 @@ func TestITMTypedConstructors(t *testing.T) {
 
 func TestITMErrorCases(t *testing.T) {
 	cfg := &Config{}
-	proc := NewPktProc(0)
+	proc := NewPktProc(nil, nil)
 	proc.SetProtocolConfig(cfg)
 
 	// reserved header error

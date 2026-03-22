@@ -31,7 +31,7 @@ func (c *capturePktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex
 }
 
 func newSyncedProc(config *Config) (*PktProc, *capturePktSink) {
-	proc := NewPktProc(0)
+	proc := NewPktProc(nil, nil)
 	proc.SetProtocolConfig(config)
 	sink := &capturePktSink{}
 	proc.SetPktOut(sink)
@@ -637,7 +637,7 @@ func TestWaitSync_13Zeros_Transition(t *testing.T) {
 // TestWaitSync_NonZeroFirst: first non-zero byte starts a PktNotSync sequence.
 func TestWaitSync_NonZeroFirst(t *testing.T) {
 	// Fresh proc (not yet synced) in waitSync
-	proc := NewPktProc(0)
+	proc := NewPktProc(nil, nil)
 	proc.SetProtocolConfig(&Config{})
 	sink := &capturePktSink{}
 	proc.SetPktOut(sink)

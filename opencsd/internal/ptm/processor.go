@@ -94,12 +94,18 @@ type PktProc struct {
 	currDecode decodeAction
 }
 
-func NewPktProc(instIDNum int) *PktProc {
+func NewPktProc(cfg *Config, logger ocsd.Logger) *PktProc {
 	p := &PktProc{}
-	p.ConfigurePktProcBase(fmt.Sprintf("%s_%d", "PKTP_PTM", instIDNum))
-
+	instIDNum := 0
+	if cfg != nil {
+		instIDNum = int(cfg.TraceID())
+	}
+	p.ConfigurePktProcBase(fmt.Sprintf("%s_%d", "PKTP_PTM", instIDNum), logger)
 	p.resetProcessorState()
 	p.buildIPacketTable()
+	if cfg != nil {
+		_ = p.SetProtocolConfig(cfg)
+	}
 	return p
 }
 

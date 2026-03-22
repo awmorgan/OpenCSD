@@ -161,7 +161,7 @@ func TestSTMEndToEndDecode(t *testing.T) {
 
 func TestSTMErrorCases(t *testing.T) {
 	config := NewConfig()
-	proc := NewPktProc(0)
+	proc := NewPktProc(nil, nil)
 	proc.SetProtocolConfig(config)
 
 	// Error case 1: ASYNC with invalid padding

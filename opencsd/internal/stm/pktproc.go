@@ -109,13 +109,19 @@ type PktProc struct {
 	syncIndex   ocsd.TrcIndex
 }
 
-func NewPktProc(instIDNum int) *PktProc {
+func NewPktProc(cfg *Config, logger ocsd.Logger) *PktProc {
 	p := &PktProc{}
-	p.ConfigurePktProcBase(fmt.Sprintf("PKTP_STM_%d", instIDNum))
-
+	instIDNum := 0
+	if cfg != nil {
+		instIDNum = int(cfg.TraceID())
+	}
+	p.ConfigurePktProcBase(fmt.Sprintf("PKTP_STM_%d", instIDNum), logger)
 	p.ConfigureSupportedOpModes(ocsd.OpflgPktprocCommon)
 	p.resetProcessorState()
 	p.buildOpTables()
+	if cfg != nil {
+		_ = p.SetProtocolConfig(cfg)
+	}
 	return p
 }
 
