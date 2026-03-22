@@ -59,9 +59,7 @@ func TestSTMEndToEndDecode(t *testing.T) {
 	proc.ConfigureComponentOpMode(ocsd.OpflgPktprocUnsyncOnBadPkts)
 
 	outReceiver := &testTrcElemIn{}
-	if err := dec.TraceElemOut.Attach(outReceiver); err != ocsd.OK {
-		t.Fatalf("TraceElemOut.Attach failed: %v", err)
-	}
+	dec.SetTraceElemOut(outReceiver)
 
 	sb := &StmStreamBuilder{}
 

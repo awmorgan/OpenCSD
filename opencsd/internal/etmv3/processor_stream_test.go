@@ -11,8 +11,8 @@ func TestProcStreamComplete(t *testing.T) {
 		config.RegCtrl = ctrlCycleAcc | ctrlVmidEna | ctrlTsEna | ctrlDataVal | ctrlDataAddr | (2 << 14) // ctxtid=2
 		config.RegCCER = ccerHasTs
 		proc := mustNewConfiguredPktProc(t, config)
-		proc.PktOutI.Attach(&noopPktSink{})
-		proc.PktOutI.Attach(&noopPktSink{})
+		proc.SetPktOut(&noopPktSink{})
+		proc.SetPktOut(&noopPktSink{})
 		return proc
 	}
 
@@ -81,7 +81,7 @@ func TestProcStreamBadTraceMode(t *testing.T) {
 	config := &Config{}
 	// No data trace flags set
 	proc := mustNewConfiguredPktProc(t, config)
-	proc.PktOutI.Attach(&noopPktSink{})
+	proc.SetPktOut(&noopPktSink{})
 
 	data := []byte{
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
@@ -101,7 +101,7 @@ func TestProcStreamBadTraceMode(t *testing.T) {
 func TestProcStreamMalformed(t *testing.T) {
 	config := &Config{}
 	proc := mustNewConfiguredPktProc(t, config)
-	proc.PktOutI.Attach(&noopPktSink{})
+	proc.SetPktOut(&noopPktSink{})
 
 	// Inject malformed packets (wrong size / early EOT)
 	data := []byte{
@@ -116,7 +116,7 @@ func TestProcStreamComplexPackets(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlCycleAcc | (2 << 14) // ctxtid=2
 	proc := mustNewConfiguredPktProc(t, config)
-	proc.PktOutI.Attach(&noopPktSink{})
+	proc.SetPktOut(&noopPktSink{})
 
 	data := []byte{
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
@@ -134,7 +134,7 @@ func TestProcStreamComplexPackets(t *testing.T) {
 func TestProcStreamPartPacket(t *testing.T) {
 	config := &Config{}
 	proc := mustNewConfiguredPktProc(t, config)
-	proc.PktOutI.Attach(&noopPktSink{})
+	proc.SetPktOut(&noopPktSink{})
 
 	// ASYNC
 	_, resp, _ := proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
@@ -159,7 +159,7 @@ func TestProcStreamPartPacket(t *testing.T) {
 func TestProcStreamExceptionData(t *testing.T) {
 	config := &Config{}
 	proc := mustNewConfiguredPktProc(t, config)
-	proc.PktOutI.Attach(&noopPktSink{})
+	proc.SetPktOut(&noopPktSink{})
 
 	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
 
@@ -211,7 +211,7 @@ func TestProcStreamDataValues(t *testing.T) {
 	config.RegCtrl = ctrlDataAddr | ctrlDataVal | ctrlDataOnly
 
 	proc := mustNewConfiguredPktProc(t, config)
-	proc.PktOutI.Attach(&noopPktSink{})
+	proc.SetPktOut(&noopPktSink{})
 
 	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
 
@@ -227,7 +227,7 @@ func TestProcStreamDataValues(t *testing.T) {
 func TestProcStreamPartPacket2(t *testing.T) {
 	config := &Config{}
 	proc := mustNewConfiguredPktProc(t, config)
-	proc.PktOutI.Attach(&noopPktSink{})
+	proc.SetPktOut(&noopPktSink{})
 
 	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x81})
 	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x82})
@@ -237,7 +237,7 @@ func TestProcStreamPartPacket2(t *testing.T) {
 func TestProcStreamMalformedHeaders(t *testing.T) {
 	config := &Config{}
 	proc := mustNewConfiguredPktProc(t, config)
-	proc.PktOutI.Attach(&noopPktSink{})
+	proc.SetPktOut(&noopPktSink{})
 	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
 
 	// Malformed branch address (missing bytes)

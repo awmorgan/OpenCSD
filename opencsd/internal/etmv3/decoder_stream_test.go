@@ -108,8 +108,8 @@ func TestDecoderMemNacc(t *testing.T) {
 	config := &Config{}
 	dec, out := setupDecFast(config)
 	mem := &mockMemAcc{failAfter: 1, hitAfter: -1} // fail on 2nd read, never find branch
-	dec.MemAccess.Replace(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder())
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -251,8 +251,8 @@ func TestDecoderAtomUsage(t *testing.T) {
 	config := &Config{}
 	dec, out := setupDecFast(config)
 	mem := &mockMemAcc{failAfter: 10, hitAfter: 0, instrType: ocsd.InstrBr}
-	dec.MemAccess.Replace(mem)
-	dec.InstrDecode.Attach(idec.NewDecoder()) // conditional branch consumes atoms!
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(idec.NewDecoder()) // conditional branch consumes atoms!
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -338,9 +338,9 @@ func setupDecFast(config *Config) (*PktDecode, *testTrcElemIn) {
 	if err != nil {
 		panic(err)
 	}
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 	return dec, out
 }
