@@ -20,9 +20,9 @@ func (m *myTrcGenElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, el
 	return ocsd.RespCont
 }
 
-func TestPktDecodeBase(t *testing.T) {
-	pb := &PktDecodeBase[dummyPkt, dummyPc]{}
-	pb.ConfigurePktDecodeBase("testDecode")
+func TestPktDecodeI(t *testing.T) {
+	pb := &PktDecodeI{}
+	pb.Init("testDecode", nil)
 
 	elemIn := &myTrcGenElemIn{}
 	pb.SetTraceElemOut(elemIn)

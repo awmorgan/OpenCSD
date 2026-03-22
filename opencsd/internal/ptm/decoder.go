@@ -72,7 +72,9 @@ func (a *PtmAtoms) clearAll() {
 }
 
 type PktDecode struct {
-	common.PktDecodeBase[Packet, Config]
+	common.PktDecodeI
+	Config       *Config
+	CurrPacketIn *Packet
 
 	currState   decodeState
 	unsyncInfo  common.UnsyncInfo
@@ -93,7 +95,7 @@ type PktDecode struct {
 
 func NewPktDecode(instIDNum int) *PktDecode {
 	d := &PktDecode{}
-	d.ConfigurePktDecodeBase(fmt.Sprintf("%s_%d", "DCD_PTM", instIDNum))
+	d.PktDecodeI.Init(fmt.Sprintf("%s_%d", "DCD_PTM", instIDNum), nil)
 
 	d.configureDecoder()
 	return d

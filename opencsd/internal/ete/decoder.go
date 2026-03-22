@@ -9,7 +9,8 @@ import (
 type PktDecode = etmv4.PktDecode
 
 func NewPktDecode(instID int) *PktDecode {
-	return etmv4.NewPktDecode(instID)
+	_ = instID
+	return etmv4.NewPktDecode(nil, nil)
 }
 
 type DecoderManager struct{}

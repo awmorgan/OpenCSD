@@ -15,7 +15,9 @@ const (
 
 // PktDecode decodes ITM packets into generic ITM-SW trace packets.
 type PktDecode struct {
-	common.PktDecodeBase[Packet, Config]
+	common.PktDecodeI
+	Config       *Config
+	CurrPacketIn *Packet
 
 	currState decoderState
 
@@ -35,7 +37,7 @@ type PktDecode struct {
 // NewPktDecode creates a new ITM packet decoder.
 func NewPktDecode(instID int) *PktDecode {
 	d := &PktDecode{}
-	d.ConfigurePktDecodeBase("DCD_ITM")
+	d.PktDecodeI.Init("DCD_ITM", nil)
 
 	d.configureDecoder()
 	return d

@@ -23,91 +23,13 @@ type TrcPktIndexer[Pt any] interface {
 	TracePktIndex(indexSOP ocsd.TrcIndex, pktType Pt)
 }
 
-type componentRuntime struct {
+// PktDecodeI represents TrcPktDecodeI.
+type PktDecodeI struct {
 	name             string
 	opFlags          uint32
 	supportedOpFlags uint32
 	logger           ocsd.Logger
 	errVerbosity     ocsd.ErrSeverity
-}
-
-func (c *componentRuntime) init(name string) {
-	c.name = name
-	c.errVerbosity = ocsd.ErrSevNone
-	c.logger = nil
-}
-
-func (c *componentRuntime) componentName() string {
-	return c.name
-}
-
-func (c *componentRuntime) configureComponentOpMode(opFlags uint32) ocsd.Err {
-	c.opFlags = opFlags & c.supportedOpFlags
-	return ocsd.OK
-}
-
-func (c *componentRuntime) componentOpMode() uint32 {
-	return c.opFlags
-}
-
-func (c *componentRuntime) supportedOpModes() uint32 {
-	return c.supportedOpFlags
-}
-
-func (c *componentRuntime) configureSupportedOpModes(flags uint32) {
-	c.supportedOpFlags = flags
-}
-
-func (c *componentRuntime) attachErrorLogger(logger ocsd.Logger) ocsd.Err {
-	if c.logger != nil {
-		return ocsd.ErrAttachTooMany
-	}
-	c.logger = logger
-	return ocsd.OK
-}
-
-func (c *componentRuntime) detachErrorLogger() ocsd.Err {
-	if c.logger == nil {
-		return ocsd.ErrAttachCompNotFound
-	}
-	c.logger = nil
-	return ocsd.OK
-}
-
-func (c *componentRuntime) logDefMessage(msg string) {
-	c.logMessage(c.errVerbosity, msg)
-}
-
-func (c *componentRuntime) logError(err *Error) {
-	if err == nil {
-		return
-	}
-	if c.logger != nil && c.isLoggingErrorLevel(err.Sev) {
-		c.logger.LogError(err.Sev, err)
-	}
-}
-
-func (c *componentRuntime) logMessage(filterLevel ocsd.ErrSeverity, msg string) {
-	if filterLevel <= c.errVerbosity && c.logger != nil {
-		c.logger.LogMessage(filterLevel, msg)
-	}
-}
-
-func (c *componentRuntime) errorLogLevel() ocsd.ErrSeverity {
-	return c.errVerbosity
-}
-
-func (c *componentRuntime) isLoggingErrorLevel(level ocsd.ErrSeverity) bool {
-	return level <= c.errVerbosity
-}
-
-func (c *componentRuntime) configureErrorLogLevel(level ocsd.ErrSeverity) {
-	c.errVerbosity = level
-}
-
-// PktDecodeI represents TrcPktDecodeI.
-type PktDecodeI struct {
-	comp componentRuntime
 
 	TraceElemOut ocsd.GenElemProcessor
 	MemAccess    TargetMemAccess
@@ -120,40 +42,68 @@ type PktDecodeI struct {
 	usesIDecode   bool
 }
 
-func (p *PktDecodeI) ComponentName() string { return p.comp.componentName() }
+func (p *PktDecodeI) Init(name string, logger ocsd.Logger) {
+	p.name = name
+	p.logger = logger
+	p.errVerbosity = ocsd.ErrSevNone
+	p.usesMemAccess = true
+	p.usesIDecode = true
+}
+
+func (p *PktDecodeI) ComponentName() string { return p.name }
 
 func (p *PktDecodeI) ConfigureComponentOpMode(opFlags uint32) ocsd.Err {
-	return p.comp.configureComponentOpMode(opFlags)
+	p.opFlags = opFlags & p.supportedOpFlags
+	return ocsd.OK
 }
 
-func (p *PktDecodeI) ComponentOpMode() uint32 { return p.comp.componentOpMode() }
+func (p *PktDecodeI) ComponentOpMode() uint32 { return p.opFlags }
 
-func (p *PktDecodeI) SupportedOpModes() uint32 { return p.comp.supportedOpModes() }
+func (p *PktDecodeI) SupportedOpModes() uint32 { return p.supportedOpFlags }
 
-func (p *PktDecodeI) ConfigureSupportedOpModes(flags uint32) { p.comp.configureSupportedOpModes(flags) }
+func (p *PktDecodeI) ConfigureSupportedOpModes(flags uint32) { p.supportedOpFlags = flags }
 
 func (p *PktDecodeI) AttachErrorLogger(logger ocsd.Logger) ocsd.Err {
-	return p.comp.attachErrorLogger(logger)
+	if p.logger != nil {
+		return ocsd.ErrAttachTooMany
+	}
+	p.logger = logger
+	return ocsd.OK
 }
 
-func (p *PktDecodeI) DetachErrorLogger() ocsd.Err { return p.comp.detachErrorLogger() }
+func (p *PktDecodeI) DetachErrorLogger() ocsd.Err {
+	if p.logger == nil {
+		return ocsd.ErrAttachCompNotFound
+	}
+	p.logger = nil
+	return ocsd.OK
+}
 
-func (p *PktDecodeI) LogDefMessage(msg string) { p.comp.logDefMessage(msg) }
+func (p *PktDecodeI) LogDefMessage(msg string) { p.LogMessage(p.errVerbosity, msg) }
 
-func (p *PktDecodeI) LogError(err *Error) { p.comp.logError(err) }
+func (p *PktDecodeI) LogError(err *Error) {
+	if err == nil {
+		return
+	}
+	if p.logger != nil && p.IsLoggingErrorLevel(err.Sev) {
+		p.logger.LogError(err.Sev, err)
+	}
+}
 
 func (p *PktDecodeI) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
-	p.comp.logMessage(filterLevel, msg)
+	if filterLevel <= p.errVerbosity && p.logger != nil {
+		p.logger.LogMessage(filterLevel, msg)
+	}
 }
 
-func (p *PktDecodeI) ErrorLogLevel() ocsd.ErrSeverity { return p.comp.errorLogLevel() }
+func (p *PktDecodeI) ErrorLogLevel() ocsd.ErrSeverity { return p.errVerbosity }
 
 func (p *PktDecodeI) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
-	return p.comp.isLoggingErrorLevel(level)
+	return level <= p.errVerbosity
 }
 
 func (p *PktDecodeI) ConfigureErrorLogLevel(level ocsd.ErrSeverity) {
-	p.comp.configureErrorLogLevel(level)
+	p.errVerbosity = level
 }
 
 func (p *PktDecodeI) SetTraceElemOut(out ocsd.GenElemProcessor) {
@@ -245,58 +195,75 @@ func (p *PktDecodeI) InvalidateMemAccCache(traceID uint8) ocsd.Err {
 	return ocsd.OK
 }
 
-// PktDecodeBase represents TrcPktDecodeBase<P, Pc>.
-type PktDecodeBase[P any, Pc any] struct {
-	PktDecodeI
-	Config       *Pc
-	CurrPacketIn *P
-}
-
-func (pb *PktDecodeBase[P, Pc]) ConfigurePktDecodeBase(name string) {
-	pb.comp.init(name)
-	pb.usesMemAccess = true
-	pb.usesIDecode = true
-}
-
 // PktProcI represents TrcPktProcI.
 type PktProcI struct {
-	comp componentRuntime
+	name             string
+	opFlags          uint32
+	supportedOpFlags uint32
+	logger           ocsd.Logger
+	errVerbosity     ocsd.ErrSeverity
 }
 
-func (p *PktProcI) ComponentName() string { return p.comp.componentName() }
+func (p *PktProcI) Init(name string, logger ocsd.Logger) {
+	p.name = name
+	p.logger = logger
+	p.errVerbosity = ocsd.ErrSevNone
+}
+
+func (p *PktProcI) ComponentName() string { return p.name }
 
 func (p *PktProcI) ConfigureComponentOpMode(opFlags uint32) ocsd.Err {
-	return p.comp.configureComponentOpMode(opFlags)
+	p.opFlags = opFlags & p.supportedOpFlags
+	return ocsd.OK
 }
 
-func (p *PktProcI) ComponentOpMode() uint32 { return p.comp.componentOpMode() }
+func (p *PktProcI) ComponentOpMode() uint32 { return p.opFlags }
 
-func (p *PktProcI) SupportedOpModes() uint32 { return p.comp.supportedOpModes() }
+func (p *PktProcI) SupportedOpModes() uint32 { return p.supportedOpFlags }
 
-func (p *PktProcI) ConfigureSupportedOpModes(flags uint32) { p.comp.configureSupportedOpModes(flags) }
+func (p *PktProcI) ConfigureSupportedOpModes(flags uint32) { p.supportedOpFlags = flags }
 
 func (p *PktProcI) AttachErrorLogger(logger ocsd.Logger) ocsd.Err {
-	return p.comp.attachErrorLogger(logger)
+	if p.logger != nil {
+		return ocsd.ErrAttachTooMany
+	}
+	p.logger = logger
+	return ocsd.OK
 }
 
-func (p *PktProcI) DetachErrorLogger() ocsd.Err { return p.comp.detachErrorLogger() }
+func (p *PktProcI) DetachErrorLogger() ocsd.Err {
+	if p.logger == nil {
+		return ocsd.ErrAttachCompNotFound
+	}
+	p.logger = nil
+	return ocsd.OK
+}
 
-func (p *PktProcI) LogDefMessage(msg string) { p.comp.logDefMessage(msg) }
+func (p *PktProcI) LogDefMessage(msg string) { p.LogMessage(p.errVerbosity, msg) }
 
-func (p *PktProcI) LogError(err *Error) { p.comp.logError(err) }
+func (p *PktProcI) LogError(err *Error) {
+	if err == nil {
+		return
+	}
+	if p.logger != nil && p.IsLoggingErrorLevel(err.Sev) {
+		p.logger.LogError(err.Sev, err)
+	}
+}
 
 func (p *PktProcI) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
-	p.comp.logMessage(filterLevel, msg)
+	if filterLevel <= p.errVerbosity && p.logger != nil {
+		p.logger.LogMessage(filterLevel, msg)
+	}
 }
 
-func (p *PktProcI) ErrorLogLevel() ocsd.ErrSeverity { return p.comp.errorLogLevel() }
+func (p *PktProcI) ErrorLogLevel() ocsd.ErrSeverity { return p.errVerbosity }
 
 func (p *PktProcI) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
-	return p.comp.isLoggingErrorLevel(level)
+	return level <= p.errVerbosity
 }
 
 func (p *PktProcI) ConfigureErrorLogLevel(level ocsd.ErrSeverity) {
-	p.comp.configureErrorLogLevel(level)
+	p.errVerbosity = level
 }
 
 // PktProcBase represents TrcPktProcBase<P, Pt, Pc>.
@@ -311,7 +278,7 @@ type PktProcBase[P any, Pt any, Pc any] struct {
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) ConfigurePktProcBase(name string) {
-	pb.comp.init(name)
+	pb.PktProcI.Init(name, nil)
 	pb.ResetStats()
 }
 

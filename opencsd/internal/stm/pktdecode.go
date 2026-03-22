@@ -18,7 +18,9 @@ const (
 
 // PktDecode converts incoming STM packets to generic output packets.
 type PktDecode struct {
-	common.PktDecodeBase[Packet, Config]
+	common.PktDecodeI
+	Config       *Config
+	CurrPacketIn *Packet
 
 	currState  decoderState
 	unsyncInfo common.UnsyncInfo
@@ -40,7 +42,7 @@ type PktDecode struct {
 // NewPktDecode creates a new STM packet decoder.
 func NewPktDecode(instIDNum int) *PktDecode {
 	d := &PktDecode{}
-	d.ConfigurePktDecodeBase(fmt.Sprintf("%s_%d", "DCD_STM", instIDNum))
+	d.PktDecodeI.Init(fmt.Sprintf("%s_%d", "DCD_STM", instIDNum), nil)
 
 	d.configureDecoder()
 	return d

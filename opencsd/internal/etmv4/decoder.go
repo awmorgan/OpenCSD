@@ -114,7 +114,10 @@ type elemRes struct {
 // Ensure PktDecode implements ocsd.TrcDataProcessor
 // And also we extend PktDecodeBase
 type PktDecode struct {
-	common.PktDecodeBase[TracePacket, Config]
+	common.PktDecodeI
+
+	Config       *Config
+	CurrPacketIn *TracePacket
 
 	currState decodeState
 	config    *Config
@@ -165,12 +168,19 @@ type PktDecode struct {
 	}
 }
 
-func NewPktDecode(instIDNum int) *PktDecode {
+func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 	d := &PktDecode{}
-	d.ConfigurePktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV4", instIDNum))
+	instIDNum := 0
+	if cfg != nil {
+		instIDNum = int(cfg.TraceID())
+	}
+	d.PktDecodeI.Init(fmt.Sprintf("%s_%d", "DCD_ETMV4", instIDNum), logger)
 	d.ConfigureSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms | ocsd.OpflgPktdecAA64OpcodeChk)
-
-	d.configureDecoder()
+	if cfg != nil {
+		_ = d.SetProtocolConfig(cfg)
+	} else {
+		d.configureDecoder()
+	}
 	return d
 }
 
@@ -2031,10 +2041,8 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
 	if cfg == nil {
 		return nil, common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "ETMv4 config cannot be nil")
 	}
-	decoder := NewPktDecode(instID)
-	if err := decoder.SetProtocolConfig(cfg); err != ocsd.OK {
-		return nil, ocsd.ToError(err)
-	}
+	_ = instID
+	decoder := NewPktDecode(cfg, nil)
 	return decoder, nil
 }
 

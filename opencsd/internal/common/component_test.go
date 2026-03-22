@@ -28,7 +28,7 @@ func (m *mockErrorLog) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
 
 func TestComponentRuntimeViaPktProcI(t *testing.T) {
 	tc := &PktProcI{}
-	tc.comp.init("TestComp")
+	tc.Init("TestComp", nil)
 
 	if tc.ErrorLogLevel() != ocsd.ErrSevNone {
 		t.Errorf("expected default error log level to be ErrSevNone")
@@ -38,7 +38,7 @@ func TestComponentRuntimeViaPktProcI(t *testing.T) {
 		t.Errorf("expected name TestComp, got %s", tc.ComponentName())
 	}
 
-	tc.comp.init("NewName")
+	tc.Init("NewName", nil)
 	if tc.ComponentName() != "NewName" {
 		t.Errorf("expected NewName")
 	}

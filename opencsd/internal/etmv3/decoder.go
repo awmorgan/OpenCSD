@@ -19,7 +19,9 @@ const (
 // PktDecode implements the ETMv3 packet decoder converting packets to generic TraceElements
 // Ported from trc_pkt_decode_etmv3.cpp
 type PktDecode struct {
-	*common.PktDecodeBase[Packet, Config]
+	common.PktDecodeI
+	Config       *Config
+	CurrPacketIn *Packet
 
 	currState  decoderState
 	unsyncInfo common.UnsyncInfo
@@ -47,8 +49,7 @@ func NewPktDecode(instID int) *PktDecode {
 		peContext:      &ocsd.PEContext{},
 		outputElemList: common.NewGenElemList(),
 	}
-	d.PktDecodeBase = &common.PktDecodeBase[Packet, Config]{}
-	d.ConfigurePktDecodeBase(fmt.Sprintf("%s_%d", "DCD_ETMV3", instID))
+	d.PktDecodeI.Init(fmt.Sprintf("%s_%d", "DCD_ETMV3", instID), nil)
 	d.codeFollower = common.NewCodeFollowerWithInterfaces(d.MemAccessIf(), d.InstrDecodeIf())
 
 	d.configureDecoder()
@@ -56,14 +57,14 @@ func NewPktDecode(instID int) *PktDecode {
 }
 
 func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) {
-	d.PktDecodeBase.SetMemAccess(mem)
+	d.PktDecodeI.SetMemAccess(mem)
 	if d.codeFollower != nil {
 		d.codeFollower.SetInterfaces(d.MemAccessIf(), d.InstrDecodeIf())
 	}
 }
 
 func (d *PktDecode) SetInstrDecode(decoder common.InstrDecode) {
-	d.PktDecodeBase.SetInstrDecode(decoder)
+	d.PktDecodeI.SetInstrDecode(decoder)
 	if d.codeFollower != nil {
 		d.codeFollower.SetInterfaces(d.MemAccessIf(), d.InstrDecodeIf())
 	}
