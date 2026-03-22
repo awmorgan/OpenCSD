@@ -27,8 +27,8 @@ type FrameDeformatter struct {
 	rawChanEnable  [128]bool
 
 	// Datapath Attachments
-	idStreams     [128]ocsd.TrcDataIn
-	rawTraceFrame ocsd.TrcRawFrameIn
+	idStreams     [128]ocsd.TrcDataProcessor
+	rawTraceFrame ocsd.RawFrameProcessor
 	errorLogger   common.ErrorLogger
 
 	// state params
@@ -63,13 +63,13 @@ func NewFrameDeformatter() *FrameDeformatter {
 }
 
 // Attachments
-func (d *FrameDeformatter) SetIDStream(id uint8, stream ocsd.TrcDataIn) {
+func (d *FrameDeformatter) SetIDStream(id uint8, stream ocsd.TrcDataProcessor) {
 	if id < 128 {
 		d.idStreams[id] = stream
 	}
 }
 
-func (d *FrameDeformatter) SetRawTraceFrame(stream ocsd.TrcRawFrameIn) {
+func (d *FrameDeformatter) SetRawTraceFrame(stream ocsd.RawFrameProcessor) {
 	d.rawTraceFrame = stream
 }
 

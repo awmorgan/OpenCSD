@@ -21,7 +21,7 @@ func NewRawFramePrinter(writer io.Writer) *RawFramePrinter {
 	}
 }
 
-// TraceRawFrameIn responds to the TrcRawFrameIn datapath interface.
+// TraceRawFrameIn responds to the RawFrameProcessor datapath interface.
 func (p *RawFramePrinter) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, frameElem ocsd.RawframeElem, data []byte, traceID uint8) ocsd.DatapathResp {
 	if p.IsMuted() {
 		return ocsd.RespCont

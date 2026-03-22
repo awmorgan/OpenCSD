@@ -144,8 +144,8 @@ func (m *mockDataSink) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, data
 	return uint32(len(dataBlock)), ocsd.RespCont, nil
 }
 
-// Ensure mockDataSink implements TrcDataIn
-var _ ocsd.TrcDataIn = (*mockDataSink)(nil)
+// Ensure mockDataSink implements TrcDataProcessor
+var _ ocsd.TrcDataProcessor = (*mockDataSink)(nil)
 
 type mockDataSinkWait struct{}
 
@@ -159,8 +159,8 @@ func (m *mockDataSinkWait) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, 
 	return uint32(len(dataBlock)), ocsd.RespWait, nil
 }
 
-// Ensure mockDataSinkWait implements TrcDataIn
-var _ ocsd.TrcDataIn = (*mockDataSinkWait)(nil)
+// Ensure mockDataSinkWait implements TrcDataProcessor
+var _ ocsd.TrcDataProcessor = (*mockDataSinkWait)(nil)
 
 type mockRawSink struct {
 	out *bytes.Buffer

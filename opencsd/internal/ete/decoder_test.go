@@ -45,8 +45,8 @@ func TestDecoderManagerCreateDecoder(t *testing.T) {
 	if in == nil || handle == nil {
 		t.Fatalf("CreateDecoder returned nil outputs")
 	}
-	if _, ok := in.(ocsd.TrcDataIn); !ok {
-		t.Fatalf("CreateDecoder input does not implement TrcDataIn")
+	if _, ok := in.(ocsd.TrcDataProcessor); !ok {
+		t.Fatalf("CreateDecoder input does not implement TrcDataProcessor")
 	}
 }
 

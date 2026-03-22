@@ -108,7 +108,7 @@ type testRange struct {
 
 var accCallbackCount int
 
-func makeTestMemAccCB(ranges []testRange) ocsd.FnMemAccIDCB {
+func makeTestMemAccCB(ranges []testRange) ocsd.MemAccessorWithID {
 
 	return func(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32 {
 		var bytesRead uint32 = 0

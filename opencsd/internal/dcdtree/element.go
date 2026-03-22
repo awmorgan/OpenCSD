@@ -7,7 +7,7 @@ import (
 )
 
 type traceElemSetterOwner interface {
-	SetTraceElemOut(ocsd.TrcGenElemIn)
+	SetTraceElemOut(ocsd.GenElemProcessor)
 }
 
 type instrDecodeSetterOwner interface {
@@ -20,11 +20,11 @@ type memAccSetterOwner interface {
 
 // DecodeTreeElement represents a registered decoder instance within the trace decode tree.
 type DecodeTreeElement struct {
-	DecoderTypeName string              // Registered name of the decoder
-	DecoderManager  ocsd.DecoderManager // Factory interface that created it
-	DataIn          ocsd.TrcDataIn      // Interface for feeding trace data
-	DecoderHandle   any                 // Pointer to the decoder processor (PktDecode)
-	SetTraceElemOut func(ocsd.TrcGenElemIn)
+	DecoderTypeName string                // Registered name of the decoder
+	DecoderManager  ocsd.DecoderManager   // Factory interface that created it
+	DataIn          ocsd.TrcDataProcessor // Interface for feeding trace data
+	DecoderHandle   any                   // Pointer to the decoder processor (PktDecode)
+	SetTraceElemOut func(ocsd.GenElemProcessor)
 	SetInstrDecode  func(common.InstrDecode)
 	SetMemAccess    func(common.TargetMemAccess)
 	Protocol        ocsd.TraceProtocol // Protocol type
@@ -32,13 +32,13 @@ type DecodeTreeElement struct {
 }
 
 // NewDecodeTreeElement creates a new DecodeTreeElement record.
-func NewDecodeTreeElement(name string, decoderManager ocsd.DecoderManager, dcdHandle any, dataIn ocsd.TrcDataIn, created bool) *DecodeTreeElement {
+func NewDecodeTreeElement(name string, decoderManager ocsd.DecoderManager, dcdHandle any, dataIn ocsd.TrcDataProcessor, created bool) *DecodeTreeElement {
 	protocol := ocsd.ProtocolUnknown
 	if decoderManager != nil {
 		protocol = decoderManager.Protocol()
 	}
 
-	var setTraceElemOut func(ocsd.TrcGenElemIn)
+	var setTraceElemOut func(ocsd.GenElemProcessor)
 	if owner, ok := dcdHandle.(traceElemSetterOwner); ok {
 		setTraceElemOut = owner.SetTraceElemOut
 	}

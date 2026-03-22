@@ -46,7 +46,7 @@ type memRegionCallbackCtx struct {
 	readCount *int
 }
 
-func makeMemRegionAccessCB(cbCtx *memRegionCallbackCtx) ocsd.FnMemAccCB {
+func makeMemRegionAccessCB(cbCtx *memRegionCallbackCtx) ocsd.MemAccessor {
 
 	return func(address ocsd.VAddr, _ ocsd.MemSpaceAcc, reqBytes uint32, byteBuffer []byte) uint32 {
 		if cbCtx == nil || len(cbCtx.data) == 0 {

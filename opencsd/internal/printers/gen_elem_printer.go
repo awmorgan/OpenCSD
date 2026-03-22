@@ -24,7 +24,7 @@ func NewGenericElementPrinter(writer io.Writer) *GenericElementPrinter {
 	}
 }
 
-// TraceElemIn implements the TrcGenElemIn interface.
+// TraceElemIn implements the GenElemProcessor interface.
 func (p *GenericElementPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
 	resp := ocsd.RespCont
 

@@ -1,6 +1,13 @@
 package ocsd
 
-// MemAccFunc is the callback function definition for callback function memory accessor type.
+// Logger defines the contract for emitting trace warnings and errors.
+// Implementations can apply severity filtering and routing as needed.
+type Logger interface {
+	LogMessage(severity ErrSeverity, msg string)
+	LogError(severity ErrSeverity, err error)
+}
+
+// MemAccessor is the callback function definition for callback function memory accessor type.
 //
 // When using callback memory accessor, the decoder will call this function to obtain the
 // memory at the address for the current opcodes. The memory space will represent the current
@@ -11,12 +18,9 @@ package ocsd
 //
 // Return 0 bytes if start address out of covered range, or memory space is not one of those defined as supported
 // when the callback was registered.
-type MemAccFunc func(address VAddr, memSpace MemSpaceAcc, reqBytes uint32, buffer []byte) uint32
+type MemAccessor func(address VAddr, memSpace MemSpaceAcc, reqBytes uint32, buffer []byte) uint32
 
-// FnMemAccCB is a compatibility alias for MemAccFunc.
-type FnMemAccCB = MemAccFunc
-
-// MemAccIDFunc is the callback function definition for callback function memory accessor type.
+// MemAccessorWithID is the callback function definition for callback function memory accessor type.
 //
 // When using callback memory accessor, the decoder will call this function to obtain the
 // memory at the address for the current opcodes. The memory space will represent the current
@@ -27,10 +31,7 @@ type FnMemAccCB = MemAccFunc
 //
 // Return 0 bytes if start address out of covered range, or memory space is not one of those defined as supported
 // when the callback was registered.
-type MemAccIDFunc func(address VAddr, memSpace MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32
-
-// FnMemAccIDCB is a compatibility alias for MemAccIDFunc.
-type FnMemAccIDCB = MemAccIDFunc
+type MemAccessorWithID func(address VAddr, memSpace MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32
 
 // TrcDataProcessor is the generic interface for supplying raw trace data
 // to a component in the decode datapath.
@@ -41,45 +42,30 @@ type TrcDataProcessor interface {
 	TraceDataIn(op DatapathOp, index TrcIndex, dataBlock []byte) (uint32, DatapathResp, error)
 }
 
-// TrcDataIn is a compatibility alias for TrcDataProcessor.
-type TrcDataIn = TrcDataProcessor
-
 // GenElemProcessor is the input interface for generic trace elements.
 type GenElemProcessor interface {
 	TraceElemIn(indexSOP TrcIndex, trcChanID uint8, elem *TraceElement) DatapathResp
 }
-
-// TrcGenElemIn is a compatibility alias for GenElemProcessor.
-type TrcGenElemIn = GenElemProcessor
 
 // PacketProcessor provides input for discrete protocol packets.
 type PacketProcessor[P any] interface {
 	PacketDataIn(op DatapathOp, indexSOP TrcIndex, pkt *P) DatapathResp
 }
 
-// PktDataIn is a compatibility alias for PacketProcessor.
-type PktDataIn[P any] = PacketProcessor[P]
-
 // PacketMonitor provides packet monitor functionality off the decode path.
 type PacketMonitor[P any] interface {
 	RawPacketDataMon(op DatapathOp, indexSOP TrcIndex, pkt *P, rawData []byte)
 }
-
-// PktRawDataMon is a compatibility alias for PacketMonitor.
-type PktRawDataMon[P any] = PacketMonitor[P]
 
 // RawFrameProcessor is the input interface for raw frame bytes.
 type RawFrameProcessor interface {
 	TraceRawFrameIn(op DatapathOp, index TrcIndex, frameElem RawframeElem, data []byte, traceID uint8) DatapathResp
 }
 
-// TrcRawFrameIn is a compatibility alias for RawFrameProcessor.
-type TrcRawFrameIn = RawFrameProcessor
-
 // DecoderManager identifies a registered decoder manager by protocol.
 // It provides construction of packet processors and full decoders.
 type DecoderManager interface {
-	CreatePacketProcessor(instID int, config any) (TrcDataIn, any, error)
-	CreateDecoder(instID int, config any) (TrcDataIn, any, error)
+	CreatePacketProcessor(instID int, config any) (TrcDataProcessor, any, error)
+	CreateDecoder(instID int, config any) (TrcDataProcessor, any, error)
 	Protocol() TraceProtocol
 }

@@ -14,9 +14,11 @@ type mockErrorLog struct {
 	lastMsg    string
 }
 
-func (m *mockErrorLog) LogError(filterLevel ocsd.ErrSeverity, msg string) {
+func (m *mockErrorLog) LogError(filterLevel ocsd.ErrSeverity, err error) {
 	m.lastErrSev = filterLevel
-	m.lastErrMsg = msg
+	if err != nil {
+		m.lastErrMsg = err.Error()
+	}
 }
 
 func (m *mockErrorLog) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
@@ -24,9 +26,9 @@ func (m *mockErrorLog) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
 	m.lastMsg = msg
 }
 
-func TestTraceComponent(t *testing.T) {
-	tc := &TraceComponent{}
-	tc.ConfigureTraceComponent("TestComp")
+func TestComponentRuntimeViaPktProcI(t *testing.T) {
+	tc := &PktProcI{}
+	tc.comp.init("TestComp")
 
 	if tc.ErrorLogLevel() != ocsd.ErrSevNone {
 		t.Errorf("expected default error log level to be ErrSevNone")
@@ -36,7 +38,7 @@ func TestTraceComponent(t *testing.T) {
 		t.Errorf("expected name TestComp, got %s", tc.ComponentName())
 	}
 
-	tc.ConfigureTraceComponent("NewName")
+	tc.comp.init("NewName")
 	if tc.ComponentName() != "NewName" {
 		t.Errorf("expected NewName")
 	}
@@ -56,12 +58,6 @@ func TestTraceComponent(t *testing.T) {
 	}
 	if tc.ComponentOpMode() != 0x00 {
 		t.Errorf("expected unsupported flags to be masked out")
-	}
-
-	assoc := &TraceComponent{}
-	tc.AttachAssocComponent(assoc)
-	if tc.AssocComponent() != assoc {
-		t.Errorf("expected associated component to be set")
 	}
 
 	// Test logging

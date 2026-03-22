@@ -34,7 +34,7 @@ func (m *mapperAdapter) InvalidateMemAccCache(csTraceID uint8) {
 	m.mapper.InvalidateMemAccCache(csTraceID)
 }
 
-// etmv3RawPacketPrinter implements common.PktRawDataMon[etmv3.Packet].
+// etmv3RawPacketPrinter implements common packet-monitor behavior for etmv3.Packet.
 type etmv3RawPacketPrinter struct {
 	writer  io.Writer
 	traceID uint8

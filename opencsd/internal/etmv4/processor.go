@@ -70,10 +70,10 @@ type Processor struct {
 	config Config
 
 	// output interface
-	pktOut ocsd.PktDataIn[TracePacket]
+	pktOut ocsd.PacketProcessor[TracePacket]
 
 	// raw packet monitor
-	PktRawMonI ocsd.PktRawDataMon[TracePacket]
+	PktRawMonI ocsd.PacketMonitor[TracePacket]
 
 	processState ProcessState
 
@@ -135,8 +135,8 @@ type Processor struct {
 	f1HasP2  bool
 }
 
-// Ensure the struct satisfies TrcDataIn
-var _ ocsd.TrcDataIn = (*Processor)(nil)
+// Ensure the struct satisfies TrcDataProcessor
+var _ ocsd.TrcDataProcessor = (*Processor)(nil)
 
 // NewProcessor creates and initializes a new ETMv4 packet Processor.
 func NewProcessor(config *Config) *Processor {
@@ -151,15 +151,15 @@ func NewProcessor(config *Config) *Processor {
 }
 
 // SetPktOut attaches the packet processor output sink.
-func (p *Processor) SetPktOut(cb ocsd.PktDataIn[TracePacket]) {
+func (p *Processor) SetPktOut(cb ocsd.PacketProcessor[TracePacket]) {
 	p.pktOut = cb
 }
 
-func (p *Processor) SetPktRawMonitor(mon ocsd.PktRawDataMon[TracePacket]) {
+func (p *Processor) SetPktRawMonitor(mon ocsd.PacketMonitor[TracePacket]) {
 	p.PktRawMonI = mon
 }
 
-// TraceDataIn implements ocsd.TrcDataIn.
+// TraceDataIn implements ocsd.TrcDataProcessor.
 func (p *Processor) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
 	switch op {
 	case ocsd.OpData:

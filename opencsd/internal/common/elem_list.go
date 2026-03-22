@@ -17,7 +17,7 @@ type GenElemList struct {
 	numUsed   int
 	numPend   int
 	csID      uint8
-	sendIf    func() ocsd.TrcGenElemIn
+	sendIf    func() ocsd.GenElemProcessor
 }
 
 // NewGenElemList creates a new list with an initial capacity.
@@ -31,7 +31,7 @@ func NewGenElemList() *GenElemList {
 	return l
 }
 
-func (l *GenElemList) SetSendIf(sendIf func() ocsd.TrcGenElemIn) {
+func (l *GenElemList) SetSendIf(sendIf func() ocsd.GenElemProcessor) {
 	l.sendIf = sendIf
 }
 
@@ -139,7 +139,7 @@ type GenElemStack struct {
 	currElemIdx int
 	sendElemIdx int
 	csID        uint8
-	sendIf      func() ocsd.TrcGenElemIn
+	sendIf      func() ocsd.GenElemProcessor
 }
 
 // NewGenElemStack creates a new trace element stack.
@@ -158,7 +158,7 @@ func (s *GenElemStack) isReady() bool {
 	return len(s.elemArray) > 0 && s.sendIf != nil
 }
 
-func (s *GenElemStack) SetSendIf(sendIf func() ocsd.TrcGenElemIn) {
+func (s *GenElemStack) SetSendIf(sendIf func() ocsd.GenElemProcessor) {
 	s.sendIf = sendIf
 }
 
