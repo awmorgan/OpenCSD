@@ -1,8 +1,10 @@
 package etmv3
 
 import (
+	"errors"
 	"testing"
 
+	"opencsd/internal/common"
 	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
@@ -55,7 +57,7 @@ func (s *noopPktSinkV3) PacketDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, pk
 
 func setupProcDec(config *Config) (*PktProc, *PktDecode, *testTrcElemIn) {
 	proc, dec, err := NewConfiguredPipeline(0, config)
-	if err != ocsd.OK {
+	if err != nil {
 		panic(err)
 	}
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1, hitAfter: -1})
@@ -68,27 +70,27 @@ func setupProcDec(config *Config) (*PktProc, *PktDecode, *testTrcElemIn) {
 func TestETMv3TypedConstructors(t *testing.T) {
 	config := &Config{}
 	proc, err := NewConfiguredPktProc(1, config)
-	if err != ocsd.OK || proc == nil || proc.Config != config {
+	if err != nil || proc == nil || proc.Config != config {
 		t.Fatalf("NewConfiguredPktProc failed: proc=%v err=%v", proc, err)
 	}
 
 	dec, err := NewConfiguredPktDecode(2, config)
-	if err != ocsd.OK || dec == nil || dec.Config != config {
+	if err != nil || dec == nil || dec.Config != config {
 		t.Fatalf("NewConfiguredPktDecode failed: dec=%v err=%v", dec, err)
 	}
 
 	proc, dec, err = NewConfiguredPipeline(3, config)
-	if err != ocsd.OK || proc == nil || dec == nil {
+	if err != nil || proc == nil || dec == nil {
 		t.Fatalf("NewConfiguredPipeline failed: proc=%v dec=%v err=%v", proc, dec, err)
 	}
 	if got := proc.PktOutI.First(); got != dec {
 		t.Fatal("expected pipeline constructor to wire processor output to decoder")
 	}
 
-	if proc, err := NewConfiguredPktProc(0, nil); err != ocsd.ErrInvalidParamVal || proc != nil {
+	if proc, err := NewConfiguredPktProc(0, nil); proc != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 		t.Fatalf("expected nil-config proc constructor failure, got proc=%v err=%v", proc, err)
 	}
-	if dec, err := NewConfiguredPktDecode(0, nil); err != ocsd.ErrInvalidParamVal || dec != nil {
+	if dec, err := NewConfiguredPktDecode(0, nil); dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 		t.Fatalf("expected nil-config decode constructor failure, got dec=%v err=%v", dec, err)
 	}
 }
@@ -96,7 +98,7 @@ func TestETMv3TypedConstructors(t *testing.T) {
 func mustNewConfiguredPktProc(tb testing.TB, config *Config) *PktProc {
 	tb.Helper()
 	proc, err := NewConfiguredPktProc(0, config)
-	if err != ocsd.OK {
+	if err != nil {
 		tb.Fatalf("NewConfiguredPktProc failed: %v", err)
 	}
 	return proc
@@ -105,8 +107,19 @@ func mustNewConfiguredPktProc(tb testing.TB, config *Config) *PktProc {
 func mustNewConfiguredPktDecode(tb testing.TB, config *Config) *PktDecode {
 	tb.Helper()
 	dec, err := NewConfiguredPktDecode(0, config)
-	if err != ocsd.OK {
+	if err != nil {
 		tb.Fatalf("NewConfiguredPktDecode failed: %v", err)
 	}
 	return dec
+}
+
+func isErrorCode(err error, code ocsd.Err) bool {
+	if err == nil {
+		return false
+	}
+	var libErr *common.Error
+	if !errors.As(err, &libErr) {
+		return false
+	}
+	return libErr.Code == code
 }

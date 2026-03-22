@@ -1,8 +1,10 @@
 package etmv4
 
 import (
+	"errors"
 	"testing"
 
+	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -10,29 +12,40 @@ func TestTypedConstructors(t *testing.T) {
 	cfg := &Config{}
 
 	proc, err := NewConfiguredProcessor(cfg)
-	if err != ocsd.OK || proc == nil {
+	if err != nil || proc == nil {
 		t.Fatalf("NewConfiguredProcessor failed: proc=%v err=%v", proc, err)
 	}
 
 	dec, err := NewConfiguredPktDecode(1, cfg)
-	if err != ocsd.OK || dec == nil || dec.Config != cfg {
+	if err != nil || dec == nil || dec.Config != cfg {
 		t.Fatalf("NewConfiguredPktDecode failed: dec=%v err=%v", dec, err)
 	}
 
 	proc, dec, err = NewConfiguredPipeline(2, cfg)
-	if err != ocsd.OK || proc == nil || dec == nil {
+	if err != nil || proc == nil || dec == nil {
 		t.Fatalf("NewConfiguredPipeline failed: proc=%v dec=%v err=%v", proc, dec, err)
 	}
 
-	if proc, err := NewConfiguredProcessor(nil); err != ocsd.ErrInvalidParamVal || proc != nil {
+	if proc, err := NewConfiguredProcessor(nil); proc != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 		t.Fatalf("expected nil-config processor constructor failure, got proc=%v err=%v", proc, err)
 	}
-	if dec, err := NewConfiguredPktDecode(0, nil); err != ocsd.ErrInvalidParamVal || dec != nil {
+	if dec, err := NewConfiguredPktDecode(0, nil); dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 		t.Fatalf("expected nil-config decode constructor failure, got dec=%v err=%v", dec, err)
 	}
-	if proc, dec, err := NewConfiguredPipeline(0, nil); err != ocsd.ErrInvalidParamVal || proc != nil || dec != nil {
+	if proc, dec, err := NewConfiguredPipeline(0, nil); proc != nil || dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 		t.Fatalf("expected nil-config pipeline constructor failure, got proc=%v dec=%v err=%v", proc, dec, err)
 	}
+}
+
+func isErrorCode(err error, code ocsd.Err) bool {
+	if err == nil {
+		return false
+	}
+	var libErr *common.Error
+	if !errors.As(err, &libErr) {
+		return false
+	}
+	return libErr.Code == code
 }
 
 func TestDecoderOnFlushResolvesPendingState(t *testing.T) {

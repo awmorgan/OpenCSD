@@ -25,7 +25,7 @@ import (
 // so currState==decodePkts. The testTrcElemIn sink is attached.
 func buildDecInDecodePkts(config *Config) (*PktDecode, *testTrcElemIn) {
 	dec, err := NewConfiguredPktDecode(0, config)
-	if err != ocsd.OK {
+	if err != nil {
 		panic(err)
 	}
 	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1})

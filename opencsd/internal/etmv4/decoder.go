@@ -2017,42 +2017,38 @@ func (d *PktDecode) pushP0ElemITE(rootPkt PktType, rootIndex ocsd.TrcIndex, ite 
 // DecoderManager is the registry factory for ETMv4 decoders
 type DecoderManager struct{}
 
-func NewDecoderManager() *DecoderManager {
-	return &DecoderManager{}
-}
-
 // NewConfiguredProcessor creates an ETMv4 packet processor with a typed config.
-func NewConfiguredProcessor(cfg *Config) (*Processor, ocsd.Err) {
+func NewConfiguredProcessor(cfg *Config) (*Processor, error) {
 	if cfg == nil {
-		return nil, ocsd.ErrInvalidParamVal
+		return nil, common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "ETMv4 config cannot be nil")
 	}
-	return NewProcessor(cfg), ocsd.OK
+	return NewProcessor(cfg), nil
 }
 
 // NewConfiguredPktDecode creates an ETMv4 packet decoder with a typed config.
-func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, ocsd.Err) {
+func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
 	if cfg == nil {
-		return nil, ocsd.ErrInvalidParamVal
+		return nil, common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "ETMv4 config cannot be nil")
 	}
 	decoder := NewPktDecode(instID)
 	if err := decoder.SetProtocolConfig(cfg); err != ocsd.OK {
-		return nil, ocsd.ErrInvalidParamVal
+		return nil, ocsd.ToError(err)
 	}
-	return decoder, ocsd.OK
+	return decoder, nil
 }
 
 // NewConfiguredPipeline creates and wires a typed ETMv4 processor/decoder pair.
-func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, ocsd.Err) {
+func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, error) {
 	proc, err := NewConfiguredProcessor(cfg)
-	if err != ocsd.OK {
+	if err != nil {
 		return nil, nil, err
 	}
 	decoder, err := NewConfiguredPktDecode(instID, cfg)
-	if err != ocsd.OK {
+	if err != nil {
 		return nil, nil, err
 	}
 	proc.SetPktOut(decoder)
-	return proc, decoder, ocsd.OK
+	return proc, decoder, nil
 }
 
 func typedConfig(config any) (*Config, error) {
@@ -2069,8 +2065,8 @@ func (m *DecoderManager) CreatePacketProcessor(instID int, config any) (ocsd.Trc
 		return nil, nil, err
 	}
 	proc, createErr := NewConfiguredProcessor(cfg)
-	if createErr != ocsd.OK {
-		return nil, nil, ocsd.ToError(createErr)
+	if createErr != nil {
+		return nil, nil, createErr
 	}
 	return proc, proc, nil
 }
@@ -2081,8 +2077,8 @@ func (m *DecoderManager) CreateDecoder(instID int, config any) (ocsd.TrcDataIn, 
 		return nil, nil, err
 	}
 	proc, decoder, createErr := NewConfiguredPipeline(instID, cfg)
-	if createErr != ocsd.OK {
-		return nil, nil, ocsd.ToError(createErr)
+	if createErr != nil {
+		return nil, nil, createErr
 	}
 	return proc, decoder, nil
 }
