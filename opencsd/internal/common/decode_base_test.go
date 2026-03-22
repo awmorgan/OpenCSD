@@ -25,7 +25,7 @@ func TestPktDecodeBase(t *testing.T) {
 	pb.ConfigurePktDecodeBase("testDecode")
 
 	elemIn := &myTrcGenElemIn{}
-	pb.TraceElemOut.Attach(elemIn)
+	pb.SetTraceElemOut(elemIn)
 	pb.ConfigInitOK = true
 	pb.SetNeedsMemAccess(false)
 	pb.SetNeedsInstructionDecode(false)
@@ -68,7 +68,7 @@ func TestPktProcBase(t *testing.T) {
 	pb.ConfigurePktProcBase("testProc")
 
 	outI := &myPktDataIn{}
-	pb.PktOutI.Attach(outI)
+	pb.SetPktOut(outI)
 
 	pb.ResetStats()
 	pb.StatsAddTotalCount(100)

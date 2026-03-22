@@ -43,9 +43,7 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, error
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := proc.PktOutI.Attach(dec); err != ocsd.OK {
-		return nil, nil, ocsd.ToError(err)
-	}
+	proc.SetPktOut(dec)
 	return proc, dec, nil
 }
 

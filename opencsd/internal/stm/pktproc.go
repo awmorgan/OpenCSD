@@ -134,26 +134,26 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 		}
 	case ocsd.OpEOT:
 		resp = p.OnEOT()
-		if p.PktOutI.IsActive() && !ocsd.DataRespIsFatal(resp) {
-			resp = p.PktOutI.First().PacketDataIn(ocsd.OpEOT, 0, nil)
+		if out := p.PktOut(); out != nil && !ocsd.DataRespIsFatal(resp) {
+			resp = out.PacketDataIn(ocsd.OpEOT, 0, nil)
 		}
-		if p.PktRawMonI.IsActive() {
-			p.PktRawMonI.First().RawPacketDataMon(ocsd.OpEOT, 0, nil, nil)
+		if rawMon := p.PktRawMonitor(); rawMon != nil {
+			rawMon.RawPacketDataMon(ocsd.OpEOT, 0, nil, nil)
 		}
 	case ocsd.OpFlush:
 		resp = p.OnFlush()
-		if ocsd.DataRespIsCont(resp) && p.PktOutI.IsActive() {
-			resp = p.PktOutI.First().PacketDataIn(ocsd.OpFlush, 0, nil)
+		if out := p.PktOut(); ocsd.DataRespIsCont(resp) && out != nil {
+			resp = out.PacketDataIn(ocsd.OpFlush, 0, nil)
 		}
 	case ocsd.OpReset:
-		if p.PktOutI.IsActive() {
-			resp = p.PktOutI.First().PacketDataIn(ocsd.OpReset, index, nil)
+		if out := p.PktOut(); out != nil {
+			resp = out.PacketDataIn(ocsd.OpReset, index, nil)
 		}
 		if !ocsd.DataRespIsFatal(resp) {
 			resp = p.OnReset()
 		}
-		if p.PktRawMonI.IsActive() {
-			p.PktRawMonI.First().RawPacketDataMon(ocsd.OpReset, index, nil, nil)
+		if rawMon := p.PktRawMonitor(); rawMon != nil {
+			rawMon.RawPacketDataMon(ocsd.OpReset, index, nil, nil)
 		}
 	default:
 		p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
@@ -438,7 +438,7 @@ func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {
 
 	if !bGotData || p.numNibbles > 22 {
 		p.currPacket.SetPacketType(PktNotSync, false)
-		if p.PktRawMonI.IsActive() {
+		if p.PktRawMonitor() != nil {
 			nibblesToSend := uint32(p.numNibbles - p.numFNibbles)
 			if p.isSync {
 				nibblesToSend = uint32(p.numNibbles - 22)
@@ -459,7 +459,7 @@ func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {
 		p.bStreamSync = true
 		p.clearSyncCount()
 		p.packetIndex = p.syncIndex
-		if p.PktRawMonI.IsActive() {
+		if p.PktRawMonitor() != nil {
 			for range 10 {
 				p.savePacketByte(0xFF)
 			}
@@ -1094,7 +1094,7 @@ func (p *PktProc) setProcUnsynced() {
 }
 
 func (p *PktProc) savePacketByte(val uint8) {
-	if p.PktRawMonI.IsActive() && !p.bWaitSyncSaveSuppressed {
+	if p.PktRawMonitor() != nil && !p.bWaitSyncSaveSuppressed {
 		p.packetData = append(p.packetData, val)
 	}
 }

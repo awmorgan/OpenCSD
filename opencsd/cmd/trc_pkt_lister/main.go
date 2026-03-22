@@ -511,7 +511,7 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 
 		switch proc := elem.DataIn.(type) {
 		case *ptm.PktProc:
-			_ = proc.PktRawMonI.Replace(&genericRawPrinter[*ptm.Packet]{
+			proc.SetPktRawMonitor(&genericRawPrinter[*ptm.Packet]{
 				writer: out, id: csID,
 				formatFn: func(pkt *ptm.Packet) string {
 					if pkt == nil {
@@ -522,7 +522,7 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 			})
 			ok = true
 		case *etmv3.PktProc:
-			_ = proc.PktRawMonI.Replace(&genericRawPrinter[*etmv3.Packet]{
+			proc.SetPktRawMonitor(&genericRawPrinter[*etmv3.Packet]{
 				writer: out, id: csID,
 				formatFn: func(pkt *etmv3.Packet) string {
 					if pkt == nil {
@@ -533,7 +533,7 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 			})
 			ok = true
 		case *etmv4.Processor:
-			_ = proc.PktRawMonI.Replace(&genericRawPrinter[*etmv4.TracePacket]{
+			proc.SetPktRawMonitor(&genericRawPrinter[*etmv4.TracePacket]{
 				writer: out, id: csID,
 				formatFn: func(pkt *etmv4.TracePacket) string {
 					if pkt == nil {
@@ -544,7 +544,7 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 			})
 			ok = true
 		case *itm.PktProc:
-			_ = proc.PktRawMonI.Replace(&genericRawPrinter[*itm.Packet]{
+			proc.SetPktRawMonitor(&genericRawPrinter[*itm.Packet]{
 				writer: out, id: csID,
 				formatFn: func(pkt *itm.Packet) string {
 					if pkt == nil {
@@ -555,7 +555,7 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 			})
 			ok = true
 		case *stm.PktProc:
-			_ = proc.PktRawMonI.Replace(&genericRawPrinter[*stm.Packet]{
+			proc.SetPktRawMonitor(&genericRawPrinter[*stm.Packet]{
 				writer: out, id: csID,
 				formatFn: func(pkt *stm.Packet) string {
 					if pkt == nil {

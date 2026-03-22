@@ -60,10 +60,10 @@ func setupProcDec(config *Config) (*PktProc, *PktDecode, *testTrcElemIn) {
 	if err != nil {
 		panic(err)
 	}
-	dec.MemAccess.Attach(&mockMemAcc{failAfter: -1, hitAfter: -1})
-	dec.InstrDecode.Attach(idec.NewDecoder())
+	dec.SetMemAccess(&mockMemAcc{failAfter: -1, hitAfter: -1})
+	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
-	dec.TraceElemOut.Attach(out)
+	dec.SetTraceElemOut(out)
 	return proc, dec, out
 }
 
@@ -83,7 +83,7 @@ func TestETMv3TypedConstructors(t *testing.T) {
 	if err != nil || proc == nil || dec == nil {
 		t.Fatalf("NewConfiguredPipeline failed: proc=%v dec=%v err=%v", proc, dec, err)
 	}
-	if got := proc.PktOutI.First(); got != dec {
+	if got := proc.PktOut(); got != dec {
 		t.Fatal("expected pipeline constructor to wire processor output to decoder")
 	}
 

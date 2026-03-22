@@ -158,6 +158,13 @@ func (p *Processor) SetPktOut(cb ocsd.PktDataIn[TracePacket]) {
 	p.pktOut = cb
 }
 
+func (p *Processor) SetPktRawMonitor(mon ocsd.PktRawDataMon[TracePacket]) {
+	if p.PktRawMonI == nil {
+		p.PktRawMonI = common.NewAttachPt[ocsd.PktRawDataMon[TracePacket]]()
+	}
+	_ = p.PktRawMonI.Replace(mon)
+}
+
 // TraceDataIn implements ocsd.TrcDataIn.
 func (p *Processor) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
 	switch op {

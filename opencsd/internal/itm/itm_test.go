@@ -104,9 +104,7 @@ func TestITMEndToEndDecode(t *testing.T) {
 			t.Fatalf("NewConfiguredPipeline failed: %v", err)
 		}
 		outReceiver := &testTrcElemIn{}
-		if err := dec.TraceElemOut.Attach(outReceiver); err != ocsd.OK {
-			t.Fatalf("TraceElemOut.Attach failed: %v", err)
-		}
+		dec.SetTraceElemOut(outReceiver)
 
 		proc.TraceDataIn(ocsd.OpData, 0, stream)
 		proc.TraceDataIn(ocsd.OpFlush, 0, nil)
@@ -231,7 +229,7 @@ func TestITMTypedConstructors(t *testing.T) {
 		if proc == nil || dec == nil {
 			t.Fatal("expected non-nil processor and decoder")
 		}
-		if got := proc.PktOutI.First(); got != dec {
+		if got := proc.PktOut(); got != dec {
 			t.Fatal("expected pipeline constructor to wire processor output to decoder")
 		}
 	})

@@ -223,14 +223,26 @@ func (dt *DecodeTree) routeIDFromConfig(config any) (uint8, error) {
 }
 
 func (dt *DecodeTree) attachElementDependencies(elem *DecodeTreeElement) {
-	if elem.TraceElemAttach != nil && dt.genElemOut != nil {
-		elem.TraceElemAttach.Replace(dt.genElemOut)
+	if dt.genElemOut != nil {
+		if elem.SetTraceElemOut != nil {
+			elem.SetTraceElemOut(dt.genElemOut)
+		} else if elem.TraceElemAttach != nil {
+			elem.TraceElemAttach.Replace(dt.genElemOut)
+		}
 	}
-	if elem.InstrDecAttach != nil && dt.instrDecode != nil {
-		elem.InstrDecAttach.Replace(dt.instrDecode)
+	if dt.instrDecode != nil {
+		if elem.SetInstrDecode != nil {
+			elem.SetInstrDecode(dt.instrDecode)
+		} else if elem.InstrDecAttach != nil {
+			elem.InstrDecAttach.Replace(dt.instrDecode)
+		}
 	}
-	if elem.MemAccAttach != nil && dt.memAccess != nil {
-		elem.MemAccAttach.Replace(dt.memAccess)
+	if dt.memAccess != nil {
+		if elem.SetMemAccess != nil {
+			elem.SetMemAccess(dt.memAccess)
+		} else if elem.MemAccAttach != nil {
+			elem.MemAccAttach.Replace(dt.memAccess)
+		}
 	}
 }
 
@@ -251,7 +263,9 @@ func (dt *DecodeTree) RemoveDecoder(csID uint8) {
 func (dt *DecodeTree) SetGenTraceElemOutI(outI ocsd.TrcGenElemIn) {
 	dt.genElemOut = outI
 	for _, elem := range dt.decodeElements {
-		if elem.TraceElemAttach != nil {
+		if elem.SetTraceElemOut != nil {
+			elem.SetTraceElemOut(outI)
+		} else if elem.TraceElemAttach != nil {
 			elem.TraceElemAttach.Replace(outI)
 		}
 	}
@@ -261,7 +275,9 @@ func (dt *DecodeTree) SetGenTraceElemOutI(outI ocsd.TrcGenElemIn) {
 func (dt *DecodeTree) SetInstrDecoder(instrDec common.InstrDecode) {
 	dt.instrDecode = instrDec
 	for _, elem := range dt.decodeElements {
-		if elem.InstrDecAttach != nil {
+		if elem.SetInstrDecode != nil {
+			elem.SetInstrDecode(instrDec)
+		} else if elem.InstrDecAttach != nil {
 			elem.InstrDecAttach.Replace(instrDec)
 		}
 	}
@@ -271,7 +287,9 @@ func (dt *DecodeTree) SetInstrDecoder(instrDec common.InstrDecode) {
 func (dt *DecodeTree) SetMemAccessI(memI common.TargetMemAccess) {
 	dt.memAccess = memI
 	for _, elem := range dt.decodeElements {
-		if elem.MemAccAttach != nil {
+		if elem.SetMemAccess != nil {
+			elem.SetMemAccess(memI)
+		} else if elem.MemAccAttach != nil {
 			elem.MemAccAttach.Replace(memI)
 		}
 	}

@@ -207,8 +207,8 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 
 func (d *PktDecode) accessMemory(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
 	if d.NeedsMemAccess() {
-		if d.MemAccAttachPt().IsActive() {
-			return d.MemAccAttachPt().First().ReadTargetMemory(address, d.TraceID(), memSpace, reqBytes)
+		if mem := d.MemAccessIf(); mem != nil {
+			return mem.ReadTargetMemory(address, d.TraceID(), memSpace, reqBytes)
 		}
 	}
 	return 0, nil, ocsd.ErrDcdInterfaceUnused
@@ -308,10 +308,11 @@ func (d *PktDecode) SetInstrRangeLimit(limit uint32) {
 
 func (d *PktDecode) syncAA64OpcodeCheckMode() {
 	enabled := d.aa64BadOpcode || (d.ComponentOpMode()&ocsd.OpflgPktdecAA64OpcodeChk) != 0
-	if !d.InstrDecodeAttachPt().IsActive() {
+	decoder := d.InstrDecodeIf()
+	if decoder == nil {
 		return
 	}
-	if setter, ok := d.InstrDecodeAttachPt().First().(interface{ SetAA64ErrOnBadOpcode(bool) }); ok {
+	if setter, ok := decoder.(interface{ SetAA64ErrOnBadOpcode(bool) }); ok {
 		setter.SetAA64ErrOnBadOpcode(enabled)
 	}
 }

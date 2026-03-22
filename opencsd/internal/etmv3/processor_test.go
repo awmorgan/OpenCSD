@@ -34,7 +34,7 @@ func newSyncedProc(config *Config) (*PktProc, *capturePktSink) {
 	proc := NewPktProc(0)
 	proc.SetProtocolConfig(config)
 	sink := &capturePktSink{}
-	proc.PktOutI.Attach(sink)
+	proc.SetPktOut(sink)
 	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
 	return proc, sink
 }
@@ -640,7 +640,7 @@ func TestWaitSync_NonZeroFirst(t *testing.T) {
 	proc := NewPktProc(0)
 	proc.SetProtocolConfig(&Config{})
 	sink := &capturePktSink{}
-	proc.PktOutI.Attach(sink)
+	proc.SetPktOut(sink)
 
 	// In waitSync, bStartOfSync=false, len=0:
 	// non-zero byte → currPacketData=[0xFF], then next 0x00 causes: len=1>0 → decrements bytesProcessed, PktNotSync

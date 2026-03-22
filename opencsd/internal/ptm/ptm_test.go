@@ -191,7 +191,7 @@ func TestPTMTypedConstructors(t *testing.T) {
 		if proc == nil || dec == nil {
 			t.Fatal("expected non-nil processor and decoder")
 		}
-		if got := proc.PktOutI.First(); got != dec {
+		if got := proc.PktOut(); got != dec {
 			t.Fatal("expected pipeline constructor to wire processor output to decoder")
 		}
 	})

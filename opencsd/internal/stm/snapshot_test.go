@@ -164,7 +164,7 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 		if !ok || proc == nil {
 			return
 		}
-		_ = proc.PktRawMonI.Replace(&stmRawPacketPrinter{writer: &out, traceID: csID})
+		proc.SetPktRawMonitor(&stmRawPacketPrinter{writer: &out, traceID: csID})
 	})
 
 	binFile := filepath.Join(snapshotDir, sourceTree.BufferInfo.DataFileName)

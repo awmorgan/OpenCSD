@@ -265,9 +265,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 		if !ok || proc == nil {
 			return
 		}
-		if proc.PktRawMonI != nil {
-			_ = proc.PktRawMonI.Replace(&eteRawPacketPrinter{writer: &out, traceID: csID})
-		}
+		proc.SetPktRawMonitor(&eteRawPacketPrinter{writer: &out, traceID: csID})
 	})
 
 	buffers := eteSnapshotBuffers(reader.ParsedTrace, bufferName, opts.multiSession)

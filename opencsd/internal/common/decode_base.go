@@ -50,6 +50,39 @@ func (p *PktDecodeI) TraceElemOutAttachPt() *AttachPt[ocsd.TrcGenElemIn] {
 func (p *PktDecodeI) InstrDecodeAttachPt() *AttachPt[InstrDecode] { return &p.InstrDecode }
 func (p *PktDecodeI) MemAccAttachPt() *AttachPt[TargetMemAccess]  { return &p.MemAccess }
 
+func (p *PktDecodeI) SetTraceElemOut(out ocsd.TrcGenElemIn) {
+	_ = p.TraceElemOut.Replace(out)
+}
+
+func (p *PktDecodeI) TraceElemOutIf() ocsd.TrcGenElemIn {
+	if p.TraceElemOut.IsActive() {
+		return p.TraceElemOut.First()
+	}
+	return nil
+}
+
+func (p *PktDecodeI) SetMemAccess(mem TargetMemAccess) {
+	_ = p.MemAccess.Replace(mem)
+}
+
+func (p *PktDecodeI) MemAccessIf() TargetMemAccess {
+	if p.MemAccess.IsActive() {
+		return p.MemAccess.First()
+	}
+	return nil
+}
+
+func (p *PktDecodeI) SetInstrDecode(decoder InstrDecode) {
+	_ = p.InstrDecode.Replace(decoder)
+}
+
+func (p *PktDecodeI) InstrDecodeIf() InstrDecode {
+	if p.InstrDecode.IsActive() {
+		return p.InstrDecode.First()
+	}
+	return nil
+}
+
 func (p *PktDecodeI) SetNeedsMemAccess(needs bool) { p.usesMemAccess = needs }
 func (p *PktDecodeI) NeedsMemAccess() bool         { return p.usesMemAccess }
 
@@ -60,13 +93,13 @@ func (p *PktDecodeI) DecodeNotReadyReason() string {
 	if !p.ConfigInitOK {
 		return "No decoder configuration information"
 	}
-	if !p.TraceElemOut.IsActive() {
+	if p.TraceElemOutIf() == nil {
 		return "No element output interface attached and enabled"
 	}
-	if p.usesMemAccess && !p.MemAccess.IsActive() {
+	if p.usesMemAccess && p.MemAccessIf() == nil {
 		return "No memory access interface attached and enabled"
 	}
-	if p.usesIDecode && !p.InstrDecode.IsActive() {
+	if p.usesIDecode && p.InstrDecodeIf() == nil {
 		return "No instruction decoder interface attached and enabled"
 	}
 
@@ -74,23 +107,23 @@ func (p *PktDecodeI) DecodeNotReadyReason() string {
 }
 
 func (p *PktDecodeI) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
-	if p.TraceElemOut.IsActive() {
-		return p.TraceElemOut.First().TraceElemIn(p.IndexCurrPkt, traceID, elem)
+	if out := p.TraceElemOutIf(); out != nil {
+		return out.TraceElemIn(p.IndexCurrPkt, traceID, elem)
 	}
 	return ocsd.RespFatalNotInit
 }
 
 func (p *PktDecodeI) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
-	if p.TraceElemOut.IsActive() {
-		return p.TraceElemOut.First().TraceElemIn(idx, traceID, elem)
+	if out := p.TraceElemOutIf(); out != nil {
+		return out.TraceElemIn(idx, traceID, elem)
 	}
 	return ocsd.RespFatalNotInit
 }
 
 func (p *PktDecodeI) InstrDecodeCall(instrInfo *ocsd.InstrInfo) ocsd.Err {
 	if p.usesIDecode {
-		if p.InstrDecode.IsActive() {
-			return p.InstrDecode.First().DecodeInstruction(instrInfo)
+		if decoder := p.InstrDecodeIf(); decoder != nil {
+			return decoder.DecodeInstruction(instrInfo)
 		}
 	}
 	return ocsd.ErrDcdInterfaceUnused
@@ -98,8 +131,8 @@ func (p *PktDecodeI) InstrDecodeCall(instrInfo *ocsd.InstrInfo) ocsd.Err {
 
 func (p *PktDecodeI) AccessMemory(address ocsd.VAddr, traceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
 	if p.usesMemAccess {
-		if p.MemAccess.IsActive() {
-			return p.MemAccess.First().ReadTargetMemory(address, traceID, memSpace, reqBytes)
+		if mem := p.MemAccessIf(); mem != nil {
+			return mem.ReadTargetMemory(address, traceID, memSpace, reqBytes)
 		}
 	}
 	return 0, nil, ocsd.ErrDcdInterfaceUnused
@@ -109,8 +142,8 @@ func (p *PktDecodeI) InvalidateMemAccCache(traceID uint8) ocsd.Err {
 	if !p.usesMemAccess {
 		return ocsd.ErrDcdInterfaceUnused
 	}
-	if p.MemAccess.IsActive() {
-		p.MemAccess.First().InvalidateMemAccCache(traceID)
+	if mem := p.MemAccessIf(); mem != nil {
+		mem.InvalidateMemAccCache(traceID)
 	}
 	return ocsd.OK
 }
@@ -155,11 +188,44 @@ func (pb *PktProcBase[P, Pt, Pc]) ConfigurePktProcBase(name string) {
 	pb.ResetStats()
 }
 
+func (pb *PktProcBase[P, Pt, Pc]) SetPktOut(out PktDataIn[P]) {
+	_ = pb.PktOutI.Replace(out)
+}
+
+func (pb *PktProcBase[P, Pt, Pc]) PktOut() PktDataIn[P] {
+	if pb.PktOutI.IsActive() {
+		return pb.PktOutI.First()
+	}
+	return nil
+}
+
+func (pb *PktProcBase[P, Pt, Pc]) SetPktRawMonitor(mon PktRawDataMon[P]) {
+	_ = pb.PktRawMonI.Replace(mon)
+}
+
+func (pb *PktProcBase[P, Pt, Pc]) PktRawMonitor() PktRawDataMon[P] {
+	if pb.PktRawMonI.IsActive() {
+		return pb.PktRawMonI.First()
+	}
+	return nil
+}
+
+func (pb *PktProcBase[P, Pt, Pc]) SetPktIndexer(indexer TrcPktIndexer[Pt]) {
+	_ = pb.PktIndexerI.Replace(indexer)
+}
+
+func (pb *PktProcBase[P, Pt, Pc]) PktIndexer() TrcPktIndexer[Pt] {
+	if pb.PktIndexerI.IsActive() {
+		return pb.PktIndexerI.First()
+	}
+	return nil
+}
+
 func (pb *PktProcBase[P, Pt, Pc]) OutputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *P) ocsd.DatapathResp {
 	resp := ocsd.RespCont
 
-	if pb.PktOutI.IsActive() {
-		resp = pb.PktOutI.First().PacketDataIn(ocsd.OpData, indexSOP, pkt)
+	if out := pb.PktOut(); out != nil {
+		resp = out.PacketDataIn(ocsd.OpData, indexSOP, pkt)
 	}
 	return resp
 }
@@ -168,14 +234,14 @@ func (pb *PktProcBase[P, Pt, Pc]) OutputRawPacketToMonitor(indexSOP ocsd.TrcInde
 	if len(pData) == 0 {
 		return
 	}
-	if pb.PktRawMonI.IsActive() {
-		pb.PktRawMonI.First().RawPacketDataMon(ocsd.OpData, indexSOP, pkt, pData)
+	if rawMon := pb.PktRawMonitor(); rawMon != nil {
+		rawMon.RawPacketDataMon(ocsd.OpData, indexSOP, pkt, pData)
 	}
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) IndexPacket(indexSOP ocsd.TrcIndex, pktType Pt) {
-	if pb.PktIndexerI.IsActive() {
-		pb.PktIndexerI.First().TracePktIndex(indexSOP, pktType)
+	if indexer := pb.PktIndexer(); indexer != nil {
+		indexer.TracePktIndex(indexSOP, pktType)
 	}
 }
 
@@ -195,7 +261,7 @@ func (pb *PktProcBase[P, Pt, Pc]) StatsBlock() (*ocsd.DecodeStats, ocsd.Err) {
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) HasRawMon() bool {
-	return pb.PktRawMonI.IsActive()
+	return pb.PktRawMonitor() != nil
 }
 
 func (pb *PktProcBase[P, Pt, Pc]) ResetStats() {
