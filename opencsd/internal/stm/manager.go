@@ -1,6 +1,7 @@
 package stm
 
 import (
+	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -8,49 +9,44 @@ import (
 type DecoderManager struct {
 }
 
-// NewDecoderManager creates a new STM decoder manager.
-func NewDecoderManager() *DecoderManager {
-	return &DecoderManager{}
-}
-
 // NewConfiguredPktProc creates an STM packet processor with a typed config.
-func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, ocsd.Err) {
+func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, error) {
 	if cfg == nil {
-		return nil, ocsd.ErrInvalidParamVal
+		return nil, common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "STM config cannot be nil")
 	}
 	proc := NewPktProc(instID)
 	if err := proc.SetProtocolConfig(cfg); err != ocsd.OK {
-		return nil, err
+		return nil, ocsd.ToError(err)
 	}
-	return proc, ocsd.OK
+	return proc, nil
 }
 
 // NewConfiguredPktDecode creates an STM packet decoder with a typed config.
-func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, ocsd.Err) {
+func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
 	if cfg == nil {
-		return nil, ocsd.ErrInvalidParamVal
+		return nil, common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "STM config cannot be nil")
 	}
 	dec := NewPktDecode(instID)
 	if err := dec.SetProtocolConfig(cfg); err != ocsd.OK {
-		return nil, err
+		return nil, ocsd.ToError(err)
 	}
-	return dec, ocsd.OK
+	return dec, nil
 }
 
 // NewConfiguredPipeline creates and wires a typed STM processor/decoder pair.
-func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, ocsd.Err) {
+func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, error) {
 	proc, err := NewConfiguredPktProc(instID, cfg)
-	if err != ocsd.OK {
+	if err != nil {
 		return nil, nil, err
 	}
 	dec, err := NewConfiguredPktDecode(instID, cfg)
-	if err != ocsd.OK {
+	if err != nil {
 		return nil, nil, err
 	}
-	if err := proc.PktOutI.Replace(dec); err != ocsd.OK {
-		return nil, nil, err
+	if err := proc.PktOutI.Attach(dec); err != ocsd.OK {
+		return nil, nil, ocsd.ToError(err)
 	}
-	return proc, dec, ocsd.OK
+	return proc, dec, nil
 }
 
 func typedConfig(config any) (*Config, error) {
@@ -71,8 +67,8 @@ func (m *DecoderManager) CreatePacketProcessor(instID int, config any) (ocsd.Trc
 		return nil, nil, err
 	}
 	proc, createErr := NewConfiguredPktProc(instID, cfg)
-	if createErr != ocsd.OK {
-		return nil, nil, ocsd.ToError(createErr)
+	if createErr != nil {
+		return nil, nil, createErr
 	}
 	return proc, proc, nil
 }
@@ -83,8 +79,8 @@ func (m *DecoderManager) CreateDecoder(instID int, config any) (ocsd.TrcDataIn, 
 		return nil, nil, err
 	}
 	proc, dec, createErr := NewConfiguredPipeline(instID, cfg)
-	if createErr != ocsd.OK {
-		return nil, nil, ocsd.ToError(createErr)
+	if createErr != nil {
+		return nil, nil, createErr
 	}
 	return proc, dec, nil
 }

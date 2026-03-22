@@ -14,9 +14,9 @@ func registerBuiltinDecoders(reg *DecoderRegister) {
 	if reg == nil {
 		return
 	}
-	_ = reg.RegisterDecoderManagerByName(ocsd.BuiltinDcdSTM, stm.NewDecoderManager())
+	_ = reg.RegisterDecoderManagerByName(ocsd.BuiltinDcdSTM, &stm.DecoderManager{})
 	_ = reg.RegisterDecoderManagerByName(ocsd.BuiltinDcdITM, &itm.DecoderManager{})
-	_ = reg.RegisterDecoderManagerByName(ocsd.BuiltinDcdPTM, ptm.NewDecoderManager())
+	_ = reg.RegisterDecoderManagerByName(ocsd.BuiltinDcdPTM, &ptm.DecoderManager{})
 	_ = reg.RegisterDecoderManagerByName(ocsd.BuiltinDcdETMV3, etmv3.NewDecoderManager())
 	_ = reg.RegisterDecoderManagerByName(ocsd.BuiltinDcdETMV4I, etmv4.NewDecoderManager())
 	_ = reg.RegisterDecoderManagerByName(ocsd.BuiltinDcdETE, ete.NewDecoderManager())

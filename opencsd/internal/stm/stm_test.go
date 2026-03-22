@@ -1,8 +1,10 @@
 package stm
 
 import (
+	"errors"
 	"testing"
 
+	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -49,7 +51,7 @@ func TestSTMEndToEndDecode(t *testing.T) {
 	config.SetTraceID(0x10)
 
 	proc, dec, err := NewConfiguredPipeline(0, config)
-	if err != ocsd.OK {
+	if err != nil {
 		t.Fatalf("NewConfiguredPipeline failed: %v", err)
 	}
 
@@ -298,11 +300,11 @@ func TestSTMConfig(t *testing.T) {
 func TestSTMFlushResetAndBadPacketClassification(t *testing.T) {
 	config := NewConfig()
 	proc, err := NewConfiguredPktProc(0, config)
-	if err != ocsd.OK {
+	if err != nil {
 		t.Fatalf("NewConfiguredPktProc failed: %v", err)
 	}
 	dec, err := NewConfiguredPktDecode(0, config)
-	if err != ocsd.OK {
+	if err != nil {
 		t.Fatalf("NewConfiguredPktDecode failed: %v", err)
 	}
 
@@ -338,7 +340,7 @@ func TestSTMTypedConstructors(t *testing.T) {
 		cfg.SetTraceID(0x31)
 
 		proc, err := NewConfiguredPktProc(1, cfg)
-		if err != ocsd.OK {
+		if err != nil {
 			t.Fatalf("NewConfiguredPktProc failed: %v", err)
 		}
 		if proc == nil || proc.Config != cfg {
@@ -351,7 +353,7 @@ func TestSTMTypedConstructors(t *testing.T) {
 		cfg.SetTraceID(0x32)
 
 		dec, err := NewConfiguredPktDecode(2, cfg)
-		if err != ocsd.OK {
+		if err != nil {
 			t.Fatalf("NewConfiguredPktDecode failed: %v", err)
 		}
 		if dec == nil || dec.Config != cfg {
@@ -360,14 +362,25 @@ func TestSTMTypedConstructors(t *testing.T) {
 	})
 
 	t.Run("RejectNilConfig", func(t *testing.T) {
-		if proc, err := NewConfiguredPktProc(0, nil); err != ocsd.ErrInvalidParamVal || proc != nil {
+		if proc, err := NewConfiguredPktProc(0, nil); proc != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 			t.Fatalf("expected nil-config proc constructor to fail, got proc=%v err=%v", proc, err)
 		}
-		if dec, err := NewConfiguredPktDecode(0, nil); err != ocsd.ErrInvalidParamVal || dec != nil {
+		if dec, err := NewConfiguredPktDecode(0, nil); dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 			t.Fatalf("expected nil-config decode constructor to fail, got dec=%v err=%v", dec, err)
 		}
-		if proc, dec, err := NewConfiguredPipeline(0, nil); err != ocsd.ErrInvalidParamVal || proc != nil || dec != nil {
+		if proc, dec, err := NewConfiguredPipeline(0, nil); proc != nil || dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 			t.Fatalf("expected nil-config pipeline constructor to fail, got proc=%v dec=%v err=%v", proc, dec, err)
 		}
 	})
+}
+
+func isErrorCode(err error, code ocsd.Err) bool {
+	if err == nil {
+		return false
+	}
+	var libErr *common.Error
+	if !errors.As(err, &libErr) {
+		return false
+	}
+	return libErr.Code == code
 }
