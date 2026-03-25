@@ -21,10 +21,6 @@ func TestTraceElement_InitAndDefaults(t *testing.T) {
 		t.Errorf("Expected unknown ISA, got %v", elem.ISA)
 	}
 
-	if elem.FlagBits != 0 {
-		t.Errorf("Expected FlagBits 0, got %v", elem.FlagBits)
-	}
-
 	elem2 := NewTraceElementWithType(GenElemTraceOn)
 	if elem2.ElemType != GenElemTraceOn {
 		t.Errorf("Expected type GenElemTraceOn, got %v", elem2.ElemType)
@@ -36,13 +32,13 @@ func TestTraceElement_Setters(t *testing.T) {
 
 	// Test cycle count
 	elem.SetCycleCount(42)
-	if elem.CycleCount != 42 || !elem.HasCC() {
+	if elem.CycleCount != 42 || !elem.HasCC {
 		t.Errorf("SetCycleCount failed")
 	}
 
 	// Test TS
 	elem.SetTS(12345678, true)
-	if elem.Timestamp != 12345678 || !elem.HasTS() || !elem.CPUFreqChange() {
+	if elem.Timestamp != 12345678 || !elem.HasTS || !elem.CPUFreqChange {
 		t.Errorf("SetTS failed")
 	}
 
@@ -54,7 +50,7 @@ func TestTraceElement_Setters(t *testing.T) {
 
 	// Test Instr Info
 	elem.SetLastInstrInfo(true, ocsd.InstrBr, ocsd.SInstrBrLink, 4)
-	if !elem.LastInstrExec() || elem.LastInstrSz() != 4 || elem.LastIType != ocsd.InstrBr || elem.LastISubtype != ocsd.SInstrBrLink {
+	if !elem.LastInstrExec || elem.LastInstrSz != 4 || elem.LastIType != ocsd.InstrBr || elem.LastISubtype != ocsd.SInstrBrLink {
 		t.Errorf("SetLastInstrInfo failed")
 	}
 
@@ -66,7 +62,7 @@ func TestTraceElement_Setters(t *testing.T) {
 
 	// Test Extended Data
 	elem.SetExtendedDataPtr([]byte{0xDE, 0xAD, 0xBE, 0xEF})
-	if !elem.ExtendedData() || len(elem.PtrExtendedData) != 4 {
+	if !elem.ExtendedData || len(elem.PtrExtendedData) != 4 {
 		t.Errorf("SetExtendedDataPtr failed")
 	}
 
@@ -91,13 +87,13 @@ func TestTraceElement_Setters(t *testing.T) {
 		t.Errorf("SetAddrStart failed")
 	}
 
-	elem.SetLastInstrCond(true)
-	if !elem.LastInstrCond() {
+	elem.LastInstrCond = true
+	if !elem.LastInstrCond {
 		t.Errorf("SetLastInstrCond failed")
 	}
 
 	elem.SetExcepMarker()
-	if !elem.ExcepDataMarker() {
+	if !elem.ExcepDataMarker {
 		t.Errorf("SetExcepMarker failed")
 	}
 
@@ -176,7 +172,7 @@ func TestTraceElement_Strings(t *testing.T) {
 				e.SetAddrRange(0x8000, 0x8010, 4)
 				e.SetISA(ocsd.ISAThumb2)
 				e.SetLastInstrInfo(true, ocsd.InstrBr, ocsd.SInstrBrLink, 4)
-				e.SetLastInstrCond(true)
+				e.LastInstrCond = true
 				e.SetCycleCount(100)
 			},
 			expected: "OCSD_GEN_TRC_ELEM_INSTR_RANGE(exec range=0x8000:[0x8010] num_i(4) last_sz(4) (ISA=T32) E BR  b+link  <cond> [CC=100]; )",
@@ -195,8 +191,8 @@ func TestTraceElement_Strings(t *testing.T) {
 				e.SetType(GenElemException)
 				e.SetExceptionNum(0x11)
 				e.EnAddr = 0x4000
-				e.SetExcepRetAddr(true)
-				e.SetExcepRetAddrBrTgt(true)
+				e.ExcepRetAddr = true
+				e.ExcepRetAddrBrTgt = true
 			},
 			expected: "OCSD_GEN_TRC_ELEM_EXCEPTION(pref ret addr:0x4000 [addr also prev br tgt]; excep num (0x11) )",
 		},
@@ -566,17 +562,15 @@ func TestTraceElement_CopyPersistentInfo(t *testing.T) {
 	}
 }
 
-func TestTraceElement_FlagBits(t *testing.T) {
+func TestTraceElement_Flags(t *testing.T) {
 	e := NewTraceElement()
-
-	e.SetExcepRetAddrBrTgt(true)
-	if !e.ExcepRetAddrBrTgt() {
-		t.Errorf("SetExcepRetAddrBrTgt failed")
+	e.ExcepRetAddrBrTgt = true
+	if !e.ExcepRetAddrBrTgt {
+		t.Errorf("ExcepRetAddrBrTgt failed")
 	}
-
-	e.SetExcepMTailChain(true)
-	if !e.ExcepMTailChain() {
-		t.Errorf("SetExcepMTailChain failed")
+	e.ExcepMTailChain = true
+	if !e.ExcepMTailChain {
+		t.Errorf("ExcepMTailChain failed")
 	}
 
 	e.UpdateType(GenElemEvent)

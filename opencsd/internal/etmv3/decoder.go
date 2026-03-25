@@ -29,10 +29,10 @@ type PktDecode struct {
 
 	codeFollower *common.CodeFollower
 
-	iAddr        uint64
-	bNeedAddr    bool
-	bSentUnknown bool
-	bWaitISync   bool
+	iAddr       uint64
+	needAddr    bool
+	sentUnknown bool
+	waitISync   bool
 
 	peContext      *ocsd.PEContext
 	outputElemList *common.GenElemList
@@ -144,9 +144,9 @@ func (d *PktDecode) configureDecoder() {
 
 func (d *PktDecode) resetDecoder() {
 	d.currState = noSync
-	d.bNeedAddr = true
-	d.bSentUnknown = false
-	d.bWaitISync = false
+	d.needAddr = true
+	d.sentUnknown = false
+	d.waitISync = false
 	d.pendingNacc = false
 	d.pendingNaccIdx = 0
 	d.pendingNaccAdr = 0
@@ -155,7 +155,7 @@ func (d *PktDecode) resetDecoder() {
 }
 
 func (d *PktDecode) nextDecodeState() decoderState {
-	if d.bWaitISync {
+	if d.waitISync {
 		return waitISync
 	}
 	return decodePkts
@@ -227,14 +227,14 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 		return resp
 	}
 
-	pElem, err := d.getNextOpElem()
+	elem, err := d.getNextOpElem()
 	if err != nil {
 		d.Base.LogError(ocsd.ErrSevError, err)
 		d.resetDecoder()
 		return ocsd.RespFatalSysErr
 	}
-	pElem.SetType(ocsd.GenElemEOTrace)
-	pElem.Payload.UnsyncEOTInfo = ocsd.UnsyncEOT
+	elem.SetType(ocsd.GenElemEOTrace)
+	elem.Payload.UnsyncEOTInfo = ocsd.UnsyncEOT
 	d.outputElemList.CommitAllPendElem()
 
 	d.currState = sendPkts
@@ -266,12 +266,12 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 			}
 			pktDone = true
 		case waitISync:
-			d.bWaitISync = true
+			d.waitISync = true
 			packetIn := d.CurrPacketIn
 			if packetIn.Type == PktISync || packetIn.Type == PktISyncCycle {
 				resp = d.processISync(packetIn.Type == PktISyncCycle, true)
 				d.currState = sendPkts
-				d.bWaitISync = false
+				d.waitISync = false
 			} else if d.preISyncValid(packetIn.Type) {
 				resp, pktDone = d.decodePacket()
 			} else {
@@ -282,7 +282,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 		case sendPkts:
 			resp = d.outputElemList.SendElements()
 			if ocsd.DataRespIsCont(resp) {
-				if d.bWaitISync {
+				if d.waitISync {
 					d.currState = waitISync
 				} else {
 					d.currState = decodePkts
@@ -300,19 +300,19 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) getNextOpElem() (*ocsd.TraceElement, error) {
-	pElem := d.outputElemList.NextElem(d.Base.IndexCurrPkt)
-	if pElem == nil {
+	elem := d.outputElemList.NextElem(d.Base.IndexCurrPkt)
+	if elem == nil {
 		return nil, fmt.Errorf("%w: Memory Allocation Error - fatal", ocsd.ErrMem)
 	}
-	return pElem, nil
+	return elem, nil
 }
 
 func (d *PktDecode) getNextOpElemAt(index ocsd.TrcIndex) (*ocsd.TraceElement, error) {
-	pElem := d.outputElemList.NextElem(index)
-	if pElem == nil {
+	elem := d.outputElemList.NextElem(index)
+	if elem == nil {
 		return nil, fmt.Errorf("%w: Memory Allocation Error - fatal", ocsd.ErrMem)
 	}
-	return pElem, nil
+	return elem, nil
 }
 
 func (d *PktDecode) queuePendingNacc(addr uint64, memSpace ocsd.MemSpaceAcc) {
@@ -334,7 +334,7 @@ func (d *PktDecode) emitPendingNacc() ocsd.DatapathResp {
 		return ocsd.RespCont
 	}
 
-	pElem, err := d.getNextOpElemAt(d.pendingNaccIdx)
+	elem, err := d.getNextOpElemAt(d.pendingNaccIdx)
 	if err != nil {
 		d.Base.LogError(ocsd.ErrSevError, err)
 		d.unsyncInfo = common.UnsyncBadPacket
@@ -342,9 +342,9 @@ func (d *PktDecode) emitPendingNacc() ocsd.DatapathResp {
 		return ocsd.RespFatalSysErr
 	}
 
-	pElem.SetType(ocsd.GenElemAddrNacc)
-	pElem.StAddr = ocsd.VAddr(d.pendingNaccAdr)
-	pElem.Payload.ExceptionNum = uint32(d.pendingNaccMem)
+	elem.SetType(ocsd.GenElemAddrNacc)
+	elem.StAddr = ocsd.VAddr(d.pendingNaccAdr)
+	elem.Payload.ExceptionNum = uint32(d.pendingNaccMem)
 	d.clearPendingNacc()
 	return ocsd.RespCont
 }
@@ -357,7 +357,7 @@ func (d *PktDecode) preISyncValid(pktType PktType) bool {
 }
 
 func (d *PktDecode) sendUnsyncPacket() ocsd.DatapathResp {
-	pElem, err := d.getNextOpElem()
+	elem, err := d.getNextOpElem()
 	if err != nil {
 		d.Base.LogError(ocsd.ErrSevError, err)
 		d.unsyncInfo = common.UnsyncBadPacket
@@ -365,8 +365,8 @@ func (d *PktDecode) sendUnsyncPacket() ocsd.DatapathResp {
 		return ocsd.RespFatalSysErr
 	}
 
-	pElem.SetType(ocsd.GenElemNoSync)
-	pElem.Payload.UnsyncEOTInfo = ocsd.UnsyncInfo(d.unsyncInfo)
+	elem.SetType(ocsd.GenElemNoSync)
+	elem.Payload.UnsyncEOTInfo = ocsd.UnsyncInfo(d.unsyncInfo)
 	return d.outputElemList.SendElements()
 }
 
@@ -384,7 +384,7 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, pktDone bool) {
 		}
 	}
 
-	var pElem *ocsd.TraceElement
+	var elem *ocsd.TraceElement
 	var err error
 
 	switch packetIn.Type {
@@ -397,16 +397,16 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, pktDone bool) {
 	case PktIncompleteEOT, PktASync, PktIgnore:
 		// ignore
 	case PktCycleCount:
-		pElem, err = d.getNextOpElem()
+		elem, err = d.getNextOpElem()
 		if err == nil {
-			pElem.SetType(ocsd.GenElemCycleCount)
-			pElem.SetCycleCount(packetIn.CycleCount)
+			elem.SetType(ocsd.GenElemCycleCount)
+			elem.SetCycleCount(packetIn.CycleCount)
 		}
 	case PktTrigger:
-		pElem, err = d.getNextOpElem()
+		elem, err = d.getNextOpElem()
 		if err == nil {
-			pElem.SetType(ocsd.GenElemEvent)
-			pElem.Payload.TraceEvent.EvType = ocsd.EventTrigger
+			elem.SetType(ocsd.GenElemEvent)
+			elem.Payload.TraceEvent.EvType = ocsd.EventTrigger
 		}
 	case PktBranchAddress:
 		resp = d.processBranchAddr()
@@ -415,38 +415,38 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, pktDone bool) {
 	case PktPHdr:
 		resp = d.processPHdr()
 	case PktContextID:
-		pElem, err = d.getNextOpElem()
+		elem, err = d.getNextOpElem()
 		if err == nil {
-			pElem.SetType(ocsd.GenElemPeContext)
+			elem.SetType(ocsd.GenElemPeContext)
 			d.peContext.ContextID = packetIn.Context.CtxtID
 			d.peContext.SetCtxtIDValid(true)
-			pElem.Context = *d.peContext
+			elem.Context = *d.peContext
 		}
 	case PktVMID:
-		pElem, err = d.getNextOpElem()
+		elem, err = d.getNextOpElem()
 		if err == nil {
-			pElem.SetType(ocsd.GenElemPeContext)
+			elem.SetType(ocsd.GenElemPeContext)
 			d.peContext.VMID = uint32(packetIn.Context.VMID)
 			d.peContext.SetVMIDValid(true)
-			pElem.Context = *d.peContext
+			elem.Context = *d.peContext
 		}
 	case PktExceptionEntry:
-		pElem, err = d.getNextOpElem()
+		elem, err = d.getNextOpElem()
 		if err == nil {
-			pElem.SetType(ocsd.GenElemException)
-			pElem.SetExcepDataMarker(true)
+			elem.SetType(ocsd.GenElemException)
+			elem.ExcepDataMarker = true
 		}
 	case PktExceptionExit:
-		pElem, err = d.getNextOpElem()
+		elem, err = d.getNextOpElem()
 		if err == nil {
-			pElem.SetType(ocsd.GenElemExceptionRet)
+			elem.SetType(ocsd.GenElemExceptionRet)
 			d.pendExceptionReturn()
 		}
 	case PktTimestamp:
-		pElem, err = d.getNextOpElem()
+		elem, err = d.getNextOpElem()
 		if err == nil {
-			pElem.SetType(ocsd.GenElemTimestamp)
-			pElem.Timestamp = packetIn.Timestamp
+			elem.SetType(ocsd.GenElemTimestamp)
+			elem.Timestamp = packetIn.Timestamp
 		}
 	case PktStoreFail, PktOOOData, PktOOOAddrPlc, PktNormData, PktDataSuppressed, PktValNotTraced, PktBadTraceMode:
 		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Invalid packet type : Data Tracing decode not supported.", ocsd.ErrHWCfgUnsupp))
@@ -483,9 +483,9 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, pktDone bool) {
 	return resp, pktDone
 }
 
-func (d *PktDecode) setNeedAddr(bNeedAddr bool) {
-	d.bNeedAddr = bNeedAddr
-	d.bSentUnknown = false
+func (d *PktDecode) setNeedAddr(needAddr bool) {
+	d.needAddr = needAddr
+	d.sentUnknown = false
 }
 
 func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp {
@@ -494,7 +494,7 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 	packetIn := d.CurrPacketIn
 	ctxtUpdate := packetIn.Context.UpdatedC || packetIn.Context.UpdatedV || packetIn.Context.Updated
 
-	pElem, err := d.getNextOpElem()
+	elem, err := d.getNextOpElem()
 	if err != nil {
 		d.Base.LogError(ocsd.ErrSevError, err)
 		d.unsyncInfo = common.UnsyncBadPacket
@@ -503,11 +503,11 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 	}
 
 	if firstSync || packetIn.ISyncInfo.Reason != ocsd.ISyncPeriodic {
-		pElem.SetType(ocsd.GenElemTraceOn)
+		elem.SetType(ocsd.GenElemTraceOn)
 		if int(packetIn.ISyncInfo.Reason) < len(onMap) {
-			pElem.Payload.TraceOnReason = onMap[packetIn.ISyncInfo.Reason]
+			elem.Payload.TraceOnReason = onMap[packetIn.ISyncInfo.Reason]
 		}
-		pElem, err = d.getNextOpElem()
+		elem, err = d.getNextOpElem()
 		if err != nil {
 			d.Base.LogError(ocsd.ErrSevError, err)
 			d.unsyncInfo = common.UnsyncBadPacket
@@ -543,13 +543,13 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 			d.peContext.SecurityLevel = sec
 		}
 
-		pElem.SetType(ocsd.GenElemPeContext)
-		pElem.Context = *d.peContext
-		pElem.ISA = packetIn.CurrISA
+		elem.SetType(ocsd.GenElemPeContext)
+		elem.Context = *d.peContext
+		elem.ISA = packetIn.CurrISA
 		d.codeFollower.SetISA(packetIn.CurrISA)
 
 		if packetIn.ISyncInfo.HasCycleCount {
-			pElem.SetCycleCount(packetIn.CycleCount)
+			elem.SetCycleCount(packetIn.CycleCount)
 		}
 	}
 
@@ -573,7 +573,7 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 
 func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 	packetIn := d.CurrPacketIn
-	bUpdatePEContext := false
+	updatePEContext := false
 
 	if packetIn.ExceptionCancel {
 		d.outputElemList.CancelPendElem()
@@ -594,12 +594,12 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 		if packetIn.Context.UpdatedC && (!d.peContext.CtxtIDValid() || d.peContext.ContextID != packetIn.Context.CtxtID) {
 			d.peContext.ContextID = packetIn.Context.CtxtID
 			d.peContext.SetCtxtIDValid(true)
-			bUpdatePEContext = true
+			updatePEContext = true
 		}
 		if packetIn.Context.UpdatedV && (!d.peContext.VMIDValid() || d.peContext.VMID != uint32(packetIn.Context.VMID)) {
 			d.peContext.VMID = uint32(packetIn.Context.VMID)
 			d.peContext.SetVMIDValid(true)
-			bUpdatePEContext = true
+			updatePEContext = true
 		}
 		if packetIn.Context.Updated {
 			sec := ocsd.SecSecure
@@ -608,7 +608,7 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 			}
 			if sec != d.peContext.SecurityLevel {
 				d.peContext.SecurityLevel = sec
-				bUpdatePEContext = true
+				updatePEContext = true
 			}
 
 			el := ocsd.ELUnknown
@@ -618,34 +618,34 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 			if !d.peContext.ELValid() || el != d.peContext.ExceptionLevel {
 				d.peContext.ExceptionLevel = el
 				d.peContext.SetELValid(true)
-				bUpdatePEContext = true
+				updatePEContext = true
 			}
 		}
 	}
 
-	if bUpdatePEContext {
-		pElem, err := d.getNextOpElem()
+	if updatePEContext {
+		elem, err := d.getNextOpElem()
 		if err != nil {
 			d.Base.LogError(ocsd.ErrSevError, err)
 			d.unsyncInfo = common.UnsyncBadPacket
 			d.resetDecoder()
 			return ocsd.RespFatalSysErr
 		}
-		pElem.SetType(ocsd.GenElemPeContext)
-		pElem.Context = *d.peContext
+		elem.SetType(ocsd.GenElemPeContext)
+		elem.Context = *d.peContext
 	}
 
 	if packetIn.Exception.Present {
 		if packetIn.Exception.Number != 0 {
-			pElem, err := d.getNextOpElem()
+			elem, err := d.getNextOpElem()
 			if err != nil {
 				d.Base.LogError(ocsd.ErrSevError, err)
 				d.unsyncInfo = common.UnsyncBadPacket
 				d.resetDecoder()
 				return ocsd.RespFatalSysErr
 			}
-			pElem.SetType(ocsd.GenElemException)
-			pElem.Payload.ExceptionNum = uint32(packetIn.Exception.Number)
+			elem.SetType(ocsd.GenElemException)
+			elem.Payload.ExceptionNum = uint32(packetIn.Exception.Number)
 		}
 	}
 
@@ -724,30 +724,30 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 	if d.peContext.SecurityLevel == ocsd.SecSecure {
 		memSpace = ocsd.MemSpaceS
 	}
-	var pElem *ocsd.TraceElement
+	var elem *ocsd.TraceElement
 	var err error
 
 	d.codeFollower.SetMemSpace(memSpace)
 
 	for {
-		if d.bNeedAddr {
-			if !d.bSentUnknown || d.Config.IsCycleAcc() {
-				pElem, err := d.getNextOpElem()
+		if d.needAddr {
+			if !d.sentUnknown || d.Config.IsCycleAcc() {
+				elem, err := d.getNextOpElem()
 				if err != nil {
 					d.Base.LogError(ocsd.ErrSevError, err)
 					d.unsyncInfo = common.UnsyncBadPacket
 					d.resetDecoder()
 					return ocsd.RespFatalSysErr
 				}
-				if d.bSentUnknown || atomsNum == 0 {
-					pElem.SetType(ocsd.GenElemCycleCount)
+				if d.sentUnknown || atomsNum == 0 {
+					elem.SetType(ocsd.GenElemCycleCount)
 				} else {
-					pElem.SetType(ocsd.GenElemAddrUnknown)
+					elem.SetType(ocsd.GenElemAddrUnknown)
 				}
 				if d.Config.IsCycleAcc() {
-					pElem.SetCycleCount(getRemainCC())
+					elem.SetCycleCount(getRemainCC())
 				}
-				d.bSentUnknown = true
+				d.sentUnknown = true
 			}
 			atomsNum = 0 // clear all
 		} else {
@@ -766,26 +766,26 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 				}
 
 				if d.codeFollower.NumInstructs() > 0 {
-					pElem, err = d.getNextOpElem()
+					elem, err = d.getNextOpElem()
 					if err != nil {
 						d.Base.LogError(ocsd.ErrSevError, err)
 						return ocsd.RespFatalSysErr
 					}
-					pElem.SetType(ocsd.GenElemInstrRange)
-					pElem.StAddr = d.codeFollower.RangeSt()
-					pElem.EnAddr = d.codeFollower.RangeEn()
-					pElem.Payload.NumInstrRange = d.codeFollower.NumInstructs()
+					elem.SetType(ocsd.GenElemInstrRange)
+					elem.StAddr = d.codeFollower.RangeSt()
+					elem.EnAddr = d.codeFollower.RangeEn()
+					elem.Payload.NumInstrRange = d.codeFollower.NumInstructs()
 
 					instrInfo := d.codeFollower.InstrInfo()
-					pElem.SetLastInstrExec(val == ocsd.AtomE)
-					pElem.LastIType = instrInfo.Type
-					pElem.LastISubtype = instrInfo.SubType
-					pElem.SetLastInstrSz(instrInfo.InstrSize)
-					pElem.SetLastInstrCond(instrInfo.IsConditional != 0)
-					pElem.ISA = isa
+					elem.LastInstrExec = val == ocsd.AtomE
+					elem.LastIType = instrInfo.Type
+					elem.LastISubtype = instrInfo.SubType
+					elem.LastInstrSz = instrInfo.InstrSize
+					elem.LastInstrCond = instrInfo.IsConditional != 0
+					elem.ISA = isa
 
 					if d.Config.IsCycleAcc() {
-						pElem.SetCycleCount(getAtomCC())
+						elem.SetCycleCount(getAtomCC())
 					}
 
 					d.iAddr = uint64(d.codeFollower.NextAddr())
@@ -801,27 +801,27 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					if d.outputElemList.NumElem() > 0 && d.outputElemList.ElemType(d.outputElemList.NumElem()-1) == ocsd.GenElemInstrRange {
 						d.queuePendingNacc(naccAddr, memSpace)
 					} else {
-						pElem, err = d.getNextOpElem()
+						elem, err = d.getNextOpElem()
 						if err != nil {
 							d.Base.LogError(ocsd.ErrSevError, err)
 							return ocsd.RespFatalSysErr
 						}
-						pElem.SetType(ocsd.GenElemAddrNacc)
-						pElem.StAddr = ocsd.VAddr(naccAddr)
-						pElem.Payload.ExceptionNum = uint32(memSpace)
+						elem.SetType(ocsd.GenElemAddrNacc)
+						elem.StAddr = ocsd.VAddr(naccAddr)
+						elem.Payload.ExceptionNum = uint32(memSpace)
 					}
 					d.setNeedAddr(true)
 					d.codeFollower.ClearNaccError()
 				}
 			} else if d.Config.IsCycleAcc() {
 				// CC only packet (atomsNum == 0)
-				pElem, err := d.getNextOpElem()
+				elem, err := d.getNextOpElem()
 				if err != nil {
 					d.Base.LogError(ocsd.ErrSevError, err)
 					return ocsd.RespFatalSysErr
 				}
-				pElem.SetType(ocsd.GenElemCycleCount)
-				pElem.SetCycleCount(getRemainCC())
+				elem.SetType(ocsd.GenElemCycleCount)
+				elem.SetCycleCount(getRemainCC())
 			}
 		}
 

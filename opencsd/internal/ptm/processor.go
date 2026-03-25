@@ -461,7 +461,7 @@ func (p *PktProc) waitASync() ocsd.DatapathResp {
 					// Keep bug-for-bug raw packet monitor output compatible with OpenCSD C++ in
 					// the carry-over NOT_ASYNC path: one synthetic tail byte may be emitted when
 					// unsynced accounting includes a previous SOP-candidate byte.
-					base := rawData[unsyncScanBlockStart:len(rawData)]
+					base := rawData[unsyncScanBlockStart:]
 					missing := rawEnd - len(rawData)
 					if missing > 0 {
 						fill := byte(len(p.pDataIn))

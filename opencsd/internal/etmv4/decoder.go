@@ -351,8 +351,8 @@ func (d *PktDecode) commitElemOnEOT() error {
 	// Iterate from oldest (index 0) to newest, matching C++ back()/delete_back()
 	// where back() returns the oldest element in the deque.
 	for len(d.p0Stack) > 0 && err == nil {
-		pElem := d.p0Stack[0] // oldest element (C++ back())
-		switch pElem.p0Type {
+		elem := d.p0Stack[0] // oldest element (C++ back())
+		switch elem.p0Type {
 		case p0TrcOn, p0Atom, p0Excep, p0ExcepRet, p0Q, p0UnseenUncommitted:
 			// clear stack and stop
 			d.poppedElems = append(d.poppedElems, d.p0Stack...)
@@ -369,20 +369,20 @@ func (d *PktDecode) commitElemOnEOT() error {
 
 		case p0TransFail, p0TransCommit:
 			if d.maxSpecDepth == 0 || d.currSpecDepth == 0 {
-				err = d.processTransElem(pElem)
+				err = d.processTransElem(elem)
 			}
 
 		case p0TransTraceInit, p0TInfo:
 			// skip
 
 		case p0Event, p0TS, p0CC, p0TSCC:
-			err = d.processTSCCEventElem(pElem)
+			err = d.processTSCCEventElem(elem)
 
 		case p0Marker:
-			err = d.processMarkerElem(pElem)
+			err = d.processMarkerElem(elem)
 
 		case p0ITE:
-			err = d.processITEElem(pElem)
+			err = d.processITEElem(elem)
 		}
 		if len(d.p0Stack) > 0 {
 			d.poppedElems = append(d.poppedElems, d.p0Stack[0])
@@ -788,7 +788,7 @@ func (d *PktDecode) decodePacket() error {
 
 func (d *PktDecode) commitElements() error {
 	err := error(nil)
-	bPopElem := true
+	popElem := true
 	numCommitReq := d.elemRes.P0Commit
 	var errIdx ocsd.TrcIndex
 	contextFlush := false
@@ -797,14 +797,14 @@ func (d *PktDecode) commitElements() error {
 
 	for d.elemRes.P0Commit > 0 && err == nil && !contextFlush {
 		if len(d.p0Stack) > 0 {
-			pElem := d.p0Stack[0] // get oldest element
-			errIdx = pElem.rootIndex
-			bPopElem = true
+			elem := d.p0Stack[0] // get oldest element
+			errIdx = elem.rootIndex
+			popElem = true
 
-			switch pElem.p0Type {
+			switch elem.p0Type {
 			case p0TrcOn:
 				d.nextRangeCheckClear()
-				err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemTraceOn)
+				err = d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemTraceOn)
 				if err == nil {
 					reason := ocsd.TraceOnNormal
 					if d.prevOverflow {
@@ -821,35 +821,35 @@ func (d *PktDecode) commitElements() error {
 					// equivalent to is_t_info_wait_addr / clear_t_info_wait_addr
 					d.returnStack.SetTInfoWaitAddr(false)
 				}
-				d.setInstrInfoInAddrISA(pElem.addrVal, pElem.addrIS)
+				d.setInstrInfoInAddrISA(elem.addrVal, elem.addrIS)
 				d.needAddr = false
 
 			case p0Ctxt:
-				if pElem.context.Updated {
-					err = d.outElem.AddElem(pElem.rootIndex)
+				if elem.context.Updated {
+					err = d.outElem.AddElem(elem.rootIndex)
 					if err == nil {
-						d.updateContext(pElem, d.outElem.CurrElem())
+						d.updateContext(elem, d.outElem.CurrElem())
 						contextFlush = true
 						d.Base.InvalidateMemAccCache(d.TraceID())
 					}
 				}
 
 			case p0Event, p0TS, p0CC, p0TSCC:
-				err = d.processTSCCEventElem(pElem)
+				err = d.processTSCCEventElem(elem)
 
 			case p0Marker:
-				err = d.processMarkerElem(pElem)
+				err = d.processMarkerElem(elem)
 
 			case p0Atom:
-				for !pElem.isEmpty() && d.elemRes.P0Commit > 0 && err == nil {
-					atom := pElem.commitOldest()
+				for !elem.isEmpty() && d.elemRes.P0Commit > 0 && err == nil {
+					atom := elem.commitOldest()
 
 					if err = d.returnStackPop(); err != nil {
 						break
 					}
 
 					if !d.needCtxt && !d.needAddr {
-						if err = d.processAtom(atom, pElem); err != nil {
+						if err = d.processAtom(atom, elem); err != nil {
 							break
 						}
 					}
@@ -857,8 +857,8 @@ func (d *PktDecode) commitElements() error {
 						d.elemRes.P0Commit--
 					}
 				}
-				if !pElem.isEmpty() {
-					bPopElem = false
+				if !elem.isEmpty() {
+					popElem = false
 				}
 
 			case p0Excep:
@@ -866,31 +866,31 @@ func (d *PktDecode) commitElements() error {
 					break
 				}
 				d.nextRangeCheckClear()
-				err = d.processException(pElem)
+				err = d.processException(elem)
 				d.elemRes.P0Commit--
 
 			case p0ExcepRet:
 				d.nextRangeCheckClear()
-				err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemExceptionRet)
+				err = d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemExceptionRet)
 				if err == nil {
-					if pElem.isP0 {
+					if elem.isP0 {
 						d.elemRes.P0Commit--
 					}
 				}
 
 			case p0FuncRet:
-				if pElem.isP0 {
+				if elem.isP0 {
 					d.elemRes.P0Commit--
 				}
 
 			case p0SrcAddr:
 				d.nextRangeCheckClear()
-				err = d.processSourceAddress(pElem)
+				err = d.processSourceAddress(elem)
 				d.elemRes.P0Commit--
 
 			case p0Q:
 				d.nextRangeCheckClear()
-				err = d.processQElement(pElem)
+				err = d.processQElement(elem)
 				d.elemRes.P0Commit--
 
 			case p0TransStart:
@@ -900,10 +900,10 @@ func (d *PktDecode) commitElements() error {
 				fallthrough
 			case p0TransCommit, p0TransFail, p0TransTraceInit:
 				d.nextRangeCheckClear()
-				err = d.processTransElem(pElem)
+				err = d.processTransElem(elem)
 
 			case p0ITE:
-				err = d.processITEElem(pElem)
+				err = d.processITEElem(elem)
 
 			case p0UnseenUncommitted:
 				d.elemRes.P0Commit--
@@ -912,7 +912,7 @@ func (d *PktDecode) commitElements() error {
 				d.returnStack.SetTInfoWaitAddr(true) // tinfo_wait_addr
 				d.returnStack.Flush()
 			}
-			if bPopElem {
+			if popElem {
 				e := d.p0Stack[0]
 				d.poppedElems = append(d.poppedElems, e)
 				d.p0Stack = d.p0Stack[1:] // pop_front
@@ -986,8 +986,8 @@ func (d *PktDecode) getCurrMemSpace() ocsd.MemSpaceAcc {
 	return ocsd.MemSpaceN
 }
 
-func (d *PktDecode) updateContext(pElem *p0Elem, elem *ocsd.TraceElement) {
-	ctx := pElem.context
+func (d *PktDecode) updateContext(p0elem *p0Elem, elem *ocsd.TraceElement) {
+	ctx := p0elem.context
 	elem.SetType(ocsd.GenElemPeContext)
 
 	d.is64bit = ctx.SF
@@ -1018,7 +1018,7 @@ func (d *PktDecode) updateContext(pElem *p0Elem, elem *ocsd.TraceElement) {
 		elem.Context.VMID = ctx.VMID
 	}
 
-	elem.ISA = d.calcISA(d.is64bit, pElem.addrIS)
+	elem.ISA = d.calcISA(d.is64bit, p0elem.addrIS)
 	d.instrInfo.Isa = elem.ISA
 	d.peContext = elem.Context // keep local copy updated
 	d.needCtxt = false
@@ -1042,66 +1042,66 @@ func (d *PktDecode) returnStackPop() error {
 	return err
 }
 
-func (d *PktDecode) processTSCCEventElem(pElem *p0Elem) error {
-	bPermitTS := !d.config.EteHasTSMarker() || d.eteFirstTSMarker
+func (d *PktDecode) processTSCCEventElem(elem *p0Elem) error {
+	permitTS := !d.config.EteHasTSMarker() || d.eteFirstTSMarker
 	var err error = nil
 
-	switch pElem.p0Type {
+	switch elem.p0Type {
 	case p0Event:
-		err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemEvent)
+		err = d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemEvent)
 		if err == nil {
 			d.outElem.CurrElem().Payload.TraceEvent.EvType = ocsd.EventNumbered
-			d.outElem.CurrElem().Payload.TraceEvent.EvNumber = uint16(pElem.params[0])
+			d.outElem.CurrElem().Payload.TraceEvent.EvNumber = uint16(elem.params[0])
 		}
 	case p0TS:
-		if bPermitTS {
-			err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemTimestamp)
+		if permitTS {
+			err = d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemTimestamp)
 			if err == nil {
-				d.outElem.CurrElem().Timestamp = uint64(pElem.params[0]) | (uint64(pElem.params[1]) << 32)
+				d.outElem.CurrElem().Timestamp = uint64(elem.params[0]) | (uint64(elem.params[1]) << 32)
 			}
 		}
 	case p0CC:
-		err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemCycleCount)
+		err = d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemCycleCount)
 		if err == nil {
-			d.outElem.CurrElem().SetCycleCount(pElem.params[0])
+			d.outElem.CurrElem().SetCycleCount(elem.params[0])
 		}
 	case p0TSCC:
-		if bPermitTS {
-			err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemTimestamp)
+		if permitTS {
+			err = d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemTimestamp)
 			if err == nil {
-				d.outElem.CurrElem().Timestamp = uint64(pElem.params[0]) | (uint64(pElem.params[1]) << 32)
-				d.outElem.CurrElem().SetCycleCount(pElem.params[2])
+				d.outElem.CurrElem().Timestamp = uint64(elem.params[0]) | (uint64(elem.params[1]) << 32)
+				d.outElem.CurrElem().SetCycleCount(elem.params[2])
 			}
 		}
 	}
 	return err
 }
 
-func (d *PktDecode) processMarkerElem(pElem *p0Elem) error {
-	if d.config.EteHasTSMarker() && pElem.marker.Type == ocsd.ElemMarkerTS {
+func (d *PktDecode) processMarkerElem(elem *p0Elem) error {
+	if d.config.EteHasTSMarker() && elem.marker.Type == ocsd.ElemMarkerTS {
 		d.eteFirstTSMarker = true
 	}
 
-	err := d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemSyncMarker)
+	err := d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemSyncMarker)
 	if err == nil {
-		d.outElem.CurrElem().Payload.SyncMarker = pElem.marker
+		d.outElem.CurrElem().Payload.SyncMarker = elem.marker
 	}
 	return err
 }
 
-func (d *PktDecode) processTransElem(pElem *p0Elem) error {
-	err := d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemMemTrans)
+func (d *PktDecode) processTransElem(elem *p0Elem) error {
+	err := d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemMemTrans)
 	if err == nil {
-		tt := ocsd.MemTransFail - ocsd.TraceMemtrans(p0TransFail-pElem.p0Type)
+		tt := ocsd.MemTransFail - ocsd.TraceMemtrans(p0TransFail-elem.p0Type)
 		d.outElem.CurrElem().Payload.MemTrans = tt
 	}
 	return err
 }
 
-func (d *PktDecode) processITEElem(pElem *p0Elem) error {
-	err := d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemInstrumentation)
+func (d *PktDecode) processITEElem(elem *p0Elem) error {
+	err := d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemInstrumentation)
 	if err == nil {
-		d.outElem.CurrElem().Payload.SWIte = pElem.ite
+		d.outElem.CurrElem().Payload.SWIte = elem.ite
 	}
 	return err
 }
@@ -1128,7 +1128,7 @@ func (d *PktDecode) setElemTraceRangeInstr(elem *ocsd.TraceElement, addrRange in
 	elem.SetType(ocsd.GenElemInstrRange)
 	elem.SetLastInstrInfo(executed, instr.Type, instr.SubType, instr.InstrSize)
 	elem.ISA = instr.Isa
-	elem.SetLastInstrCond(instr.IsConditional != 0)
+	elem.LastInstrCond = instr.IsConditional != 0
 	elem.StAddr = addrRange.stAddr
 	elem.EnAddr = addrRange.enAddr
 	elem.Payload.NumInstrRange = addrRange.numInstr
@@ -1207,12 +1207,12 @@ func (d *PktDecode) traceInstrToWP(rangeOut *instrRange, res *wpRes, traceToAddr
 	return err
 }
 
-func (d *PktDecode) processAtom(atom ocsd.AtmVal, pElem *p0Elem) error {
+func (d *PktDecode) processAtom(atom ocsd.AtmVal, elem *p0Elem) error {
 	var WPRes wpRes
 	var addrRange instrRange
 	ETE_ERET := false
 
-	err := d.outElem.AddElem(pElem.rootIndex)
+	err := d.outElem.AddElem(elem.rootIndex)
 	if err != nil {
 		return err
 	}
@@ -1227,7 +1227,7 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, pElem *p0Elem) error {
 			}
 			return nil
 		}
-		return d.handlePacketSeqErr(err, pElem.rootIndex, "Error processing atom packet.")
+		return d.handlePacketSeqErr(err, elem.rootIndex, "Error processing atom packet.")
 	}
 
 	if WPRes == wpFound {
@@ -1254,12 +1254,12 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, pElem *p0Elem) error {
 			}
 		}
 
-		d.setElemTraceRange(d.outElem.CurrElem(), addrRange, atom == ocsd.AtomE, pElem.rootIndex)
+		d.setElemTraceRange(d.outElem.CurrElem(), addrRange, atom == ocsd.AtomE, elem.rootIndex)
 
 		// Check for discontinuous ranges that can indicate an inconsistent/corrupt
 		// program image used for decode. Mirrors the C++ etmv4 decoder logic.
 		if !d.nextRangeCheckOK(addrRange.stAddr) {
-			return d.handleBadImageError(pElem.rootIndex, "Discontinuous ranges - Inconsistent program image for decode\n")
+			return d.handleBadImageError(elem.rootIndex, "Discontinuous ranges - Inconsistent program image for decode\n")
 		}
 		if atom == ocsd.AtomN {
 			// Branch not taken, next range is expected to continue at nextAddr.
@@ -1270,7 +1270,7 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, pElem *p0Elem) error {
 		}
 
 		if ETE_ERET {
-			err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemExceptionRet)
+			err = d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemExceptionRet)
 			if err != nil {
 				return err
 			}
@@ -1280,9 +1280,9 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, pElem *p0Elem) error {
 		d.nextRangeCheckClear()
 
 		if addrRange.stAddr != addrRange.enAddr {
-			d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true, pElem.rootIndex)
+			d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true, elem.rootIndex)
 			if WPRes == wpNacc {
-				err = d.outElem.AddElem(pElem.rootIndex)
+				err = d.outElem.AddElem(elem.rootIndex)
 			}
 		}
 
@@ -1297,19 +1297,19 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, pElem *p0Elem) error {
 	return nil
 }
 
-func (d *PktDecode) processException(pElem *p0Elem) error {
+func (d *PktDecode) processException(elem *p0Elem) error {
 	var err error
 	var pCtxtElem *p0Elem
 	var pAddressElem *p0Elem
 
-	pExceptElem := pElem
+	pExceptElem := elem
 	excepPktIndex := pExceptElem.rootIndex
 	branchTarget := pExceptElem.prevSame
 	ETE_resetPkt := pExceptElem.rootPkt == ETE_PktPeReset
 
 	var excepRetAddr ocsd.VAddr
 	var WPRes wpRes
-	bMTailChain := false
+	mTailChain := false
 
 	idx := 1
 	if !ETE_resetPkt {
@@ -1358,10 +1358,10 @@ func (d *PktDecode) processException(pElem *p0Elem) error {
 
 	if !ETE_resetPkt {
 		if d.config.CoreProf == ocsd.ProfileCortexM {
-			bMTailChain = excepRetAddr == 0xFFFFFFFE
+			mTailChain = excepRetAddr == 0xFFFFFFFE
 		}
 
-		if d.instrInfo.InstrAddr < excepRetAddr && !bMTailChain {
+		if d.instrInfo.InstrAddr < excepRetAddr && !mTailChain {
 			rangeOut := false
 			var addrRange instrRange
 
@@ -1410,16 +1410,16 @@ func (d *PktDecode) processException(pElem *p0Elem) error {
 
 	d.outElem.CurrElem().SetType(ocsd.GenElemException)
 	d.outElem.CurrElem().EnAddr = excepRetAddr
-	d.outElem.CurrElem().SetExcepRetAddr(true)
-	if bMTailChain {
-		d.outElem.CurrElem().SetExcepRetAddr(false)
-		d.outElem.CurrElem().SetExcepMTailChain(true)
+	d.outElem.CurrElem().ExcepRetAddr = true
+	if mTailChain {
+		d.outElem.CurrElem().ExcepRetAddr = false
+		d.outElem.CurrElem().ExcepMTailChain = true
 	}
-	d.outElem.CurrElem().SetExcepRetAddrBrTgt(branchTarget)
+	d.outElem.CurrElem().ExcepRetAddrBrTgt = branchTarget
 	d.outElem.CurrElem().Payload.ExceptionNum = uint32(pExceptElem.excepNum)
 
 	// Remove processed elements from p0Stack
-	// pElem (index 0) will be popped by the caller. So pop from 1 to idx
+	// elem (index 0) will be popped by the caller. So pop from 1 to idx
 	if idx > 0 {
 		for i := 1; i <= idx; i++ {
 			d.poppedElems = append(d.poppedElems, d.p0Stack[i])
@@ -1431,12 +1431,12 @@ func (d *PktDecode) processException(pElem *p0Elem) error {
 	return err
 }
 
-func (d *PktDecode) processSourceAddress(pElem *p0Elem) error {
+func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 	var err error
-	srcAddr := pElem.addrVal
+	srcAddr := elem.addrVal
 	currAddr := d.instrInfo.InstrAddr
 	var outRange instrRange
-	bSplitRangeOnN := (d.ComponentOpMode() & ocsd.OpflgPktdecSrcAddrNAtoms) != 0
+	splitRangeOnN := (d.ComponentOpMode() & ocsd.OpflgPktdecSrcAddrNAtoms) != 0
 
 	bytesReq := uint32(4)
 	bytesRead, memData, errMem := d.accessMemory(srcAddr, d.getCurrMemSpace(), bytesReq)
@@ -1446,7 +1446,7 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) error {
 	}
 
 	if bytesRead != 4 {
-		err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemAddrNacc)
+		err = d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemAddrNacc)
 		d.outElem.CurrElem().StAddr = srcAddr
 		d.outElem.CurrElem().Payload.ExceptionNum = uint32(d.getCurrMemSpace())
 		return err
@@ -1473,15 +1473,15 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) error {
 	outRange.enAddr = d.instrInfo.InstrAddr
 
 	if outRange.enAddr-outRange.stAddr > ocsd.VAddr(d.instrInfo.InstrSize) {
-		if d.instrInfo.Isa != ocsd.ISAThumb2 && !bSplitRangeOnN {
+		if d.instrInfo.Isa != ocsd.ISAThumb2 && !splitRangeOnN {
 			outRange.numInstr = uint32(outRange.enAddr-outRange.stAddr) / 4
 		} else {
 			instr := d.instrInfo
 			instr.InstrAddr = outRange.stAddr
 			outRange.numInstr = 0
-			bMemAccErr := false
+			memAccErr := false
 
-			for instr.InstrAddr < outRange.enAddr && !bMemAccErr {
+			for instr.InstrAddr < outRange.enAddr && !memAccErr {
 				bytesRead, mData, eMem := d.accessMemory(instr.InstrAddr, d.getCurrMemSpace(), bytesReq)
 				if eMem != nil {
 					return eMem
@@ -1495,20 +1495,20 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) error {
 					}
 					instr.InstrAddr += ocsd.VAddr(instr.InstrSize)
 					outRange.numInstr++
-					if bSplitRangeOnN && instr.InstrAddr < outRange.enAddr && instr.Type != ocsd.InstrOther {
+					if splitRangeOnN && instr.InstrAddr < outRange.enAddr && instr.Type != ocsd.InstrOther {
 						midRange := outRange
 						midRange.enAddr = instr.InstrAddr
-						err = d.outElem.AddElem(pElem.rootIndex)
+						err = d.outElem.AddElem(elem.rootIndex)
 						if err != nil {
 							return err
 						}
-						d.setElemTraceRangeInstr(d.outElem.CurrElem(), midRange, false, pElem.rootIndex, &instr)
+						d.setElemTraceRangeInstr(d.outElem.CurrElem(), midRange, false, elem.rootIndex, &instr)
 						outRange.stAddr = midRange.enAddr
 						outRange.numInstr = 0
 					}
 				} else {
-					bMemAccErr = true
-					err = d.outElem.AddElemType(pElem.rootIndex, ocsd.GenElemAddrNacc)
+					memAccErr = true
+					err = d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemAddrNacc)
 					if err != nil {
 						return err
 					}
@@ -1538,19 +1538,19 @@ func (d *PktDecode) processSourceAddress(pElem *p0Elem) error {
 	}
 	d.instrInfo.Isa = d.instrInfo.NextIsa
 
-	d.outElem.AddElem(pElem.rootIndex)
-	d.setElemTraceRange(d.outElem.CurrElem(), outRange, true, pElem.rootIndex)
+	d.outElem.AddElem(elem.rootIndex)
+	d.setElemTraceRange(d.outElem.CurrElem(), outRange, true, elem.rootIndex)
 
 	return err
 }
 
-func (d *PktDecode) processQElement(pElem *p0Elem) error {
+func (d *PktDecode) processQElement(elem *p0Elem) error {
 	var err error
 	var qAddr ocsd.VAddr
 	var qIs uint8
-	iCount := pElem.qCount
+	iCount := elem.qCount
 
-	if !pElem.qHasAddr {
+	if !elem.qHasAddr {
 		var pAddressElem *p0Elem
 		var pCtxtElem *p0Elem
 
@@ -1577,11 +1577,11 @@ func (d *PktDecode) processQElement(pElem *p0Elem) error {
 			d.p0Stack = append(d.p0Stack[:1], append([]*p0Elem{pCtxtElem}, d.p0Stack[1:]...)...)
 		}
 	} else {
-		qAddr = pElem.addrVal
-		qIs = pElem.addrIS
+		qAddr = elem.addrVal
+		qIs = elem.addrIS
 	}
 
-	err = d.outElem.AddElem(pElem.rootIndex)
+	err = d.outElem.AddElem(elem.rootIndex)
 	if err != nil {
 		return err
 	}
@@ -1644,7 +1644,7 @@ func (d *PktDecode) processQElement(pElem *p0Elem) error {
 		if d.instrInfo.InstrAddr == qAddr || isBranch {
 			inCompleteRange = false
 			addrRange.enAddr = d.instrInfo.InstrAddr
-			d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true, pElem.rootIndex)
+			d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true, elem.rootIndex)
 		}
 	}
 
@@ -1678,11 +1678,11 @@ func (d *PktDecode) cancelElements() error {
 			} else {
 				// get the newest element (end of slice)
 				lastIdx := len(d.p0Stack) - 1
-				pElem := d.p0Stack[lastIdx]
-				if pElem.isP0 {
-					if pElem.p0Type == p0Atom {
-						d.elemRes.P0Cancel -= pElem.cancelNewest(d.elemRes.P0Cancel)
-						if pElem.isEmpty() {
+				elem := d.p0Stack[lastIdx]
+				if elem.isP0 {
+					if elem.p0Type == p0Atom {
+						d.elemRes.P0Cancel -= elem.cancelNewest(d.elemRes.P0Cancel)
+						if elem.isEmpty() {
 							d.poppedElems = append(d.poppedElems, d.p0Stack[lastIdx])
 							d.p0Stack = d.p0Stack[:lastIdx]
 						}
@@ -1692,9 +1692,9 @@ func (d *PktDecode) cancelElements() error {
 						d.p0Stack = d.p0Stack[:lastIdx]
 					}
 				} else {
-					switch pElem.p0Type {
+					switch elem.p0Type {
 					case p0Event, p0TS, p0CC, p0TSCC, p0Marker, p0ITE:
-						temp = append(temp, pElem)
+						temp = append(temp, elem)
 						d.p0Stack = d.p0Stack[:lastIdx]
 					default:
 						d.poppedElems = append(d.poppedElems, d.p0Stack[lastIdx])
@@ -1724,29 +1724,29 @@ func (d *PktDecode) cancelElements() error {
 
 func (d *PktDecode) mispredictAtom() error {
 	err := error(nil)
-	bFoundAtom := false
-	bDone := false
+	foundAtom := false
+	done := false
 
 	// Iterate from newest (end) to oldest, mirroring C++ front() iteration.
-	for i := len(d.p0Stack) - 1; i >= 0 && !bDone; i-- {
-		pElem := d.p0Stack[i]
-		if pElem.p0Type == p0Atom {
-			pElem.mispredictNewest()
-			bFoundAtom = true
-			bDone = true
-		} else if pElem.p0Type == p0Addr {
+	for i := len(d.p0Stack) - 1; i >= 0 && !done; i-- {
+		elem := d.p0Stack[i]
+		if elem.p0Type == p0Atom {
+			elem.mispredictNewest()
+			foundAtom = true
+			done = true
+		} else if elem.p0Type == p0Addr {
 			// discard address elements between mispredict and the atom
-			d.poppedElems = append(d.poppedElems, pElem)
+			d.poppedElems = append(d.poppedElems, elem)
 			d.p0Stack = append(d.p0Stack[:i], d.p0Stack[i+1:]...)
-		} else if pElem.p0Type == p0UnseenUncommitted {
+		} else if elem.p0Type == p0UnseenUncommitted {
 			// mispredict in one of the uncommitted elements before sync - disregard
-			bDone = true
-			bFoundAtom = true
+			done = true
+			foundAtom = true
 		}
 		// for any other type: continue scanning toward older elements
 	}
 
-	if !bFoundAtom {
+	if !foundAtom {
 		err = d.handlePacketSeqErr(ocsd.ErrCommitPktOverrun, d.Base.IndexCurrPkt, "Not found mispredict atom")
 	}
 	d.elemRes.Mispredict = false
@@ -1758,16 +1758,16 @@ func (d *PktDecode) discardElements() error {
 
 	for len(d.p0Stack) > 0 && err == nil {
 		// Process oldest element first, mirroring C++ back() on a newest-first deque.
-		pElem := d.p0Stack[0]
+		elem := d.p0Stack[0]
 
-		if pElem.p0Type == p0Marker {
-			err = d.processMarkerElem(pElem)
-		} else if pElem.p0Type == p0ITE {
-			err = d.processITEElem(pElem)
+		if elem.p0Type == p0Marker {
+			err = d.processMarkerElem(elem)
+		} else if elem.p0Type == p0ITE {
+			err = d.processITEElem(elem)
 		} else {
-			err = d.processTSCCEventElem(pElem)
+			err = d.processTSCCEventElem(elem)
 		}
-		d.poppedElems = append(d.poppedElems, pElem)
+		d.poppedElems = append(d.poppedElems, elem)
 		d.p0Stack = d.p0Stack[1:]
 	}
 

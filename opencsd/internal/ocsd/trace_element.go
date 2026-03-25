@@ -122,7 +122,17 @@ type TraceElement struct {
 	LastIType    InstrType
 	LastISubtype InstrSubtype
 
-	FlagBits uint32
+	LastInstrExec     bool
+	LastInstrSz       uint8
+	HasCC             bool
+	CPUFreqChange     bool
+	ExcepRetAddr      bool
+	ExcepDataMarker   bool
+	ExtendedData      bool
+	HasTS             bool
+	LastInstrCond     bool
+	ExcepRetAddrBrTgt bool
+	ExcepMTailChain   bool
 
 	Payload struct {
 		ExceptionNum  uint32
@@ -140,99 +150,32 @@ type TraceElement struct {
 	PtrExtendedData []byte
 }
 
-func (e *TraceElement) LastInstrExec() bool { return (e.FlagBits & (1 << 0)) != 0 }
-func (e *TraceElement) SetLastInstrExec(v bool) {
-	if v {
-		e.FlagBits |= (1 << 0)
-	} else {
-		e.FlagBits &^= (1 << 0)
-	}
-}
+func (e *TraceElement) clearPerPktData() {
+	e.LastInstrExec = false
+	e.LastInstrSz = 0
+	e.HasCC = false
+	e.CPUFreqChange = false
+	e.ExcepRetAddr = false
+	e.ExcepDataMarker = false
+	e.ExtendedData = false
+	e.HasTS = false
+	e.LastInstrCond = false
+	e.ExcepRetAddrBrTgt = false
+	e.ExcepMTailChain = false
 
-func (e *TraceElement) LastInstrSz() uint8 { return uint8((e.FlagBits >> 1) & 0x7) }
-func (e *TraceElement) SetLastInstrSz(v uint8) {
-	e.FlagBits = (e.FlagBits &^ (0x7 << 1)) | ((uint32(v) & 0x7) << 1)
-}
-
-func (e *TraceElement) HasCC() bool { return (e.FlagBits & (1 << 4)) != 0 }
-func (e *TraceElement) SetHasCC(v bool) {
-	if v {
-		e.FlagBits |= (1 << 4)
-	} else {
-		e.FlagBits &^= (1 << 4)
-	}
-}
-
-func (e *TraceElement) CPUFreqChange() bool { return (e.FlagBits & (1 << 5)) != 0 }
-func (e *TraceElement) SetCPUFreqChange(v bool) {
-	if v {
-		e.FlagBits |= (1 << 5)
-	} else {
-		e.FlagBits &^= (1 << 5)
-	}
-}
-
-func (e *TraceElement) ExcepRetAddr() bool { return (e.FlagBits & (1 << 6)) != 0 }
-func (e *TraceElement) SetExcepRetAddr(v bool) {
-	if v {
-		e.FlagBits |= (1 << 6)
-	} else {
-		e.FlagBits &^= (1 << 6)
-	}
-}
-
-func (e *TraceElement) ExcepDataMarker() bool { return (e.FlagBits & (1 << 7)) != 0 }
-func (e *TraceElement) SetExcepDataMarker(v bool) {
-	if v {
-		e.FlagBits |= (1 << 7)
-	} else {
-		e.FlagBits &^= (1 << 7)
-	}
-}
-
-func (e *TraceElement) ExtendedData() bool { return (e.FlagBits & (1 << 8)) != 0 }
-func (e *TraceElement) SetExtendedData(v bool) {
-	if v {
-		e.FlagBits |= (1 << 8)
-	} else {
-		e.FlagBits &^= (1 << 8)
-	}
-}
-
-func (e *TraceElement) HasTS() bool { return (e.FlagBits & (1 << 9)) != 0 }
-func (e *TraceElement) SetHasTS(v bool) {
-	if v {
-		e.FlagBits |= (1 << 9)
-	} else {
-		e.FlagBits &^= (1 << 9)
-	}
-}
-
-func (e *TraceElement) LastInstrCond() bool { return (e.FlagBits & (1 << 10)) != 0 }
-func (e *TraceElement) SetLastInstrCond(v bool) {
-	if v {
-		e.FlagBits |= (1 << 10)
-	} else {
-		e.FlagBits &^= (1 << 10)
-	}
-}
-
-func (e *TraceElement) ExcepRetAddrBrTgt() bool { return (e.FlagBits & (1 << 11)) != 0 }
-func (e *TraceElement) SetExcepRetAddrBrTgt(v bool) {
-	if v {
-		e.FlagBits |= (1 << 11)
-	} else {
-		e.FlagBits &^= (1 << 11)
-	}
-}
-
-func (e *TraceElement) ExcepMTailChain() bool { return (e.FlagBits & (1 << 12)) != 0 }
-func (e *TraceElement) SetExcepMTailChain(v bool) {
-	if v {
-		e.FlagBits |= (1 << 12)
-	} else {
-		e.FlagBits &^= (1 << 12)
-	}
+	e.Payload = struct {
+		ExceptionNum  uint32
+		TraceEvent    TraceEvent
+		TraceOnReason TraceOnReason
+		SWTraceInfo   SWTInfo
+		NumInstrRange uint32
+		UnsyncEOTInfo UnsyncInfo
+		SyncMarker    TraceMarkerPayload
+		MemTrans      TraceMemtrans
+		SWIte         TraceSWIte
+		SWTItm        SWTItmInfo
+	}{}
+	e.PtrExtendedData = nil
 }
 
 // Construct with default state
@@ -267,23 +210,6 @@ func (e *TraceElement) Init() {
 	e.clearPerPktData()
 }
 
-func (e *TraceElement) clearPerPktData() {
-	e.FlagBits = 0
-	e.Payload = struct {
-		ExceptionNum  uint32
-		TraceEvent    TraceEvent
-		TraceOnReason TraceOnReason
-		SWTraceInfo   SWTInfo
-		NumInstrRange uint32
-		UnsyncEOTInfo UnsyncInfo
-		SyncMarker    TraceMarkerPayload
-		MemTrans      TraceMemtrans
-		SWIte         TraceSWIte
-		SWTItm        SWTItmInfo
-	}{}
-	e.PtrExtendedData = nil
-}
-
 // set elements API
 func (e *TraceElement) SetType(typ GenElemType) {
 	e.ElemType = typ
@@ -304,7 +230,7 @@ func (e *TraceElement) SetISA(isa ISA) {
 
 func (e *TraceElement) SetCycleCount(cycleCount uint32) {
 	e.CycleCount = cycleCount
-	e.SetHasCC(true)
+	e.HasCC = true
 }
 
 func (e *TraceElement) SetEvent(evType EventType, number uint16) {
@@ -318,12 +244,12 @@ func (e *TraceElement) SetEvent(evType EventType, number uint16) {
 
 func (e *TraceElement) SetTS(ts uint64, freqChange bool) {
 	e.Timestamp = ts
-	e.SetCPUFreqChange(freqChange)
-	e.SetHasTS(true)
+	e.CPUFreqChange = freqChange
+	e.HasTS = true
 }
 
 func (e *TraceElement) SetExcepMarker() {
-	e.SetExcepDataMarker(true)
+	e.ExcepDataMarker = true
 }
 
 func (e *TraceElement) SetExceptionNum(excepNum uint32) {
@@ -349,8 +275,8 @@ func (e *TraceElement) SetAddrRange(stAddr, enAddr VAddr, numInstr uint32) {
 }
 
 func (e *TraceElement) SetLastInstrInfo(exec bool, lastIType InstrType, lastISubtype InstrSubtype, size uint8) {
-	e.SetLastInstrExec(exec)
-	e.SetLastInstrSz(size & 0x7)
+	e.LastInstrExec = exec
+	e.LastInstrSz = size & 0x7
 	e.LastIType = lastIType
 	e.LastISubtype = lastISubtype
 }
@@ -364,7 +290,7 @@ func (e *TraceElement) SetSWTInfo(swtInfo SWTInfo) {
 }
 
 func (e *TraceElement) SetExtendedDataPtr(data []byte) {
-	e.SetExtendedData(true)
+	e.ExtendedData = true
 	e.PtrExtendedData = data
 }
 
@@ -538,9 +464,9 @@ func (e *TraceElement) String() string {
 	case GenElemInstrRange:
 		sb.WriteString(fmt.Sprintf("exec range=0x%x:[0x%x] ", e.StAddr, e.EnAddr))
 		sb.WriteString(fmt.Sprintf("num_i(%d) ", e.Payload.NumInstrRange))
-		sb.WriteString(fmt.Sprintf("last_sz(%d) ", e.LastInstrSz()))
+		sb.WriteString(fmt.Sprintf("last_sz(%d) ", e.LastInstrSz))
 		sb.WriteString(fmt.Sprintf("(ISA=%s) ", isaStr[e.ISA]))
-		if e.LastInstrExec() {
+		if e.LastInstrExec {
 			sb.WriteString("E ")
 		} else {
 			sb.WriteString("N ")
@@ -553,7 +479,7 @@ func (e *TraceElement) String() string {
 				sb.WriteString(s)
 			}
 		}
-		if e.LastInstrCond() {
+		if e.LastInstrCond {
 			sb.WriteString(" <cond>")
 		}
 
@@ -566,9 +492,9 @@ func (e *TraceElement) String() string {
 		sb.WriteString(fmt.Sprintf("num_i(%d) ", e.Payload.NumInstrRange))
 
 	case GenElemException:
-		if e.ExcepRetAddr() {
+		if e.ExcepRetAddr {
 			sb.WriteString(fmt.Sprintf("pref ret addr:0x%x", e.EnAddr))
-			if e.ExcepRetAddrBrTgt() {
+			if e.ExcepRetAddrBrTgt {
 				sb.WriteString(" [addr also prev br tgt]")
 			}
 			sb.WriteString("; ")
@@ -643,7 +569,7 @@ func (e *TraceElement) String() string {
 		sb.WriteString(fmt.Sprintf("EL%d; 0x%016x", e.Payload.SWIte.EL, e.Payload.SWIte.Value))
 	}
 
-	if e.HasCC() {
+	if e.HasCC {
 		sb.WriteString(fmt.Sprintf(" [CC=%d]; ", e.CycleCount))
 	}
 

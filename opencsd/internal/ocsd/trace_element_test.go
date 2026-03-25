@@ -20,7 +20,7 @@ func TestTraceElementString_AddressWidthFormatting(t *testing.T) {
 
 func TestTraceElementString_ExceptionRetAddressFormatting(t *testing.T) {
 	e := NewTraceElementWithType(GenElemException)
-	e.SetExcepRetAddr(true)
+	e.ExcepRetAddr = true
 	e.EnAddr = 0xDEADBEEF
 	e.SetExceptionNum(0x11)
 

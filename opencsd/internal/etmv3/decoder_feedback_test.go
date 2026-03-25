@@ -9,7 +9,7 @@ import (
 func TestDecodePacketPreservesWaitISyncWithoutOutput(t *testing.T) {
 	dec, _ := setupDecFast(&Config{})
 	dec.currState = waitISync
-	dec.bWaitISync = true
+	dec.waitISync = true
 
 	pkt := &Packet{}
 	pkt.ResetState()
@@ -33,8 +33,8 @@ func TestOnFlushCommitsPendingElements(t *testing.T) {
 	out.elements = nil
 	dec.currState = decodePkts
 
-	pElem := dec.outputElemList.NextElem(7)
-	pElem.SetType(ocsd.GenElemInstrRange)
+	elem := dec.outputElemList.NextElem(7)
+	elem.SetType(ocsd.GenElemInstrRange)
 	dec.outputElemList.PendLastNElem(1)
 
 	resp := dec.OnFlush()
@@ -101,8 +101,8 @@ func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 	dec, out := buildDecInDecodePkts(&Config{})
 	out.elements = nil
 
-	pElem := dec.outputElemList.NextElem(3)
-	pElem.SetType(ocsd.GenElemInstrRange)
+	elem := dec.outputElemList.NextElem(3)
+	elem.SetType(ocsd.GenElemInstrRange)
 	dec.outputElemList.PendLastNElem(1)
 	dec.pendingNacc = true
 	dec.pendingNaccIdx = 3
@@ -142,8 +142,8 @@ func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 	dec, out := buildDecInDecodePkts(&Config{})
 	out.elements = nil
 
-	pElem := dec.outputElemList.NextElem(5)
-	pElem.SetType(ocsd.GenElemInstrRange)
+	elem := dec.outputElemList.NextElem(5)
+	elem.SetType(ocsd.GenElemInstrRange)
 	dec.outputElemList.PendLastNElem(1)
 	dec.pendingNacc = true
 	dec.pendingNaccIdx = 5

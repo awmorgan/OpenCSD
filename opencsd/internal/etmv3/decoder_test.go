@@ -152,8 +152,8 @@ func TestProcessBranchAddr_NoException_SetsAddr(t *testing.T) {
 	if dec.iAddr != 0x4000 {
 		t.Errorf("expected iAddr=0x4000, got 0x%X", dec.iAddr)
 	}
-	if dec.bNeedAddr {
-		t.Error("bNeedAddr should be false after branch addr received")
+	if dec.needAddr {
+		t.Error("needAddr should be false after branch addr received")
 	}
 }
 
@@ -350,7 +350,7 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 				t.Errorf("expected StAddr=0x1000, got 0x%X", e.StAddr)
 			}
 			// E-atom with InstrBr: LastInstrExec should be true
-			if !e.LastInstrExec() {
+			if !e.LastInstrExec {
 				t.Error("expected LastInstrExec=true for E-atom with InstrBr")
 			}
 			return
@@ -429,18 +429,18 @@ func TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpData, 2, phdrPkt)
 
 	// Send Trigger to commit the pending InstrRange element (non-branch packets call CommitAllPendElem).
-	// processPHdr sets bNeedAddr=true after IndirectBr E-atom.
+	// processPHdr sets needAddr=true after IndirectBr E-atom.
 	trigPkt := &Packet{}
 	trigPkt.ResetState()
 	trigPkt.Type = PktTrigger
 	dec.PacketDataIn(ocsd.OpData, 3, trigPkt)
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
-	if !dec.bNeedAddr {
+	if !dec.needAddr {
 		t.Logf("InstrType from follower: %v", dec.codeFollower.InstrInfo().Type)
 		t.Logf("InstrOpcode from follower: %x", dec.codeFollower.InstrInfo().Opcode)
 		t.Logf("HasNext: %v", dec.codeFollower.HasNext())
-		t.Error("expected bNeedAddr=true after IndirectBr E-atom")
+		t.Error("expected needAddr=true after IndirectBr E-atom")
 	}
 	_ = out
 }
@@ -530,20 +530,20 @@ func TestProcessPHdr_CCOnly_ZeroAtoms(t *testing.T) {
 	}
 }
 
-// TestProcessPHdr_NeedAddr_EmitsAddrUnknown: bNeedAddr=true, bSentUnknown=false → AddrUnknown.
-// After ISync, bNeedAddr=false. After IndrBr E-atom, bNeedAddr=true, bSentUnknown=false.
-// The SECOND PHdr sends bNeedAddr=true, bSentUnknown=false (since the first EmitsAddrUnknown).
-// Actually the first PHdr with IndirBr puts bNeedAddr=true after the E-atom is processed.
-// The FIRST call ITSELF (with bNeedAddr=false initially, from ISync) doesn't emit AddrUnknown.
-// It processes the atom, hits IndirBr, then sets bNeedAddr=true.
-// The second PHdr call sees bNeedAddr=true, bSentUnknown=false → emits AddrUnknown.
+// TestProcessPHdr_NeedAddr_EmitsAddrUnknown: needAddr=true, sentUnknown=false → AddrUnknown.
+// After ISync, needAddr=false. After IndrBr E-atom, needAddr=true, sentUnknown=false.
+// The SECOND PHdr sends needAddr=true, sentUnknown=false (since the first EmitsAddrUnknown).
+// Actually the first PHdr with IndirBr puts needAddr=true after the E-atom is processed.
+// The FIRST call ITSELF (with needAddr=false initially, from ISync) doesn't emit AddrUnknown.
+// It processes the atom, hits IndirBr, then sets needAddr=true.
+// The second PHdr call sees needAddr=true, sentUnknown=false → emits AddrUnknown.
 func TestProcessPHdr_NeedAddr_EmitsAddrUnknown(t *testing.T) {
 	config := &Config{}
 	dec, out := buildDecInDecodePkts(config)
 
-	// First: set bNeedAddr=true directly to skip the complex atom-following
-	dec.bNeedAddr = true
-	dec.bSentUnknown = false
+	// First: set needAddr=true directly to skip the complex atom-following
+	dec.needAddr = true
+	dec.sentUnknown = false
 
 	n0 := len(out.elements)
 
@@ -564,12 +564,12 @@ func TestProcessPHdr_NeedAddr_EmitsAddrUnknown(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Logf("elements after bNeedAddr=true: %v", elemTypes(out)[n0:])
-		t.Error("expected GenElemAddrUnknown when bNeedAddr=true and bSentUnknown=false")
+		t.Logf("elements after needAddr=true: %v", elemTypes(out)[n0:])
+		t.Error("expected GenElemAddrUnknown when needAddr=true and sentUnknown=false")
 	}
 }
 
-// TestProcessPHdr_NeedAddr_SentUnknown_Skips: bNeedAddr=true, bSentUnknown=true, !isCycleAcc → skip.
+// TestProcessPHdr_NeedAddr_SentUnknown_Skips: needAddr=true, sentUnknown=true, !isCycleAcc → skip.
 func TestProcessPHdr_NeedAddr_SentUnknown_Skips(t *testing.T) {
 	config := &Config{} // non-CC
 
@@ -578,7 +578,7 @@ func TestProcessPHdr_NeedAddr_SentUnknown_Skips(t *testing.T) {
 	dec.SetMemAccess(mem)
 	dec.SetInstrDecode(idec.NewDecoder())
 
-	// First PHdr: bNeedAddr=true, bSentUnknown=false → emits AddrUnknown, bSentUnknown=true
+	// First PHdr: needAddr=true, sentUnknown=false → emits AddrUnknown, sentUnknown=true
 	phdrPkt := &Packet{}
 	phdrPkt.ResetState()
 	phdrPkt.Type = PktPHdr
@@ -589,16 +589,16 @@ func TestProcessPHdr_NeedAddr_SentUnknown_Skips(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
 	// No new AddrUnknown element should appear (skip path)
-	// Actually, the previous PHdr call set bNeedAddr=true and reset bSentUnknown=false.
-	// So we need to call it ONCE to set bSentUnknown=true, then AGAIN to skip.
-	dec.PacketDataIn(ocsd.OpData, 3, phdrPkt) // This one emits AddrUnknown and sets bSentUnknown=true
+	// Actually, the previous PHdr call set needAddr=true and reset sentUnknown=false.
+	// So we need to call it ONCE to set sentUnknown=true, then AGAIN to skip.
+	dec.PacketDataIn(ocsd.OpData, 3, phdrPkt) // This one emits AddrUnknown and sets sentUnknown=true
 	n1 := len(out.elements)
 	dec.PacketDataIn(ocsd.OpData, 4, phdrPkt) // This one SHOULD skip
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
 	for _, e := range out.elements[n1:] {
 		if e.ElemType == ocsd.GenElemAddrUnknown {
-			t.Error("should NOT emit AddrUnknown when bSentUnknown=true and !isCycleAcc")
+			t.Error("should NOT emit AddrUnknown when sentUnknown=true and !isCycleAcc")
 		}
 	}
 }
@@ -833,9 +833,9 @@ func TestOnFlush_SendPktsState(t *testing.T) {
 
 	// Directly manipulate to enter sendPkts state with an element pending
 	dec.currState = sendPkts
-	pElem := dec.outputElemList.NextElem(5)
-	if pElem != nil {
-		pElem.ElemType = ocsd.GenElemEvent
+	elem := dec.outputElemList.NextElem(5)
+	if elem != nil {
+		elem.ElemType = ocsd.GenElemEvent
 	}
 	dec.outputElemList.CommitAllPendElem()
 
@@ -856,7 +856,7 @@ func TestOnFlush_SendPktsState(t *testing.T) {
 	}
 }
 
-// TestOnFlush_SendPkts_WaitISync: sendPkts + bWaitISync=true → transitions back to waitISync.
+// TestOnFlush_SendPkts_WaitISync: sendPkts + waitISync=true → transitions back to waitISync.
 func TestOnFlush_SendPkts_WaitISync(t *testing.T) {
 	config := &Config{}
 	dec := mustNewConfiguredPktDecode(t, config)
@@ -876,21 +876,21 @@ func TestOnFlush_SendPkts_WaitISync(t *testing.T) {
 	tsPkt.Timestamp = 0xABCD
 	dec.PacketDataIn(ocsd.OpData, 1, tsPkt)
 
-	// Manually put into sendPkts with bWaitISync=true
+	// Manually put into sendPkts with waitISync=true
 	dec.currState = sendPkts
-	dec.bWaitISync = true
-	pElem := dec.outputElemList.NextElem(2)
-	if pElem != nil {
-		pElem.ElemType = ocsd.GenElemTimestamp
-		pElem.Timestamp = 0xABCD
+	dec.waitISync = true
+	elem := dec.outputElemList.NextElem(2)
+	if elem != nil {
+		elem.ElemType = ocsd.GenElemTimestamp
+		elem.Timestamp = 0xABCD
 	}
 	dec.outputElemList.CommitAllPendElem()
 
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
-	// After flush, bWaitISync was true → should transition to waitISync
+	// After flush, waitISync was true → should transition to waitISync
 	if dec.currState != waitISync {
-		t.Errorf("expected currState=waitISync after flush with bWaitISync=true, got %v", dec.currState)
+		t.Errorf("expected currState=waitISync after flush with waitISync=true, got %v", dec.currState)
 	}
 }
 

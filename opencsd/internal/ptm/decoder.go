@@ -275,9 +275,9 @@ func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 
-	bPktDone := false
+	pktDone := false
 
-	for !bPktDone {
+	for !pktDone {
 		switch d.currState {
 		case decodeNoSync:
 			d.outputElem.SetType(ocsd.GenElemNoSync)
@@ -288,27 +288,27 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 			} else {
 				d.currState = decodeWaitSync
 			}
-			bPktDone = true
+			pktDone = true
 
 		case decodeWaitSync:
 			if d.CurrPacketIn.Type == PktASync {
 				d.currState = decodeWaitISync
 			}
-			bPktDone = true
+			pktDone = true
 
 		case decodeWaitISync:
 			if d.CurrPacketIn.Type == PktISync {
 				d.currState = decodePkts
 			} else {
-				bPktDone = true
+				pktDone = true
 			}
 
 		case decodePkts:
 			resp = d.decodePacket()
-			bPktDone = true
+			pktDone = true
 
 		default:
-			bPktDone = true
+			pktDone = true
 		}
 	}
 	return resp
@@ -360,11 +360,11 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 	case PktWPointUpdate:
 		resp = d.processWPUpdate()
 	case PktContextID:
-		bUpdate := true
+		update := true
 		if d.peContext.CtxtIDValid() && d.peContext.ContextID == pkt.Context.CtxtID {
-			bUpdate = false
+			update = false
 		}
-		if bUpdate {
+		if update {
 			d.peContext.ContextID = pkt.Context.CtxtID
 			d.peContext.SetCtxtIDValid(true)
 			d.outputElem.SetType(ocsd.GenElemPeContext)
@@ -372,11 +372,11 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 			resp = d.Base.OutputTraceElement(d.csID, &d.outputElem)
 		}
 	case PktVMID:
-		bUpdate := true
+		update := true
 		if d.peContext.VMIDValid() && d.peContext.VMID == uint32(pkt.Context.VMID) {
-			bUpdate = false
+			update = false
 		}
-		if bUpdate {
+		if update {
 			d.peContext.VMID = uint32(pkt.Context.VMID)
 			d.peContext.SetVMIDValid(true)
 			d.outputElem.SetType(ocsd.GenElemPeContext)
@@ -476,9 +476,9 @@ func (d *PktDecode) processBranch() ocsd.DatapathResp {
 		if pkt.Exception.Present {
 			d.outputElem.SetType(ocsd.GenElemException)
 			d.outputElem.SetExceptionNum(uint32(pkt.Exception.Number))
-			d.outputElem.SetExcepRetAddr(false)
+			d.outputElem.ExcepRetAddr = false
 			if d.currPeState.valid {
-				d.outputElem.SetExcepRetAddr(true)
+				d.outputElem.ExcepRetAddr = true
 				d.outputElem.EnAddr = d.currPeState.instrAddr
 			}
 			if pkt.CCValid {
@@ -557,7 +557,7 @@ func (d *PktDecode) checkPendingNacc(resp *ocsd.DatapathResp) {
 func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp waypointTraceOp, nextAddrMatch ocsd.VAddr) ocsd.DatapathResp {
 	resp := ocsd.RespCont
 
-	bWPFound := false
+	wpFound := false
 	var err error
 
 	d.instrInfo.InstrAddr = d.currPeState.instrAddr
@@ -565,7 +565,7 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 
 	d.outputElem.SetType(ocsd.GenElemInstrRange)
 
-	bWPFound, err = d.traceInstrToWP(traceWPOp, nextAddrMatch)
+	wpFound, err = d.traceInstrToWP(traceWPOp, nextAddrMatch)
 	if err != nil {
 		if errors.Is(err, ocsd.ErrUnsupportedISA) {
 			d.currPeState.valid = false
@@ -576,7 +576,7 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 		return ocsd.RespFatalInvalidData
 	}
 
-	if bWPFound {
+	if wpFound {
 		nextAddr := d.instrInfo.InstrAddr
 
 		switch d.instrInfo.Type {
@@ -613,7 +613,7 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 		if d.CurrPacketIn.CCValid {
 			d.outputElem.SetCycleCount(d.CurrPacketIn.CycleCount)
 		}
-		d.outputElem.SetLastInstrCond(d.instrInfo.IsConditional != 0)
+		d.outputElem.LastInstrCond = d.instrInfo.IsConditional != 0
 		resp = d.Base.OutputTraceElementIdx(d.Base.IndexCurrPkt, d.csID, &d.outputElem)
 
 		d.currPeState.instrAddr = d.instrInfo.InstrAddr
@@ -623,14 +623,14 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 		if d.outputElem.StAddr != d.outputElem.EnAddr {
 			d.outputElem.SetLastInstrInfo(true, d.instrInfo.Type, d.instrInfo.SubType, d.instrInfo.InstrSize)
 			d.outputElem.SetISA(d.currPeState.isa)
-			d.outputElem.SetLastInstrCond(d.instrInfo.IsConditional != 0)
+			d.outputElem.LastInstrCond = d.instrInfo.IsConditional != 0
 			resp = d.Base.OutputTraceElementIdx(d.Base.IndexCurrPkt, d.csID, &d.outputElem)
 		}
 	}
 	return resp
 }
 
-func (d *PktDecode) traceInstrToWP(traceWPOp waypointTraceOp, nextAddrMatch ocsd.VAddr) (bWPFound bool, err error) {
+func (d *PktDecode) traceInstrToWP(traceWPOp waypointTraceOp, nextAddrMatch ocsd.VAddr) (wpFound bool, err error) {
 	err = nil
 	var bytesReq uint32
 	var currOpAddress ocsd.VAddr
@@ -644,9 +644,9 @@ func (d *PktDecode) traceInstrToWP(traceWPOp waypointTraceOp, nextAddrMatch ocsd
 	d.outputElem.EnAddr = d.instrInfo.InstrAddr
 	d.outputElem.Payload.NumInstrRange = 0
 
-	bWPFound = false
+	wpFound = false
 
-	for !bWPFound && !d.memNaccPending {
+	for !wpFound && !d.memNaccPending {
 		bytesReq = 4
 		currOpAddress = d.instrInfo.InstrAddr
 		bytesRead, memData, errMem := d.Base.AccessMemory(d.instrInfo.InstrAddr, d.csID, memSpace, bytesReq)
@@ -690,17 +690,17 @@ func (d *PktDecode) traceInstrToWP(traceWPOp waypointTraceOp, nextAddrMatch ocsd
 
 			if traceWPOp != traceWaypoint {
 				if traceWPOp == traceToAddrExcl {
-					bWPFound = d.outputElem.EnAddr == nextAddrMatch
+					wpFound = d.outputElem.EnAddr == nextAddrMatch
 				} else {
-					bWPFound = currOpAddress == nextAddrMatch
+					wpFound = currOpAddress == nextAddrMatch
 				}
 			} else {
-				bWPFound = d.instrInfo.Type != ocsd.InstrOther
+				wpFound = d.instrInfo.Type != ocsd.InstrOther
 			}
 		} else {
 			d.memNaccPending = true
 			d.naccAddr = d.instrInfo.InstrAddr
 		}
 	}
-	return bWPFound, err
+	return wpFound, err
 }
