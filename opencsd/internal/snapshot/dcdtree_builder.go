@@ -24,10 +24,10 @@ type mapperAdapter struct {
 	mapper memacc.Mapper
 }
 
-func (m *mapperAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
+func (m *mapperAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
 	buf := make([]byte, reqBytes)
 	readBytes, err := m.mapper.Read(address, csTraceID, memSpace, reqBytes, buf)
-	return readBytes, buf[:readBytes], ocsd.AsErr(err)
+	return readBytes, buf[:readBytes], err
 }
 
 func (m *mapperAdapter) InvalidateMemAccCache(csTraceID uint8) {
@@ -38,7 +38,7 @@ type snapshotErrorLogger struct {
 	reader *Reader
 }
 
-func (l *snapshotErrorLogger) LogError(_ ocsd.HandleErrLog, err *common.Error) {
+func (l *snapshotErrorLogger) LogError(_ ocsd.HandleErrLog, err error) {
 	if l.reader == nil || err == nil {
 		return
 	}
@@ -56,8 +56,8 @@ func (l *snapshotErrorLogger) LogMessage(_ ocsd.HandleErrLog, sev ocsd.ErrSeveri
 	l.reader.logInfo(msg)
 }
 
-func (l *snapshotErrorLogger) LastError() *common.Error          { return nil }
-func (l *snapshotErrorLogger) LastIDError(_ uint8) *common.Error { return nil }
+func (l *snapshotErrorLogger) LastError() error          { return nil }
+func (l *snapshotErrorLogger) LastIDError(_ uint8) error { return nil }
 
 var dumpSpaceMap = map[string]ocsd.MemSpaceAcc{
 	"":           ocsd.MemSpaceAny,
@@ -427,9 +427,9 @@ func (b *DecodeTreeBuilder) createITMDecoder(devSrc *ParsedDevice) error {
 
 func (b *DecodeTreeBuilder) createDecoder(decoderName string, cfg any) error {
 	if b.packetProcOnly {
-		return b.tree.CreatePacketProcessorError(decoderName, cfg)
+		return b.tree.CreatePacketProcessor(decoderName, cfg)
 	}
-	return b.tree.CreateFullDecoderError(decoderName, cfg)
+	return b.tree.CreateFullDecoder(decoderName, cfg)
 }
 
 // addCoreDumpMemory adds memory region accessors from a core device's dump definitions.
@@ -466,8 +466,8 @@ func (b *DecodeTreeBuilder) addCoreDumpMemory(mapper memacc.Mapper, dev *ParsedD
 
 		acc := memacc.NewBufferAccessor(ocsd.VAddr(dump.Address), fileBytes)
 		acc.SetMemSpace(mapDumpMemSpace(dump.Space))
-		if errCode := mapper.AddAccessor(acc, 0); errCode != ocsd.OK {
-			b.reader.logError(fmt.Sprintf("Failed to add memory accessor for %s (%s): %v", dev.DeviceName, path, errCode))
+		if err := mapper.AddAccessor(acc, 0); err != nil {
+			b.reader.logError(fmt.Sprintf("Failed to add memory accessor for %s (%s): %v", dev.DeviceName, path, err))
 		}
 	}
 }

@@ -1,6 +1,9 @@
 package common
 
-import "opencsd/internal/ocsd"
+import (
+	"errors"
+	"opencsd/internal/ocsd"
+)
 
 // CodeFollower follows the execution path by decoding instructions.
 // It interfaces with memory access and instruction decode.
@@ -147,13 +150,13 @@ func (cf *CodeFollower) MemSpace() ocsd.MemSpaceAcc {
 }
 
 // DecodeSingleOpCode decodes a single opcode at instrInfo.InstrAddr.
-func (cf *CodeFollower) DecodeSingleOpCode() ocsd.Err {
+func (cf *CodeFollower) DecodeSingleOpCode() error {
 	var bytesReq uint32 = 4
 
 	// Read memory location for opcode
 	readBytes, pData, err := cf.memAccess.ReadTargetMemory(cf.instrInfo.InstrAddr, cf.traceID, cf.memSpace, bytesReq)
 
-	if err != ocsd.OK {
+	if err != nil {
 		return err
 	}
 
@@ -188,7 +191,7 @@ func (cf *CodeFollower) resetFollowerState() bool {
 }
 
 // FollowSingleAtom decodes an instruction at a single location and calculates the next address.
-func (cf *CodeFollower) FollowSingleAtom(addrStart ocsd.VAddr, atom ocsd.AtmVal) ocsd.Err {
+func (cf *CodeFollower) FollowSingleAtom(addrStart ocsd.VAddr, atom ocsd.AtmVal) error {
 	if !cf.resetFollowerState() {
 		return ocsd.ErrNotInit
 	}
@@ -198,8 +201,8 @@ func (cf *CodeFollower) FollowSingleAtom(addrStart ocsd.VAddr, atom ocsd.AtmVal)
 	cf.instrInfo.InstrAddr = addrStart
 	err := cf.DecodeSingleOpCode()
 
-	if err != ocsd.OK {
-		if ocsd.IsMemNacc(err) {
+	if err != nil {
+		if errors.Is(err, ocsd.ErrMemNacc) {
 			cf.hasNaccErr = true
 			cf.noAccessAddr = cf.instrInfo.InstrAddr
 			cf.nextAddr = cf.instrInfo.InstrAddr
@@ -228,5 +231,5 @@ func (cf *CodeFollower) FollowSingleAtom(addrStart ocsd.VAddr, atom ocsd.AtmVal)
 		}
 	}
 
-	return ocsd.OK
+	return nil
 }

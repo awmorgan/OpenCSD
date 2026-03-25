@@ -42,10 +42,10 @@ type mockMemAcc struct {
 	isIndirect bool
 }
 
-func (m *mockMemAcc) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
+func (m *mockMemAcc) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
 	m.calls++
 	if m.failAfter > 0 && m.calls > m.failAfter {
-		return 0, nil, ocsd.OK // short read triggers memNaccPending
+		return 0, nil, nil // short read triggers memNaccPending
 	}
 
 	isHit := m.hitAfter >= 0 && m.calls > m.hitAfter
@@ -54,17 +54,17 @@ func (m *mockMemAcc) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSp
 	// We assume ARM (A32) state since most PTM tests use ISAArm.
 	if isHit {
 		if m.isIndirect && m.isLink {
-			return reqBytes, []byte{0x30, 0x00, 0x20, 0x01}, ocsd.OK // BLX R0 (0x01200030)
+			return reqBytes, []byte{0x30, 0x00, 0x20, 0x01}, nil // BLX R0 (0x01200030)
 		} else if m.isIndirect {
-			return reqBytes, []byte{0x1E, 0xFF, 0x2F, 0x01}, ocsd.OK // BX LR (0x012FFF1E)
+			return reqBytes, []byte{0x1E, 0xFF, 0x2F, 0x01}, nil // BX LR (0x012FFF1E)
 		} else if m.isLink {
-			return reqBytes, []byte{0x00, 0x00, 0x00, 0xEB}, ocsd.OK // BL (0xEB000000)
+			return reqBytes, []byte{0x00, 0x00, 0x00, 0xEB}, nil // BL (0xEB000000)
 		}
-		return reqBytes, []byte{0x00, 0x00, 0x00, 0xEA}, ocsd.OK // B (0xEA000000)
+		return reqBytes, []byte{0x00, 0x00, 0x00, 0xEA}, nil // B (0xEA000000)
 	}
 
 	// Not a hit -> InstrOther
-	return reqBytes, []byte{0x00, 0x00, 0x80, 0xE0}, ocsd.OK // ADD R0, R0, R0
+	return reqBytes, []byte{0x00, 0x00, 0x80, 0xE0}, nil // ADD R0, R0, R0
 }
 
 func (m *mockMemAcc) InvalidateMemAccCache(csTraceID uint8) {}
@@ -197,27 +197,20 @@ func TestPTMTypedConstructors(t *testing.T) {
 	})
 
 	t.Run("RejectNilConfig", func(t *testing.T) {
-		if proc, err := NewConfiguredPktProc(0, nil); proc != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
+		if proc, err := NewConfiguredPktProc(0, nil); proc != nil || !errors.Is(err, ocsd.ErrInvalidParamVal) {
 			t.Fatalf("expected nil-config proc constructor to fail, got proc=%v err=%v", proc, err)
 		}
-		if dec, err := NewConfiguredPktDecode(0, nil); dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
+		if dec, err := NewConfiguredPktDecode(0, nil); dec != nil || !errors.Is(err, ocsd.ErrInvalidParamVal) {
 			t.Fatalf("expected nil-config decode constructor to fail, got dec=%v err=%v", dec, err)
 		}
-		if proc, dec, err := NewConfiguredPipeline(0, nil); proc != nil || dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
+		if proc, dec, err := NewConfiguredPipeline(0, nil); proc != nil || dec != nil || !errors.Is(err, ocsd.ErrInvalidParamVal) {
 			t.Fatalf("expected nil-config pipeline constructor to fail, got proc=%v dec=%v err=%v", proc, dec, err)
 		}
 	})
 }
 
-func isErrorCode(err error, code ocsd.Err) bool {
-	if err == nil {
-		return false
-	}
-	var libErr *common.Error
-	if !errors.As(err, &libErr) {
-		return false
-	}
-	return libErr.Code == code
+func isErrorCode(err error, code error) bool {
+	return errors.Is(err, code)
 }
 
 // --- Processor: Comprehensive byte stream tests ---

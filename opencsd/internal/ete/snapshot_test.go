@@ -2,6 +2,7 @@ package ete_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -36,10 +37,10 @@ func (p *eteRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd
 	_, _ = io.WriteString(p.writer, fmt.Sprintf("Idx:%d; ID:%x;\t%s : description\n", indexSOP, p.traceID, pkt.EffectiveType().String()))
 }
 
-func (m *mapperAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
+func (m *mapperAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
 	buf := make([]byte, reqBytes)
 	readBytes, err := m.mapper.Read(address, csTraceID, memSpace, reqBytes, buf)
-	return readBytes, buf[:readBytes], ocsd.AsErr(err)
+	return readBytes, buf[:readBytes], err
 }
 
 func (m *mapperAdapter) InvalidateMemAccCache(csTraceID uint8) {
@@ -60,7 +61,7 @@ type eteGoldenTestCase struct {
 }
 
 type opModeComponent interface {
-	ConfigureComponentOpMode(opFlags uint32) ocsd.Err
+	ConfigureComponentOpMode(opFlags uint32) error
 	ComponentOpMode() uint32
 	SupportedOpModes() uint32
 }
@@ -213,7 +214,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 		}
 
 		if err := tree.CreateFullDecoder(ocsd.BuiltinDcdETE, cfg); err != nil {
-			if ocsd.AsErr(err) == ocsd.ErrAttachTooMany {
+			if errors.Is(err, ocsd.ErrAttachTooMany) {
 				continue
 			}
 			return nil, fmt.Errorf("create ETE decoder for %s failed: %v", srcDevName, err)

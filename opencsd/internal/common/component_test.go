@@ -39,7 +39,7 @@ func TestComponentRuntimeViaDecoderBase(t *testing.T) {
 
 	b.ConfigureSupportedOpModes(0x0F)
 	err := b.ConfigureComponentOpMode(0x01)
-	if err != ocsd.OK {
+	if err != nil {
 		t.Errorf("expected OK, got %v", err)
 	}
 	if b.ComponentOpMode() != 0x01 {
@@ -47,7 +47,7 @@ func TestComponentRuntimeViaDecoderBase(t *testing.T) {
 	}
 
 	err = b.ConfigureComponentOpMode(0x10)
-	if err != ocsd.OK {
+	if err != nil {
 		t.Errorf("expected OK for unsupported-flag mask behaviour, got %v", err)
 	}
 	if b.ComponentOpMode() != 0x00 {
@@ -71,7 +71,7 @@ func TestComponentRuntimeViaDecoderBase(t *testing.T) {
 	}
 
 	b.ErrVerbosity = ocsd.ErrSevError
-	b.LogError(Errorf(ocsd.ErrSevError, ocsd.ErrInvalidID, "test error"))
+	b.LogError(ocsd.ErrSevError, ocsd.ErrInvalidID)
 	if logger.lastErrSev != ocsd.ErrSevError {
 		t.Errorf("log error failed to pass severity")
 	}

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -45,9 +44,6 @@ func TestDecoderManagerCreateDecoder(t *testing.T) {
 	if in == nil || handle == nil {
 		t.Fatalf("CreateDecoder returned nil outputs")
 	}
-	if _, ok := in.(ocsd.TrcDataProcessor); !ok {
-		t.Fatalf("CreateDecoder input does not implement TrcDataProcessor")
-	}
 }
 
 func TestTypedPipelineConstructors(t *testing.T) {
@@ -74,7 +70,7 @@ func TestDecoderManagerRejectsWrongConfigType(t *testing.T) {
 	m := &DecoderManager{}
 
 	in, handle, err := m.CreatePacketProcessor(0, struct{}{})
-	if got := ocsd.AsErr(err); got != ocsd.ErrInvalidParamVal {
+	if !errors.Is(err, ocsd.ErrInvalidParamVal) {
 		t.Fatalf("CreatePacketProcessor err=%v want %v", err, ocsd.ErrInvalidParamVal)
 	}
 	if in != nil || handle != nil {
@@ -82,7 +78,7 @@ func TestDecoderManagerRejectsWrongConfigType(t *testing.T) {
 	}
 
 	in, handle, err = m.CreateDecoder(0, struct{}{})
-	if got := ocsd.AsErr(err); got != ocsd.ErrInvalidParamVal {
+	if !errors.Is(err, ocsd.ErrInvalidParamVal) {
 		t.Fatalf("CreateDecoder err=%v want %v", err, ocsd.ErrInvalidParamVal)
 	}
 	if in != nil || handle != nil {
@@ -90,13 +86,6 @@ func TestDecoderManagerRejectsWrongConfigType(t *testing.T) {
 	}
 }
 
-func isErrorCode(err error, code ocsd.Err) bool {
-	if err == nil {
-		return false
-	}
-	var libErr *common.Error
-	if !errors.As(err, &libErr) {
-		return false
-	}
-	return libErr.Code == code
+func isErrorCode(err error, code error) bool {
+	return errors.Is(err, code)
 }

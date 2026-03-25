@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"opencsd/internal/common"
 	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
@@ -26,25 +25,25 @@ type mockMemAcc struct {
 	instrType ocsd.InstrType // type to emit at waypoint
 }
 
-func (m *mockMemAcc) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
+func (m *mockMemAcc) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
 	m.calls++
 	if m.failAfter >= 0 && m.calls > m.failAfter {
-		return 0, nil, ocsd.OK
+		return 0, nil, nil
 	}
 
 	isHit := m.hitAfter >= 0 && m.calls > m.hitAfter
 
 	if isHit {
 		if m.instrType == ocsd.InstrBrIndirect {
-			return reqBytes, []byte{0x1E, 0xFF, 0x2F, 0xE1}, ocsd.OK // BX LR (0xE12FFF1E - unconditional)
+			return reqBytes, []byte{0x1E, 0xFF, 0x2F, 0xE1}, nil // BX LR (0xE12FFF1E - unconditional)
 		} else if m.instrType == ocsd.InstrOther {
-			return reqBytes, []byte{0x00, 0x00, 0x80, 0xE0}, ocsd.OK // ADD R0, R0, R0
+			return reqBytes, []byte{0x00, 0x00, 0x80, 0xE0}, nil // ADD R0, R0, R0
 		}
 		// Default to branch
-		return reqBytes, []byte{0x00, 0x00, 0x00, 0xEA}, ocsd.OK // B (0xEA000000)
+		return reqBytes, []byte{0x00, 0x00, 0x00, 0xEA}, nil // B (0xEA000000)
 	}
 
-	return reqBytes, []byte{0x00, 0x00, 0x80, 0xE0}, ocsd.OK // ADD R0, R0, R0
+	return reqBytes, []byte{0x00, 0x00, 0x80, 0xE0}, nil // ADD R0, R0, R0
 }
 
 func (m *mockMemAcc) InvalidateMemAccCache(csTraceID uint8) {}
@@ -113,13 +112,6 @@ func mustNewConfiguredPktDecode(tb testing.TB, config *Config) *PktDecode {
 	return dec
 }
 
-func isErrorCode(err error, code ocsd.Err) bool {
-	if err == nil {
-		return false
-	}
-	var libErr *common.Error
-	if !errors.As(err, &libErr) {
-		return false
-	}
-	return libErr.Code == code
+func isErrorCode(err error, code error) bool {
+	return errors.Is(err, code)
 }

@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -13,12 +12,12 @@ type mockLogger struct {
 	bytes.Buffer
 }
 
-func (m *mockLogger) LogError(_ ocsd.HandleErrLog, _ *common.Error) {}
+func (m *mockLogger) LogError(_ ocsd.HandleErrLog, _ error) {}
 func (m *mockLogger) LogMessage(_ ocsd.HandleErrLog, _ ocsd.ErrSeverity, msg string) {
 	m.WriteString(msg)
 }
-func (m *mockLogger) LastError() *common.Error          { return nil }
-func (m *mockLogger) LastIDError(_ uint8) *common.Error { return nil }
+func (m *mockLogger) LastError() error          { return nil }
+func (m *mockLogger) LastIDError(_ uint8) error { return nil }
 
 func TestItemPrinter(t *testing.T) {
 	var buf bytes.Buffer

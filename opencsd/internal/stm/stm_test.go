@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -372,13 +371,6 @@ func TestSTMTypedConstructors(t *testing.T) {
 	})
 }
 
-func isErrorCode(err error, code ocsd.Err) bool {
-	if err == nil {
-		return false
-	}
-	var libErr *common.Error
-	if !errors.As(err, &libErr) {
-		return false
-	}
-	return libErr.Code == code
+func isErrorCode(err error, code error) bool {
+	return errors.Is(err, code)
 }

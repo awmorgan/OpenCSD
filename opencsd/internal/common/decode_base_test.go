@@ -14,7 +14,7 @@ func TestDecoderBase(t *testing.T) {
 	}
 
 	b.ConfigureSupportedOpModes(0x0F)
-	if err := b.ConfigureComponentOpMode(0x03); err != ocsd.OK {
+	if err := b.ConfigureComponentOpMode(0x03); err != nil {
 		t.Errorf("expected OK, got %v", err)
 	}
 	if b.ComponentOpMode() != 0x03 {
@@ -25,7 +25,7 @@ func TestDecoderBase(t *testing.T) {
 	}
 
 	// Flags outside supported range should be masked out
-	if err := b.ConfigureComponentOpMode(0x10); err != ocsd.OK {
+	if err := b.ConfigureComponentOpMode(0x10); err != nil {
 		t.Errorf("expected OK after masking, got %v", err)
 	}
 	if b.ComponentOpMode() != 0x00 {
@@ -85,7 +85,7 @@ func TestProcBase(t *testing.T) {
 	}
 
 	b.ConfigureSupportedOpModes(0x0F)
-	if err := b.ConfigureComponentOpMode(0x05); err != ocsd.OK {
+	if err := b.ConfigureComponentOpMode(0x05); err != nil {
 		t.Errorf("expected OK, got %v", err)
 	}
 	if b.ComponentOpMode() != 0x05 {
@@ -105,7 +105,7 @@ func TestProcBase(t *testing.T) {
 	b.StatsAddBadHdrCount(1)
 
 	stats, errCode := b.StatsBlock()
-	if errCode != ocsd.OK {
+	if errCode != nil {
 		t.Errorf("expected OK after StatsInit, got %v", errCode)
 	}
 	if stats.ChannelTotal != 100 {

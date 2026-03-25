@@ -2,6 +2,7 @@ package memacc
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"opencsd/internal/ocsd"
 	"testing"
@@ -62,7 +63,7 @@ func TestOverlapRegions(t *testing.T) {
 	acc1 := NewBufferAccessor(0x0000, asByteSlice(&el01NSBlocks, 0))
 	acc1.SetMemSpace(ocsd.MemSpaceEL1N)
 	err := mapper.AddAccessor(acc1, 0)
-	if err != ocsd.OK {
+	if err != nil {
 		t.Errorf("Failed to set memory accessor: %v", err)
 	}
 
@@ -70,14 +71,14 @@ func TestOverlapRegions(t *testing.T) {
 	acc2 := NewBufferAccessor(0x1000, asByteSlice(&el01NSBlocks, 1))
 	acc2.SetMemSpace(ocsd.MemSpaceEL1N)
 	err = mapper.AddAccessor(acc2, 0)
-	if err != ocsd.ErrMemAccOverlap {
+	if !errors.Is(err, ocsd.ErrMemAccOverlap) {
 		t.Errorf("Expected overlap error, got: %v", err)
 	}
 
 	// Non overlapping region - same memory space
 	acc2.Configure(0x8000, asByteSlice(&el01NSBlocks, 1))
 	err = mapper.AddAccessor(acc2, 0)
-	if err != ocsd.OK {
+	if err != nil {
 		t.Errorf("Failed to set non overlapping memory accessor: %v", err)
 	}
 
@@ -85,7 +86,7 @@ func TestOverlapRegions(t *testing.T) {
 	acc3 := NewBufferAccessor(0x0000, asByteSlice(&el01SBlocks, 0))
 	acc3.SetMemSpace(ocsd.MemSpaceEL1S)
 	err = mapper.AddAccessor(acc3, 0)
-	if err != ocsd.OK {
+	if err != nil {
 		t.Errorf("Failed to set overlapping memory accessor in other memory space: %v", err)
 	}
 
@@ -93,7 +94,7 @@ func TestOverlapRegions(t *testing.T) {
 	acc4 := NewBufferAccessor(0x0000, asByteSlice(&el2SBlocks, 0))
 	acc4.SetMemSpace(ocsd.MemSpaceS)
 	err = mapper.AddAccessor(acc4, 0)
-	if err != ocsd.ErrMemAccOverlap {
+	if !errors.Is(err, ocsd.ErrMemAccOverlap) {
 		t.Errorf("Expected overlap error for general S accessor, got: %v", err)
 	}
 }
@@ -322,7 +323,7 @@ func TestAccessorRemoval(t *testing.T) {
 	}
 
 	err := mapper.RemoveAccessor(acc1)
-	if err != ocsd.OK {
+	if err != nil {
 		t.Errorf("Expected OK, got %v", err)
 	}
 	if len(mapper.accessors) != 1 {
@@ -332,7 +333,7 @@ func TestAccessorRemoval(t *testing.T) {
 	// Remove non-existent
 	accFake := NewBufferAccessor(0x3000, make([]byte, 100))
 	err = mapper.RemoveAccessor(accFake)
-	if err != ocsd.ErrInvalidParamVal {
+	if !errors.Is(err, ocsd.ErrInvalidParamVal) {
 		t.Errorf("Expected ErrInvalidParamVal, got %v", err)
 	}
 
@@ -392,12 +393,12 @@ func TestEdgeCasesAndUtilities(t *testing.T) {
 	mapper.EnableCaching(true)
 
 	err := mapper.cache.SetCacheSizes(10, 1, true)
-	if err != ocsd.ErrInvalidParamVal {
+	if !errors.Is(err, ocsd.ErrInvalidParamVal) {
 		t.Errorf("Expected ErrInvalidParamVal for SetCacheSizes limits, got: %v", err)
 	}
 	err = mapper.cache.SetCacheSizes(10, 1, false)
-	if err != ocsd.OK {
-		t.Errorf("Expected OK for SetCacheSizes auto-limit")
+	if err != nil {
+		t.Errorf("Expected nil for SetCacheSizes auto-limit")
 	}
 	if mapper.cache.pageSize != MinPageSize || mapper.cache.numPages != MinPages {
 		t.Errorf("Cache sizes not clamped to min")
@@ -534,7 +535,7 @@ func TestGlobalMapperRead(t *testing.T) {
 	mapper := NewGlobalMapper()
 	data := []byte{0x11, 0x22, 0x33, 0x44}
 	acc := NewBufferAccessor(0x1000, data)
-	if err := mapper.AddAccessor(acc, 0); err != ocsd.OK {
+	if err := mapper.AddAccessor(acc, 0); err != nil {
 		t.Fatalf("failed to add accessor: %v", err)
 	}
 
@@ -595,7 +596,7 @@ func TestMapper_ErrorAndCacheEdgePaths(t *testing.T) {
 	// Add invalid accessor
 	accBuf.EndAddress = 0 // invalid range
 	err := mapper.AddAccessor(accBuf, 0)
-	if err != ocsd.ErrMemAccRangeInvalid {
+	if !errors.Is(err, ocsd.ErrMemAccRangeInvalid) {
 		t.Errorf("Expected invalid range error")
 	}
 
@@ -621,7 +622,7 @@ func TestMapper_ErrorAndCacheEdgePaths(t *testing.T) {
 
 	numBytes := uint32(4)
 	err = mapper.ReadTargetMemory(0, 0, ocsd.MemSpaceAny, &numBytes, readBuf)
-	if err != ocsd.ErrMemAccBadLen {
+	if !errors.Is(err, ocsd.ErrMemAccBadLen) {
 		t.Errorf("Expected ErrMemAccBadLen, got %v", err)
 	}
 

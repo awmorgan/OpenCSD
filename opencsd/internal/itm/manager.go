@@ -1,7 +1,7 @@
 package itm
 
 import (
-	"opencsd/internal/common"
+	"fmt"
 	"opencsd/internal/ocsd"
 )
 
@@ -12,7 +12,7 @@ type DecoderManager struct {
 // NewConfiguredPktProc creates an ITM packet processor with a typed config.
 func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, error) {
 	if cfg == nil {
-		return nil, common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "ITM config cannot be nil")
+		return nil, fmt.Errorf("%w: ITM config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
 	_ = instID
 	proc := NewPktProc(cfg, nil)
@@ -22,7 +22,7 @@ func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, error) {
 // NewConfiguredPktDecode creates an ITM packet decoder with a typed config.
 func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
 	if cfg == nil {
-		return nil, common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "ITM config cannot be nil")
+		return nil, fmt.Errorf("%w: ITM config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
 	_ = instID
 	dec := NewPktDecode(cfg, nil)
@@ -46,7 +46,7 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, error
 func typedConfig(config any) (*Config, error) {
 	cfg, ok := config.(*Config)
 	if !ok {
-		return nil, ocsd.ToError(ocsd.ErrInvalidParamType)
+		return nil, ocsd.ErrInvalidParamType
 	}
 	return cfg, nil
 }

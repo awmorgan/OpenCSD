@@ -1,6 +1,7 @@
 package ptm
 
 import (
+	"errors"
 	"fmt"
 
 	"opencsd/internal/common"
@@ -122,7 +123,7 @@ func (p *PktProc) PktOut() ocsd.PacketProcessor[Packet] { return p.PktOutI }
 func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor[Packet]) { p.PktRawMonI = mon }
 
 // ConfigureComponentOpMode delegates to Base.
-func (p *PktProc) ConfigureComponentOpMode(flags uint32) ocsd.Err {
+func (p *PktProc) ConfigureComponentOpMode(flags uint32) error {
 	return p.Base.ConfigureComponentOpMode(flags)
 }
 
@@ -157,7 +158,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 	switch op {
 	case ocsd.OpData:
 		if len(dataBlock) == 0 {
-			p.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrPktInterpFail, "Interpreter failed - cannot process payload for unexpected or unsupported packet."))
+			p.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Interpreter failed - cannot process payload for unexpected or unsupported packet.", ocsd.ErrPktInterpFail))
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			processed, resp, err = p.ProcessData(index, dataBlock)
@@ -186,17 +187,17 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			rawMon.RawPacketDataMon(ocsd.OpReset, index, nil, nil)
 		}
 	default:
-		p.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
+		p.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Packet Processor : Unknown Datapath operation", ocsd.ErrInvalidParamVal))
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return processed, resp, err
 }
 
-func (p *PktProc) SetProtocolConfig(config *Config) ocsd.Err {
+func (p *PktProc) SetProtocolConfig(config *Config) error {
 	p.Config = config
 	if p.Config != nil {
 		p.chanIDCopy = p.Config.TraceID()
-		return ocsd.OK
+		return nil
 	}
 	return ocsd.ErrNotInit
 }
@@ -249,10 +250,7 @@ func (p *PktProc) isSync() bool {
 
 func (p *PktProc) malformedPacketErr(msg string) error {
 	p.currPacket.ErrType = PktBadSequence
-	e := common.Errorf(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "%s", msg)
-	e.Idx = p.currPktIndex
-	e.ChanID = p.chanIDCopy
-	return e
+	return fmt.Errorf("%w: %s", ocsd.ErrBadPacketSeq, msg)
 }
 
 func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, ocsd.DatapathResp, error) {
@@ -287,12 +285,8 @@ func (p *PktProc) doProcessLoop() (resp ocsd.DatapathResp, currByte uint8, ok bo
 		if err == nil {
 			return ocsd.RespCont, nil
 		}
-		ce, ok := err.(*common.Error)
-		if !ok {
-			return ocsd.RespFatalInvalidData, err
-		}
-		p.Base.LogError(ce)
-		if ce.Code == ocsd.ErrBadPacketSeq || ce.Code == ocsd.ErrInvalidPcktHdr {
+		p.Base.LogError(ocsd.ErrSevError, err)
+		if errors.Is(err, ocsd.ErrBadPacketSeq) || errors.Is(err, ocsd.ErrInvalidPcktHdr) {
 			p.processState = stateSendPkt
 			return ocsd.RespCont, err
 		}
@@ -314,9 +308,7 @@ func (p *PktProc) doProcessLoop() (resp ocsd.DatapathResp, currByte uint8, ok bo
 			p.currDecode = p.iTable[currByte].action
 			p.currPacket.Type = p.iTable[currByte].pktType
 		} else {
-			e := common.Errorf(ocsd.ErrSevError, ocsd.ErrPktInterpFail, "Data Buffer Overrun")
-			e.Idx = p.currPktIndex
-			e.ChanID = p.chanIDCopy
+			e := fmt.Errorf("%w: Data Buffer Overrun", ocsd.ErrPktInterpFail)
 			resp, err = handleErr(e)
 			return resp, currByte, ok, err
 		}

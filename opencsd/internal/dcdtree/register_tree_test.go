@@ -230,7 +230,7 @@ func TestDecodeTreeCreateDecoderRejectsOutOfRangeRouteID(t *testing.T) {
 	defer tree.Destroy()
 
 	err := tree.CreateFullDecoder(name, testConfig{id: 0x80})
-	if got := ocsd.AsErr(err); got != ocsd.ErrInvalidID {
+	if !errors.Is(err, ocsd.ErrInvalidID) {
 		t.Fatalf("expected ErrInvalidID for route ID 0x80, got %v", err)
 	}
 }
@@ -294,14 +294,14 @@ func TestDecodeTreeErrorWrappersExposeSentinels(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	if err := tree.CreateFullDecoderError("STM", testConfig{id: 0x80}); err == nil {
-		t.Fatal("expected CreateFullDecoderError to fail for out-of-range route id")
+	if err := tree.CreateFullDecoder("STM", testConfig{id: 0x80}); err == nil {
+		t.Fatal("expected CreateFullDecoder to fail for out-of-range route id")
 	} else if !errors.Is(err, ErrCreateFullDecoder) {
 		t.Fatalf("expected ErrCreateFullDecoder sentinel, got %v", err)
 	}
 
-	if err := tree.CreatePacketProcessorError("UNKNOWN_DECODER", testConfig{id: 0x10}); err == nil {
-		t.Fatal("expected CreatePacketProcessorError to fail for unknown decoder")
+	if err := tree.CreatePacketProcessor("UNKNOWN_DECODER", testConfig{id: 0x10}); err == nil {
+		t.Fatal("expected CreatePacketProcessor to fail for unknown decoder")
 	} else if !errors.Is(err, ErrCreatePacketProcessor) {
 		t.Fatalf("expected ErrCreatePacketProcessor sentinel, got %v", err)
 	}

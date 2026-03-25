@@ -62,7 +62,7 @@ type packetPrinter interface {
 }
 
 type opModeComponent interface {
-	SetComponentOpMode(opFlags uint32) ocsd.Err
+	SetComponentOpMode(opFlags uint32) error
 	ComponentOpMode() uint32
 	SupportedOpModes() uint32
 }
@@ -71,10 +71,9 @@ type memAccAdapter struct {
 	mapper memacc.Mapper
 }
 
-func (m *memAccAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
+func (m *memAccAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
 	buf := make([]byte, reqBytes)
-	readBytes := reqBytes
-	err := m.mapper.ReadTargetMemory(address, csTraceID, memSpace, &readBytes, buf)
+	readBytes, err := m.mapper.Read(address, csTraceID, memSpace, reqBytes, buf)
 	return readBytes, buf[:readBytes], err
 }
 
@@ -640,7 +639,7 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 			acc := memacc.NewBufferAccessor(ocsd.VAddr(memParams.Address), b)
 			space := parseMemSpace(memParams.Space)
 			acc.SetMemSpace(space)
-			if mapper.AddAccessor(acc, 0) != ocsd.OK {
+			if err := mapper.AddAccessor(acc, 0); err != nil {
 				continue
 			}
 

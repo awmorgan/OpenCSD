@@ -3,6 +3,7 @@ package etmv4_test
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"opencsd/internal/common"
 	"opencsd/internal/dcdtree"
 	"opencsd/internal/etmv4"
 	"opencsd/internal/memacc"
@@ -30,7 +30,7 @@ type etmv4RawPacketPrinter struct {
 }
 
 type testErrLogger struct {
-	lastErr *common.Error
+	lastErr error
 }
 
 type etmv4DecodeOptions struct {
@@ -71,14 +71,14 @@ func makeMemRegionAccessCB(cbCtx *memRegionCallbackCtx) ocsd.MemAccessor {
 	}
 }
 
-func (l *testErrLogger) LogError(_ ocsd.HandleErrLog, err *common.Error) {
+func (l *testErrLogger) LogError(_ ocsd.HandleErrLog, err error) {
 	l.lastErr = err
 }
 
 func (l *testErrLogger) LogMessage(_ ocsd.HandleErrLog, _ ocsd.ErrSeverity, _ string) {}
 
-func (l *testErrLogger) LastError() *common.Error          { return nil }
-func (l *testErrLogger) LastIDError(_ uint8) *common.Error { return nil }
+func (l *testErrLogger) LastError() error          { return nil }
+func (l *testErrLogger) LastIDError(_ uint8) error { return nil }
 
 func (p *etmv4RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket, rawData []byte) {
 	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
@@ -96,10 +96,10 @@ func (p *etmv4RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP oc
 	_, _ = io.WriteString(p.writer, sb.String())
 }
 
-func (m *mapperAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
+func (m *mapperAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
 	buf := make([]byte, reqBytes)
 	readBytes, err := m.mapper.Read(address, csTraceID, memSpace, reqBytes, buf)
-	return readBytes, buf[:readBytes], ocsd.AsErr(err)
+	return readBytes, buf[:readBytes], err
 }
 
 func (m *mapperAdapter) InvalidateMemAccCache(csTraceID uint8) {
@@ -373,7 +373,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 			}
 			if opts.extraOpFlags != 0 {
 				if opComp, ok := elem.DecoderHandle.(interface {
-					ConfigureComponentOpMode(uint32) ocsd.Err
+					ConfigureComponentOpMode(uint32) error
 					ComponentOpMode() uint32
 					SupportedOpModes() uint32
 				}); ok {
@@ -422,12 +422,12 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 				cbCtx := &memRegionCallbackCtx{startAddr: startAddr, data: b, readCount: &callbackReads}
 				acc := memacc.NewCallbackAccessor(startAddr, endAddr, ocsd.MemSpaceAny)
 				acc.SetCallback(makeMemRegionAccessCB(cbCtx))
-				if err := mapper.AddAccessor(acc, 0); err != ocsd.OK && err != ocsd.ErrMemAccOverlap {
+				if err := mapper.AddAccessor(acc, 0); err != nil && !errors.Is(err, ocsd.ErrMemAccOverlap) {
 					return nil, fmt.Errorf("add callback mem accessor failed for %s: %v", path, err)
 				}
 			} else {
 				acc := memacc.NewBufferAccessor(ocsd.VAddr(memParams.Address), b)
-				if err := mapper.AddAccessor(acc, 0); err != ocsd.OK && err != ocsd.ErrMemAccOverlap {
+				if err := mapper.AddAccessor(acc, 0); err != nil && !errors.Is(err, ocsd.ErrMemAccOverlap) {
 					return nil, fmt.Errorf("add buffer mem accessor failed for %s: %v", path, err)
 				}
 			}

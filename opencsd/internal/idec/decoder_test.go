@@ -62,7 +62,7 @@ func TestDecoder_DecodeA32(t *testing.T) {
 				WfiWfeBranch:    1,
 			}
 			err := dec.DecodeInstruction(info)
-			if err != ocsd.OK {
+			if err != nil {
 				t.Fatalf("Expected OK, got %v", err)
 			}
 			if info.Type != tt.expected {
@@ -142,7 +142,7 @@ func TestDecoder_DecodeT32(t *testing.T) {
 				WfiWfeBranch:    1,
 			}
 			err := dec.DecodeInstruction(info)
-			if err != ocsd.OK {
+			if err != nil {
 				t.Fatalf("Expected OK, got %v", err)
 			}
 			if info.Type != tt.expected {
@@ -211,7 +211,7 @@ func TestDecoder_DecodeA64(t *testing.T) {
 				WfiWfeBranch:    1,
 			}
 			err := dec.DecodeInstruction(info)
-			if err != ocsd.OK {
+			if err != nil {
 				t.Fatalf("Expected OK, got %v", err)
 			}
 			if info.Type != tt.expected {
@@ -296,7 +296,7 @@ func TestDecoder_HelperClassificationAndDestinations(t *testing.T) {
 	}
 
 	itThumb := &ocsd.InstrInfo{Isa: ocsd.ISAThumb2, Opcode: 0x00004400, TrackItBlock: 1, ThumbItConditions: 1}
-	if err := dec.DecodeInstruction(itThumb); err != ocsd.OK || itThumb.ThumbItConditions != 0 {
+	if err := dec.DecodeInstruction(itThumb); err != nil || itThumb.ThumbItConditions != 0 {
 		t.Fatalf("expected IT condition decrement, err=%v cond=%d", err, itThumb.ThumbItConditions)
 	}
 

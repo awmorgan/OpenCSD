@@ -1,6 +1,7 @@
 package demux
 
 import (
+	"fmt"
 	"opencsd/internal/common"
 
 	"opencsd/internal/ocsd"
@@ -77,8 +78,8 @@ func (d *FrameDeformatter) SetErrorLogger(logger common.ErrorLogger) {
 	d.errorLogger = logger
 }
 
-func (d *FrameDeformatter) Configure(flags uint32) ocsd.Err {
-	err := ocsd.OK
+func (d *FrameDeformatter) Configure(flags uint32) error {
+	var err error
 
 	if (flags & ^uint32(ocsd.DfrmtrValidMask)) != 0 {
 		err = ocsd.ErrInvalidParamVal
@@ -93,10 +94,9 @@ func (d *FrameDeformatter) Configure(flags uint32) ocsd.Err {
 		err = ocsd.ErrInvalidParamVal
 	}
 
-	if err != ocsd.OK {
+	if err != nil {
 		if d.errorLogger != nil {
-			errObj := common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Invalid Config Flags")
-			d.errorLogger.LogError(ocsd.HandleGenErr, errObj)
+			d.errorLogger.LogError(ocsd.HandleGenErr, fmt.Errorf("%w: Invalid Config Flags", ocsd.ErrInvalidParamVal))
 		}
 	} else {
 		// alignment is the multiple of bytes the buffer size must be.
@@ -108,7 +108,7 @@ func (d *FrameDeformatter) Configure(flags uint32) ocsd.Err {
 		// if we have HSYNCS then always align to 2 byte buffers
 		if flags&ocsd.DfrmtrHasHsyncs != 0 {
 			d.alignment = 2
-		} else if flags&ocsd.DfrmtrHasFsyncs != 0 { // otherwise FSYNCS only can have 4 byte aligned buffers.
+		} else if flags&ocsd.DfrmtrHasFsyncs != 0 { // otherwise Fsyncs only can have 4 byte aligned buffers.
 			d.alignment = 4
 		}
 	}
@@ -119,7 +119,7 @@ func (d *FrameDeformatter) ConfigFlags() uint32 {
 	return d.cfgFlags
 }
 
-func (d *FrameDeformatter) OutputFilterIDs(idList []uint8, enable bool) ocsd.Err {
+func (d *FrameDeformatter) OutputFilterIDs(idList []uint8, enable bool) error {
 	for _, id := range idList {
 		if id >= 128 {
 			return ocsd.ErrInvalidID
@@ -127,12 +127,12 @@ func (d *FrameDeformatter) OutputFilterIDs(idList []uint8, enable bool) ocsd.Err
 		// m_IDStreams[id].set_enabled(enable) is handled in attach pt but for here we use a simple routing if absent
 		d.rawChanEnable[id] = enable
 	}
-	return ocsd.OK
+	return nil
 }
 
-func (d *FrameDeformatter) OutputFilterAllIDs(enable bool) ocsd.Err {
+func (d *FrameDeformatter) OutputFilterAllIDs(enable bool) error {
 	d.SetRawChanFilterAll(enable)
-	return ocsd.OK
+	return nil
 }
 
 func (d *FrameDeformatter) SetRawChanFilterAll(enable bool) {
@@ -178,11 +178,7 @@ func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocs
 			if err != nil {
 				d.collateDataPathResp(ocsd.RespFatalInvalidData)
 				if d.errorLogger != nil {
-					if e, ok := err.(*common.Error); ok {
-						d.errorLogger.LogError(ocsd.HandleGenErr, e)
-					} else {
-						d.errorLogger.LogError(ocsd.HandleGenErr, common.Errorf(ocsd.ErrSevError, ocsd.ErrFail, "%v", err.Error()))
-					}
+					d.errorLogger.LogError(ocsd.HandleGenErr, err)
 				}
 			}
 		}
@@ -257,21 +253,18 @@ func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, 
 
 func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byte) (resp ocsd.DatapathResp, numBytesProcessed uint32) {
 	if d.alignment == 0 {
-		errObj := common.Errorf(ocsd.ErrSevError, ocsd.ErrFail, "Deformatter not configured")
-		return d.processTraceDataError(errObj, ocsd.RespFatalSysErr), 0
+		return d.processTraceDataError(fmt.Errorf("%w: Deformatter not configured", ocsd.ErrFail), ocsd.RespFatalSysErr), 0
 	}
 
 	if len(d.pendingData) > 0 {
 		expected := d.pendingIndex + ocsd.TrcIndex(len(d.pendingData))
 		if expected != index {
-			err := common.Errorf(ocsd.ErrSevError, ocsd.ErrDfrmtrNotconttrace, "Not continuous trace data")
-			err.Idx = index
+			err := fmt.Errorf("%w: Not continuous trace data", ocsd.ErrDfrmtrNotconttrace)
 			return d.processTraceDataError(err, ocsd.RespFatalInvalidData), 0
 		}
 	} else if d.firstData {
 		if d.trcCurrIdx != index {
-			err := common.Errorf(ocsd.ErrSevError, ocsd.ErrDfrmtrNotconttrace, "Not continuous trace data")
-			err.Idx = index
+			err := fmt.Errorf("%w: Not continuous trace data", ocsd.ErrDfrmtrNotconttrace)
 			return d.processTraceDataError(err, ocsd.RespFatalInvalidData), 0
 		}
 	}
@@ -323,16 +316,16 @@ func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBloc
 	dataBlockSize := uint32(len(dataBlock))
 
 	if dataBlockSize%d.alignment != 0 {
-		return d.processTraceDataError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Input block incorrect size, must be %d byte multiple", d.alignment), ocsd.RespFatalInvalidData), 0
+		return d.processTraceDataError(fmt.Errorf("%w: Input block incorrect size, must be %d byte multiple", ocsd.ErrInvalidParamVal, d.alignment), ocsd.RespFatalInvalidData), 0
 	}
 
 	if d.checkForSync(dataBlockSize) {
 		bProcessing := true
 		for bProcessing {
-			var errObj *common.Error
-			bProcessing, errObj = d.extractFrame(dataBlockSize)
-			if errObj != nil {
-				return d.processTraceDataError(errObj, ocsd.RespFatalInvalidData), 0
+			var dcdErr error
+			bProcessing, dcdErr = d.extractFrame(dataBlockSize)
+			if dcdErr != nil {
+				return d.processTraceDataError(dcdErr, ocsd.RespFatalInvalidData), 0
 			}
 			if bProcessing {
 				bProcessing = d.unpackFrame()
@@ -348,7 +341,7 @@ func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBloc
 	return resp, numBytesProcessed
 }
 
-func (d *FrameDeformatter) processTraceDataError(errObj *common.Error, resp ocsd.DatapathResp) ocsd.DatapathResp {
+func (d *FrameDeformatter) processTraceDataError(errObj error, resp ocsd.DatapathResp) ocsd.DatapathResp {
 	d.collateDataPathResp(resp)
 	if errObj != nil && d.errorLogger != nil {
 		d.errorLogger.LogError(ocsd.HandleGenErr, errObj)

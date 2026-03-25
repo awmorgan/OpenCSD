@@ -24,10 +24,10 @@ type mapperAdapter struct {
 	mapper memacc.Mapper
 }
 
-func (m *mapperAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
+func (m *mapperAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
 	buf := make([]byte, reqBytes)
 	readBytes, err := m.mapper.Read(address, csTraceID, memSpace, reqBytes, buf)
-	return readBytes, buf[:readBytes], ocsd.AsErr(err)
+	return readBytes, buf[:readBytes], err
 }
 
 func (m *mapperAdapter) InvalidateMemAccCache(csTraceID uint8) {

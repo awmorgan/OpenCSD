@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -235,13 +234,13 @@ func TestITMTypedConstructors(t *testing.T) {
 	})
 
 	t.Run("RejectNilConfig", func(t *testing.T) {
-		if proc, err := NewConfiguredPktProc(0, nil); proc != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
+		if proc, err := NewConfiguredPktProc(0, nil); proc != nil || !errors.Is(err, ocsd.ErrInvalidParamVal) {
 			t.Fatalf("expected nil-config proc constructor to fail with ErrInvalidParamVal, got proc=%v err=%v", proc, err)
 		}
-		if dec, err := NewConfiguredPktDecode(0, nil); dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
+		if dec, err := NewConfiguredPktDecode(0, nil); dec != nil || !errors.Is(err, ocsd.ErrInvalidParamVal) {
 			t.Fatalf("expected nil-config decode constructor to fail with ErrInvalidParamVal, got dec=%v err=%v", dec, err)
 		}
-		if proc, dec, err := NewConfiguredPipeline(0, nil); proc != nil || dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
+		if proc, dec, err := NewConfiguredPipeline(0, nil); proc != nil || dec != nil || !errors.Is(err, ocsd.ErrInvalidParamVal) {
 			t.Fatalf("expected nil-config pipeline constructor to fail with ErrInvalidParamVal, got proc=%v dec=%v err=%v", proc, dec, err)
 		}
 	})
@@ -334,15 +333,8 @@ func TestITMErrorCases(t *testing.T) {
 	dec.OnReset()
 }
 
-func isErrorCode(err error, code ocsd.Err) bool {
-	if err == nil {
-		return false
-	}
-	var libErr *common.Error
-	if !errors.As(err, &libErr) {
-		return false
-	}
-	return libErr.Code == code
+func isErrorCode(err error, code error) bool {
+	return errors.Is(err, code)
 }
 
 func TestITMPacketStringVariants(t *testing.T) {

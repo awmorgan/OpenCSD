@@ -28,97 +28,54 @@ func IsReservedCSSrcID(id uint8) bool {
 
 // General Library Return and Error Codes
 
-// Err represents library error return type
-type Err uint32
-
-const (
-	OK                       Err = 0
-	ErrFail                  Err = 1
-	ErrMem                   Err = 2
-	ErrNotInit               Err = 3
-	ErrInvalidID             Err = 4
-	ErrBadHandle             Err = 5
-	ErrInvalidParamVal       Err = 6
-	ErrInvalidParamType      Err = 7
-	ErrFileError             Err = 8
-	ErrNoProtocol            Err = 9
-	ErrAttachTooMany         Err = 10
-	ErrAttachInvalidParam    Err = 11
-	ErrAttachCompNotFound    Err = 12
-	ErrRdrFileNotFound       Err = 13
-	ErrRdrInvalidInit        Err = 14
-	ErrRdrNoDecoder          Err = 15
-	ErrDataDecodeFatal       Err = 16
-	ErrDfrmtrNotconttrace    Err = 17
-	ErrDfrmtrBadFhsync       Err = 18
-	ErrBadPacketSeq          Err = 19
-	ErrInvalidPcktHdr        Err = 20
-	ErrPktInterpFail         Err = 21
-	ErrUnsupportedISA        Err = 22
-	ErrHWCfgUnsupp           Err = 23
-	ErrUnsuppDecodePkt       Err = 24
-	ErrBadDecodePkt          Err = 25
-	ErrCommitPktOverrun      Err = 26
-	ErrMemNacc               Err = 27
-	ErrRetStackOverflow      Err = 28
-	ErrDcdtNoFormatter       Err = 29
-	ErrMemAccOverlap         Err = 30
-	ErrMemAccFileNotFound    Err = 31
-	ErrMemAccFileDiffRange   Err = 32
-	ErrMemAccRangeInvalid    Err = 33
-	ErrMemAccBadLen          Err = 34
-	ErrTestSnapshotParse     Err = 35
-	ErrTestSnapshotParseInfo Err = 36
-	ErrTestSnapshotRead      Err = 37
-	ErrTestSSToDecoder       Err = 38
-	ErrDcdregNameRepeat      Err = 39
-	ErrDcdregNameUnknown     Err = 40
-	ErrDcdregTypeUnknown     Err = 41
-	ErrDcdregToomany         Err = 42
-	ErrDcdInterfaceUnused    Err = 43
-	ErrInvalidOpcode         Err = 44
-	ErrIRangeLimitOverrun    Err = 45
-	ErrBadDecodeImage        Err = 46
-	ErrLast                  Err = 47
+var (
+	ErrFail                  = errors.New("general failure")
+	ErrMem                   = errors.New("internal memory allocation error")
+	ErrNotInit               = errors.New("component not initialised")
+	ErrInvalidID             = errors.New("invalid CoreSight Trace Source ID")
+	ErrBadHandle             = errors.New("invalid handle passed to component")
+	ErrInvalidParamVal       = errors.New("invalid value parameter passed to component")
+	ErrInvalidParamType      = errors.New("type mismatch on abstract interface")
+	ErrFileError             = errors.New("file access error")
+	ErrNoProtocol            = errors.New("trace protocol unsupported")
+	ErrAttachTooMany         = errors.New("cannot attach - attach device limit reached")
+	ErrAttachInvalidParam    = errors.New("cannot attach - invalid parameter")
+	ErrAttachCompNotFound    = errors.New("cannot detach - component not found")
+	ErrRdrFileNotFound       = errors.New("source reader - file not found")
+	ErrRdrInvalidInit        = errors.New("source reader - invalid initialisation parameter")
+	ErrRdrNoDecoder          = errors.New("source reader - no trace decoder set")
+	ErrDataDecodeFatal       = errors.New("a decoder in the data path has returned a fatal error")
+	ErrDfrmtrNotconttrace    = errors.New("trace input to deformatter non-continuous")
+	ErrDfrmtrBadFhsync       = errors.New("bad frame or half frame sync in trace deformatter")
+	ErrBadPacketSeq          = errors.New("bad packet sequence")
+	ErrInvalidPcktHdr        = errors.New("invalid packet header")
+	ErrPktInterpFail         = errors.New("interpreter failed - cannot recover - bad data or sequence")
+	ErrUnsupportedISA        = errors.New("ISA not supported in decoder")
+	ErrHWCfgUnsupp           = errors.New("programmed trace configuration not supported by decoder")
+	ErrUnsuppDecodePkt       = errors.New("packet not supported in decoder")
+	ErrBadDecodePkt          = errors.New("reserved or unknown packet in decoder")
+	ErrCommitPktOverrun      = errors.New("overrun in commit packet stack - tried to commit more than available")
+	ErrMemNacc               = errors.New("unable to access required memory address")
+	ErrRetStackOverflow      = errors.New("internal return stack overflow checks failed - popped more than we pushed")
+	ErrDcdtNoFormatter       = errors.New("no formatter in use - operation not valid")
+	ErrMemAccOverlap         = errors.New("attempted to set an overlapping range in memory access map")
+	ErrMemAccFileNotFound    = errors.New("memory access file could not be opened")
+	ErrMemAccFileDiffRange   = errors.New("attempt to re-use the same memory access file for a different address range")
+	ErrMemAccRangeInvalid    = errors.New("address range in accessor set to invalid values")
+	ErrMemAccBadLen          = errors.New("memory accessor returned a bad read length value (larger than requested)")
+	ErrTestSnapshotParse     = errors.New("test snapshot file parse error")
+	ErrTestSnapshotParseInfo = errors.New("test snapshot file parse information")
+	ErrTestSnapshotRead      = errors.New("test snapshot reader error")
+	ErrTestSSToDecoder       = errors.New("test snapshot to decode tree conversion error")
+	ErrDcdregNameRepeat      = errors.New("attempted to register a decoder with the same name as another one")
+	ErrDcdregNameUnknown     = errors.New("attempted to find a decoder with a name that is not known in the library")
+	ErrDcdregTypeUnknown     = errors.New("attempted to find a decoder with a type that is not known in the library")
+	ErrDcdregToomany         = errors.New("attempted to register too many custom decoders")
+	ErrDcdInterfaceUnused    = errors.New("attempt to connect or use and interface not supported by this decoder")
+	ErrInvalidOpcode         = errors.New("illegal Opcode found while decoding program memory")
+	ErrIRangeLimitOverrun    = errors.New("an optional limit on consecutive instructions in range during decode has been exceeded")
+	ErrBadDecodeImage        = errors.New("mismatch between trace packets and decode image")
 )
-
-type StatusError struct {
-	Code Err
-}
-
-func (e StatusError) Error() string {
-	return "ocsd status error"
-}
-
-func ToError(err Err) error {
-	if err == OK {
-		return nil
-	}
-	return StatusError{Code: err}
-}
-
-func AsErr(err error) Err {
-	if err == nil {
-		return OK
-	}
-	var statusErr StatusError
-	if errors.As(err, &statusErr) {
-		return statusErr.Code
-	}
-	return ErrFail
-}
-
-func IsOK(err Err) bool {
-	return err == OK
-}
-
-func IsNotOK(err Err) bool {
-	return err != OK
-}
-
-func IsMemNacc(err Err) bool {
-	return err == ErrMemNacc
-}
 
 type HandleRdr uint32
 type HandleErrLog uint32

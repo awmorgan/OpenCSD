@@ -2,10 +2,10 @@ package demux
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"testing"
 
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -124,19 +124,19 @@ func makeBufBadData() []byte {
 }
 
 type TestLogger struct {
-	lastErr ocsd.Err
+	lastErr error
 }
 
-func (l *TestLogger) LogError(_ ocsd.HandleErrLog, err *common.Error) {
+func (l *TestLogger) LogError(_ ocsd.HandleErrLog, err error) {
 	if err != nil {
-		l.lastErr = err.Code
+		l.lastErr = err
 	}
 }
 
 func (l *TestLogger) LogMessage(_ ocsd.HandleErrLog, _ ocsd.ErrSeverity, _ string) {}
 
-func (l *TestLogger) LastError() *common.Error          { return nil }
-func (l *TestLogger) LastIDError(_ uint8) *common.Error { return nil }
+func (l *TestLogger) LastError() error          { return nil }
+func (l *TestLogger) LastIDError(_ uint8) error { return nil }
 
 type mockDataSink struct{}
 
@@ -217,19 +217,19 @@ func TestDemuxInit(t *testing.T) {
 	errLog := &TestLogger{}
 	df.SetErrorLogger(errLog)
 
-	if err := df.Configure(0); err != ocsd.ErrInvalidParamVal {
+	if err := df.Configure(0); !errors.Is(err, ocsd.ErrInvalidParamVal) {
 		t.Errorf("Expected OCSD_ERR_INVALID_PARAM_VAL for 0 flag config, got %v", err)
 	}
 
-	if err := df.Configure(0x80 | ocsd.DfrmtrFrameMemAlign); err != ocsd.ErrInvalidParamVal {
+	if err := df.Configure(0x80 | ocsd.DfrmtrFrameMemAlign); !errors.Is(err, ocsd.ErrInvalidParamVal) {
 		t.Errorf("Expected OCSD_ERR_INVALID_PARAM_VAL for unknown flag config, got %v", err)
 	}
 
-	if err := df.Configure(ocsd.DfrmtrFrameMemAlign | ocsd.DfrmtrHasFsyncs); err != ocsd.ErrInvalidParamVal {
+	if err := df.Configure(ocsd.DfrmtrFrameMemAlign | ocsd.DfrmtrHasFsyncs); !errors.Is(err, ocsd.ErrInvalidParamVal) {
 		t.Errorf("Expected OCSD_ERR_INVALID_PARAM_VAL for bad combo flag config, got %v", err)
 	}
 
-	if err := df.OutputFilterIDs([]uint8{128}, true); err != ocsd.ErrInvalidID {
+	if err := df.OutputFilterIDs([]uint8{128}, true); !errors.Is(err, ocsd.ErrInvalidID) {
 		t.Errorf("Expected OCSD_ERR_INVALID_ID for ID 128, got %v", err)
 	}
 }
@@ -494,7 +494,7 @@ func TestRunHSyncFSyncTest(t *testing.T) {
 	resetDecoder(df, t)
 	bufBad := makeBufBadData()
 	_, resp, _ := df.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(len(buf1)), bufBad)
-	if resp != ocsd.RespFatalInvalidData || errLog.lastErr != ocsd.ErrDfrmtrBadFhsync {
+	if resp != ocsd.RespFatalInvalidData || !errors.Is(errLog.lastErr, ocsd.ErrDfrmtrBadFhsync) {
 		t.Errorf("Expected RespFatalInvalidData and ErrDfrmtrBadFhsync, got resp=%v err=%v", resp, errLog.lastErr)
 	}
 }
@@ -510,7 +510,7 @@ func TestRunDemuxBadDataTest(t *testing.T) {
 	resetDecoder(df, t)
 	bufBad := makeBufBadData()
 	_, resp, _ := df.TraceDataIn(ocsd.OpData, 0, bufBad)
-	if resp != ocsd.RespFatalInvalidData || errLog.lastErr != ocsd.ErrDfrmtrBadFhsync {
+	if resp != ocsd.RespFatalInvalidData || !errors.Is(errLog.lastErr, ocsd.ErrDfrmtrBadFhsync) {
 		t.Errorf("Expected RespFatalInvalidData and ErrDfrmtrBadFhsync, got resp=%v err=%v", resp, errLog.lastErr)
 	}
 }

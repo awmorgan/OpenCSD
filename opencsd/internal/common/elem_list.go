@@ -170,12 +170,12 @@ func (s *GenElemStack) CurrElem() *ocsd.TraceElement {
 	return s.elemArray[s.currElemIdx].elem
 }
 
-func (s *GenElemStack) ResetElemStack() ocsd.Err {
+func (s *GenElemStack) ResetElemStack() error {
 	if !s.isReady() {
 		return ocsd.ErrNotInit
 	}
 	s.resetIndexes()
-	return ocsd.OK
+	return nil
 }
 
 func (s *GenElemStack) resetIndexes() {
@@ -191,7 +191,7 @@ func (s *GenElemStack) copyPersistentData(src, dst int) {
 	s.elemArray[dst].elem.CopyPersistentData(s.elemArray[src].elem)
 }
 
-func (s *GenElemStack) growArray() ocsd.Err {
+func (s *GenElemStack) growArray() error {
 	newSize := len(s.elemArray) + 4
 	newArr := make([]elemSlot, newSize)
 	copy(newArr, s.elemArray)
@@ -199,12 +199,12 @@ func (s *GenElemStack) growArray() ocsd.Err {
 		newArr[i].elem = ocsd.NewTraceElement()
 	}
 	s.elemArray = newArr
-	return ocsd.OK
+	return nil
 }
 
-func (s *GenElemStack) AddElem(trcPktIdx ocsd.TrcIndex) ocsd.Err {
+func (s *GenElemStack) AddElem(trcPktIdx ocsd.TrcIndex) error {
 	if s.currElemIdx+1 == len(s.elemArray) {
-		if err := s.growArray(); err != ocsd.OK {
+		if err := s.growArray(); err != nil {
 			return err
 		}
 	}
@@ -214,16 +214,16 @@ func (s *GenElemStack) AddElem(trcPktIdx ocsd.TrcIndex) ocsd.Err {
 	}
 	s.elemArray[s.currElemIdx].pktIndex = trcPktIdx
 	s.elemToSend++
-	return ocsd.OK
+	return nil
 }
 
 func (s *GenElemStack) SetCurrElemIdx(trcPktIdx ocsd.TrcIndex) {
 	s.elemArray[s.currElemIdx].pktIndex = trcPktIdx
 }
 
-func (s *GenElemStack) AddElemType(trcPktIdx ocsd.TrcIndex, elemType ocsd.GenElemType) ocsd.Err {
+func (s *GenElemStack) AddElemType(trcPktIdx ocsd.TrcIndex, elemType ocsd.GenElemType) error {
 	err := s.AddElem(trcPktIdx)
-	if err == ocsd.OK {
+	if err == nil {
 		s.CurrElem().SetType(elemType)
 	}
 	return err

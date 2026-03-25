@@ -1,7 +1,7 @@
 package ete
 
 import (
-	"opencsd/internal/common"
+	"fmt"
 	"opencsd/internal/etmv4"
 	"opencsd/internal/ocsd"
 )
@@ -20,7 +20,7 @@ type DecoderManager struct{}
 // NewConfiguredProcessor creates an ETE packet processor with a typed config.
 func NewConfiguredProcessor(cfg *Config) (*Processor, error) {
 	if cfg == nil {
-		return nil, common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "ETE config cannot be nil")
+		return nil, fmt.Errorf("%w: ETE config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
 	return NewProcessor(cfg), nil
 }
@@ -28,7 +28,7 @@ func NewConfiguredProcessor(cfg *Config) (*Processor, error) {
 // NewConfiguredPktDecode creates an ETE packet decoder with a typed config.
 func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
 	if cfg == nil {
-		return nil, common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "ETE config cannot be nil")
+		return nil, fmt.Errorf("%w: ETE config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
 	_ = instID
 	decoder := NewPktDecode(cfg, nil)
@@ -52,7 +52,7 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, err
 func typedConfig(config any) (*Config, error) {
 	cfg, ok := config.(*Config)
 	if !ok {
-		return nil, ocsd.ToError(ocsd.ErrInvalidParamVal)
+		return nil, ocsd.ErrInvalidParamVal
 	}
 	return cfg, nil
 }

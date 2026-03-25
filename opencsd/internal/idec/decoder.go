@@ -19,13 +19,13 @@ func (d *Decoder) SetAA64ErrOnBadOpcode(bSet bool) {
 	d.aa64ErrBadOpcode = bSet
 }
 
-func (d *Decoder) DecodeInstruction(instrInfo *ocsd.InstrInfo) ocsd.Err {
+func (d *Decoder) DecodeInstruction(instrInfo *ocsd.InstrInfo) error {
 	info := &DecodeInfo{
 		InstrSubType: ocsd.SInstrNone,
 		ArchVersion:  instrInfo.PeType.Arch,
 	}
 
-	var err ocsd.Err = ocsd.OK
+	var err error
 
 	switch instrInfo.Isa {
 	case ocsd.ISAArm:
@@ -45,7 +45,7 @@ func (d *Decoder) DecodeInstruction(instrInfo *ocsd.InstrInfo) ocsd.Err {
 	return err
 }
 
-func (d *Decoder) decodeA32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) ocsd.Err {
+func (d *Decoder) decodeA32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) error {
 	var branchAddr uint32
 	var barrier ArmBarrierT
 
@@ -96,10 +96,10 @@ func (d *Decoder) decodeA32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) ocsd.Er
 		instrInfo.IsConditional = 0
 	}
 
-	return ocsd.OK
+	return nil
 }
 
-func (d *Decoder) decodeA64(instrInfo *ocsd.InstrInfo, info *DecodeInfo) ocsd.Err {
+func (d *Decoder) decodeA64(instrInfo *ocsd.InstrInfo, info *DecodeInfo) error {
 	var branchAddr uint64
 	var barrier ArmBarrierT
 
@@ -153,10 +153,10 @@ func (d *Decoder) decodeA64(instrInfo *ocsd.InstrInfo, info *DecodeInfo) ocsd.Er
 		instrInfo.IsConditional = 0
 	}
 
-	return ocsd.OK
+	return nil
 }
 
-func (d *Decoder) decodeT32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) ocsd.Err {
+func (d *Decoder) decodeT32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) error {
 	var branchAddr uint32
 	var barrier ArmBarrierT
 
@@ -231,5 +231,5 @@ func (d *Decoder) decodeT32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) ocsd.Er
 		}
 	}
 
-	return ocsd.OK
+	return nil
 }

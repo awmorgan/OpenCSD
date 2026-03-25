@@ -7,14 +7,14 @@ import (
 // TargetMemAccess represents ITargetMemAccess.
 // Interface to memory access.
 type TargetMemAccess interface {
-	ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err)
+	ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error)
 	InvalidateMemAccCache(csTraceID uint8)
 }
 
 // InstrDecode represents IInstrDecode.
 // Interface to instruction decoding.
 type InstrDecode interface {
-	DecodeInstruction(instrInfo *ocsd.InstrInfo) ocsd.Err
+	DecodeInstruction(instrInfo *ocsd.InstrInfo) error
 }
 
 // TrcPktIndexer represents ITrcPktIndexer.
@@ -53,12 +53,12 @@ func (b *DecoderBase) Init(name string, logger ocsd.Logger) {
 }
 
 // LogError logs an error if the logger is set and the severity threshold is met.
-func (b *DecoderBase) LogError(err *Error) {
+func (b *DecoderBase) LogError(sev ocsd.ErrSeverity, err error) {
 	if err == nil {
 		return
 	}
-	if b.Logger != nil && b.IsLoggingErrorLevel(err.Sev) {
-		b.Logger.LogError(err.Sev, err)
+	if b.Logger != nil && b.IsLoggingErrorLevel(sev) {
+		b.Logger.LogError(sev, err)
 	}
 }
 
@@ -75,9 +75,9 @@ func (b *DecoderBase) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
 }
 
 // ConfigureComponentOpMode applies opFlags masked to the supported set.
-func (b *DecoderBase) ConfigureComponentOpMode(opFlags uint32) ocsd.Err {
+func (b *DecoderBase) ConfigureComponentOpMode(opFlags uint32) error {
 	b.OpFlags = opFlags & b.SupportedOpFlags
-	return ocsd.OK
+	return nil
 }
 
 // ComponentOpMode returns the current operational mode flags.
@@ -124,7 +124,7 @@ func (b *DecoderBase) DecodeNotReadyReason() string {
 }
 
 // AccessMemory reads target memory via the attached TargetMemAccess interface.
-func (b *DecoderBase) AccessMemory(address ocsd.VAddr, traceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
+func (b *DecoderBase) AccessMemory(address ocsd.VAddr, traceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
 	if b.UsesMemAccess {
 		if b.MemAccess != nil {
 			return b.MemAccess.ReadTargetMemory(address, traceID, memSpace, reqBytes)
@@ -134,7 +134,7 @@ func (b *DecoderBase) AccessMemory(address ocsd.VAddr, traceID uint8, memSpace o
 }
 
 // InstrDecodeCall calls the attached instruction decoder.
-func (b *DecoderBase) InstrDecodeCall(instrInfo *ocsd.InstrInfo) ocsd.Err {
+func (b *DecoderBase) InstrDecodeCall(instrInfo *ocsd.InstrInfo) error {
 	if b.UsesIDecode {
 		if b.InstrDecode != nil {
 			return b.InstrDecode.DecodeInstruction(instrInfo)
@@ -144,14 +144,14 @@ func (b *DecoderBase) InstrDecodeCall(instrInfo *ocsd.InstrInfo) ocsd.Err {
 }
 
 // InvalidateMemAccCache invalidates the memory access cache for the given trace ID.
-func (b *DecoderBase) InvalidateMemAccCache(traceID uint8) ocsd.Err {
+func (b *DecoderBase) InvalidateMemAccCache(traceID uint8) error {
 	if !b.UsesMemAccess {
 		return ocsd.ErrDcdInterfaceUnused
 	}
 	if b.MemAccess != nil {
 		b.MemAccess.InvalidateMemAccCache(traceID)
 	}
-	return ocsd.OK
+	return nil
 }
 
 // ProcBase holds the shared state for a packet processor.
@@ -179,12 +179,12 @@ func (b *ProcBase) Init(name string, logger ocsd.Logger) {
 }
 
 // LogError logs an error if the logger is set and severity threshold is met.
-func (b *ProcBase) LogError(err *Error) {
+func (b *ProcBase) LogError(sev ocsd.ErrSeverity, err error) {
 	if err == nil {
 		return
 	}
-	if b.Logger != nil && b.IsLoggingErrorLevel(err.Sev) {
-		b.Logger.LogError(err.Sev, err)
+	if b.Logger != nil && b.IsLoggingErrorLevel(sev) {
+		b.Logger.LogError(sev, err)
 	}
 }
 
@@ -201,9 +201,9 @@ func (b *ProcBase) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
 }
 
 // ConfigureComponentOpMode applies opFlags masked to the supported set.
-func (b *ProcBase) ConfigureComponentOpMode(opFlags uint32) ocsd.Err {
+func (b *ProcBase) ConfigureComponentOpMode(opFlags uint32) error {
 	b.OpFlags = opFlags & b.SupportedOpFlags
-	return ocsd.OK
+	return nil
 }
 
 // ComponentOpMode returns the current operational mode flags.
@@ -216,11 +216,11 @@ func (b *ProcBase) SupportedOpModes() uint32 { return b.SupportedOpFlags }
 func (b *ProcBase) ConfigureSupportedOpModes(flags uint32) { b.SupportedOpFlags = flags }
 
 // StatsBlock returns the decode statistics, or ErrNotInit if stats were never initialized.
-func (b *ProcBase) StatsBlock() (*ocsd.DecodeStats, ocsd.Err) {
+func (b *ProcBase) StatsBlock() (*ocsd.DecodeStats, error) {
 	if !b.statsInit {
 		return &b.Stats, ocsd.ErrNotInit
 	}
-	return &b.Stats, ocsd.OK
+	return &b.Stats, nil
 }
 
 // HasRawMon reports whether a raw packet monitor has been attached.

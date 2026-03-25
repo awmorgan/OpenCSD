@@ -93,44 +93,27 @@ func TestMacros(t *testing.T) {
 
 func TestErrorStandardMapping(t *testing.T) {
 	errs := []struct {
-		code Err
-		err  error
+		err error
 	}{
-		{OK, nil},
-		{ErrFail, errors.New("ErrFail")},
-		{ErrNotInit, errors.New("ErrNotInit")},
+		{nil},
+		{ErrFail},
+		{ErrNotInit},
 	}
 
-	// Here we just test that we can associate custom go errors with Err codes.
 	for _, e := range errs {
-		if e.code == OK && e.err != nil {
-			t.Errorf("OK should map to nil")
-		} else if e.code != OK && e.err == nil {
-			t.Errorf("Error codes should map to an error interface")
+		if e.err != nil && e.err.Error() == "" {
+			t.Errorf("Error codes should map to an error interface with content")
 		}
 	}
 }
 
 func TestErrHelpers(t *testing.T) {
-	if !IsOK(OK) {
-		t.Error("IsOK(OK) should be true")
+	// IsMemNacc etc are no longer helpers if we use errors.Is
+	if !errors.Is(ErrMemNacc, ErrMemNacc) {
+		t.Error("errors.Is(ErrMemNacc, ErrMemNacc) should be true")
 	}
-	if IsOK(ErrFail) {
-		t.Error("IsOK(ErrFail) should be false")
-	}
-
-	if IsNotOK(OK) {
-		t.Error("IsNotOK(OK) should be false")
-	}
-	if !IsNotOK(ErrInvalidParamVal) {
-		t.Error("IsNotOK(ErrInvalidParamVal) should be true")
-	}
-
-	if !IsMemNacc(ErrMemNacc) {
-		t.Error("IsMemNacc(ErrMemNacc) should be true")
-	}
-	if IsMemNacc(ErrMemAccOverlap) {
-		t.Error("IsMemNacc(ErrMemAccOverlap) should be false")
+	if errors.Is(ErrMemAccOverlap, ErrMemNacc) {
+		t.Error("errors.Is(ErrMemAccOverlap, ErrMemNacc) should be false")
 	}
 }
 

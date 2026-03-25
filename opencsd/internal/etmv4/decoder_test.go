@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -37,21 +36,14 @@ func TestTypedConstructors(t *testing.T) {
 	}
 }
 
-func isErrorCode(err error, code ocsd.Err) bool {
-	if err == nil {
-		return false
-	}
-	var libErr *common.Error
-	if !errors.As(err, &libErr) {
-		return false
-	}
-	return libErr.Code == code
+func isErrorCode(err error, code error) bool {
+	return errors.Is(err, code)
 }
 
 func TestDecoderOnFlushResolvesPendingState(t *testing.T) {
 	d := NewPktDecode(nil, nil)
 	d.Config = &Config{}
-	if err := d.SetProtocolConfig(d.Config); err != ocsd.OK {
+	if err := d.SetProtocolConfig(d.Config); err != nil {
 		t.Fatalf("OnProtocolConfig failed: %v", err)
 	}
 
@@ -71,7 +63,7 @@ func TestDecoderTSRequiresMarkerWhenConfigured(t *testing.T) {
 		RegIdr0: 0x800000,
 		RegIdr1: 0x510, // full version 0x51
 	}
-	if err := d.SetProtocolConfig(d.Config); err != ocsd.OK {
+	if err := d.SetProtocolConfig(d.Config); err != nil {
 		t.Fatalf("OnProtocolConfig failed: %v", err)
 	}
 
@@ -81,7 +73,7 @@ func TestDecoderTSRequiresMarkerWhenConfigured(t *testing.T) {
 		params:    [4]uint32{0x11223344, 0x0, 0x0, 0x0},
 	}
 
-	if err := d.processTSCCEventElem(tsElem); err != ocsd.OK {
+	if err := d.processTSCCEventElem(tsElem); err != nil {
 		t.Fatalf("processTSCCEventElem pre-marker failed: %v", err)
 	}
 	if got := d.outElem.NumElemToSend(); got != 0 {
@@ -96,14 +88,14 @@ func TestDecoderTSRequiresMarkerWhenConfigured(t *testing.T) {
 			Value: 0,
 		},
 	}
-	if err := d.processMarkerElem(markerElem); err != ocsd.OK {
+	if err := d.processMarkerElem(markerElem); err != nil {
 		t.Fatalf("processMarkerElem failed: %v", err)
 	}
 	if !d.eteFirstTSMarker {
 		t.Fatalf("expected eteFirstTSMarker to be set after TS marker")
 	}
 
-	if err := d.processTSCCEventElem(tsElem); err != ocsd.OK {
+	if err := d.processTSCCEventElem(tsElem); err != nil {
 		t.Fatalf("processTSCCEventElem post-marker failed: %v", err)
 	}
 	if got := d.outElem.NumElemToSend(); got != 2 {
@@ -124,7 +116,7 @@ func TestDecoderDecodePacketFuncRetV8M(t *testing.T) {
 	d.CurrPacketIn = &TracePacket{Type: PktFuncRet}
 	d.Base.IndexCurrPkt = 10
 
-	if err := d.decodePacket(); err != ocsd.OK {
+	if err := d.decodePacket(); err != nil {
 		t.Fatalf("decodePacket failed: %v", err)
 	}
 	if len(d.p0Stack) != 1 {

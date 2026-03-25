@@ -234,15 +234,15 @@ type TracePacket struct {
 	ErrHdrVal uint8
 
 	// intra-packet data - valid across packets.
-	VAddr                  ocsd.VAddr
-	VAddrISA               uint8
-	VAddrValidBits         uint8
-	VAddrPktBits           uint8
-	VAddrStack             [3]ocsd.VAddr
-	VAddrValidBitsStack    [3]uint8
-	VAddrPktBitsStack      [3]uint8
-	VAddrISAStack          [3]uint8
-	Context                Context
+	VAddr               ocsd.VAddr
+	VAddrISA            uint8
+	VAddrValidBits      uint8
+	VAddrPktBits        uint8
+	VAddrStack          [3]ocsd.VAddr
+	VAddrValidBitsStack [3]uint8
+	VAddrPktBitsStack   [3]uint8
+	VAddrISAStack       [3]uint8
+	Context             Context
 
 	Timestamp     uint64
 	TSBitsChanged uint8

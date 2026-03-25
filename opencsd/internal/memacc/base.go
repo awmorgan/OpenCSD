@@ -185,7 +185,7 @@ func (c *Cache) EnabledForSize(reqSize uint32) bool {
 	return c.enabled && reqSize <= uint32(c.pageSize)
 }
 
-func (c *Cache) SetCacheSizes(pageSize uint16, numPages int, errOnLimit bool) ocsd.Err {
+func (c *Cache) SetCacheSizes(pageSize uint16, numPages int, errOnLimit bool) error {
 	if pageSize < MinPageSize || pageSize > MaxPageSize || numPages < MinPages || numPages > MaxPages {
 		if errOnLimit {
 			return ocsd.ErrInvalidParamVal
@@ -206,7 +206,7 @@ func (c *Cache) SetCacheSizes(pageSize uint16, numPages int, errOnLimit bool) oc
 	if c.enabled {
 		c.createCaches()
 	}
-	return ocsd.OK
+	return nil
 }
 
 func (c *Cache) createCaches() {
@@ -267,7 +267,7 @@ func (c *Cache) Read(acc Accessor, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc
 	}
 
 	if !c.enabled {
-		return 0, ocsd.ToError(ocsd.ErrFail)
+		return 0, ocsd.ErrFail
 	}
 
 	bytesRead := uint32(0)
@@ -304,7 +304,7 @@ func (c *Cache) Read(acc Accessor, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc
 	read := acc.ReadBytes(pageBase, memSpace, trcID, avail, c.blocks[newIdx].Data)
 	if read > uint32(c.pageSize) {
 		c.blocks[newIdx].ValidLen = 0
-		return 0, ocsd.ToError(ocsd.ErrMemAccBadLen)
+		return 0, ocsd.ErrMemAccBadLen
 	}
 
 	c.blocks[newIdx].StAddr = pageBase

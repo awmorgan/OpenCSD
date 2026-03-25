@@ -11,22 +11,22 @@ type Mapper interface {
 	Read(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) (uint32, error)
 
 	// ReadTargetMemory reads bytes from the mapped memory accessors.
-	ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, numBytes *uint32, buffer []byte) ocsd.Err
+	ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, numBytes *uint32, buffer []byte) error
 
 	// InvalidateMemAccCache invalidates cache entries for a specific Trace ID.
 	InvalidateMemAccCache(trcID uint8)
 
 	// AddAccessor adds a new memory accessor to the mapper.
-	AddAccessor(accessor Accessor, trcID uint8) ocsd.Err
+	AddAccessor(accessor Accessor, trcID uint8) error
 
 	// RemoveAccessor removes a specific accessor.
-	RemoveAccessor(accessor Accessor) ocsd.Err
+	RemoveAccessor(accessor Accessor) error
 
 	// RemoveAllAccessors clears all accessors.
 	RemoveAllAccessors()
 
 	// EnableCaching controls memory access caching.
-	EnableCaching(enable bool) ocsd.Err
+	EnableCaching(enable bool) error
 }
 
 // GlobalMapper implements a global registry of memory accessors.
@@ -44,13 +44,13 @@ func NewGlobalMapper() *GlobalMapper {
 	}
 }
 
-func (m *GlobalMapper) EnableCaching(enable bool) ocsd.Err {
+func (m *GlobalMapper) EnableCaching(enable bool) error {
 	m.cache.EnableCaching(enable)
-	return ocsd.OK
+	return nil
 }
 
 // SetCacheSizes updates mapper cache page sizing limits.
-func (m *GlobalMapper) SetCacheSizes(pageSize uint16, numPages int, errOnLimit bool) ocsd.Err {
+func (m *GlobalMapper) SetCacheSizes(pageSize uint16, numPages int, errOnLimit bool) error {
 	return m.cache.SetCacheSizes(pageSize, numPages, errOnLimit)
 }
 
@@ -62,13 +62,13 @@ func (m *GlobalMapper) Read(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSp
 
 	bytesRead := reqBytes
 	err := m.ReadTargetMemory(address, trcID, memSpace, &bytesRead, buffer)
-	if err != ocsd.OK {
-		return 0, ocsd.ToError(err)
+	if err != nil {
+		return 0, err
 	}
 	return bytesRead, nil
 }
 
-func (m *GlobalMapper) ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, numBytes *uint32, buffer []byte) ocsd.Err {
+func (m *GlobalMapper) ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, numBytes *uint32, buffer []byte) error {
 	prevAcc := m.accCurr
 	found := m.findAccessor(address, memSpace, trcID)
 	if found && m.cache.Enabled() && prevAcc != nil && prevAcc != m.accCurr {
@@ -77,7 +77,7 @@ func (m *GlobalMapper) ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpac
 
 	if !found {
 		*numBytes = 0
-		return ocsd.OK // Or ErrMemNacc? C++ returns OCSD_OK but readBytes is 0.
+		return nil // Or ocsd.ErrMemNacc? C++ returns OCSD_OK but readBytes is 0.
 	}
 
 	// Read from cache if enabled
@@ -85,7 +85,7 @@ func (m *GlobalMapper) ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpac
 		readVal, err := m.cache.Read(m.accCurr, address, memSpace, trcID, *numBytes, buffer)
 		if err == nil {
 			*numBytes = readVal
-			return ocsd.OK
+			return nil
 		}
 		// Fallback to direct read if cache fails (though ReadBytesFromCache should have loaded it)
 	}
@@ -95,7 +95,7 @@ func (m *GlobalMapper) ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpac
 		return ocsd.ErrMemAccBadLen
 	}
 	*numBytes = read
-	return ocsd.OK
+	return nil
 }
 
 func (m *GlobalMapper) InvalidateMemAccCache(trcID uint8) {
@@ -104,7 +104,7 @@ func (m *GlobalMapper) InvalidateMemAccCache(trcID uint8) {
 	}
 }
 
-func (m *GlobalMapper) AddAccessor(accessor Accessor, trcID uint8) ocsd.Err {
+func (m *GlobalMapper) AddAccessor(accessor Accessor, trcID uint8) error {
 	if !accessor.ValidateRange() {
 		return ocsd.ErrMemAccRangeInvalid
 	}
@@ -117,10 +117,10 @@ func (m *GlobalMapper) AddAccessor(accessor Accessor, trcID uint8) ocsd.Err {
 	}
 
 	m.accessors = append(m.accessors, accessor)
-	return ocsd.OK
+	return nil
 }
 
-func (m *GlobalMapper) RemoveAccessor(accessor Accessor) ocsd.Err {
+func (m *GlobalMapper) RemoveAccessor(accessor Accessor) error {
 	for i, a := range m.accessors {
 		if a == accessor {
 			m.accessors = append(m.accessors[:i], m.accessors[i+1:]...)
@@ -130,7 +130,7 @@ func (m *GlobalMapper) RemoveAccessor(accessor Accessor) ocsd.Err {
 			if m.cache.Enabled() {
 				m.cache.InvalidateAll()
 			}
-			return ocsd.OK
+			return nil
 		}
 	}
 	return ocsd.ErrInvalidParamVal

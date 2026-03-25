@@ -18,7 +18,7 @@ const (
 
 // PktDecode converts incoming STM packets to generic output packets.
 type PktDecode struct {
-	Base common.DecoderBase
+	Base         common.DecoderBase
 	Config       *Config
 	CurrPacketIn *Packet
 
@@ -64,7 +64,7 @@ func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.Base.MemAccess 
 func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.Base.InstrDecode = dec }
 
 // ConfigureComponentOpMode delegates to Base.
-func (d *PktDecode) ConfigureComponentOpMode(flags uint32) ocsd.Err {
+func (d *PktDecode) ConfigureComponentOpMode(flags uint32) error {
 	return d.Base.ConfigureComponentOpMode(flags)
 }
 
@@ -75,27 +75,27 @@ func (d *PktDecode) ComponentOpMode() uint32 { return d.Base.ComponentOpMode() }
 func (d *PktDecode) SupportedOpModes() uint32 { return d.Base.SupportedOpModes() }
 
 // SetProtocolConfig sets the STM hardware configuration.
-func (d *PktDecode) SetProtocolConfig(config *Config) ocsd.Err {
+func (d *PktDecode) SetProtocolConfig(config *Config) error {
 	d.Config = config
 	if d.Config == nil {
 		return ocsd.ErrNotInit
 	}
 	d.csID = d.Config.TraceID()
 	d.Base.ConfigInitOK = true
-	return ocsd.OK
+	return nil
 }
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) ocsd.DatapathResp {
 	resp := ocsd.RespCont
 	if reason := d.Base.DecodeNotReadyReason(); reason != "" {
-		d.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrNotInit, "%s", reason))
+		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason))
 		return ocsd.RespFatalNotInit
 	}
 
 	switch op {
 	case ocsd.OpData:
 		if pktIn == nil {
-			d.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
+			d.Base.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			d.CurrPacketIn = pktIn
@@ -109,7 +109,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 	case ocsd.OpReset:
 		resp = d.OnReset()
 	default:
-		d.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
+		d.Base.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return resp

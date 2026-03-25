@@ -40,7 +40,7 @@ func NewBuiltinDecoderRegister() *DecoderRegister {
 	return reg
 }
 
-func (r *DecoderRegister) registerDecoderManagerByNameStatus(name string, mngr ocsd.DecoderManager) ocsd.Err {
+func (r *DecoderRegister) registerDecoderManagerByNameStatus(name string, mngr ocsd.DecoderManager) error {
 	if mngr == nil {
 		return ocsd.ErrInvalidParamVal
 	}
@@ -52,20 +52,20 @@ func (r *DecoderRegister) registerDecoderManagerByNameStatus(name string, mngr o
 	r.decoderManagers[name] = mngr
 	if mngr.Protocol() != ocsd.ProtocolUnknown {
 		if _, exists := r.typedManagers[mngr.Protocol()]; exists {
-			return ocsd.OK
+			return nil
 		}
 		r.typedManagers[mngr.Protocol()] = mngr
 	}
-	return ocsd.OK
+	return nil
 }
 
 // RegisterDecoderManagerByName registers a decoder manager factory under a specific name.
 func (r *DecoderRegister) RegisterDecoderManagerByName(name string, mngr ocsd.DecoderManager) error {
 	err := r.registerDecoderManagerByNameStatus(name, mngr)
-	if err == ocsd.OK {
+	if err == nil {
 		return nil
 	}
-	return fmt.Errorf("%w: %q (ocsd err %d)", ErrDecoderRegistration, name, uint32(err))
+	return fmt.Errorf("%w: %q (%v)", ErrDecoderRegistration, name, err)
 }
 
 // Register registers a decoder manager and returns a Go error.
@@ -73,11 +73,11 @@ func (r *DecoderRegister) Register(name string, mngr ocsd.DecoderManager) error 
 	return r.RegisterDecoderManagerByName(name, mngr)
 }
 
-func (r *DecoderRegister) decoderManagerByNameStatus(name string) (ocsd.DecoderManager, ocsd.Err) {
+func (r *DecoderRegister) decoderManagerByNameStatus(name string) (ocsd.DecoderManager, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if mngr, exists := r.decoderManagers[name]; exists {
-		return mngr, ocsd.OK
+		return mngr, nil
 	}
 	return nil, ocsd.ErrDcdregNameUnknown
 }
@@ -85,17 +85,17 @@ func (r *DecoderRegister) decoderManagerByNameStatus(name string) (ocsd.DecoderM
 // DecoderManagerByName retrieves a decoder manager by name and returns a Go error.
 func (r *DecoderRegister) DecoderManagerByName(name string) (ocsd.DecoderManager, error) {
 	mngr, err := r.decoderManagerByNameStatus(name)
-	if err == ocsd.OK {
+	if err == nil {
 		return mngr, nil
 	}
-	return nil, fmt.Errorf("%w: %q (ocsd err %d)", ErrDecoderManagerNotFound, name, uint32(err))
+	return nil, fmt.Errorf("%w: %q (%v)", ErrDecoderManagerNotFound, name, err)
 }
 
-func (r *DecoderRegister) decoderManagerByTypeStatus(dcdType ocsd.TraceProtocol) (ocsd.DecoderManager, ocsd.Err) {
+func (r *DecoderRegister) decoderManagerByTypeStatus(dcdType ocsd.TraceProtocol) (ocsd.DecoderManager, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if mngr, exists := r.typedManagers[dcdType]; exists {
-		return mngr, ocsd.OK
+		return mngr, nil
 	}
 	return nil, ocsd.ErrDcdregTypeUnknown
 }
@@ -103,10 +103,10 @@ func (r *DecoderRegister) decoderManagerByTypeStatus(dcdType ocsd.TraceProtocol)
 // DecoderManagerByType retrieves a decoder manager by protocol and returns a Go error.
 func (r *DecoderRegister) DecoderManagerByType(dcdType ocsd.TraceProtocol) (ocsd.DecoderManager, error) {
 	mngr, err := r.decoderManagerByTypeStatus(dcdType)
-	if err == ocsd.OK {
+	if err == nil {
 		return mngr, nil
 	}
-	return nil, fmt.Errorf("%w: protocol %v (ocsd err %d)", ErrDecoderManagerNotFound, dcdType, uint32(err))
+	return nil, fmt.Errorf("%w: protocol %v (%v)", ErrDecoderManagerNotFound, dcdType, err)
 }
 
 // NextCustomProtocolID allocates the next custom protocol ID.

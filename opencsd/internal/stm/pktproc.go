@@ -1,6 +1,7 @@
 package stm
 
 import (
+	"errors"
 	"fmt"
 
 	"opencsd/internal/common"
@@ -135,7 +136,7 @@ func (p *PktProc) SetPktOut(out ocsd.PacketProcessor[Packet]) { p.PktOutI = out 
 func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor[Packet]) { p.PktRawMonI = mon }
 
 // ConfigureComponentOpMode delegates to Base.
-func (p *PktProc) ConfigureComponentOpMode(flags uint32) ocsd.Err {
+func (p *PktProc) ConfigureComponentOpMode(flags uint32) error {
 	return p.Base.ConfigureComponentOpMode(flags)
 }
 
@@ -170,7 +171,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 	switch op {
 	case ocsd.OpData:
 		if len(dataBlock) == 0 {
-			p.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor: Zero length data block error"))
+			p.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Packet Processor: Zero length data block error", ocsd.ErrInvalidParamVal))
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			processed, resp, err = p.ProcessData(index, dataBlock)
@@ -199,7 +200,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			rawMon.RawPacketDataMon(ocsd.OpReset, index, nil, nil)
 		}
 	default:
-		p.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
+		p.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Packet Processor : Unknown Datapath operation", ocsd.ErrInvalidParamVal))
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return processed, resp, err
@@ -265,13 +266,8 @@ func (p *PktProc) handleProcError(err error) (resp ocsd.DatapathResp, outErr err
 		return ocsd.RespCont, nil, false
 	}
 
-	e, ok := err.(*common.Error)
-	if !ok {
-		return ocsd.RespFatalInvalidData, err, true
-	}
-
-	p.Base.LogError(e)
-	if (e.Code == ocsd.ErrBadPacketSeq || e.Code == ocsd.ErrInvalidPcktHdr) &&
+	p.Base.LogError(ocsd.ErrSevError, err)
+	if (errors.Is(err, ocsd.ErrBadPacketSeq) || errors.Is(err, ocsd.ErrInvalidPcktHdr)) &&
 		(p.Base.ComponentOpMode()&ocsd.OpflgPktprocErrBadPkts) == 0 {
 		resp = p.outputPacket()
 		if (p.Base.ComponentOpMode() & ocsd.OpflgPktprocUnsyncOnBadPkts) != 0 {
@@ -300,9 +296,9 @@ func (p *PktProc) OnFlush() ocsd.DatapathResp {
 	return ocsd.RespCont
 }
 
-func (p *PktProc) SetProtocolConfig(config *Config) ocsd.Err {
+func (p *PktProc) SetProtocolConfig(config *Config) error {
 	p.Config = config
-	return ocsd.OK
+	return nil
 }
 
 func (p *PktProc) IsBadPacket() bool {
@@ -328,28 +324,14 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 // Callers must return immediately after calling this.
 func (p *PktProc) setBadSequenceError(msg string) error {
 	p.currPacket.UpdateErrType(PktBadSequence)
-	trcID := uint8(0)
-	if p.Config != nil {
-		trcID = p.Config.TraceID()
-	}
-	e := common.Errorf(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "%s", msg)
-	e.Idx = p.packetIndex
-	e.ChanID = trcID
-	return e
+	return fmt.Errorf("%w: %s", ocsd.ErrBadPacketSeq, msg)
 }
 
 // setReservedHdrError records a reserved-header error on the processor.
 // Callers must return immediately after calling this.
 func (p *PktProc) setReservedHdrError(msg string) error {
 	p.currPacket.SetPacketType(PktReserved, false)
-	trcID := uint8(0)
-	if p.Config != nil {
-		trcID = p.Config.TraceID()
-	}
-	e := common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, "%s", msg)
-	e.Idx = p.packetIndex
-	e.ChanID = trcID
-	return e
+	return fmt.Errorf("%w: %s", ocsd.ErrInvalidPcktHdr, msg)
 }
 
 func (p *PktProc) resetProcessorState() {
@@ -456,7 +438,6 @@ func (p *PktProc) runDecodeAction() error {
 	default:
 		return p.setBadSequenceError("STM decode action not set")
 	}
-	return nil
 }
 
 func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {

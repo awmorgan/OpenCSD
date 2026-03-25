@@ -118,17 +118,7 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 
 // CreateFullDecoder creates a full decoder within the tree for a generic trace config.
 func (dt *DecodeTree) CreateFullDecoder(decoderName string, config any) error {
-	return dt.createDecoder(decoderName, config, true)
-}
-
-// CreateFullDecoderStatus creates a full decoder and returns legacy ocsd.Err status code.
-func (dt *DecodeTree) CreateFullDecoderStatus(decoderName string, config any) ocsd.Err {
-	return ocsd.AsErr(dt.CreateFullDecoder(decoderName, config))
-}
-
-// CreateFullDecoderError creates a full decoder and returns a Go error.
-func (dt *DecodeTree) CreateFullDecoderError(decoderName string, config any) error {
-	err := dt.CreateFullDecoder(decoderName, config)
+	err := dt.createDecoder(decoderName, config, true)
 	if err == nil {
 		return nil
 	}
@@ -137,17 +127,7 @@ func (dt *DecodeTree) CreateFullDecoderError(decoderName string, config any) err
 
 // CreatePacketProcessor creates a packet processor within the tree for a generic trace config.
 func (dt *DecodeTree) CreatePacketProcessor(decoderName string, config any) error {
-	return dt.createDecoder(decoderName, config, false)
-}
-
-// CreatePacketProcessorStatus creates a packet processor and returns legacy ocsd.Err status code.
-func (dt *DecodeTree) CreatePacketProcessorStatus(decoderName string, config any) ocsd.Err {
-	return ocsd.AsErr(dt.CreatePacketProcessor(decoderName, config))
-}
-
-// CreatePacketProcessorError creates a packet processor and returns a Go error.
-func (dt *DecodeTree) CreatePacketProcessorError(decoderName string, config any) error {
-	err := dt.CreatePacketProcessor(decoderName, config)
+	err := dt.createDecoder(decoderName, config, false)
 	if err == nil {
 		return nil
 	}
@@ -157,7 +137,7 @@ func (dt *DecodeTree) CreatePacketProcessorError(decoderName string, config any)
 func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder bool) error {
 	registry := dt.registry
 	if registry == nil {
-		return ocsd.ToError(ocsd.ErrNotInit)
+		return ocsd.ErrNotInit
 	}
 
 	manager, err := registry.DecoderManagerByName(decoderName)
@@ -171,7 +151,7 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 	}
 
 	if _, exists := dt.decodeElements[routeID]; exists {
-		return ocsd.ToError(ocsd.ErrAttachTooMany)
+		return ocsd.ErrAttachTooMany
 	}
 
 	var pktIn ocsd.TrcDataProcessor
@@ -192,7 +172,7 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 	}
 
 	if handle == nil {
-		return ocsd.ToError(ocsd.ErrFail)
+		return ocsd.ErrFail
 	}
 
 	elem := NewDecodeTreeElement(decoderName, manager, handle, pktIn, true)
@@ -209,7 +189,7 @@ func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder 
 func (dt *DecodeTree) routeIDFromConfig(config any) (uint8, error) {
 	cfg, ok := config.(traceIDConfig)
 	if !ok {
-		return 0, ocsd.ToError(ocsd.ErrInvalidParamType)
+		return 0, ocsd.ErrInvalidParamType
 	}
 
 	routeID := cfg.TraceID()
@@ -217,7 +197,7 @@ func (dt *DecodeTree) routeIDFromConfig(config any) (uint8, error) {
 		routeID = 0
 	}
 	if routeID >= 0x80 {
-		return 0, ocsd.ToError(ocsd.ErrInvalidID)
+		return 0, ocsd.ErrInvalidID
 	}
 	return routeID, nil
 }
