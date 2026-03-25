@@ -22,7 +22,10 @@ const asyncSize = 6
 // PktProc implements the ETMv3 packet processor.
 // Ported from trc_pkt_proc_etmv3_impl.cpp
 type PktProc struct {
-	*common.PktProcBase[Packet, PktType, Config]
+	Base       common.ProcBase
+	Config     *Config
+	PktOutI    ocsd.PacketProcessor[Packet]
+	PktRawMonI ocsd.PacketMonitor[Packet]
 
 	processState processState
 
@@ -52,17 +55,53 @@ type PktProc struct {
 // NewPktProc creates a new ETMv3 packet processor
 func NewPktProc(cfg *Config, logger ocsd.Logger) *PktProc {
 	p := &PktProc{}
-	p.PktProcBase = &common.PktProcBase[Packet, PktType, Config]{}
 	instID := 0
 	if cfg != nil {
 		instID = int(cfg.TraceID())
 	}
-	p.ConfigurePktProcBase(fmt.Sprintf("%s_%d", "PKTP_ETMV3", instID), logger)
+	p.Base.Init(fmt.Sprintf("%s_%d", "PKTP_ETMV3", instID), logger)
 	p.resetProcessorState()
 	if cfg != nil {
 		_ = p.SetProtocolConfig(cfg)
 	}
 	return p
+}
+
+// SetPktOut attaches the downstream packet decoder.
+func (p *PktProc) SetPktOut(out ocsd.PacketProcessor[Packet]) { p.PktOutI = out }
+
+// PktOut returns the downstream packet processor.
+func (p *PktProc) PktOut() ocsd.PacketProcessor[Packet] { return p.PktOutI }
+
+// SetPktRawMonitor attaches a raw packet monitor.
+func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor[Packet]) { p.PktRawMonI = mon }
+
+// ConfigureComponentOpMode delegates to Base.
+func (p *PktProc) ConfigureComponentOpMode(flags uint32) ocsd.Err {
+	return p.Base.ConfigureComponentOpMode(flags)
+}
+
+// ComponentOpMode delegates to Base.
+func (p *PktProc) ComponentOpMode() uint32 { return p.Base.ComponentOpMode() }
+
+func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) ocsd.DatapathResp {
+	if p.PktOutI != nil {
+		return p.PktOutI.PacketDataIn(ocsd.OpData, indexSOP, pkt)
+	}
+	return ocsd.RespCont
+}
+
+func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, pData []byte) {
+	if p.PktRawMonI != nil && len(pData) > 0 {
+		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, indexSOP, pkt, pData)
+	}
+}
+
+func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pktType PktType, pktData []byte) ocsd.DatapathResp {
+	if len(pktData) > 0 {
+		p.outputRawPacketToMonitor(indexSOP, pkt, pktData)
+	}
+	return p.outputDecodedPacket(indexSOP, pkt)
 }
 
 func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
@@ -73,36 +112,36 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 	switch op {
 	case ocsd.OpData:
 		if len(dataBlock) == 0 {
-			p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor: Zero length data block error"))
+			p.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor: Zero length data block error"))
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			processed, resp, err = p.ProcessData(index, dataBlock)
 		}
 	case ocsd.OpEOT:
 		resp = p.OnEOT()
-		if out := p.PktOut(); out != nil && !ocsd.DataRespIsFatal(resp) {
+		if out := p.PktOutI; out != nil && !ocsd.DataRespIsFatal(resp) {
 			resp = out.PacketDataIn(ocsd.OpEOT, 0, nil)
 		}
-		if rawMon := p.PktRawMonitor(); rawMon != nil {
+		if rawMon := p.PktRawMonI; rawMon != nil {
 			rawMon.RawPacketDataMon(ocsd.OpEOT, 0, nil, nil)
 		}
 	case ocsd.OpFlush:
 		resp = p.OnFlush()
-		if out := p.PktOut(); ocsd.DataRespIsCont(resp) && out != nil {
+		if out := p.PktOutI; ocsd.DataRespIsCont(resp) && out != nil {
 			resp = out.PacketDataIn(ocsd.OpFlush, 0, nil)
 		}
 	case ocsd.OpReset:
-		if out := p.PktOut(); out != nil {
+		if out := p.PktOutI; out != nil {
 			resp = out.PacketDataIn(ocsd.OpReset, index, nil)
 		}
 		if !ocsd.DataRespIsFatal(resp) {
 			resp = p.OnReset()
 		}
-		if rawMon := p.PktRawMonitor(); rawMon != nil {
+		if rawMon := p.PktRawMonI; rawMon != nil {
 			rawMon.RawPacketDataMon(ocsd.OpReset, index, nil, nil)
 		}
 	default:
-		p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
+		p.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return processed, resp, err
@@ -584,15 +623,15 @@ func (p *PktProc) processPayloadByte(by uint8) {
 		p.processState = sendPkt
 	default:
 		p.processState = procErr
-		p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrPktInterpFail, "Interpreter failed - cannot process payload for unexpected or unsupported packet."))
+		p.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrPktInterpFail, "Interpreter failed - cannot process payload for unexpected or unsupported packet."))
 	}
 }
 
 func (p *PktProc) outputPacket() ocsd.DatapathResp {
-	dpResp := ocsd.RespFatalNotInit
+	var dpResp ocsd.DatapathResp
 	if true { // assuming p.isInit=true conceptually
 		if !p.bSendPartPkt {
-			dpResp = p.OutputOnAllInterfaces(p.packetIndex, &p.currPacket, p.currPacket.Type, p.currPacketData)
+			dpResp = p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, p.currPacket.Type, p.currPacketData)
 			if p.bStreamSync {
 				p.processState = procHdr
 			} else {
@@ -600,7 +639,7 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 			}
 			p.currPacketData = p.currPacketData[:0]
 		} else {
-			dpResp = p.OutputOnAllInterfaces(p.packetIndex, &p.currPacket, p.currPacket.Type, p.partPktData)
+			dpResp = p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, p.currPacket.Type, p.partPktData)
 			p.processState = p.postPartPktState
 			p.packetIndex += ocsd.TrcIndex(len(p.partPktData))
 			p.bSendPartPkt = false
@@ -1103,10 +1142,10 @@ func (p *PktProc) extractTimestamp() (val uint64, tsBits uint8) {
 
 func (p *PktProc) throwPacketHeaderErr(msg string) {
 	p.processState = procErr
-	p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, "%v", msg))
+	p.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidPcktHdr, "%v", msg))
 }
 
 func (p *PktProc) throwMalformedPacketErr(msg string) {
 	p.processState = procErr
-	p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "%v", msg))
+	p.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "%v", msg))
 }

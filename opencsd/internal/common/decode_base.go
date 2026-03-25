@@ -23,350 +23,234 @@ type TrcPktIndexer[Pt any] interface {
 	TracePktIndex(indexSOP ocsd.TrcIndex, pktType Pt)
 }
 
-// PktDecodeI represents TrcPktDecodeI.
-type PktDecodeI struct {
-	name             string
-	opFlags          uint32
-	supportedOpFlags uint32
-	logger           ocsd.Logger
-	errVerbosity     ocsd.ErrSeverity
+// DecoderBase holds the shared state for a packet decoder.
+// Concrete decoders hold it as a named field (e.g. Base DecoderBase) and
+// call its methods explicitly — no embedding, no promoted method surface.
+type DecoderBase struct {
+	Name             string
+	Logger           ocsd.Logger
+	ErrVerbosity     ocsd.ErrSeverity
+	OpFlags          uint32
+	SupportedOpFlags uint32
 
 	TraceElemOut ocsd.GenElemProcessor
 	MemAccess    TargetMemAccess
 	InstrDecode  InstrDecode
 
-	IndexCurrPkt ocsd.TrcIndex
-
+	IndexCurrPkt  ocsd.TrcIndex
 	ConfigInitOK  bool
-	usesMemAccess bool
-	usesIDecode   bool
+	UsesMemAccess bool
+	UsesIDecode   bool
 }
 
-func (p *PktDecodeI) Init(name string, logger ocsd.Logger) {
-	p.name = name
-	p.logger = logger
-	p.errVerbosity = ocsd.ErrSevNone
-	p.usesMemAccess = true
-	p.usesIDecode = true
+// Init sets up the DecoderBase with a component name and optional logger.
+func (b *DecoderBase) Init(name string, logger ocsd.Logger) {
+	b.Name = name
+	b.Logger = logger
+	b.ErrVerbosity = ocsd.ErrSevNone
+	b.UsesMemAccess = true
+	b.UsesIDecode = true
 }
 
-func (p *PktDecodeI) ComponentName() string { return p.name }
-
-func (p *PktDecodeI) ConfigureComponentOpMode(opFlags uint32) ocsd.Err {
-	p.opFlags = opFlags & p.supportedOpFlags
-	return ocsd.OK
-}
-
-func (p *PktDecodeI) ComponentOpMode() uint32 { return p.opFlags }
-
-func (p *PktDecodeI) SupportedOpModes() uint32 { return p.supportedOpFlags }
-
-func (p *PktDecodeI) ConfigureSupportedOpModes(flags uint32) { p.supportedOpFlags = flags }
-
-func (p *PktDecodeI) AttachErrorLogger(logger ocsd.Logger) ocsd.Err {
-	if p.logger != nil {
-		return ocsd.ErrAttachTooMany
-	}
-	p.logger = logger
-	return ocsd.OK
-}
-
-func (p *PktDecodeI) DetachErrorLogger() ocsd.Err {
-	if p.logger == nil {
-		return ocsd.ErrAttachCompNotFound
-	}
-	p.logger = nil
-	return ocsd.OK
-}
-
-func (p *PktDecodeI) LogDefMessage(msg string) { p.LogMessage(p.errVerbosity, msg) }
-
-func (p *PktDecodeI) LogError(err *Error) {
+// LogError logs an error if the logger is set and the severity threshold is met.
+func (b *DecoderBase) LogError(err *Error) {
 	if err == nil {
 		return
 	}
-	if p.logger != nil && p.IsLoggingErrorLevel(err.Sev) {
-		p.logger.LogError(err.Sev, err)
+	if b.Logger != nil && b.IsLoggingErrorLevel(err.Sev) {
+		b.Logger.LogError(err.Sev, err)
 	}
 }
 
-func (p *PktDecodeI) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
-	if filterLevel <= p.errVerbosity && p.logger != nil {
-		p.logger.LogMessage(filterLevel, msg)
+// LogMessage logs a message at the given severity level.
+func (b *DecoderBase) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
+	if filterLevel <= b.ErrVerbosity && b.Logger != nil {
+		b.Logger.LogMessage(filterLevel, msg)
 	}
 }
 
-func (p *PktDecodeI) ErrorLogLevel() ocsd.ErrSeverity { return p.errVerbosity }
-
-func (p *PktDecodeI) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
-	return level <= p.errVerbosity
+// IsLoggingErrorLevel reports whether errors at the given severity should be logged.
+func (b *DecoderBase) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
+	return level <= b.ErrVerbosity
 }
 
-func (p *PktDecodeI) ConfigureErrorLogLevel(level ocsd.ErrSeverity) {
-	p.errVerbosity = level
+// ConfigureComponentOpMode applies opFlags masked to the supported set.
+func (b *DecoderBase) ConfigureComponentOpMode(opFlags uint32) ocsd.Err {
+	b.OpFlags = opFlags & b.SupportedOpFlags
+	return ocsd.OK
 }
 
-func (p *PktDecodeI) SetTraceElemOut(out ocsd.GenElemProcessor) {
-	p.TraceElemOut = out
+// ComponentOpMode returns the current operational mode flags.
+func (b *DecoderBase) ComponentOpMode() uint32 { return b.OpFlags }
+
+// SupportedOpModes returns the supported operational mode bitmask.
+func (b *DecoderBase) SupportedOpModes() uint32 { return b.SupportedOpFlags }
+
+// ConfigureSupportedOpModes sets which op-mode flags this decoder supports.
+func (b *DecoderBase) ConfigureSupportedOpModes(flags uint32) { b.SupportedOpFlags = flags }
+
+// OutputTraceElement sends an element to the downstream consumer using IndexCurrPkt.
+func (b *DecoderBase) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
+	if b.TraceElemOut != nil {
+		return b.TraceElemOut.TraceElemIn(b.IndexCurrPkt, traceID, elem)
+	}
+	return ocsd.RespFatalNotInit
 }
 
-func (p *PktDecodeI) TraceElemOutIf() ocsd.GenElemProcessor {
-	return p.TraceElemOut
+// OutputTraceElementIdx sends an element to the downstream consumer at an explicit index.
+func (b *DecoderBase) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
+	if b.TraceElemOut != nil {
+		return b.TraceElemOut.TraceElemIn(idx, traceID, elem)
+	}
+	return ocsd.RespFatalNotInit
 }
 
-func (p *PktDecodeI) SetMemAccess(mem TargetMemAccess) {
-	p.MemAccess = mem
-}
-
-func (p *PktDecodeI) MemAccessIf() TargetMemAccess {
-	return p.MemAccess
-}
-
-func (p *PktDecodeI) SetInstrDecode(decoder InstrDecode) {
-	p.InstrDecode = decoder
-}
-
-func (p *PktDecodeI) InstrDecodeIf() InstrDecode {
-	return p.InstrDecode
-}
-
-func (p *PktDecodeI) SetNeedsMemAccess(needs bool) { p.usesMemAccess = needs }
-func (p *PktDecodeI) NeedsMemAccess() bool         { return p.usesMemAccess }
-
-func (p *PktDecodeI) SetNeedsInstructionDecode(needs bool) { p.usesIDecode = needs }
-func (p *PktDecodeI) NeedsInstructionDecode() bool         { return p.usesIDecode }
-
-func (p *PktDecodeI) DecodeNotReadyReason() string {
-	if !p.ConfigInitOK {
+// DecodeNotReadyReason returns a human-readable explanation of why the decoder is not
+// ready, or an empty string if the decoder is ready to process packets.
+func (b *DecoderBase) DecodeNotReadyReason() string {
+	if !b.ConfigInitOK {
 		return "No decoder configuration information"
 	}
-	if p.TraceElemOutIf() == nil {
+	if b.TraceElemOut == nil {
 		return "No element output interface attached and enabled"
 	}
-	if p.usesMemAccess && p.MemAccessIf() == nil {
+	if b.UsesMemAccess && b.MemAccess == nil {
 		return "No memory access interface attached and enabled"
 	}
-	if p.usesIDecode && p.InstrDecodeIf() == nil {
+	if b.UsesIDecode && b.InstrDecode == nil {
 		return "No instruction decoder interface attached and enabled"
 	}
-
 	return ""
 }
 
-func (p *PktDecodeI) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
-	if out := p.TraceElemOutIf(); out != nil {
-		return out.TraceElemIn(p.IndexCurrPkt, traceID, elem)
-	}
-	return ocsd.RespFatalNotInit
-}
-
-func (p *PktDecodeI) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
-	if out := p.TraceElemOutIf(); out != nil {
-		return out.TraceElemIn(idx, traceID, elem)
-	}
-	return ocsd.RespFatalNotInit
-}
-
-func (p *PktDecodeI) InstrDecodeCall(instrInfo *ocsd.InstrInfo) ocsd.Err {
-	if p.usesIDecode {
-		if decoder := p.InstrDecodeIf(); decoder != nil {
-			return decoder.DecodeInstruction(instrInfo)
-		}
-	}
-	return ocsd.ErrDcdInterfaceUnused
-}
-
-func (p *PktDecodeI) AccessMemory(address ocsd.VAddr, traceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
-	if p.usesMemAccess {
-		if mem := p.MemAccessIf(); mem != nil {
-			return mem.ReadTargetMemory(address, traceID, memSpace, reqBytes)
+// AccessMemory reads target memory via the attached TargetMemAccess interface.
+func (b *DecoderBase) AccessMemory(address ocsd.VAddr, traceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, ocsd.Err) {
+	if b.UsesMemAccess {
+		if b.MemAccess != nil {
+			return b.MemAccess.ReadTargetMemory(address, traceID, memSpace, reqBytes)
 		}
 	}
 	return 0, nil, ocsd.ErrDcdInterfaceUnused
 }
 
-func (p *PktDecodeI) InvalidateMemAccCache(traceID uint8) ocsd.Err {
-	if !p.usesMemAccess {
+// InstrDecodeCall calls the attached instruction decoder.
+func (b *DecoderBase) InstrDecodeCall(instrInfo *ocsd.InstrInfo) ocsd.Err {
+	if b.UsesIDecode {
+		if b.InstrDecode != nil {
+			return b.InstrDecode.DecodeInstruction(instrInfo)
+		}
+	}
+	return ocsd.ErrDcdInterfaceUnused
+}
+
+// InvalidateMemAccCache invalidates the memory access cache for the given trace ID.
+func (b *DecoderBase) InvalidateMemAccCache(traceID uint8) ocsd.Err {
+	if !b.UsesMemAccess {
 		return ocsd.ErrDcdInterfaceUnused
 	}
-	if mem := p.MemAccessIf(); mem != nil {
-		mem.InvalidateMemAccCache(traceID)
+	if b.MemAccess != nil {
+		b.MemAccess.InvalidateMemAccCache(traceID)
 	}
 	return ocsd.OK
 }
 
-// PktProcI represents TrcPktProcI.
-type PktProcI struct {
-	name             string
-	opFlags          uint32
-	supportedOpFlags uint32
-	logger           ocsd.Logger
-	errVerbosity     ocsd.ErrSeverity
+// ProcBase holds the shared state for a packet processor.
+// Concrete processors hold it as a named field and call its methods explicitly.
+type ProcBase struct {
+	Name             string
+	Logger           ocsd.Logger
+	ErrVerbosity     ocsd.ErrSeverity
+	OpFlags          uint32
+	SupportedOpFlags uint32
+
+	PktOutI    any // ocsd.PacketProcessor[P] stored as any; processors access it via their own typed field
+	PktRawMonI any // ocsd.PacketMonitor[P] stored as any; same
+
+	Stats     ocsd.DecodeStats
+	statsInit bool
 }
 
-func (p *PktProcI) Init(name string, logger ocsd.Logger) {
-	p.name = name
-	p.logger = logger
-	p.errVerbosity = ocsd.ErrSevNone
+// Init sets up the ProcBase.
+func (b *ProcBase) Init(name string, logger ocsd.Logger) {
+	b.Name = name
+	b.Logger = logger
+	b.ErrVerbosity = ocsd.ErrSevNone
+	b.ResetStats()
 }
 
-func (p *PktProcI) ComponentName() string { return p.name }
-
-func (p *PktProcI) ConfigureComponentOpMode(opFlags uint32) ocsd.Err {
-	p.opFlags = opFlags & p.supportedOpFlags
-	return ocsd.OK
-}
-
-func (p *PktProcI) ComponentOpMode() uint32 { return p.opFlags }
-
-func (p *PktProcI) SupportedOpModes() uint32 { return p.supportedOpFlags }
-
-func (p *PktProcI) ConfigureSupportedOpModes(flags uint32) { p.supportedOpFlags = flags }
-
-func (p *PktProcI) AttachErrorLogger(logger ocsd.Logger) ocsd.Err {
-	if p.logger != nil {
-		return ocsd.ErrAttachTooMany
-	}
-	p.logger = logger
-	return ocsd.OK
-}
-
-func (p *PktProcI) DetachErrorLogger() ocsd.Err {
-	if p.logger == nil {
-		return ocsd.ErrAttachCompNotFound
-	}
-	p.logger = nil
-	return ocsd.OK
-}
-
-func (p *PktProcI) LogDefMessage(msg string) { p.LogMessage(p.errVerbosity, msg) }
-
-func (p *PktProcI) LogError(err *Error) {
+// LogError logs an error if the logger is set and severity threshold is met.
+func (b *ProcBase) LogError(err *Error) {
 	if err == nil {
 		return
 	}
-	if p.logger != nil && p.IsLoggingErrorLevel(err.Sev) {
-		p.logger.LogError(err.Sev, err)
+	if b.Logger != nil && b.IsLoggingErrorLevel(err.Sev) {
+		b.Logger.LogError(err.Sev, err)
 	}
 }
 
-func (p *PktProcI) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
-	if filterLevel <= p.errVerbosity && p.logger != nil {
-		p.logger.LogMessage(filterLevel, msg)
+// LogMessage logs a message at the given severity level.
+func (b *ProcBase) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
+	if filterLevel <= b.ErrVerbosity && b.Logger != nil {
+		b.Logger.LogMessage(filterLevel, msg)
 	}
 }
 
-func (p *PktProcI) ErrorLogLevel() ocsd.ErrSeverity { return p.errVerbosity }
-
-func (p *PktProcI) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
-	return level <= p.errVerbosity
+// IsLoggingErrorLevel reports whether errors at the given severity should be logged.
+func (b *ProcBase) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
+	return level <= b.ErrVerbosity
 }
 
-func (p *PktProcI) ConfigureErrorLogLevel(level ocsd.ErrSeverity) {
-	p.errVerbosity = level
+// ConfigureComponentOpMode applies opFlags masked to the supported set.
+func (b *ProcBase) ConfigureComponentOpMode(opFlags uint32) ocsd.Err {
+	b.OpFlags = opFlags & b.SupportedOpFlags
+	return ocsd.OK
 }
 
-// PktProcBase represents TrcPktProcBase<P, Pt, Pc>.
-type PktProcBase[P any, Pt any, Pc any] struct {
-	PktProcI
-	Config      *Pc
-	PktOutI     ocsd.PacketProcessor[P]
-	PktRawMonI  ocsd.PacketMonitor[P]
-	PktIndexerI TrcPktIndexer[Pt]
-	Stats       ocsd.DecodeStats
-	statsInit   bool
-}
+// ComponentOpMode returns the current operational mode flags.
+func (b *ProcBase) ComponentOpMode() uint32 { return b.OpFlags }
 
-func (pb *PktProcBase[P, Pt, Pc]) ConfigurePktProcBase(name string, logger ocsd.Logger) {
-	pb.PktProcI.Init(name, logger)
-	pb.ResetStats()
-}
+// SupportedOpModes returns the supported operational mode bitmask.
+func (b *ProcBase) SupportedOpModes() uint32 { return b.SupportedOpFlags }
 
-func (pb *PktProcBase[P, Pt, Pc]) SetPktOut(out ocsd.PacketProcessor[P]) {
-	pb.PktOutI = out
-}
+// ConfigureSupportedOpModes sets which op-mode flags this processor supports.
+func (b *ProcBase) ConfigureSupportedOpModes(flags uint32) { b.SupportedOpFlags = flags }
 
-func (pb *PktProcBase[P, Pt, Pc]) PktOut() ocsd.PacketProcessor[P] {
-	return pb.PktOutI
-}
-
-func (pb *PktProcBase[P, Pt, Pc]) SetPktRawMonitor(mon ocsd.PacketMonitor[P]) {
-	pb.PktRawMonI = mon
-}
-
-func (pb *PktProcBase[P, Pt, Pc]) PktRawMonitor() ocsd.PacketMonitor[P] {
-	return pb.PktRawMonI
-}
-
-func (pb *PktProcBase[P, Pt, Pc]) SetPktIndexer(indexer TrcPktIndexer[Pt]) {
-	pb.PktIndexerI = indexer
-}
-
-func (pb *PktProcBase[P, Pt, Pc]) PktIndexer() TrcPktIndexer[Pt] {
-	return pb.PktIndexerI
-}
-
-func (pb *PktProcBase[P, Pt, Pc]) OutputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *P) ocsd.DatapathResp {
-	resp := ocsd.RespCont
-
-	if out := pb.PktOut(); out != nil {
-		resp = out.PacketDataIn(ocsd.OpData, indexSOP, pkt)
+// StatsBlock returns the decode statistics, or ErrNotInit if stats were never initialized.
+func (b *ProcBase) StatsBlock() (*ocsd.DecodeStats, ocsd.Err) {
+	if !b.statsInit {
+		return &b.Stats, ocsd.ErrNotInit
 	}
-	return resp
+	return &b.Stats, ocsd.OK
 }
 
-func (pb *PktProcBase[P, Pt, Pc]) OutputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *P, pData []byte) {
-	if len(pData) == 0 {
-		return
-	}
-	if rawMon := pb.PktRawMonitor(); rawMon != nil {
-		rawMon.RawPacketDataMon(ocsd.OpData, indexSOP, pkt, pData)
-	}
+// HasRawMon reports whether a raw packet monitor has been attached.
+// Processors call this to check the PktRawMonI field directly.
+func (b *ProcBase) HasRawMon() bool { return b.PktRawMonI != nil }
+
+// ResetStats zeroes all decode statistics fields.
+func (b *ProcBase) ResetStats() {
+	b.Stats.Version = ocsd.VerNum
+	b.Stats.Revision = ocsd.StatsRevision
+	b.Stats.ChannelTotal = 0
+	b.Stats.ChannelUnsynced = 0
+	b.Stats.BadHeaderErrs = 0
+	b.Stats.BadSequenceErrs = 0
+	b.Stats.Demux.FrameBytes = 0
+	b.Stats.Demux.NoIDBytes = 0
+	b.Stats.Demux.ValidIDBytes = 0
 }
 
-func (pb *PktProcBase[P, Pt, Pc]) IndexPacket(indexSOP ocsd.TrcIndex, pktType Pt) {
-	if indexer := pb.PktIndexer(); indexer != nil {
-		indexer.TracePktIndex(indexSOP, pktType)
-	}
-}
+// StatsInit marks the statistics block as initialized.
+func (b *ProcBase) StatsInit() { b.statsInit = true }
 
-func (pb *PktProcBase[P, Pt, Pc]) OutputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *P, pktType Pt, pktData []byte) ocsd.DatapathResp {
-	pb.IndexPacket(indexSOP, pktType)
-	if len(pktData) > 0 {
-		pb.OutputRawPacketToMonitor(indexSOP, pkt, pktData)
-	}
-	return pb.OutputDecodedPacket(indexSOP, pkt)
-}
+// StatsAddTotalCount adds to the total channel bytes counter.
+func (b *ProcBase) StatsAddTotalCount(count uint64) { b.Stats.ChannelTotal += count }
 
-func (pb *PktProcBase[P, Pt, Pc]) StatsBlock() (*ocsd.DecodeStats, ocsd.Err) {
-	if !pb.statsInit {
-		return &pb.Stats, ocsd.ErrNotInit
-	}
-	return &pb.Stats, ocsd.OK
-}
+// StatsAddUnsyncCount adds to the unsynced channel bytes counter.
+func (b *ProcBase) StatsAddUnsyncCount(count uint64) { b.Stats.ChannelUnsynced += count }
 
-func (pb *PktProcBase[P, Pt, Pc]) HasRawMon() bool {
-	return pb.PktRawMonitor() != nil
-}
+// StatsAddBadSeqCount adds to the bad-sequence-error counter.
+func (b *ProcBase) StatsAddBadSeqCount(count uint32) { b.Stats.BadSequenceErrs += count }
 
-func (pb *PktProcBase[P, Pt, Pc]) ResetStats() {
-	pb.Stats.Version = ocsd.VerNum
-	pb.Stats.Revision = ocsd.StatsRevision
-	pb.Stats.ChannelTotal = 0
-	pb.Stats.ChannelUnsynced = 0
-	pb.Stats.BadHeaderErrs = 0
-	pb.Stats.BadSequenceErrs = 0
-	pb.Stats.Demux.FrameBytes = 0
-	pb.Stats.Demux.NoIDBytes = 0
-	pb.Stats.Demux.ValidIDBytes = 0
-}
-
-func (pb *PktProcBase[P, Pt, Pc]) StatsAddTotalCount(count uint64) { pb.Stats.ChannelTotal += count }
-func (pb *PktProcBase[P, Pt, Pc]) StatsAddUnsyncCount(count uint64) {
-	pb.Stats.ChannelUnsynced += count
-}
-func (pb *PktProcBase[P, Pt, Pc]) StatsAddBadSeqCount(count uint32) {
-	pb.Stats.BadSequenceErrs += count
-}
-func (pb *PktProcBase[P, Pt, Pc]) StatsAddBadHdrCount(count uint32) { pb.Stats.BadHeaderErrs += count }
-func (pb *PktProcBase[P, Pt, Pc]) StatsInit()                       { pb.statsInit = true }
+// StatsAddBadHdrCount adds to the bad-header-error counter.
+func (b *ProcBase) StatsAddBadHdrCount(count uint32) { b.Stats.BadHeaderErrs += count }

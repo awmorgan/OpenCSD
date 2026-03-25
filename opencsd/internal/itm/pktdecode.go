@@ -17,7 +17,7 @@ const (
 
 // PktDecode decodes ITM packets into generic ITM-SW trace packets.
 type PktDecode struct {
-	common.PktDecodeI
+	Base common.DecoderBase
 	Config       *Config
 	CurrPacketIn *Packet
 
@@ -43,13 +43,33 @@ func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 	if cfg != nil {
 		instID = int(cfg.TraceID())
 	}
-	d.PktDecodeI.Init(fmt.Sprintf("%s_%d", "DCD_ITM", instID), logger)
+	d.Base.Init(fmt.Sprintf("%s_%d", "DCD_ITM", instID), logger)
 	d.configureDecoder()
 	if cfg != nil {
 		_ = d.SetProtocolConfig(cfg)
 	}
 	return d
 }
+
+// SetTraceElemOut satisfies dcdtree's traceElemSetterOwner interface.
+func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) { d.Base.TraceElemOut = out }
+
+// SetMemAccess satisfies dcdtree's memAccSetterOwner interface.
+func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.Base.MemAccess = mem }
+
+// SetInstrDecode satisfies dcdtree's instrDecodeSetterOwner interface.
+func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.Base.InstrDecode = dec }
+
+// ConfigureComponentOpMode delegates to Base.
+func (d *PktDecode) ConfigureComponentOpMode(flags uint32) ocsd.Err {
+	return d.Base.ConfigureComponentOpMode(flags)
+}
+
+// ComponentOpMode delegates to Base.
+func (d *PktDecode) ComponentOpMode() uint32 { return d.Base.ComponentOpMode() }
+
+// SupportedOpModes delegates to Base.
+func (d *PktDecode) SupportedOpModes() uint32 { return d.Base.SupportedOpModes() }
 
 // SetProtocolConfig sets the ITM hardware configuration.
 func (d *PktDecode) SetProtocolConfig(cfg *Config) ocsd.Err {
@@ -58,25 +78,25 @@ func (d *PktDecode) SetProtocolConfig(cfg *Config) ocsd.Err {
 		return ocsd.ErrNotInit
 	}
 	d.csID = d.Config.TraceID()
-	d.ConfigInitOK = true
+	d.Base.ConfigInitOK = true
 	return ocsd.OK
 }
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if reason := d.DecodeNotReadyReason(); reason != "" {
-		d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrNotInit, "%s", reason))
+	if reason := d.Base.DecodeNotReadyReason(); reason != "" {
+		d.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrNotInit, "%s", reason))
 		return ocsd.RespFatalNotInit
 	}
 
 	switch op {
 	case ocsd.OpData:
 		if pktIn == nil {
-			d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
+			d.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			d.CurrPacketIn = pktIn
-			d.IndexCurrPkt = indexSOP
+			d.Base.IndexCurrPkt = indexSOP
 			resp = d.ProcessPacket()
 		}
 	case ocsd.OpEOT:
@@ -86,7 +106,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 	case ocsd.OpReset:
 		resp = d.OnReset()
 	default:
-		d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
+		d.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return resp
@@ -101,7 +121,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 		case dcdNoSync:
 			d.outputElem.SetType(ocsd.GenElemNoSync)
 			d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncInfo(d.unsyncInfo))
-			resp = d.OutputTraceElement(d.csID, &d.outputElem)
+			resp = d.Base.OutputTraceElement(d.csID, &d.outputElem)
 			d.currState = dcdWaitSync
 
 		case dcdWaitSync:
@@ -121,7 +141,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	d.outputElem.SetType(ocsd.GenElemEOTrace)
 	d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncEOT)
-	return d.OutputTraceElement(d.csID, &d.outputElem)
+	return d.Base.OutputTraceElement(d.csID, &d.outputElem)
 }
 
 func (d *PktDecode) OnReset() ocsd.DatapathResp {
@@ -143,8 +163,8 @@ func (d *PktDecode) configureDecoder() {
 	d.csID = 0
 
 	// base decoder state - ITM requires no memory and instruction decode.
-	d.SetNeedsMemAccess(false)
-	d.SetNeedsInstructionDecode(false)
+	d.Base.UsesMemAccess = false
+	d.Base.UsesIDecode = false
 	d.unsyncInfo = common.UnsyncInitDecoder
 	d.resetDecoder()
 }
@@ -266,7 +286,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 		}
 		d.outputElem.SetType(ocsd.GenElemITMTrace)
 		d.outputElem.SetSWTITMInfo(d.itmInfo)
-		resp = d.OutputTraceElement(d.csID, &d.outputElem)
+		resp = d.Base.OutputTraceElement(d.csID, &d.outputElem)
 	}
 
 	return resp

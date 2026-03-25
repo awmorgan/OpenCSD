@@ -19,7 +19,7 @@ const (
 // PktDecode implements the ETMv3 packet decoder converting packets to generic TraceElements
 // Ported from trc_pkt_decode_etmv3.cpp
 type PktDecode struct {
-	common.PktDecodeI
+	Base common.DecoderBase
 	Config       *Config
 	CurrPacketIn *Packet
 
@@ -53,8 +53,8 @@ func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 	if cfg != nil {
 		instID = int(cfg.TraceID())
 	}
-	d.PktDecodeI.Init(fmt.Sprintf("%s_%d", "DCD_ETMV3", instID), logger)
-	d.codeFollower = common.NewCodeFollowerWithInterfaces(d.MemAccessIf(), d.InstrDecodeIf())
+	d.Base.Init(fmt.Sprintf("%s_%d", "DCD_ETMV3", instID), logger)
+	d.codeFollower = common.NewCodeFollowerWithInterfaces(d.Base.MemAccess, d.Base.InstrDecode)
 	d.configureDecoder()
 	if cfg != nil {
 		_ = d.SetProtocolConfig(cfg)
@@ -63,38 +63,61 @@ func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 }
 
 func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) {
-	d.PktDecodeI.SetMemAccess(mem)
+	d.Base.MemAccess = mem
 	if d.codeFollower != nil {
-		d.codeFollower.SetInterfaces(d.MemAccessIf(), d.InstrDecodeIf())
+		d.codeFollower.SetInterfaces(d.Base.MemAccess, d.Base.InstrDecode)
 	}
 }
 
 func (d *PktDecode) SetInstrDecode(decoder common.InstrDecode) {
-	d.PktDecodeI.SetInstrDecode(decoder)
+	d.Base.InstrDecode = decoder
 	if d.codeFollower != nil {
-		d.codeFollower.SetInterfaces(d.MemAccessIf(), d.InstrDecodeIf())
+		d.codeFollower.SetInterfaces(d.Base.MemAccess, d.Base.InstrDecode)
 	}
 }
+
+// SetTraceElemOut satisfies dcdtree's traceElemSetterOwner interface.
+func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) { d.Base.TraceElemOut = out }
+
+// traceElemOutIf returns the downstream GenElemProcessor (used as a func reference for outputElemList).
+func (d *PktDecode) traceElemOutIf() ocsd.GenElemProcessor { return d.Base.TraceElemOut }
+
+// ConfigureComponentOpMode delegates to Base.
+func (d *PktDecode) ConfigureComponentOpMode(flags uint32) ocsd.Err {
+	return d.Base.ConfigureComponentOpMode(flags)
+}
+
+// ComponentOpMode delegates to Base.
+func (d *PktDecode) ComponentOpMode() uint32 { return d.Base.ComponentOpMode() }
+
+// SupportedOpModes delegates to Base.
+func (d *PktDecode) SupportedOpModes() uint32 { return d.Base.SupportedOpModes() }
+
+// SetNeedsMemAccess controls whether memory access is required for decode.
+func (d *PktDecode) SetNeedsMemAccess(needs bool) { d.Base.UsesMemAccess = needs }
+
+// SetNeedsInstructionDecode controls whether instruction decode is required.
+func (d *PktDecode) SetNeedsInstructionDecode(needs bool) { d.Base.UsesIDecode = needs }
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) ocsd.DatapathResp {
 	resp := ocsd.RespCont
 	if d.codeFollower != nil {
-		d.codeFollower.SetInterfaces(d.MemAccessIf(), d.InstrDecodeIf())
+		d.codeFollower.SetInterfaces(d.Base.MemAccess, d.Base.InstrDecode)
 	}
 
-	if reason := d.DecodeNotReadyReason(); reason != "" {
-		d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrNotInit, "%v", reason))
+	if reason := d.Base.DecodeNotReadyReason(); reason != "" {
+		d.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrNotInit, "%v", reason))
 		return ocsd.RespFatalNotInit
 	}
 
 	switch op {
 	case ocsd.OpData:
 		if pktIn == nil {
-			d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
+			d.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			d.CurrPacketIn = pktIn
-			d.IndexCurrPkt = indexSOP
+			d.Base.IndexCurrPkt = indexSOP
 			resp = d.ProcessPacket()
 		}
 	case ocsd.OpEOT:
@@ -104,7 +127,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 	case ocsd.OpReset:
 		resp = d.OnReset()
 	default:
-		d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
+		d.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, ""))
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return resp
@@ -115,7 +138,7 @@ func (d *PktDecode) configureDecoder() {
 	d.resetDecoder()
 	d.unsyncInfo = common.UnsyncInitDecoder
 
-	d.outputElemList.SetSendIf(d.TraceElemOutIf)
+	d.outputElemList.SetSendIf(d.traceElemOutIf)
 }
 
 func (d *PktDecode) resetDecoder() {
@@ -142,13 +165,13 @@ func (d *PktDecode) SetProtocolConfig(config *Config) ocsd.Err {
 	if d.Config == nil {
 		return ocsd.ErrNotInit
 	}
-	d.ConfigInitOK = true
+	d.Base.ConfigInitOK = true
 
 	d.csID = d.Config.TraceID()
 
 	if d.Config.TraceMode() != TMInstrOnly {
 		err := ocsd.ErrHWCfgUnsupp
-		d.LogError(common.Errorf(ocsd.ErrSevError, err, "ETMv3 trace decoder : data trace decode not yet supported"))
+		d.Base.LogError(common.Errorf(ocsd.ErrSevError, err, "ETMv3 trace decoder : data trace decode not yet supported"))
 		return err
 	}
 
@@ -205,7 +228,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 
 	pElem, err := d.getNextOpElem()
 	if err != nil {
-		d.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
+		d.Base.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
 		d.resetDecoder()
 		return ocsd.RespFatalSysErr
 	}
@@ -267,7 +290,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 			pktDone = true
 		default:
 			pktDone = true
-			d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrFail, "Unknown Decoder State"))
+			d.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrFail, "Unknown Decoder State"))
 			d.resetDecoder()
 			resp = ocsd.RespFatalSysErr
 		}
@@ -276,9 +299,9 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) getNextOpElem() (*ocsd.TraceElement, error) {
-	pElem := d.outputElemList.NextElem(d.IndexCurrPkt)
+	pElem := d.outputElemList.NextElem(d.Base.IndexCurrPkt)
 	if pElem == nil {
-		return nil, &common.Error{Code: ocsd.ErrMem, Idx: d.IndexCurrPkt, ChanID: d.csID, Message: "Memory Allocation Error - fatal"}
+		return nil, &common.Error{Code: ocsd.ErrMem, Idx: d.Base.IndexCurrPkt, ChanID: d.csID, Message: "Memory Allocation Error - fatal"}
 	}
 	return pElem, nil
 }
@@ -293,7 +316,7 @@ func (d *PktDecode) getNextOpElemAt(index ocsd.TrcIndex) (*ocsd.TraceElement, er
 
 func (d *PktDecode) queuePendingNacc(addr uint64, memSpace ocsd.MemSpaceAcc) {
 	d.pendingNacc = true
-	d.pendingNaccIdx = d.IndexCurrPkt
+	d.pendingNaccIdx = d.Base.IndexCurrPkt
 	d.pendingNaccAdr = addr
 	d.pendingNaccMem = memSpace
 }
@@ -312,7 +335,7 @@ func (d *PktDecode) emitPendingNacc() ocsd.DatapathResp {
 
 	pElem, err := d.getNextOpElemAt(d.pendingNaccIdx)
 	if err != nil {
-		d.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
+		d.Base.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
 		d.unsyncInfo = common.UnsyncBadPacket
 		d.resetDecoder()
 		return ocsd.RespFatalSysErr
@@ -335,7 +358,7 @@ func (d *PktDecode) preISyncValid(pktType PktType) bool {
 func (d *PktDecode) sendUnsyncPacket() ocsd.DatapathResp {
 	pElem, err := d.getNextOpElem()
 	if err != nil {
-		d.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
+		d.Base.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
 		d.unsyncInfo = common.UnsyncBadPacket
 		d.resetDecoder()
 		return ocsd.RespFatalSysErr
@@ -365,7 +388,7 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, pktDone bool) {
 
 	switch packetIn.Type {
 	case PktNotSync:
-		d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "Trace Packet Synchronisation Lost"))
+		d.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "Trace Packet Synchronisation Lost"))
 		d.unsyncInfo = common.UnsyncBadPacket
 		d.resetDecoder()
 		return ocsd.RespFatalSysErr, true
@@ -425,20 +448,20 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, pktDone bool) {
 			pElem.Timestamp = packetIn.Timestamp
 		}
 	case PktStoreFail, PktOOOData, PktOOOAddrPlc, PktNormData, PktDataSuppressed, PktValNotTraced, PktBadTraceMode:
-		d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrHWCfgUnsupp, "Invalid packet type : Data Tracing decode not supported."))
+		d.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrHWCfgUnsupp, "Invalid packet type : Data Tracing decode not supported."))
 		resp = ocsd.RespFatalInvalidData
 	case PktBadSequence:
-		d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "Bad Packet sequence."))
+		d.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "Bad Packet sequence."))
 		resp = ocsd.RespFatalInvalidData
 	case PktReserved:
 		fallthrough
 	default:
-		d.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "Reserved or unknown packet ID."))
+		d.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrBadPacketSeq, "Reserved or unknown packet ID."))
 		resp = ocsd.RespFatalInvalidData
 	}
 
 	if err != nil {
-		d.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
+		d.Base.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
 		d.unsyncInfo = common.UnsyncBadPacket
 		d.resetDecoder()
 		return ocsd.RespFatalSysErr, true
@@ -472,7 +495,7 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 
 	pElem, err := d.getNextOpElem()
 	if err != nil {
-		d.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
+		d.Base.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
 		d.unsyncInfo = common.UnsyncBadPacket
 		d.resetDecoder()
 		return ocsd.RespFatalSysErr
@@ -485,7 +508,7 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 		}
 		pElem, err = d.getNextOpElem()
 		if err != nil {
-			d.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
+			d.Base.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
 			d.unsyncInfo = common.UnsyncBadPacket
 			d.resetDecoder()
 			return ocsd.RespFatalSysErr
@@ -602,7 +625,7 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 	if bUpdatePEContext {
 		pElem, err := d.getNextOpElem()
 		if err != nil {
-			d.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
+			d.Base.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
 			d.unsyncInfo = common.UnsyncBadPacket
 			d.resetDecoder()
 			return ocsd.RespFatalSysErr
@@ -615,7 +638,7 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 		if packetIn.Exception.Number != 0 {
 			pElem, err := d.getNextOpElem()
 			if err != nil {
-				d.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
+				d.Base.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
 				d.unsyncInfo = common.UnsyncBadPacket
 				d.resetDecoder()
 				return ocsd.RespFatalSysErr
@@ -710,7 +733,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 			if !d.bSentUnknown || d.Config.IsCycleAcc() {
 				pElem, err := d.getNextOpElem()
 				if err != nil {
-					d.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
+					d.Base.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
 					d.unsyncInfo = common.UnsyncBadPacket
 					d.resetDecoder()
 					return ocsd.RespFatalSysErr
@@ -737,14 +760,14 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 				d.codeFollower.SetISA(isa)
 				errCF := d.codeFollower.FollowSingleAtom(ocsd.VAddr(d.iAddr), val)
 				if errCF != ocsd.OK && errCF != ocsd.ErrMemNacc {
-					d.LogError(common.Errorf(ocsd.ErrSevError, errCF, "Error following atom"))
+					d.Base.LogError(common.Errorf(ocsd.ErrSevError, errCF, "Error following atom"))
 					return ocsd.RespFatalSysErr
 				}
 
 				if d.codeFollower.NumInstructs() > 0 {
 					pElem, err = d.getNextOpElem()
 					if err != nil {
-						d.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
+						d.Base.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
 						return ocsd.RespFatalSysErr
 					}
 					pElem.SetType(ocsd.GenElemInstrRange)
@@ -779,7 +802,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					} else {
 						pElem, err = d.getNextOpElem()
 						if err != nil {
-							d.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
+							d.Base.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
 							return ocsd.RespFatalSysErr
 						}
 						pElem.SetType(ocsd.GenElemAddrNacc)
@@ -793,7 +816,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 				// CC only packet (atomsNum == 0)
 				pElem, err := d.getNextOpElem()
 				if err != nil {
-					d.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
+					d.Base.LogError(common.Errorf(ocsd.ErrSevError, err.(*common.Error).Code, "%v", err.Error()))
 					return ocsd.RespFatalSysErr
 				}
 				pElem.SetType(ocsd.GenElemCycleCount)

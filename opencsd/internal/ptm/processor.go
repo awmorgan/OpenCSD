@@ -49,7 +49,10 @@ const (
 )
 
 type PktProc struct {
-	common.PktProcBase[Packet, PktType, Config]
+	Base       common.ProcBase
+	Config     *Config
+	PktOutI    ocsd.PacketProcessor[Packet]
+	PktRawMonI ocsd.PacketMonitor[Packet]
 
 	processState processState
 
@@ -100,13 +103,50 @@ func NewPktProc(cfg *Config, logger ocsd.Logger) *PktProc {
 	if cfg != nil {
 		instIDNum = int(cfg.TraceID())
 	}
-	p.ConfigurePktProcBase(fmt.Sprintf("%s_%d", "PKTP_PTM", instIDNum), logger)
+	p.Base.Init(fmt.Sprintf("%s_%d", "PKTP_PTM", instIDNum), logger)
 	p.resetProcessorState()
 	p.buildIPacketTable()
 	if cfg != nil {
 		_ = p.SetProtocolConfig(cfg)
 	}
 	return p
+}
+
+// SetPktOut attaches the downstream packet decoder.
+func (p *PktProc) SetPktOut(out ocsd.PacketProcessor[Packet]) { p.PktOutI = out }
+
+// PktOut returns the downstream packet processor.
+func (p *PktProc) PktOut() ocsd.PacketProcessor[Packet] { return p.PktOutI }
+
+// SetPktRawMonitor attaches a raw packet monitor.
+func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor[Packet]) { p.PktRawMonI = mon }
+
+// ConfigureComponentOpMode delegates to Base.
+func (p *PktProc) ConfigureComponentOpMode(flags uint32) ocsd.Err {
+	return p.Base.ConfigureComponentOpMode(flags)
+}
+
+// ComponentOpMode delegates to Base.
+func (p *PktProc) ComponentOpMode() uint32 { return p.Base.ComponentOpMode() }
+
+func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) ocsd.DatapathResp {
+	if p.PktOutI != nil {
+		return p.PktOutI.PacketDataIn(ocsd.OpData, indexSOP, pkt)
+	}
+	return ocsd.RespCont
+}
+
+func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, pData []byte) {
+	if p.PktRawMonI != nil && len(pData) > 0 {
+		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, indexSOP, pkt, pData)
+	}
+}
+
+func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pktType PktType, pktData []byte) ocsd.DatapathResp {
+	if len(pktData) > 0 {
+		p.outputRawPacketToMonitor(indexSOP, pkt, pktData)
+	}
+	return p.outputDecodedPacket(indexSOP, pkt)
 }
 
 func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
@@ -117,36 +157,36 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 	switch op {
 	case ocsd.OpData:
 		if len(dataBlock) == 0 {
-			p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor: Zero length data block error"))
+			p.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrPktInterpFail, "Interpreter failed - cannot process payload for unexpected or unsupported packet."))
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			processed, resp, err = p.ProcessData(index, dataBlock)
 		}
 	case ocsd.OpEOT:
 		resp = p.OnEOT()
-		if out := p.PktOut(); out != nil && !ocsd.DataRespIsFatal(resp) {
+		if out := p.PktOutI; out != nil && !ocsd.DataRespIsFatal(resp) {
 			resp = out.PacketDataIn(ocsd.OpEOT, 0, nil)
 		}
-		if rawMon := p.PktRawMonitor(); rawMon != nil {
+		if rawMon := p.PktRawMonI; rawMon != nil {
 			rawMon.RawPacketDataMon(ocsd.OpEOT, 0, nil, nil)
 		}
 	case ocsd.OpFlush:
 		resp = p.OnFlush()
-		if out := p.PktOut(); ocsd.DataRespIsCont(resp) && out != nil {
+		if out := p.PktOutI; ocsd.DataRespIsCont(resp) && out != nil {
 			resp = out.PacketDataIn(ocsd.OpFlush, 0, nil)
 		}
 	case ocsd.OpReset:
-		if out := p.PktOut(); out != nil {
+		if out := p.PktOutI; out != nil {
 			resp = out.PacketDataIn(ocsd.OpReset, index, nil)
 		}
 		if !ocsd.DataRespIsFatal(resp) {
 			resp = p.OnReset()
 		}
-		if rawMon := p.PktRawMonitor(); rawMon != nil {
+		if rawMon := p.PktRawMonI; rawMon != nil {
 			rawMon.RawPacketDataMon(ocsd.OpReset, index, nil, nil)
 		}
 	default:
-		p.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
+		p.Base.LogError(common.Errorf(ocsd.ErrSevError, ocsd.ErrInvalidParamVal, "Packet Processor : Unknown Datapath operation"))
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return processed, resp, err
@@ -251,7 +291,7 @@ func (p *PktProc) doProcessLoop() (resp ocsd.DatapathResp, currByte uint8, ok bo
 		if !ok {
 			return ocsd.RespFatalInvalidData, err
 		}
-		p.LogError(ce)
+		p.Base.LogError(ce)
 		if ce.Code == ocsd.ErrBadPacketSeq || ce.Code == ocsd.ErrInvalidPcktHdr {
 			p.processState = stateSendPkt
 			return ocsd.RespCont, err
@@ -264,7 +304,7 @@ func (p *PktProc) doProcessLoop() (resp ocsd.DatapathResp, currByte uint8, ok bo
 		if !p.waitASyncSOPkt {
 			p.currPktIndex = p.blockIdx + ocsd.TrcIndex(p.dataInProcessed)
 			p.currPacket.Type = PktNotSync
-			p.bAsyncRawOp = p.PktRawMonitor() != nil
+			p.bAsyncRawOp = p.PktRawMonI != nil
 		}
 		resp = p.waitASync()
 
@@ -328,7 +368,7 @@ func (p *PktProc) runDecodeAction() error {
 }
 
 func (p *PktProc) outputPacket() ocsd.DatapathResp {
-	resp := p.OutputOnAllInterfaces(p.currPktIndex, &p.currPacket, p.currPacket.Type, p.currPacketData)
+	resp := p.outputOnAllInterfaces(p.currPktIndex, &p.currPacket, p.currPacket.Type, p.currPacketData)
 	p.currPacketData = p.currPacketData[:0]
 	return resp
 }
@@ -418,13 +458,13 @@ func (p *PktProc) waitASync() ocsd.DatapathResp {
 		if bSendUnsyncedData && unsyncedBytes > 0 {
 			if p.bAsyncRawOp {
 				if pktBytesOnEntry > 0 {
-					p.OutputRawPacketToMonitor(p.currPktIndex, &p.currPacket, spareZeros[:pktBytesOnEntry])
+					p.outputRawPacketToMonitor(p.currPktIndex, &p.currPacket, spareZeros[:pktBytesOnEntry])
 					p.currPktIndex += ocsd.TrcIndex(pktBytesOnEntry)
 				}
 				rawData := p.pDataIn
 				rawEnd := unsyncScanBlockStart + unsyncedBytes
 				if rawEnd <= len(rawData) {
-					p.OutputRawPacketToMonitor(p.currPktIndex, &p.currPacket, rawData[unsyncScanBlockStart:rawEnd])
+					p.outputRawPacketToMonitor(p.currPktIndex, &p.currPacket, rawData[unsyncScanBlockStart:rawEnd])
 				} else if unsyncScanBlockStart < len(rawData) {
 					// Keep bug-for-bug raw packet monitor output compatible with OpenCSD C++ in
 					// the carry-over NOT_ASYNC path: one synthetic tail byte may be emitted when
@@ -438,14 +478,14 @@ func (p *PktProc) waitASync() ocsd.DatapathResp {
 						for i := len(base); i < len(tmp); i++ {
 							tmp[i] = fill
 						}
-						p.OutputRawPacketToMonitor(p.currPktIndex, &p.currPacket, tmp)
+						p.outputRawPacketToMonitor(p.currPktIndex, &p.currPacket, tmp)
 					} else {
-						p.OutputRawPacketToMonitor(p.currPktIndex, &p.currPacket, base)
+						p.outputRawPacketToMonitor(p.currPktIndex, &p.currPacket, base)
 					}
 				}
 			}
 			if !p.bOPNotSyncPkt {
-				resp = p.OutputDecodedPacket(p.currPktIndex, &p.currPacket)
+				resp = p.outputDecodedPacket(p.currPktIndex, &p.currPacket)
 				p.bOPNotSyncPkt = true
 			}
 			unsyncScanBlockStart += unsyncedBytes
