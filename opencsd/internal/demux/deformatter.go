@@ -288,7 +288,7 @@ func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byt
 	alignedIndex := d.pendingIndex
 
 	var alignedProcessed uint32
-	resp, alignedProcessed = d.processTraceDataAligned(alignedIndex, alignedBlock)
+	_, alignedProcessed = d.processTraceDataAligned(alignedIndex, alignedBlock)
 
 	if alignedProcessed > 0 {
 		d.pendingData = d.pendingData[int(alignedProcessed):]

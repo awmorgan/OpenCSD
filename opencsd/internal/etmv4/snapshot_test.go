@@ -306,9 +306,9 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		}
 
 		cfg := &etmv4.Config{}
-		var val string
-		val, _ = dev.RegValue("TRCTRACEIDR")
+		_, _ = dev.RegValue("TRCTRACEIDR")
 
+		var val string
 		val, _ = dev.RegValue("TRCIDR0")
 		cfg.RegIdr0 = uint32(parseHexOrDec(val))
 		val, _ = dev.RegValue("TRCIDR1")

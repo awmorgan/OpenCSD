@@ -304,7 +304,7 @@ func TestPrioritization(t *testing.T) {
 	}
 
 	// Requesting EL3 should give accAny (0xAA)
-	numBytes, _ = mapper.Read(0x0, 0, ocsd.MemSpaceEL3, numBytes, buf)
+	_, _ = mapper.Read(0x0, 0, ocsd.MemSpaceEL3, numBytes, buf)
 	if buf[0] != 0xAA {
 		t.Errorf("Expected fallback to Any: 0xAA, got 0x%X", buf[0])
 	}
@@ -350,11 +350,10 @@ func TestCacheInvalidation(t *testing.T) {
 	acc := NewBufferAccessor(0, []byte{1, 2, 3, 4})
 	mapper.AddAccessor(acc, 0)
 
-	numBytes := uint32(4)
 	buf := make([]byte, 4)
 
 	// Populate cache for TrcID 0x10
-	numBytes, _ = mapper.Read(0, 0x10, ocsd.MemSpaceAny, numBytes, buf)
+	_, _ = mapper.Read(0, 0x10, ocsd.MemSpaceAny, 4, buf)
 	if mapper.cache.blocks[mapper.cache.mruIdx].ValidLen == 0 || mapper.cache.blocks[mapper.cache.mruIdx].TrcID != 0x10 {
 		t.Errorf("Cache not populated for 0x10")
 	}
@@ -362,8 +361,7 @@ func TestCacheInvalidation(t *testing.T) {
 	// Populate cache for TrcID 0x20
 	acc2 := NewBufferAccessor(0x1000, []byte{5, 6, 7, 8})
 	mapper.AddAccessor(acc2, 0)
-	numBytes = 4
-	numBytes, _ = mapper.Read(0x1000, 0x20, ocsd.MemSpaceAny, numBytes, buf)
+	_, _ = mapper.Read(0x1000, 0x20, ocsd.MemSpaceAny, 4, buf)
 
 	// Invalidate by Trace ID
 	mapper.InvalidateMemAccCache(0x10)
@@ -722,13 +720,12 @@ func TestPrioritizationSwitchesFromAnyToSpecific(t *testing.T) {
 	numBytes := uint32(1)
 	buf := make([]byte, 1)
 
-	numBytes, _ = mapper.Read(0x0, 0, ocsd.MemSpaceEL3, numBytes, buf)
+	_, _ = mapper.Read(0x0, 0, ocsd.MemSpaceEL3, numBytes, buf)
 	if buf[0] != 0xAA {
 		t.Fatalf("expected Any accessor on first read, got 0x%X", buf[0])
 	}
 
-	numBytes = 1
-	numBytes, _ = mapper.Read(0x0, 0, ocsd.MemSpaceEL1N, numBytes, buf)
+	_, _ = mapper.Read(0x0, 0, ocsd.MemSpaceEL1N, numBytes, buf)
 	if buf[0] != 0x55 {
 		t.Fatalf("expected specific accessor after Any cached current, got 0x%X", buf[0])
 	}

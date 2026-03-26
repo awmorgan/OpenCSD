@@ -262,8 +262,6 @@ func TestDecoder_HelperClassificationAndDestinations(t *testing.T) {
 	var armDest uint32 = 0xDEADBEEF
 	if got, ok := InstARMBranchDestination(0x1000, 0x0a000004); !ok || got == 0xDEADBEEF {
 		t.Fatalf("expected ARM branch destination to be computed")
-	} else {
-		armDest = got
 	}
 	armDest = 0xCAFE
 	if _, ok := InstARMBranchDestination(0x1000, 0xE0000000); ok || armDest != 0xCAFE {
