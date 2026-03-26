@@ -142,7 +142,7 @@ func run(args []string) error {
 		return nil
 	}
 	if opts.ssDir == "" {
-		return errors.New("Trace Packet Lister : Error: Missing directory string on -ss_dir option")
+		return errors.New("trace packet lister: error: missing directory string on -ss_dir option")
 	}
 
 	out, closeFn, err := configureOutput(opts)
@@ -160,12 +160,12 @@ func run(args []string) error {
 	reader.SetDir(opts.ssDir)
 	reader.Verbose = opts.ssVerbose
 	if err := reader.Read(); err != nil {
-		return fmt.Errorf("Trace Packet Lister : Failed to read snapshot: %w", err)
+		return fmt.Errorf("trace packet lister: failed to read snapshot: %w", err)
 	}
 
 	sourceNames := getSourceNames(reader)
 	if len(sourceNames) == 0 {
-		return errors.New("Trace Packet Lister : No trace source buffer names found")
+		return errors.New("trace packet lister: no trace source buffer names found")
 	}
 
 	if opts.srcName == "" {
@@ -206,11 +206,11 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 	packetProcOnly := !opts.decode
 	tree, err := builder.Build(opts.srcName, packetProcOnly)
 	if err != nil {
-		return fmt.Errorf("Trace Packet Lister : Failed to create decode tree for source %s: %w", opts.srcName, err)
+		return fmt.Errorf("trace packet lister: failed to create decode tree for source %s: %w", opts.srcName, err)
 	}
 
 	if tree == nil {
-		return errors.New("Trace Packet Lister : No supported protocols found.")
+		return errors.New("trace packet lister: no supported protocols found")
 	}
 
 	configureFrameDemux(tree, out, opts)
@@ -291,7 +291,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, genPrinter *printers.GenericElementPrinter, opts options) error {
 	file, err := os.Open(fileName)
 	if err != nil {
-		return fmt.Errorf("Trace Packet Lister : Error : Unable to open trace buffer %s: %w", fileName, err)
+		return fmt.Errorf("trace packet lister: error: unable to open trace buffer %s: %w", fileName, err)
 	}
 	defer file.Close()
 
@@ -395,22 +395,22 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 	}
 
 	if dataPathErr != nil {
-		return fmt.Errorf("Trace Packet Lister : Data path processing error: %w", dataPathErr)
+		return fmt.Errorf("trace packet lister: data path processing error: %w", dataPathErr)
 	}
 
 	if ocsd.DataRespIsFatal(dataPathResp) {
-		fmt.Fprintln(out, "Trace Packet Lister : Data Path fatal error")
+		fmt.Fprintln(out, "trace packet lister: data path fatal error")
 		if opts.ssVerbose {
 			fmt.Fprintf(os.Stderr, "[trc_pkt_lister] fatal response=%d at trace index=%d pending=%d\n", dataPathResp, traceIndex, len(pending))
 		}
 	} else {
 		if _, _, err := tree.TraceDataIn(ocsd.OpEOT, 0, nil); err != nil {
-			return fmt.Errorf("Trace Packet Lister : OpEOT error: %w", err)
+			return fmt.Errorf("trace packet lister: OpEOT error: %w", err)
 		}
 
 		if opts.multiSession {
 			if _, _, err := tree.TraceDataIn(ocsd.OpReset, 0, nil); err != nil {
-				return fmt.Errorf("Trace Packet Lister : OpReset error: %w", err)
+				return fmt.Errorf("trace packet lister: OpReset error: %w", err)
 			}
 		}
 	}
@@ -679,7 +679,7 @@ func configureOutput(opts options) (io.Writer, func(), error) {
 	if opts.logFile {
 		f, err := os.Create(opts.logFileName)
 		if err != nil {
-			return nil, nil, fmt.Errorf("Trace Packet Lister : Error: cannot open logfile %s: %w", opts.logFileName, err)
+			return nil, nil, fmt.Errorf("trace packet lister: error: cannot open logfile %s: %w", opts.logFileName, err)
 		}
 		outputs = append(outputs, f)
 		closers = append(closers, f)
@@ -792,7 +792,7 @@ func parseOptions(args []string) (options, error) {
 			opts.help = true
 			return opts, nil
 		}
-		return opts, fmt.Errorf("Trace Packet Lister : Error parsing flags: %w", err)
+		return opts, fmt.Errorf("trace packet lister: error parsing flags: %w", err)
 	}
 
 	if help {
