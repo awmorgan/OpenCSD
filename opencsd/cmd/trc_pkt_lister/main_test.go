@@ -63,8 +63,8 @@ func TestTraceListerGoldens(t *testing.T) {
 				t.Fatalf("read golden %s: %v", tc.goldenPath, err)
 			}
 
-			got := sanitizeTraceListerPPL(string(gotBytes), tc.decoder)
-			want := sanitizeTraceListerPPL(string(wantBytes), tc.decoder)
+			got := sanitizeTraceListerPPL(string(gotBytes))
+			want := sanitizeTraceListerPPL(string(wantBytes))
 
 			if got != want {
 				gotLines := strings.Split(got, "\n")
@@ -257,7 +257,7 @@ func extractSourceName(ppl string) string {
 	return ""
 }
 
-func sanitizeTraceListerPPL(ppl, decoder string) string {
+func sanitizeTraceListerPPL(ppl string) string {
 	lines := strings.Split(normalizeNewlines(ppl), "\n")
 	out := make([]string, 0, len(lines))
 	for _, raw := range lines {
@@ -278,7 +278,7 @@ func sanitizeTraceListerPPL(ppl, decoder string) string {
 
 		records := splitIdxRecords(raw)
 		for _, rec := range records {
-			normalized := normalizeTraceListerIdxRecord(rec, decoder)
+			normalized := normalizeTraceListerIdxRecord(rec)
 			if normalized != "" {
 				out = append(out, normalized)
 			}
@@ -400,7 +400,7 @@ func splitIdxRecords(line string) []string {
 	return records
 }
 
-func normalizeTraceListerIdxRecord(rec, decoder string) string {
+func normalizeTraceListerIdxRecord(rec string) string {
 	id, ok := extractLineID(rec)
 	if !ok {
 		return ""

@@ -164,9 +164,10 @@ func (c *Config) VmidSize() uint32 {
 	if vmidszF == 1 {
 		return 8
 	} else if c.FullVersion() > 0x40 {
-		if vmidszF == 2 {
+		switch vmidszF {
+		case 2:
 			return 16
-		} else if vmidszF == 4 {
+		case 4:
 			return 32
 		}
 	}

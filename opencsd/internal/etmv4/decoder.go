@@ -954,9 +954,10 @@ func (d *PktDecode) getCurrMemSpace() ocsd.MemSpaceAcc {
 	sec := d.peContext.SecurityLevel
 	el := d.peContext.ExceptionLevel
 
-	if sec == ocsd.SecRoot {
+	switch sec {
+	case ocsd.SecRoot:
 		return ocsd.MemSpaceRoot
-	} else if sec == ocsd.SecRealm {
+	case ocsd.SecRealm:
 		if el == ocsd.EL1 || el == ocsd.EL0 {
 			return ocsd.MemSpaceEL1R
 		}
@@ -964,7 +965,7 @@ func (d *PktDecode) getCurrMemSpace() ocsd.MemSpaceAcc {
 			return ocsd.MemSpaceEL2R
 		}
 		return ocsd.MemSpaceR
-	} else if sec == ocsd.SecSecure {
+	case ocsd.SecSecure:
 		if el == ocsd.EL3 {
 			return ocsd.MemSpaceEL3
 		}
@@ -1120,11 +1121,11 @@ type instrRange struct {
 	numInstr uint32
 }
 
-func (d *PktDecode) setElemTraceRange(elem *ocsd.TraceElement, addrRange instrRange, executed bool, index ocsd.TrcIndex) {
-	d.setElemTraceRangeInstr(elem, addrRange, executed, index, &d.instrInfo)
+func (d *PktDecode) setElemTraceRange(elem *ocsd.TraceElement, addrRange instrRange, executed bool) {
+	d.setElemTraceRangeInstr(elem, addrRange, executed, &d.instrInfo)
 }
 
-func (d *PktDecode) setElemTraceRangeInstr(elem *ocsd.TraceElement, addrRange instrRange, executed bool, index ocsd.TrcIndex, instr *ocsd.InstrInfo) {
+func (d *PktDecode) setElemTraceRangeInstr(elem *ocsd.TraceElement, addrRange instrRange, executed bool, instr *ocsd.InstrInfo) {
 	elem.SetType(ocsd.GenElemInstrRange)
 	elem.SetLastInstrInfo(executed, instr.Type, instr.SubType, instr.InstrSize)
 	elem.ISA = instr.Isa
@@ -1254,12 +1255,12 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, elem *p0Elem) error {
 			}
 		}
 
-		d.setElemTraceRange(d.outElem.CurrElem(), addrRange, atom == ocsd.AtomE, elem.rootIndex)
+		d.setElemTraceRange(d.outElem.CurrElem(), addrRange, atom == ocsd.AtomE)
 
 		// Check for discontinuous ranges that can indicate an inconsistent/corrupt
 		// program image used for decode. Mirrors the C++ etmv4 decoder logic.
 		if !d.nextRangeCheckOK(addrRange.stAddr) {
-			return d.handleBadImageError(elem.rootIndex, "Discontinuous ranges - Inconsistent program image for decode\n")
+			return d.handleBadImageError("Discontinuous ranges - Inconsistent program image for decode\n")
 		}
 		if atom == ocsd.AtomN {
 			// Branch not taken, next range is expected to continue at nextAddr.
@@ -1280,7 +1281,7 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, elem *p0Elem) error {
 		d.nextRangeCheckClear()
 
 		if addrRange.stAddr != addrRange.enAddr {
-			d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true, elem.rootIndex)
+			d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true)
 			if WPRes == wpNacc {
 				err = d.outElem.AddElem(elem.rootIndex)
 			}
@@ -1378,12 +1379,12 @@ func (d *PktDecode) processException(elem *p0Elem) error {
 			}
 
 			if WPRes == wpFound {
-				d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true, excepPktIndex)
+				d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true)
 				rangeOut = true
 			} else {
 				d.needAddr = true
 				if addrRange.stAddr != addrRange.enAddr {
-					d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true, excepPktIndex)
+					d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true)
 					rangeOut = true
 				}
 			}
@@ -1502,7 +1503,7 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 						if err != nil {
 							return err
 						}
-						d.setElemTraceRangeInstr(d.outElem.CurrElem(), midRange, false, elem.rootIndex, &instr)
+						d.setElemTraceRangeInstr(d.outElem.CurrElem(), midRange, false, &instr)
 						outRange.stAddr = midRange.enAddr
 						outRange.numInstr = 0
 					}
@@ -1539,7 +1540,7 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 	d.instrInfo.Isa = d.instrInfo.NextIsa
 
 	d.outElem.AddElem(elem.rootIndex)
-	d.setElemTraceRange(d.outElem.CurrElem(), outRange, true, elem.rootIndex)
+	d.setElemTraceRange(d.outElem.CurrElem(), outRange, true)
 
 	return err
 }
@@ -1644,7 +1645,7 @@ func (d *PktDecode) processQElement(elem *p0Elem) error {
 		if d.instrInfo.InstrAddr == qAddr || isBranch {
 			inCompleteRange = false
 			addrRange.enAddr = d.instrInfo.InstrAddr
-			d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true, elem.rootIndex)
+			d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true)
 		}
 	}
 
@@ -1730,15 +1731,16 @@ func (d *PktDecode) mispredictAtom() error {
 	// Iterate from newest (end) to oldest, mirroring C++ front() iteration.
 	for i := len(d.p0Stack) - 1; i >= 0 && !done; i-- {
 		elem := d.p0Stack[i]
-		if elem.p0Type == p0Atom {
+		switch elem.p0Type {
+		case p0Atom:
 			elem.mispredictNewest()
 			foundAtom = true
 			done = true
-		} else if elem.p0Type == p0Addr {
+		case p0Addr:
 			// discard address elements between mispredict and the atom
 			d.poppedElems = append(d.poppedElems, elem)
 			d.p0Stack = append(d.p0Stack[:i], d.p0Stack[i+1:]...)
-		} else if elem.p0Type == p0UnseenUncommitted {
+		case p0UnseenUncommitted:
 			// mispredict in one of the uncommitted elements before sync - disregard
 			done = true
 			foundAtom = true
@@ -1760,11 +1762,12 @@ func (d *PktDecode) discardElements() error {
 		// Process oldest element first, mirroring C++ back() on a newest-first deque.
 		elem := d.p0Stack[0]
 
-		if elem.p0Type == p0Marker {
+		switch elem.p0Type {
+		case p0Marker:
 			err = d.processMarkerElem(elem)
-		} else if elem.p0Type == p0ITE {
+		case p0ITE:
 			err = d.processITEElem(elem)
-		} else {
+		default:
 			err = d.processTSCCEventElem(elem)
 		}
 		d.poppedElems = append(d.poppedElems, elem)
@@ -1822,7 +1825,7 @@ func (d *PktDecode) handleBadPacket(idx ocsd.TrcIndex, reason string) {
 	d.unsyncPktIdx = idx
 }
 
-func (d *PktDecode) handleBadImageError(idx ocsd.TrcIndex, reason string) error {
+func (d *PktDecode) handleBadImageError(reason string) error {
 	d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", ocsd.ErrBadDecodeImage, reason))
 	d.resetDecoderState()
 	d.currState = noSync

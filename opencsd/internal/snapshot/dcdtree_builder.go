@@ -264,9 +264,10 @@ func (b *DecodeTreeBuilder) createSTDecoder(devSrc *ParsedDevice) error {
 		devTypeName = devTypeName[:pos]
 	}
 
-	if devTypeName == STMProtocol {
+	switch devTypeName {
+	case STMProtocol:
 		return b.createSTMDecoder(devSrc)
-	} else if devTypeName == ITMProtocol {
+	case ITMProtocol:
 		return b.createITMDecoder(devSrc)
 	}
 	return fmt.Errorf("unknown ST devType: %s", devTypeName)

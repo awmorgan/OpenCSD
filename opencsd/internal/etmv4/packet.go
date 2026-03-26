@@ -775,9 +775,10 @@ func (p *TracePacket) getExceptionStr() string {
 		}
 	}
 
-	if p.ExceptionInfo.AddrInterp == 0x1 {
+	switch p.ExceptionInfo.AddrInterp {
+	case 0x1:
 		sb.WriteString(" Ret Addr Follows;")
-	} else if p.ExceptionInfo.AddrInterp == 0x2 {
+	case 0x2:
 		sb.WriteString(" Ret Addr Follows, Match Prev;")
 	}
 

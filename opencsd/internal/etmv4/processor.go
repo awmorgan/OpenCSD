@@ -338,7 +338,7 @@ func (p *Processor) runDecodeAction(lastByte uint8) {
 	case decodePktInvalidCfg:
 		p.iPktInvalidCfg(lastByte)
 	case decodePktITE:
-		p.iPktITE(lastByte)
+		p.iPktITE()
 	case decodePktCycleCntF123:
 		p.iPktCycleCntF123(lastByte)
 	case decodePktSpeclRes:
@@ -354,7 +354,7 @@ func (p *Processor) runDecodeAction(lastByte uint8) {
 	case decodePktShortAddr:
 		p.iPktShortAddr(lastByte)
 	case decodePktLongAddr:
-		p.iPktLongAddr(lastByte)
+		p.iPktLongAddr()
 	case decodePktQ:
 		p.iPktQ(lastByte)
 	case decodeAtom:
@@ -959,7 +959,7 @@ func (p *Processor) iPktShortAddr(lastByte uint8) {
 
 	if p.addrDone {
 		addrVal, bits, _ := p.extractShortAddrFromBuf(p.currPacketData, 1, p.addrIS)
-		p.currPacket.VAddr, p.currPacket.VAddrValidBits = p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, addrVal, p.addrIS, bits)
+		p.currPacket.VAddr, p.currPacket.VAddrValidBits = p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, addrVal, bits)
 		p.currPacket.VAddrPktBits = uint8(bits)
 		p.currPacket.VAddrISA = p.addrIS
 		p.currPacket.PushVAddr()
@@ -967,7 +967,7 @@ func (p *Processor) iPktShortAddr(lastByte uint8) {
 	}
 }
 
-func (p *Processor) iPktLongAddr(lastByte uint8) {
+func (p *Processor) iPktLongAddr() {
 	if len(p.currPacketData) == 1 {
 		p.addrIS = 0
 		p.bAddr64bit = false
@@ -1083,7 +1083,7 @@ func (p *Processor) iPktQ(lastByte uint8) {
 			if p.addrShort {
 				qAddr, bits, n := p.extractShortAddrFromBuf(p.currPacketData, idx, p.addrIS)
 				idx += n
-				p.currPacket.VAddr, p.currPacket.VAddrValidBits = p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, qAddr, p.addrIS, bits)
+				p.currPacket.VAddr, p.currPacket.VAddrValidBits = p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, qAddr, bits)
 				p.currPacket.VAddrISA = p.addrIS
 				p.currPacket.VAddrPktBits = uint8(bits)
 			} else {
@@ -1156,7 +1156,7 @@ func (p *Processor) iAtom(lastByte uint8) {
 	p.processState = SendPkt
 }
 
-func (p *Processor) iPktITE(lastByte uint8) {
+func (p *Processor) iPktITE() {
 	// Packet is always 10 bytes: Header, EL info byte, 8 bytes payload.
 	if len(p.currPacketData) == 10 {
 		var value uint64
@@ -1360,7 +1360,7 @@ func (p *Processor) extractShortAddrFromBuf(buf []byte, stIdx int, IS uint8) (va
 }
 
 // updateShortAddress updates a VAddr with a short address value (clears lower bits, sets new ones).
-func (p *Processor) updateShortAddress(existing ocsd.VAddr, existingValidBits uint8, addrVal uint32, IS uint8, bits int) (ocsd.VAddr, uint8) {
+func (p *Processor) updateShortAddress(existing ocsd.VAddr, existingValidBits uint8, addrVal uint32, bits int) (ocsd.VAddr, uint8) {
 	mask := ocsd.VAddr((uint64(1) << bits) - 1)
 	updated := (existing &^ mask) | ocsd.VAddr(addrVal)
 	updatedValidBits := existingValidBits

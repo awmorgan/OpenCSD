@@ -543,9 +543,10 @@ func (e *TraceElement) String() string {
 		e.printSWInfoPktItm(&sb)
 
 	case GenElemEvent:
-		if e.Payload.TraceEvent.EvType == EventTrigger {
+		switch e.Payload.TraceEvent.EvType {
+		case EventTrigger:
 			sb.WriteString(" Trigger; ")
-		} else if e.Payload.TraceEvent.EvType == EventNumbered {
+		case EventNumbered:
 			sb.WriteString(fmt.Sprintf(" Numbered:%d; ", e.Payload.TraceEvent.EvNumber))
 		}
 
