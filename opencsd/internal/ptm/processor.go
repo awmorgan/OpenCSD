@@ -156,7 +156,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 	switch op {
 	case ocsd.OpData:
 		if len(dataBlock) == 0 {
-			p.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Interpreter failed - cannot process payload for unexpected or unsupported packet.", ocsd.ErrPktInterpFail))
+			p.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Interpreter failed - cannot process payload for unexpected or unsupported packet", ocsd.ErrPktInterpFail))
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			processed, resp, err = p.ProcessData(index, dataBlock)

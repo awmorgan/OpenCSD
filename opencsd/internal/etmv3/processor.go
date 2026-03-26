@@ -619,7 +619,7 @@ func (p *PktProc) processPayloadByte(by uint8) {
 		p.processState = sendPkt
 	default:
 		p.processState = procErr
-		p.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Interpreter failed - cannot process payload for unexpected or unsupported packet.", ocsd.ErrPktInterpFail))
+		p.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Interpreter failed - cannot process payload for unexpected or unsupported packet", ocsd.ErrPktInterpFail))
 	}
 }
 

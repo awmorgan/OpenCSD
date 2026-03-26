@@ -291,7 +291,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 			pktDone = true
 		default:
 			pktDone = true
-			d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("Unknown Decoder State"))
+			d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("unknown decoder state"))
 			d.resetDecoder()
 			resp = ocsd.RespFatalSysErr
 		}
@@ -449,15 +449,15 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, pktDone bool) {
 			elem.Timestamp = packetIn.Timestamp
 		}
 	case PktStoreFail, PktOOOData, PktOOOAddrPlc, PktNormData, PktDataSuppressed, PktValNotTraced, PktBadTraceMode:
-		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Invalid packet type : Data Tracing decode not supported.", ocsd.ErrHWCfgUnsupp))
+		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Invalid packet type : Data Tracing decode not supported", ocsd.ErrHWCfgUnsupp))
 		resp = ocsd.RespFatalInvalidData
 	case PktBadSequence:
-		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Bad Packet sequence.", ocsd.ErrBadPacketSeq))
+		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Bad Packet sequence", ocsd.ErrBadPacketSeq))
 		resp = ocsd.RespFatalInvalidData
 	case PktReserved:
 		fallthrough
 	default:
-		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Reserved or unknown packet ID.", ocsd.ErrBadPacketSeq))
+		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Reserved or unknown packet ID", ocsd.ErrBadPacketSeq))
 		resp = ocsd.RespFatalInvalidData
 	}
 

@@ -243,7 +243,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 			if d.currPeState.valid {
 				resp = d.processAtom()
 			} else {
-				d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Dropped atom packet(s) at EOT while PE state is invalid.", ocsd.ErrBadPacketSeq))
+				d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Dropped atom packet(s) at EOT while PE state is invalid", ocsd.ErrBadPacketSeq))
 				d.atoms.clearAll()
 				resp = ocsd.RespWarnCont
 			}
@@ -388,7 +388,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 			d.atoms.set(pkt.Atom, d.Base.IndexCurrPkt)
 			resp = d.processAtom()
 		} else {
-			d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Dropped atom packet while PE state is invalid; waiting for branch address or I-Sync.", ocsd.ErrBadPacketSeq))
+			d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Dropped atom packet while PE state is invalid; waiting for branch address or I-Sync", ocsd.ErrBadPacketSeq))
 			resp = ocsd.RespWarnCont
 		}
 	case PktTimestamp:
@@ -569,10 +569,10 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 	if err != nil {
 		if errors.Is(err, ocsd.ErrUnsupportedISA) {
 			d.currPeState.valid = false
-			d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Warning: unsupported instruction set processing %s packet.", err, pktMsg))
+			d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Warning: unsupported instruction set processing %s packet", err, pktMsg))
 			return ocsd.RespWarnCont
 		}
-		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error processing %s packet.", err, pktMsg))
+		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error processing %s packet", err, pktMsg))
 		return ocsd.RespFatalInvalidData
 	}
 
@@ -596,7 +596,7 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 					d.instrInfo.NextIsa = nextIsa
 
 					if d.returnStack.Overflow() {
-						d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Return stack error processing %s packet.", ocsd.ErrRetStackOverflow, pktMsg))
+						d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Return stack error processing %s packet", ocsd.ErrRetStackOverflow, pktMsg))
 						return ocsd.RespFatalInvalidData
 					} else {
 						d.currPeState.valid = true

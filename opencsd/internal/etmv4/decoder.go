@@ -405,7 +405,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	err := d.commitElemOnEOT()
 	if err != nil {
 		resp = ocsd.RespFatalInvalidData
-		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error flushing element stack at end of trace data.", err))
+		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error flushing element stack at end of trace data", err))
 	} else {
 		resp = d.outElem.SendElements()
 	}
@@ -1221,11 +1221,11 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, elem *p0Elem) error {
 			d.needAddr = true
 			d.needCtxt = true
 			{
-				d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Warning: unsupported instruction set processing atom packet.", err))
+				d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Warning: unsupported instruction set processing atom packet", err))
 			}
 			return nil
 		}
-		return d.handlePacketSeqErr(err, elem.rootIndex, "Error processing atom packet.")
+		return d.handlePacketSeqErr(err, elem.rootIndex, "Error processing atom packet")
 	}
 
 	if WPRes == wpFound {
@@ -1368,9 +1368,9 @@ func (d *PktDecode) processException(elem *p0Elem) error {
 				if err == ocsd.ErrUnsupportedISA {
 					d.needAddr = true
 					d.needCtxt = true
-					d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Warning: unsupported instruction set processing exception packet.", err))
+					d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Warning: unsupported instruction set processing exception packet", err))
 				} else {
-					d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error processing exception packet.", err))
+					d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error processing exception packet", err))
 				}
 				return err
 			}
@@ -1439,7 +1439,7 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 	bytesReq := uint32(4)
 	bytesRead, memData, errMem := d.accessMemory(srcAddr, d.getCurrMemSpace(), bytesReq)
 	if errMem != nil {
-		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Mem access error processing source address packet.", errMem))
+		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Mem access error processing source address packet", errMem))
 		return errMem
 	}
 
@@ -1455,7 +1455,7 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 	d.instrInfo.InstrAddr = srcAddr
 	err = d.Base.InstrDecodeCall(&d.instrInfo)
 	if err != nil {
-		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Instruction decode error processing source address packet.", err))
+		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Instruction decode error processing source address packet", err))
 		return err
 	}
 	d.instrInfo.InstrAddr += ocsd.VAddr(d.instrInfo.InstrSize)
@@ -1559,7 +1559,7 @@ func (d *PktDecode) processQElement(elem *p0Elem) error {
 		}
 
 		if idx >= len(d.p0Stack) || d.p0Stack[idx].p0Type != p0Addr {
-			d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Address missing in Q packet.", ocsd.ErrBadPacketSeq))
+			d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Address missing in Q packet", ocsd.ErrBadPacketSeq))
 			return ocsd.ErrBadPacketSeq
 		}
 		pAddressElem = d.p0Stack[idx]
