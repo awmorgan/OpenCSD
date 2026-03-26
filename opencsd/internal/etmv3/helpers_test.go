@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
 
@@ -47,24 +46,6 @@ func (m *mockMemAcc) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSp
 }
 
 func (m *mockMemAcc) InvalidateMemAccCache(csTraceID uint8) {}
-
-type noopPktSinkV3 struct{}
-
-func (s *noopPktSinkV3) PacketDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, pkt *Packet) ocsd.DatapathResp {
-	return ocsd.RespCont
-}
-
-func setupProcDec(config *Config) (*PktProc, *PktDecode, *testTrcElemIn) {
-	proc, dec, err := NewConfiguredPipeline(0, config)
-	if err != nil {
-		panic(err)
-	}
-	dec.SetMemAccess(&mockMemAcc{failAfter: -1, hitAfter: -1})
-	dec.SetInstrDecode(idec.NewDecoder())
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
-	return proc, dec, out
-}
 
 func TestETMv3TypedConstructors(t *testing.T) {
 	config := &Config{}

@@ -159,7 +159,6 @@ type Cache struct {
 	sequence uint32
 	enabled  bool
 	mruIdx   int
-	errLog   ocsd.HandleErrLog // Placeholder for error logging if needed
 }
 
 func NewCache() *Cache {

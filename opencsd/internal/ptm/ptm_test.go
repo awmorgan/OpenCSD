@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"opencsd/internal/common"
 	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
@@ -76,18 +75,6 @@ func makeAsyncBlock() []byte {
 	return []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80}
 }
 
-func setupProcDec(config *Config) (*PktProc, *PktDecode, *testTrcElemIn) {
-	proc, dec, err := NewConfiguredPipeline(0, config)
-	if err != nil {
-		panic(err)
-	}
-	dec.SetMemAccess(&mockMemAcc{})
-	dec.SetInstrDecode(idec.NewDecoder())
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
-	return proc, dec, out
-}
-
 // noopPktSink is a no-op packet receiver that just swallows packets without decoding.
 type noopPktSink struct{}
 
@@ -103,18 +90,6 @@ func setupProcOnly(config *Config) *PktProc {
 	}
 	proc.SetPktOut(&noopPktSink{})
 	return proc
-}
-
-func setupProcDecFull(config *Config, memAcc common.TargetMemAccess, instrDec common.InstrDecode) (*PktProc, *PktDecode, *testTrcElemIn) {
-	proc, dec, err := NewConfiguredPipeline(0, config)
-	if err != nil {
-		panic(err)
-	}
-	dec.SetMemAccess(memAcc)
-	dec.SetInstrDecode(instrDec)
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
-	return proc, dec, out
 }
 
 // --- Config ---
@@ -207,10 +182,6 @@ func TestPTMTypedConstructors(t *testing.T) {
 			t.Fatalf("expected nil-config pipeline constructor to fail, got proc=%v dec=%v err=%v", proc, dec, err)
 		}
 	})
-}
-
-func isErrorCode(err error, code error) bool {
-	return errors.Is(err, code)
 }
 
 // --- Processor: Comprehensive byte stream tests ---

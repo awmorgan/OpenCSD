@@ -333,10 +333,6 @@ func TestITMErrorCases(t *testing.T) {
 	dec.OnReset()
 }
 
-func isErrorCode(err error, code error) bool {
-	return errors.Is(err, code)
-}
-
 func TestITMPacketStringVariants(t *testing.T) {
 	pkt := &Packet{}
 	pkt.Reset()

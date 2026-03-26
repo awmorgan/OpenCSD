@@ -34,8 +34,6 @@ type DecodeTree struct {
 	instrDecode common.InstrDecode
 	memAccess   common.TargetMemAccess
 	genElemOut  ocsd.GenElemProcessor
-
-	demuxStats ocsd.DemuxStats
 }
 
 type traceIDConfig interface {

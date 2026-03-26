@@ -57,10 +57,6 @@ type options struct {
 	help             bool
 }
 
-type packetPrinter interface {
-	SetMute(bool)
-}
-
 type opModeComponent interface {
 	SetComponentOpMode(opFlags uint32) error
 	ComponentOpMode() uint32

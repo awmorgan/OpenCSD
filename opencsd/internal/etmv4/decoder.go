@@ -138,7 +138,6 @@ type PktDecode struct {
 	is64bit          bool
 	peContext        ocsd.PEContext
 	prevOverflow     bool
-	memSpace         ocsd.MemSpaceAcc
 
 	// Intra packet state
 	timestamp   uint64

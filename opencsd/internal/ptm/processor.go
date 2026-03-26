@@ -58,7 +58,6 @@ type PktProc struct {
 	processState processState
 
 	currPacketData []uint8
-	currPktIdx     uint32
 	currPacket     Packet
 	currPktIndex   ocsd.TrcIndex
 
@@ -73,7 +72,6 @@ type PktProc struct {
 	bAsyncRawOp    bool
 	bOPNotSyncPkt  bool
 	async0         int
-	partAsync      bool
 
 	numPktBytesReq int
 	needCycleCount bool
@@ -237,15 +235,6 @@ func (p *PktProc) readByteVal() (uint8, bool) {
 func (p *PktProc) readByte() bool {
 	_, ok := p.readByteVal()
 	return ok
-}
-
-func (p *PktProc) unReadByte() {
-	p.dataInProcessed--
-	p.currPacketData = p.currPacketData[:len(p.currPacketData)-1]
-}
-
-func (p *PktProc) isSync() bool {
-	return p.currPacket.Type == PktNotSync
 }
 
 func (p *PktProc) malformedPacketErr(msg string) error {

@@ -16,9 +16,6 @@ const (
 	procErr
 )
 
-const maxPacketSize = 32
-const asyncSize = 6
-
 // PktProc implements the ETMv3 packet processor.
 // Ported from trc_pkt_proc_etmv3_impl.cpp
 type PktProc struct {
@@ -48,8 +45,7 @@ type PktProc struct {
 	expectDataAddr bool
 	foundDataAddr  bool
 
-	packetIndex         ocsd.TrcIndex
-	packetCurrByteIndex ocsd.TrcIndex
+	packetIndex ocsd.TrcIndex
 }
 
 // NewPktProc creates a new ETMv3 packet processor
@@ -762,8 +758,6 @@ func (p *PktProc) extractBrAddrPkt() (value uint64, nBitsOut int) {
 	return value, bitcount
 }
 
-var addrMaskB5 = []uint8{0x7, 0xF, 0xF, 0x1F}
-var addrBitsB5 = []int{3, 4, 4, 5}
 var exceptionTypeARMdeprecated = []ocsd.ArmV7Exception{
 	ocsd.ExcpReset,
 	ocsd.ExcpIRQ,

@@ -254,13 +254,6 @@ func (p *PktProc) handleProcError(err error) (resp ocsd.DatapathResp, outErr err
 	return ocsd.RespFatalInvalidData, err, true
 }
 
-func (p *PktProc) traceID() uint8 {
-	if p.Config != nil {
-		return p.Config.TraceID()
-	}
-	return 0
-}
-
 func (p *PktProc) OnEOT() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 	if p.procState == procData {
