@@ -55,7 +55,7 @@ func TestGenElemList(t *testing.T) {
 	}
 
 	list.Reset()
-	if list.firstIdx != 0 || list.numUsed != 0 {
+	if list.NumElem() != 0 {
 		t.Errorf("Reset failed")
 	}
 
