@@ -402,9 +402,7 @@ func (d *PktDecode) commitElemOnEOT() error {
 
 func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	var err error
-
-	err = d.commitElemOnEOT()
+	err := d.commitElemOnEOT()
 	if err != nil {
 		resp = ocsd.RespFatalInvalidData
 		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error flushing element stack at end of trace data.", err))

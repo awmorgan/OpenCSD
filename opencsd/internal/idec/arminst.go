@@ -295,10 +295,7 @@ func InstA64WfiWfe(inst uint32, info *DecodeInfo) bool {
 }
 
 func InstA64Tstart(inst uint32) bool {
-	if (inst & 0xffffffe0) == 0xd5233060 {
-		return true
-	}
-	return false
+	return (inst & 0xffffffe0) == 0xd5233060
 }
 
 func InstA64IsIndirectBranch(inst uint32, info *DecodeInfo) bool {

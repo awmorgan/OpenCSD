@@ -782,12 +782,7 @@ func (p *TracePacket) getExceptionStr() string {
 		sb.WriteString(" Ret Addr Follows, Match Prev;")
 	}
 
-	res := sb.String()
-	if strings.HasSuffix(res, ";") {
-		// Actually the C++ code outputs spaces and semicolons exact. We'll strip the leading/trailing as needed or leave as is if the test requires it.
-		// `oss << " " << ARv8Excep[exception_info.exceptionType] << ";";`
-	}
-	return " " + res // Add the leading space to match C++
+	return " " + sb.String()
 }
 
 // PushVAddr pushes the current VAddr and VAddrISA to the top of the history stack
