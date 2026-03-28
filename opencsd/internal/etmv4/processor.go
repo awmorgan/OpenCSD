@@ -1020,6 +1020,15 @@ func (p *Processor) update32BitAddress(currAddr ocsd.VAddr, newVal32 uint32) ocs
 	return ocsd.VAddr(newVal32)
 }
 
+func (p *Processor) markMalformedCurrentPacket(errType PktType) {
+	if p.processState == SendPkt && p.currPacket.Type == PktBadSequence {
+		return
+	}
+	p.currPacket.ErrType = errType
+	p.currPacket.Type = PktBadSequence
+	p.processState = SendPkt
+}
+
 func (p *Processor) iPktQ(lastByte uint8) {
 	if len(p.currPacketData) == 1 {
 		p.qType = int(lastByte & 0xF)
@@ -1302,6 +1311,9 @@ func (p *Processor) extractCondResult(buf []byte, stIdx int) (key uint32, result
 // extractContField extracts a continuation-coded 32-bit value from the buffer starting at stIdx.
 // Returns number of bytes consumed.
 func (p *Processor) extractContField(buf []byte, stIdx int, byteLimit int) (value uint32, consumed int) {
+	if stIdx < 0 || stIdx >= len(buf) || byteLimit <= 0 {
+		return 0, 0
+	}
 	idx := 0
 	lastByte := false
 	for !lastByte && idx < byteLimit {
@@ -1309,8 +1321,25 @@ func (p *Processor) extractContField(buf []byte, stIdx int, byteLimit int) (valu
 			return value, idx
 		}
 		byteVal := buf[stIdx+idx]
+		shift := idx * 7
+		if shift >= 32 {
+			p.markMalformedCurrentPacket(p.currPacket.Type)
+			return 0, 0
+		}
+		part := uint32(byteVal & 0x7F)
+		if shift > 25 {
+			maxPart := uint32((uint64(1) << uint(32-shift)) - 1)
+			if part > maxPart {
+				p.markMalformedCurrentPacket(p.currPacket.Type)
+				return 0, 0
+			}
+		}
+		if idx == byteLimit-1 && (byteVal&0x80) != 0 {
+			p.markMalformedCurrentPacket(p.currPacket.Type)
+			return 0, 0
+		}
 		lastByte = (byteVal & 0x80) != 0x80
-		value |= uint32(byteVal&0x7F) << (idx * 7)
+		value |= part << shift
 		idx++
 	}
 	return value, idx
@@ -1320,6 +1349,9 @@ func (p *Processor) extractContField(buf []byte, stIdx int, byteLimit int) (valu
 // Returns number of bytes consumed.
 func (p *Processor) extractTSField64(buf []byte, stIdx int, value *uint64) int {
 	const maxByteIdx = 8
+	if stIdx < 0 || stIdx >= len(buf) {
+		return 0
+	}
 	idx := 0
 	lastByte := false
 	*value = 0
@@ -1344,6 +1376,10 @@ func (p *Processor) extractTSField64(buf []byte, stIdx int, value *uint64) int {
 // extractShortAddrFromBuf extracts a short address from the buffer.
 // Returns number of bytes consumed.
 func (p *Processor) extractShortAddrFromBuf(buf []byte, stIdx int, IS uint8) (value uint32, bits int, consumed int) {
+	if stIdx < 0 || stIdx >= len(buf) {
+		p.markMalformedCurrentPacket(p.currPacket.Type)
+		return 0, 0, 0
+	}
 	isShift := 2
 	if IS == 1 {
 		isShift = 1
@@ -1354,6 +1390,10 @@ func (p *Processor) extractShortAddrFromBuf(buf []byte, stIdx int, IS uint8) (va
 
 	if (buf[stIdx+idx] & 0x80) != 0 {
 		idx++
+		if stIdx+idx >= len(buf) {
+			p.markMalformedCurrentPacket(p.currPacket.Type)
+			return 0, 0, 0
+		}
 		value |= uint32(buf[stIdx+idx]) << (7 + isShift)
 		bits += 8
 	}
@@ -1364,6 +1404,10 @@ func (p *Processor) extractShortAddrFromBuf(buf []byte, stIdx int, IS uint8) (va
 
 // updateShortAddress updates a VAddr with a short address value (clears lower bits, sets new ones).
 func (p *Processor) updateShortAddress(existing ocsd.VAddr, existingValidBits uint8, addrVal uint32, bits int) (ocsd.VAddr, uint8) {
+	if bits <= 0 || bits > ocsd.MaxVABitsize {
+		p.markMalformedCurrentPacket(p.currPacket.Type)
+		return existing, existingValidBits
+	}
 	mask := ocsd.VAddr((uint64(1) << bits) - 1)
 	updated := (existing &^ mask) | ocsd.VAddr(addrVal)
 	updatedValidBits := existingValidBits
@@ -1380,6 +1424,11 @@ func (p *Processor) updateShortAddress(existing ocsd.VAddr, existingValidBits ui
 // extract64BitLongAddr extracts an 8-byte 64-bit long address.
 // Returns number of bytes consumed.
 func (p *Processor) extract64BitLongAddr(buf []byte, stIdx int, IS uint8, value *uint64) int {
+	if stIdx < 0 || stIdx+7 >= len(buf) {
+		p.markMalformedCurrentPacket(p.currPacket.Type)
+		*value = 0
+		return 0
+	}
 	*value = 0
 	if IS == 0 {
 		*value |= uint64(buf[stIdx+0]&0x7F) << 2
@@ -1400,6 +1449,10 @@ func (p *Processor) extract64BitLongAddr(buf []byte, stIdx int, IS uint8, value 
 // extract32BitLongAddr extracts a 4-byte 32-bit long address.
 // Returns number of bytes consumed.
 func (p *Processor) extract32BitLongAddr(buf []byte, stIdx int, IS uint8) (value uint32, consumed int) {
+	if stIdx < 0 || stIdx+3 >= len(buf) {
+		p.markMalformedCurrentPacket(p.currPacket.Type)
+		return 0, 0
+	}
 	if IS == 0 {
 		value |= uint32(buf[stIdx+0]&0x7F) << 2
 		value |= uint32(buf[stIdx+1]&0x7F) << 9

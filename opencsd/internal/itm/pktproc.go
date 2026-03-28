@@ -437,34 +437,54 @@ func (p *PktProc) readContBytes(limit int) bool {
 	return bDone
 }
 
-func (p *PktProc) extractContVal32() uint32 {
+func (p *PktProc) extractContVal32() (uint32, error) {
 	if len(p.packetData) == 0 {
-		return 0
+		return 0, nil
 	}
 	var value uint32 = 0
 	shift := 0
 	idxMax := len(p.packetData) - 1
 
 	for idx := 1; idx <= idxMax; idx++ {
-		value |= (uint32(p.packetData[idx]&0x7F) << shift)
+		part := uint32(p.packetData[idx] & 0x7F)
+		if shift >= 32 {
+			return 0, p.setBadSequenceError("Continuation value exceeds 32-bit width")
+		}
+		if shift > 25 {
+			maxPart := uint32((uint64(1) << uint(32-shift)) - 1)
+			if part > maxPart {
+				return 0, p.setBadSequenceError("Continuation value overflows 32-bit width")
+			}
+		}
+		value |= (part << shift)
 		shift += 7
 	}
-	return value
+	return value, nil
 }
 
-func (p *PktProc) extractContVal64() uint64 {
+func (p *PktProc) extractContVal64() (uint64, error) {
 	if len(p.packetData) == 0 {
-		return 0
+		return 0, nil
 	}
 	var value uint64 = 0
 	shift := 0
 	idxMax := len(p.packetData) - 1
 
 	for idx := 1; idx <= idxMax; idx++ {
-		value |= (uint64(p.packetData[idx]&0x7F) << shift)
+		part := uint64(p.packetData[idx] & 0x7F)
+		if shift >= 64 {
+			return 0, p.setBadSequenceError("Continuation value exceeds 64-bit width")
+		}
+		if shift > 57 {
+			maxPart := (uint64(1) << uint(64-shift)) - 1
+			if part > maxPart {
+				return 0, p.setBadSequenceError("Continuation value overflows 64-bit width")
+			}
+		}
+		value |= (part << shift)
 		shift += 7
 	}
-	return value
+	return value, nil
 }
 
 func (p *PktProc) PktLocalTS() error {
@@ -485,7 +505,11 @@ func (p *PktProc) PktLocalTS() error {
 	bGotContVal = p.readContBytes(pktSizeLimit)
 
 	if bGotContVal {
-		p.currPacket.SetValue(p.extractContVal32(), uint8(len(p.packetData)-1))
+		v, err := p.extractContVal32()
+		if err != nil {
+			return err
+		}
+		p.currPacket.SetValue(v, uint8(len(p.packetData)-1))
 		p.procState = procSendPkt
 	} else if len(p.packetData) == pktSizeLimit {
 		return p.setBadSequenceError("Local TS packet: Payload continuation value too long")
@@ -503,7 +527,11 @@ func (p *PktProc) PktGlobalTS1() error {
 			p.currPacket.SetSrcID((b >> 5) & 0x3)
 			p.packetData[4] = b & 0x1F
 		}
-		p.currPacket.SetValue(p.extractContVal32(), uint8(len(p.packetData)-1))
+		v, err := p.extractContVal32()
+		if err != nil {
+			return err
+		}
+		p.currPacket.SetValue(v, uint8(len(p.packetData)-1))
 		p.procState = procSendPkt
 	} else if len(p.packetData) == pktSizeLimit {
 		return p.setBadSequenceError("GTS1 packet: Payload continuation value too long")
@@ -517,9 +545,17 @@ func (p *PktProc) PktGlobalTS2() error {
 
 	if bGotContVal {
 		if len(p.packetData) <= 5 {
-			p.currPacket.SetValue(p.extractContVal32(), uint8(len(p.packetData)-1))
+			v, err := p.extractContVal32()
+			if err != nil {
+				return err
+			}
+			p.currPacket.SetValue(v, uint8(len(p.packetData)-1))
 		} else {
-			p.currPacket.SetExtValue(p.extractContVal64())
+			v, err := p.extractContVal64()
+			if err != nil {
+				return err
+			}
+			p.currPacket.SetExtValue(v)
 		}
 		p.procState = procSendPkt
 	} else if len(p.packetData) == pktSizeLimit {
@@ -548,7 +584,11 @@ func (p *PktProc) PktExtension() error {
 
 		value := uint32(0)
 		if len(p.packetData) > 1 {
-			value = p.extractContVal32()
+			var err error
+			value, err = p.extractContVal32()
+			if err != nil {
+				return err
+			}
 			value <<= 3
 		}
 		value |= uint32((p.headerByte >> 4) & 0x7)

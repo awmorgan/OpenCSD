@@ -947,6 +947,9 @@ func (p *PktProc) ExtractTS() error {
 			for bCont && (p.currTSNibbles < p.reqTSNibbles) {
 				bCont = p.readNibble()
 				if bCont {
+					if p.tsUpdateValue > 0x0FFFFFFFFFFFFFFF {
+						return p.setBadSequenceError("STM: malformed timestamp overflow")
+					}
 					p.tsUpdateValue <<= 4
 					p.tsUpdateValue |= uint64(p.nibble)
 					p.currTSNibbles++

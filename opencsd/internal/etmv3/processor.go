@@ -727,8 +727,8 @@ func (p *PktProc) extractBrAddrPkt() (value uint64, nBitsOut int) {
 			} else if (addrbyte & 0xA0) == 0x20 {
 				p.currPacket.UpdateISA(ocsd.ISAJazelle)
 			} else {
-				// Malformed, but we should not panic directly here or just log.
-				// For now silently fail or return what we have (PktProc handles err state).
+				// Legacy streams may encode address+exception combinations that do not
+				// map cleanly onto these ISA patterns. Preserve existing behaviour.
 			}
 		}
 
@@ -909,6 +909,17 @@ func (p *PktProc) extractCycleCount() uint32 {
 		currByte := p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
 
+		if byteIdx == 4 {
+			if (currByte & 0x80) != 0 {
+				p.throwMalformedPacketErr("Malformed cycle count: overlong continuation")
+				return 0
+			}
+			if (currByte & 0x70) != 0 {
+				p.throwMalformedPacketErr("Malformed cycle count: overflow in terminal byte")
+				return 0
+			}
+		}
+
 		cycleCount |= uint32(currByte&mask) << (7 * byteIdx)
 		bCond = (currByte & 0x80) == 0x80
 		byteIdx++
@@ -1043,6 +1054,7 @@ func (p *PktProc) onISyncPacket() {
 
 func (p *PktProc) extractDataAddress() (addr uint64, bits uint8, updateBE bool, beVal uint8) {
 	nBits := 0
+	nBytes := 0
 
 	for {
 		if !p.checkPktLimits() {
@@ -1050,6 +1062,12 @@ func (p *PktProc) extractDataAddress() (addr uint64, bits uint8, updateBE bool, 
 		}
 		b := p.currPacketData[p.currPktIdx]
 		p.currPktIdx++
+		nBytes++
+
+		if nBits > 57 {
+			p.throwMalformedPacketErr("Malformed data address: shift exceeds 64-bit accumulator")
+			return 0, 0, false, 0
+		}
 
 		if nBits == 0 {
 			addr |= uint64(b & 0x7F) // lose continuation bit
@@ -1070,6 +1088,10 @@ func (p *PktProc) extractDataAddress() (addr uint64, bits uint8, updateBE bool, 
 		}
 		if (b & 0x80) == 0 {
 			break
+		}
+		if nBytes >= 5 {
+			p.throwMalformedPacketErr("Malformed data address: continuation exceeds maximum encoded length")
+			return 0, 0, false, 0
 		}
 	}
 	return addr, uint8(nBits), updateBE, beVal

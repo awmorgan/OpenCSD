@@ -543,9 +543,18 @@ func (p *PktProc) extractCycleCount(offset int) (uint32, error) {
 			bCont = (currByte & 0x40) != 0
 			cycleCount = uint32((currByte >> 2) & 0xF)
 		} else {
+			if byIdx >= 5 {
+				return 0, p.malformedPacketErr("Cycle Count value exceeds maximum encoded length.")
+			}
 			bCont = (currByte & 0x80) != 0
 			if byIdx == 4 {
+				if (currByte & 0x80) != 0 {
+					return 0, p.malformedPacketErr("Cycle Count continuation exceeds maximum encoded length.")
+				}
 				bCont = false
+			}
+			if shift > 25 {
+				return 0, p.malformedPacketErr("Cycle Count shift exceeds 32-bit accumulator width.")
 			}
 			cycleCount |= (uint32(currByte&0x7F) << shift)
 			shift += 7
@@ -582,6 +591,9 @@ func (p *PktProc) extractTS() (uint64, uint8, int, error) {
 		if tsIdx >= len(p.currPacketData) {
 			return 0, 0, 0, p.malformedPacketErr("Insufficient packet bytes for Timestamp value.")
 		}
+		if shift >= 64 {
+			return 0, 0, 0, p.malformedPacketErr("Timestamp shift exceeds 64-bit accumulator width.")
+		}
 		byteVal := p.currPacketData[tsIdx]
 		if b64BitVal {
 			if tsIdx < 9 {
@@ -598,6 +610,9 @@ func (p *PktProc) extractTS() (uint64, uint8, int, error) {
 				byteVal &= 0x7F
 				tsUpdateBits += 7
 			} else {
+				if (byteVal & 0x80) != 0 {
+					return 0, 0, 0, p.malformedPacketErr("Timestamp continuation exceeds maximum encoded length.")
+				}
 				byteVal &= 0x3F
 				bCont = false
 				tsUpdateBits += 6
@@ -610,13 +625,20 @@ func (p *PktProc) extractTS() (uint64, uint8, int, error) {
 	return tsVal, tsUpdateBits, tsIdx, nil
 }
 
-func (p *PktProc) extractAddress(offset int) (uint32, uint8) {
+func (p *PktProc) extractAddress(offset int) (uint32, uint8, error) {
 	addrVal := uint32(0)
 	mask := uint8(0x7E)
 	numBits := uint8(0x7)
 	shift := 0
 	nextShift := 0
 	totalBits := uint8(0)
+
+	if p.numAddrBytes <= 0 || p.numAddrBytes > 5 {
+		return 0, 0, p.malformedPacketErr("Address value has invalid encoded length.")
+	}
+	if offset < 0 || offset+p.numAddrBytes > len(p.currPacketData) {
+		return 0, 0, p.malformedPacketErr("Insufficient packet bytes for address value.")
+	}
 
 	for i := 0; i < p.numAddrBytes; i++ {
 		if i == 4 {
@@ -640,7 +662,17 @@ func (p *PktProc) extractAddress(offset int) (uint32, uint8) {
 		}
 
 		shift = nextShift
-		addrVal |= uint32(p.currPacketData[i+offset]&mask) << shift
+		if shift >= 32 {
+			return 0, 0, p.malformedPacketErr("Address shift exceeds 32-bit accumulator width.")
+		}
+		part := uint32(p.currPacketData[i+offset] & mask)
+		if shift > 25 {
+			maxPart := uint32((uint64(1) << uint(32-shift)) - 1)
+			if part > maxPart {
+				return 0, 0, p.malformedPacketErr("Address value overflows 32-bit accumulator.")
+			}
+		}
+		addrVal |= part << shift
 		totalBits += numBits
 
 		if i == 0 {
@@ -660,7 +692,7 @@ func (p *PktProc) extractAddress(offset int) (uint32, uint8) {
 		addrVal <<= 1
 		totalBits++
 	}
-	return addrVal, totalBits
+	return addrVal, totalBits, nil
 }
 
 // pkt processing fns
@@ -827,7 +859,10 @@ func (p *PktProc) pktWPointUpdate() error {
 		}
 		p.currPacket.UpdateISA(p.addrPktIsa)
 
-		addrVal, totalBits := p.extractAddress(1)
+		addrVal, totalBits, err := p.extractAddress(1)
+		if err != nil {
+			return err
+		}
 		p.currPacket.UpdateAddress(ocsd.VAddr(addrVal), int(totalBits))
 		p.processState = stateSendPkt
 	}
@@ -1074,7 +1109,10 @@ func (p *PktProc) pktBranchAddr() error {
 		}
 		p.currPacket.UpdateISA(p.addrPktIsa)
 
-		addrVal, totalBits := p.extractAddress(0)
+		addrVal, totalBits, err := p.extractAddress(0)
+		if err != nil {
+			return err
+		}
 		p.currPacket.UpdateAddress(ocsd.VAddr(addrVal), int(totalBits))
 
 		if p.numExcepBytes > 0 {
