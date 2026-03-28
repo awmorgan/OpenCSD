@@ -2,6 +2,7 @@ package stm
 
 import (
 	"fmt"
+	"strings"
 )
 
 // PktType represents STM protocol packet types.
@@ -221,6 +222,7 @@ func (p *Packet) pktTypeName(pktType PktType) string {
 }
 
 func (p *Packet) String() string {
+	var sb strings.Builder
 	var name, desc string
 	addMarkerTS := false
 
@@ -278,42 +280,49 @@ func (p *Packet) String() string {
 		name, desc = "UNKNOWN", "ERROR: unknown packet type"
 	}
 
+	sb.WriteString(name)
 	if addMarkerTS {
 		if p.IsMarkerPkt() {
-			name += "M"
-			desc += " + marker"
+			sb.WriteString("M")
 		}
 		if p.IsTSPkt() {
-			name += "TS"
-			desc += " + timestamp"
+			sb.WriteString("TS")
+		}
+	}
+	sb.WriteString(":")
+	sb.WriteString(desc)
+	if addMarkerTS {
+		if p.IsMarkerPkt() {
+			sb.WriteString(" + marker")
+		}
+		if p.IsTSPkt() {
+			sb.WriteString(" + timestamp")
 		}
 	}
 
-	str := fmt.Sprintf("%s:%s", name, desc)
-
 	switch p.Type {
 	case PktIncompleteEOT, PktBadSequence:
-		str += fmt.Sprintf("[%s]", p.pktTypeName(p.ErrType))
+		fmt.Fprintf(&sb, "[%s]", p.pktTypeName(p.ErrType))
 	case PktVersion:
-		str += fmt.Sprintf("; Ver=%d", p.Payload.D8)
+		fmt.Fprintf(&sb, "; Ver=%d", p.Payload.D8)
 	case PktFreq:
-		str += fmt.Sprintf("; Freq=%dHz", p.Payload.D32)
+		fmt.Fprintf(&sb, "; Freq=%dHz", p.Payload.D32)
 	case PktTrig:
-		str += fmt.Sprintf("; TrigData=0x%02x", p.Payload.D8)
+		fmt.Fprintf(&sb, "; TrigData=0x%02x", p.Payload.D8)
 	case PktM8:
-		str += fmt.Sprintf("; Master=0x%02x", p.Master)
+		fmt.Fprintf(&sb, "; Master=0x%02x", p.Master)
 	case PktC8, PktC16:
-		str += fmt.Sprintf("; Chan=0x%04x", p.Channel)
+		fmt.Fprintf(&sb, "; Chan=0x%04x", p.Channel)
 	case PktD4:
-		str += fmt.Sprintf("; Data=0x%01x", p.Payload.D8&0xF)
+		fmt.Fprintf(&sb, "; Data=0x%01x", p.Payload.D8&0xF)
 	case PktD8:
-		str += fmt.Sprintf("; Data=0x%02x", p.Payload.D8)
+		fmt.Fprintf(&sb, "; Data=0x%02x", p.Payload.D8)
 	case PktD16:
-		str += fmt.Sprintf("; Data=0x%04x", p.Payload.D16)
+		fmt.Fprintf(&sb, "; Data=0x%04x", p.Payload.D16)
 	case PktD32:
-		str += fmt.Sprintf("; Data=0x%08x", p.Payload.D32)
+		fmt.Fprintf(&sb, "; Data=0x%08x", p.Payload.D32)
 	case PktD64:
-		str += fmt.Sprintf("; Data=0x%016x", p.Payload.D64)
+		fmt.Fprintf(&sb, "; Data=0x%016x", p.Payload.D64)
 	}
 
 	if p.IsTSPkt() {
@@ -323,8 +332,8 @@ func (p *Packet) String() string {
 		} else if p.PktTSBits > 0 {
 			updateMask = (uint64(1) << p.PktTSBits) - 1
 		}
-		str += fmt.Sprintf("; TS=0x%016X ~[0x%X]", p.Timestamp, p.Timestamp&updateMask)
+		fmt.Fprintf(&sb, "; TS=0x%016X ~[0x%X]", p.Timestamp, p.Timestamp&updateMask)
 	}
 
-	return str
+	return sb.String()
 }

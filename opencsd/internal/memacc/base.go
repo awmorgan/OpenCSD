@@ -130,7 +130,9 @@ func (b *BaseAccessor) String() string {
 		typeStr = "UnknAcc"
 	}
 	spaceStr := MemSpaceString(b.MemSpaceAcc)
-	return fmt.Sprintf("%s; Range::0x%x:%x; Mem Space::%s", typeStr, b.StartAddress, b.EndAddress, spaceStr)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%s; Range::0x%x:%x; Mem Space::%s", typeStr, b.StartAddress, b.EndAddress, spaceStr)
+	return sb.String()
 }
 
 // Memory Access Cache

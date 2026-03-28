@@ -591,23 +591,29 @@ func (t PktType) Description() string {
 
 // HeaderString returns packet header text in trc_pkt_lister format.
 func (p *TracePacket) HeaderString() string {
+	var sb strings.Builder
+
 	et := p.EffectiveType()
-	desc := et.Description()
+	sb.WriteString(et.String())
+	sb.WriteString(" : ")
+
+	var desc strings.Builder
+	desc.WriteString(et.Description())
+
 	if (et == PktAddrMatch || et == ETE_PktSrcAddrMatch) && p.Valid.ExactMatchIdxValid {
-		desc = fmt.Sprintf("%s, [%d]", desc, p.AddrExactMatchIdx)
+		fmt.Fprintf(&desc, ", [%d]", p.AddrExactMatchIdx)
 	}
 	// For I_INCOMPLETE_EOT, p.Type holds the original packet type that was interrupted.
 	if et == PktIncompleteEOT && p.Type != PktNoErrType {
-		desc = fmt.Sprintf("%s[%s]", desc, p.Type.String())
+		fmt.Fprintf(&desc, "[%s]", p.Type.String())
 	} else if (et == PktBadSequence || et == PktReservedCfg) && p.ErrType != PktNoErrType && p.ErrType != PktIncompleteEOT {
 		// For I_BAD_SEQUENCE and I_RESERVED_CFG, ErrType holds the original type.
-		desc = fmt.Sprintf("%s[%s]", desc, p.ErrType.String())
+		fmt.Fprintf(&desc, "[%s]", p.ErrType.String())
 	}
 
-	details := ""
 	switch et {
 	case PktTraceInfo:
-		details += fmt.Sprintf("; INFO=0x%x", p.TraceInfo.Val&0xFF)
+		fmt.Fprintf(&desc, "; INFO=0x%x", p.TraceInfo.Val&0xFF)
 		ccEnabled := 0
 		if p.TraceInfo.CCEnabled {
 			ccEnabled = 1
@@ -617,109 +623,109 @@ func (p *TracePacket) HeaderString() string {
 			if p.TraceInfo.InTransState {
 				tstate = 1
 			}
-			details += fmt.Sprintf(" { CC.%d, TSTATE.%d }", ccEnabled, tstate)
+			fmt.Fprintf(&desc, " { CC.%d, TSTATE.%d }", ccEnabled, tstate)
 		} else {
-			details += fmt.Sprintf(" { CC.%d }", ccEnabled)
+			fmt.Fprintf(&desc, " { CC.%d }", ccEnabled)
 		}
 		if p.Valid.CCThreshold {
-			details += fmt.Sprintf("; CC_THRESHOLD=0x%x", p.CCThreshold)
+			fmt.Fprintf(&desc, "; CC_THRESHOLD=0x%x", p.CCThreshold)
 		}
 		if p.TraceInfo.InitialTInfo && p.Valid.SpecDepthValid && p.TraceInfo.SpecFieldPresent {
-			details += fmt.Sprintf("; INIT SPEC DEPTH=%d", p.CurrSpecDepth)
+			fmt.Fprintf(&desc, "; INIT SPEC DEPTH=%d", p.CurrSpecDepth)
 		}
 		if p.TraceInfo.InitialTInfo {
-			details += "; Decoder Sync point TINFO"
+			desc.WriteString("; Decoder Sync point TINFO")
 		}
 	case PktAddrCtxtL_32IS0, PktAddrCtxtL_32IS1:
 		updateBits := uint8(0)
 		if p.VAddrPktBits < 32 {
 			updateBits = p.VAddrPktBits
 		}
-		details += "; Addr=" + addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits) + "; " + p.contextStr()
+		fmt.Fprintf(&desc, "; Addr=%s; %s", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits), p.contextStr())
 	case PktAddrL_32IS0, PktAddrL_32IS1, ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1:
 		updateBits := uint8(0)
 		if p.VAddrPktBits < 32 {
 			updateBits = p.VAddrPktBits
 		}
-		details += "; Addr=" + addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits) + "; "
+		fmt.Fprintf(&desc, "; Addr=%s; ", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits))
 	case PktAddrCtxtL_64IS0, PktAddrCtxtL_64IS1:
 		updateBits := uint8(0)
 		if p.VAddrPktBits < 64 {
 			updateBits = p.VAddrPktBits
 		}
-		details += "; Addr=" + addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits) + "; " + p.contextStr()
+		fmt.Fprintf(&desc, "; Addr=%s; %s", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits), p.contextStr())
 	case PktAddrL_64IS0, PktAddrL_64IS1, ETE_PktSrcAddrL_64IS0, ETE_PktSrcAddrL_64IS1:
 		updateBits := uint8(0)
 		if p.VAddrPktBits < 64 {
 			updateBits = p.VAddrPktBits
 		}
-		details += "; Addr=" + addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits) + "; "
+		fmt.Fprintf(&desc, "; Addr=%s; ", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits))
 	case PktCtxt:
-		details += "; " + p.contextStr()
+		fmt.Fprintf(&desc, "; %s", p.contextStr())
 	case PktAddrS_IS0, PktAddrS_IS1, ETE_PktSrcAddrS_IS0, ETE_PktSrcAddrS_IS1:
-		details += "; Addr=" + addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, p.VAddrPktBits)
+		fmt.Fprintf(&desc, "; Addr=%s", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, p.VAddrPktBits))
 	case PktAddrMatch, ETE_PktSrcAddrMatch:
-		details += fmt.Sprintf("; Addr=%s; ", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, 0))
+		fmt.Fprintf(&desc, "; Addr=%s; ", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, 0))
 	case PktAtomF1, PktAtomF2, PktAtomF3, PktAtomF4, PktAtomF5, PktAtomF6:
-		details += "; " + p.getAtomStr()
+		fmt.Fprintf(&desc, "; %s", p.getAtomStr())
 	case PktExcept:
-		details += "; " + p.getExceptionStr()
+		fmt.Fprintf(&desc, "; %s", p.getExceptionStr())
 	case PktTimestamp:
-		details += fmt.Sprintf("; Updated val = 0x%x", p.Timestamp)
+		fmt.Fprintf(&desc, "; Updated val = 0x%x", p.Timestamp)
 		if p.Valid.CycleCount {
-			details += fmt.Sprintf("; CC=0x%x", p.CycleCount)
+			fmt.Fprintf(&desc, "; CC=0x%x", p.CycleCount)
 		}
 	case PktCcntF1, PktCcntF2, PktCcntF3:
-		details += fmt.Sprintf("; Count=0x%x", p.CycleCount)
+		fmt.Fprintf(&desc, "; Count=0x%x", p.CycleCount)
 		if p.Valid.CommitElem {
-			details += fmt.Sprintf("; Commit(%d)", p.CommitElements)
+			fmt.Fprintf(&desc, "; Commit(%d)", p.CommitElements)
 		}
 	case PktCancelF1:
-		details += fmt.Sprintf("; Cancel(%d)", p.CancelElements)
+		fmt.Fprintf(&desc, "; Cancel(%d)", p.CancelElements)
 	case PktCancelF1Mispred:
-		details += fmt.Sprintf("; Cancel(%d), Mispredict", p.CancelElements)
+		fmt.Fprintf(&desc, "; Cancel(%d), Mispredict", p.CancelElements)
 	case PktCancelF2:
-		details += "; "
+		desc.WriteString("; ")
 		if p.Atom.Num > 0 {
-			details += fmt.Sprintf("Atom: %s, ", p.getAtomStr())
+			fmt.Fprintf(&desc, "Atom: %s, ", p.getAtomStr())
 		}
-		details += "Cancel(1), Mispredict"
+		desc.WriteString("Cancel(1), Mispredict")
 	case PktCancelF3:
-		details += "; "
+		desc.WriteString("; ")
 		if p.Atom.Num > 0 {
-			details += fmt.Sprintf("Atom: %s, ", p.getAtomStr())
+			fmt.Fprintf(&desc, "Atom: %s, ", p.getAtomStr())
 		}
-		details += "Cancel(1)"
+		desc.WriteString("Cancel(1)")
 	case PktMispredict:
-		details += "; "
+		desc.WriteString("; ")
 		if p.Atom.Num > 0 {
-			details += fmt.Sprintf("Atom: %s, ", p.getAtomStr())
+			fmt.Fprintf(&desc, "Atom: %s, ", p.getAtomStr())
 		}
-		details += "Mispredict"
+		desc.WriteString("Mispredict")
 	case PktCommit:
-		details += fmt.Sprintf("; Commit(%d)", p.CommitElements)
+		fmt.Fprintf(&desc, "; Commit(%d)", p.CommitElements)
 	case PktQ:
 		if p.QPkt.CountPresent {
-			details += fmt.Sprintf("; Count(%d)", p.QPkt.QCount)
+			fmt.Fprintf(&desc, "; Count(%d)", p.QPkt.QCount)
 		} else {
-			details += "; Count(Unknown)"
+			desc.WriteString("; Count(Unknown)")
 		}
 		if p.QPkt.AddrMatch {
-			details += fmt.Sprintf("; [%d]", p.AddrExactMatchIdx)
+			fmt.Fprintf(&desc, "; [%d]", p.AddrExactMatchIdx)
 		}
 		if p.QPkt.AddrPresent || p.QPkt.AddrMatch {
 			updateBits := uint8(0)
 			if p.VAddrPktBits < 64 {
 				updateBits = p.VAddrPktBits
 			}
-			details += "; Addr=" + addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits)
+			fmt.Fprintf(&desc, "; Addr=%s", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits))
 		}
 	case ETE_PktITE:
-		details += fmt.Sprintf("; EL%d; Payload=0x%x", p.ITEPkt.EL, p.ITEPkt.Value)
+		fmt.Fprintf(&desc, "; EL%d; Payload=0x%x", p.ITEPkt.EL, p.ITEPkt.Value)
 	}
 
-	desc += details
-	return fmt.Sprintf("%s : %s", et.String(), strings.TrimSpace(desc))
+	sb.WriteString(strings.TrimSpace(desc.String()))
+	return sb.String()
 }
 
 func addrValStr(addr uint64, is64 bool, updateBits uint8) string {

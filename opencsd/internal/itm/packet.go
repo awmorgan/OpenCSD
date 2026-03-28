@@ -114,29 +114,35 @@ func (p *Packet) IsBadPacket() bool {
 
 // String provides a string representation of the packet, matching C++ trc_pkt_elem_itm formatting.
 func (p *Packet) String() string {
+	var sb strings.Builder
 	name, desc := p.typeNameAndDesc()
-	str := name + ": "
+	sb.WriteString(name)
+	sb.WriteString(": ")
 
 	switch p.Type {
 	case PktSWIT:
-		str += fmt.Sprintf("{src id: 0x%02x}  %s", p.SrcID, p.hexVal())
+		fmt.Fprintf(&sb, "{src id: 0x%02x}  ", p.SrcID)
+		p.writeHexVal(&sb)
 	case PktDWT:
-		str += fmt.Sprintf("{desc: 0x%02x} %s", p.SrcID, p.dwtPacketBody())
+		fmt.Fprintf(&sb, "{desc: 0x%02x} ", p.SrcID)
+		p.writeDwtPacketBody(&sb)
 	case PktTSLocal:
-		str += p.tsLocalPacketBody()
+		p.writeTsLocalPacketBody(&sb)
 	case PktTSGlobal1:
-		str += p.tsGlobal1PacketBody()
+		p.writeTsGlobal1PacketBody(&sb)
 	case PktTSGlobal2:
-		str += p.tsGlobal2PacketBody()
+		p.writeTsGlobal2PacketBody(&sb)
 	case PktExtension:
-		str += p.extensionPacketBody()
+		p.writeExtensionPacketBody(&sb)
 	case PktIncompleteEOT, PktBadSequence:
 		errName, _ := (&Packet{Type: p.ErrType}).typeNameAndDesc()
-		str += fmt.Sprintf("[Init type: %s] ", errName)
+		fmt.Fprintf(&sb, "[Init type: %s] ", errName)
 	}
 
-	str += "; '" + desc + "'"
-	return str
+	sb.WriteString("; '")
+	sb.WriteString(desc)
+	sb.WriteString("'")
+	return sb.String()
 }
 
 func (p *Packet) typeNameAndDesc() (string, string) {
@@ -170,12 +176,18 @@ func (p *Packet) typeNameAndDesc() (string, string) {
 	}
 }
 
-func (p *Packet) hexVal() string {
+func (p *Packet) writeHexVal(sb *strings.Builder) {
 	valSz := int(p.ValSz)
 	if valSz < 1 || valSz > 4 {
 		valSz = 4
 	}
-	return fmt.Sprintf("0x%0*x", valSz*2, p.Value)
+	fmt.Fprintf(sb, "0x%0*x", valSz*2, p.Value)
+}
+
+func (p *Packet) hexVal() string {
+	var sb strings.Builder
+	p.writeHexVal(&sb)
+	return sb.String()
 }
 
 var dwtFlags = [...]struct {
@@ -192,57 +204,62 @@ var dwtFlags = [...]struct {
 
 var dwtExcepFn = [...]string{"reserved", "entered", "exited", "returned to"}
 
-func (p *Packet) dwtPacketBody() string {
-	var sb strings.Builder
-
+func (p *Packet) writeDwtPacketBody(sb *strings.Builder) {
 	if p.SrcID == 0 {
-		fmt.Fprintf(&sb, "[Event Counter: 0x%02x; Flags: ", p.Value)
+		fmt.Fprintf(sb, "[Event Counter: 0x%02x; Flags: ", p.Value)
 		for _, f := range dwtFlags {
 			if p.Value&uint32(f.bit) != 0 {
-				fmt.Fprintf(&sb, " %s ", f.str)
+				fmt.Fprintf(sb, " %s ", f.str)
 			} else {
 				sb.WriteString(" --- ")
 			}
 		}
 		sb.WriteString("] ")
-		return sb.String()
+		return
 	}
 
 	if p.SrcID == 1 {
 		action := (p.Value >> 12) & 0x3
-		fmt.Fprintf(&sb, "[Exception Num:  0x%04x(%s) ]", p.Value&0x1FF, dwtExcepFn[action])
-		return sb.String()
+		fmt.Fprintf(sb, "[Exception Num:  0x%04x(%s) ]", p.Value&0x1FF, dwtExcepFn[action])
+		return
 	}
 
 	if p.SrcID == 2 {
-		fmt.Fprintf(&sb, "[PC Sample: %s] ", p.hexVal())
-		return sb.String()
+		sb.WriteString("[PC Sample: ")
+		p.writeHexVal(sb)
+		sb.WriteString("] ")
+		return
 	}
 
 	if p.SrcID >= 8 && p.SrcID <= 23 {
 		dtType := (p.SrcID >> 3) & 0x3
 		dtRW := p.SrcID & 0x1
 		dtComp := (p.SrcID >> 1) & 0x3
-		val := p.hexVal()
 		if dtType == 0x1 && dtRW == 0 {
-			fmt.Fprintf(&sb, "[Data Trc: comp=%d; PC Value=%s ] ", dtComp, val)
-			return sb.String()
+			fmt.Fprintf(sb, "[Data Trc: comp=%d; PC Value=", dtComp)
+			p.writeHexVal(sb)
+			sb.WriteString(" ] ")
+			return
 		}
 		if dtType == 0x1 && dtRW == 1 {
-			fmt.Fprintf(&sb, "[Data Trc: comp=%d; Address=%s ] ", dtComp, val)
-			return sb.String()
+			fmt.Fprintf(sb, "[Data Trc: comp=%d; Address=", dtComp)
+			p.writeHexVal(sb)
+			sb.WriteString(" ] ")
+			return
 		}
 		if dtType == 0x2 {
 			if dtRW == 1 {
-				fmt.Fprintf(&sb, "[Data Trc: comp=%d; Val write: %s] ", dtComp, val)
+				fmt.Fprintf(sb, "[Data Trc: comp=%d; Val write: ", dtComp)
 			} else {
-				fmt.Fprintf(&sb, "[Data Trc: comp=%d; Val read: %s] ", dtComp, val)
+				fmt.Fprintf(sb, "[Data Trc: comp=%d; Val read: ", dtComp)
 			}
-			return sb.String()
+			p.writeHexVal(sb)
+			sb.WriteString("] ")
+			return
 		}
 	}
 
-	return "[Reserved discriminator value] "
+	sb.WriteString("[Reserved discriminator value] ")
 }
 
 var tsLocalTypes = [...]string{
@@ -252,20 +269,20 @@ var tsLocalTypes = [...]string{
 	"TS Delayed, Packet Delayed",
 }
 
-func (p *Packet) tsLocalPacketBody() string {
-	return fmt.Sprintf("%s { %s }", p.hexVal(), tsLocalTypes[p.SrcID&3])
+func (p *Packet) writeTsLocalPacketBody(sb *strings.Builder) {
+	p.writeHexVal(sb)
+	fmt.Fprintf(sb, " { %s }", tsLocalTypes[p.SrcID&3])
 }
 
 var tsGlobal1BitSizes = [...]int{6, 13, 20, 25}
 
-func (p *Packet) tsGlobal1PacketBody() string {
+func (p *Packet) writeTsGlobal1PacketBody(sb *strings.Builder) {
 	idx := max(int(p.ValSz)-1, 0)
 	if idx >= len(tsGlobal1BitSizes) {
 		idx = len(tsGlobal1BitSizes) - 1
 	}
 
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "{ TS bits [%d:0]", tsGlobal1BitSizes[idx])
+	fmt.Fprintf(sb, "{ TS bits [%d:0]", tsGlobal1BitSizes[idx])
 	if p.SrcID&0x1 != 0 {
 		sb.WriteString(", Clk change")
 	}
@@ -273,27 +290,25 @@ func (p *Packet) tsGlobal1PacketBody() string {
 		sb.WriteString(", Clk wrap")
 	}
 	sb.WriteString("} ")
-	sb.WriteString(p.hexVal())
-	return sb.String()
+	p.writeHexVal(sb)
 }
 
-func (p *Packet) tsGlobal2PacketBody() string {
-	var sb strings.Builder
+func (p *Packet) writeTsGlobal2PacketBody(sb *strings.Builder) {
 	if p.ValSz == 5 {
 		sb.WriteString("{ TS bits [63:26]} ")
-		fmt.Fprintf(&sb, "0x%02x%08x", p.ValExt, p.Value)
+		fmt.Fprintf(sb, "0x%02x%08x", p.ValExt, p.Value)
 	} else {
 		sb.WriteString("{ TS bits [47:26]} ")
-		sb.WriteString(p.hexVal())
+		p.writeHexVal(sb)
 	}
-	return sb.String()
 }
 
-func (p *Packet) extensionPacketBody() string {
+func (p *Packet) writeExtensionPacketBody(sb *strings.Builder) {
 	bitsize := int(p.SrcID&0x1F) + 1
 	if bitsize == 3 && (p.SrcID&0x80) == 0 {
-		return fmt.Sprintf("{stim port page} 0x%02x", p.Value)
+		fmt.Fprintf(sb, "{stim port page} 0x%02x", p.Value)
+		return
 	}
 	width := (bitsize / 4) + 1
-	return fmt.Sprintf("{unknown extension type, %d bits } 0x%0*x", bitsize, width, p.Value)
+	fmt.Fprintf(sb, "{unknown extension type, %d bits } 0x%0*x", bitsize, width, p.Value)
 }

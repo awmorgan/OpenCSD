@@ -419,17 +419,15 @@ func buildISAStr(isa ocsd.ISA) string {
 	}
 }
 
-// buildAtomStrCA returns the atom string matching C++ getAtomStr, supporting cycle-accurate mode.
-func (p *Packet) buildAtomStrCA() string {
-	var oss strings.Builder
+func (p *Packet) writeAtomStrCA(sb *strings.Builder) {
 	bitpattern := p.Atom.EnBits
 	if p.CycleCount == 0 {
 		// non-cycle-accurate
 		for i := 0; i < int(p.Atom.Num); i++ {
 			if bitpattern&1 == 1 {
-				oss.WriteString("E")
+				sb.WriteString("E")
 			} else {
-				oss.WriteString("N")
+				sb.WriteString("N")
 			}
 			bitpattern >>= 1
 		}
@@ -438,101 +436,112 @@ func (p *Packet) buildAtomStrCA() string {
 		case 1:
 			for i := 0; i < int(p.Atom.Num); i++ {
 				if bitpattern&1 == 1 {
-					oss.WriteString("WE")
+					sb.WriteString("WE")
 				} else {
-					oss.WriteString("WN")
+					sb.WriteString("WN")
 				}
 				bitpattern >>= 1
 			}
 		case 2:
-			oss.WriteString("W")
+			sb.WriteString("W")
 			for i := 0; i < int(p.Atom.Num); i++ {
 				if bitpattern&1 == 1 {
-					oss.WriteString("E")
+					sb.WriteString("E")
 				} else {
-					oss.WriteString("N")
+					sb.WriteString("N")
 				}
 				bitpattern >>= 1
 			}
 		case 3:
 			for i := uint32(0); i < p.CycleCount; i++ {
-				oss.WriteString("W")
+				sb.WriteString("W")
 			}
 			if p.Atom.Num > 0 {
 				if bitpattern&1 == 1 {
-					oss.WriteString("E")
+					sb.WriteString("E")
 				} else {
-					oss.WriteString("N")
+					sb.WriteString("N")
 				}
 			}
 		}
-		fmt.Fprintf(&oss, "; Cycles=%d", p.CycleCount)
+		fmt.Fprintf(sb, "; Cycles=%d", p.CycleCount)
 	}
+}
+
+func (p *Packet) buildAtomStrCA() string {
+	var oss strings.Builder
+	p.writeAtomStrCA(&oss)
 	return oss.String()
 }
 
-// buildISyncStr returns the ISync string matching C++ getISyncStr output.
-func (p *Packet) buildISyncStr() string {
-	var oss strings.Builder
+func (p *Packet) writeISyncStr(sb *strings.Builder) {
 	reasons := []string{"Periodic", "Trace Enable", "Restart Overflow", "Debug Exit"}
 	reason := "Unknown"
 	if int(p.ISyncInfo.Reason) < len(reasons) {
 		reason = reasons[p.ISyncInfo.Reason]
 	}
-	fmt.Fprintf(&oss, "(%s); ", reason)
+	fmt.Fprintf(sb, "(%s); ", reason)
 	if !p.ISyncInfo.NoAddress {
 		if p.ISyncInfo.HasLSipAddr {
-			fmt.Fprintf(&oss, "Data Instr Addr=0x%08x; ", uint32(p.Addr))
+			fmt.Fprintf(sb, "Data Instr Addr=0x%08x; ", uint32(p.Addr))
 		} else {
-			fmt.Fprintf(&oss, "Addr=0x%08x; ", uint32(p.Addr))
+			fmt.Fprintf(sb, "Addr=0x%08x; ", uint32(p.Addr))
 		}
 	}
 	if p.Context.CurrNS {
-		oss.WriteString("NS; ")
+		sb.WriteString("NS; ")
 	} else {
-		oss.WriteString("S; ")
+		sb.WriteString("S; ")
 	}
 	if p.Context.CurrHyp {
-		oss.WriteString("Hyp; ")
+		sb.WriteString("Hyp; ")
 	} else {
-		oss.WriteString(" ")
+		sb.WriteString(" ")
 	}
 	if p.Context.UpdatedC {
-		fmt.Fprintf(&oss, "CtxtID=%x; ", p.Context.CtxtID)
+		fmt.Fprintf(sb, "CtxtID=%x; ", p.Context.CtxtID)
 	}
 	if p.ISyncInfo.NoAddress {
-		return oss.String()
+		return
 	}
-	oss.WriteString(buildISAStr(p.CurrISA))
+	sb.WriteString(buildISAStr(p.CurrISA))
 	if p.ISyncInfo.HasCycleCount {
-		fmt.Fprintf(&oss, "Cycles=%d; ", p.CycleCount)
+		fmt.Fprintf(sb, "Cycles=%d; ", p.CycleCount)
 	}
-	return oss.String()
 }
 
-// buildBranchAddressStr returns the branch address string matching C++ getBranchAddressStr.
-func (p *Packet) buildBranchAddressStr() string {
-	var oss strings.Builder
-	oss.WriteString("Addr=")
-	oss.WriteString(addrValStr(p.Addr, p.AddrPktBits))
-	oss.WriteString("; ")
+func (p *Packet) buildISyncStr() string {
+	var sb strings.Builder
+	p.writeISyncStr(&sb)
+	return sb.String()
+}
+
+func (p *Packet) writeBranchAddressStr(sb *strings.Builder) {
+	sb.WriteString("Addr=")
+	sb.WriteString(addrValStr(p.Addr, p.AddrPktBits))
+	sb.WriteString("; ")
 	if p.CurrISA != p.PrevISA {
-		oss.WriteString(buildISAStr(p.CurrISA))
+		sb.WriteString(buildISAStr(p.CurrISA))
 	}
 	if p.Context.Updated {
 		if p.Context.CurrNS {
-			oss.WriteString("NS; ")
+			sb.WriteString("NS; ")
 		} else {
-			oss.WriteString("S; ")
+			sb.WriteString("S; ")
 		}
 		if p.Context.CurrHyp {
-			oss.WriteString("Hyp; ")
+			sb.WriteString("Hyp; ")
 		}
 	}
 	if p.Exception.Present {
-		oss.WriteString(p.buildExcepStr())
+		p.writeExcepStr(sb)
 	}
-	return oss.String()
+}
+
+func (p *Packet) buildBranchAddressStr() string {
+	var sb strings.Builder
+	p.writeBranchAddressStr(&sb)
+	return sb.String()
 }
 
 var armV7ExcepNames = []string{
@@ -542,46 +551,56 @@ var armV7ExcepNames = []string{
 	"Data Fault", "Generic", "IRQ", "FIQ",
 }
 
-// buildExcepStr returns the exception string matching C++ getExcepStr (ARMv7 non-CM case).
-func (p *Packet) buildExcepStr() string {
-	var oss strings.Builder
-	oss.WriteString("Exception=")
+func (p *Packet) writeExcepStr(sb *strings.Builder) {
+	sb.WriteString("Exception=")
 	num := int(p.Exception.Number)
 	if num < len(armV7ExcepNames) {
-		oss.WriteString(armV7ExcepNames[num])
+		sb.WriteString(armV7ExcepNames[num])
 	} else {
-		fmt.Fprintf(&oss, "IRQ%d", num-0x10)
+		fmt.Fprintf(sb, "IRQ%d", num-0x10)
 	}
-	oss.WriteString("; ")
+	sb.WriteString("; ")
 	if p.ExceptionCancel {
-		oss.WriteString("; Cancel prev instr")
+		sb.WriteString("; Cancel prev instr")
 	}
-	return oss.String()
+}
+
+func (p *Packet) buildExcepStr() string {
+	var sb strings.Builder
+	p.writeExcepStr(&sb)
+	return sb.String()
 }
 
 func (p *Packet) String() string {
+	var sb strings.Builder
 	name, desc := packetTypeNameDesc(p.Type)
-	s := name + " : " + desc
+	sb.WriteString(name)
+	sb.WriteString(" : ")
+	sb.WriteString(desc)
+
 	switch p.Type {
 	case PktBadSequence, PktBadTraceMode:
 		errName, _ := packetTypeNameDesc(p.ErrType)
-		s += "[" + errName + "]"
+		fmt.Fprintf(&sb, "[%s]", errName)
 	case PktBranchAddress:
-		s += "; " + p.buildBranchAddressStr()
+		sb.WriteString("; ")
+		p.writeBranchAddressStr(&sb)
 	case PktISync, PktISyncCycle:
-		s += "; " + p.buildISyncStr()
+		sb.WriteString("; ")
+		p.writeISyncStr(&sb)
 	case PktPHdr:
-		s += "; " + p.buildAtomStrCA()
+		sb.WriteString("; ")
+		p.writeAtomStrCA(&sb)
 	case PktCycleCount:
-		s += fmt.Sprintf("; Cycles=%d", p.CycleCount)
+		fmt.Fprintf(&sb, "; Cycles=%d", p.CycleCount)
 	case PktContextID:
-		s += fmt.Sprintf("; CtxtID=0x%x", p.Context.CtxtID)
+		fmt.Fprintf(&sb, "; CtxtID=0x%x", p.Context.CtxtID)
 	case PktVMID:
-		s += fmt.Sprintf("; VMID=0x%x", uint32(p.Context.VMID))
+		fmt.Fprintf(&sb, "; VMID=0x%x", uint32(p.Context.VMID))
 	case PktTimestamp:
-		s += fmt.Sprintf("; TS=0x%x (%d) ", p.Timestamp, p.Timestamp)
+		fmt.Fprintf(&sb, "; TS=0x%x (%d) ", p.Timestamp, p.Timestamp)
 	}
-	return s
+	return sb.String()
 }
 
 func (p *Packet) ISAStr() string {

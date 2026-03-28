@@ -405,10 +405,10 @@ func (e *TraceElement) String() string {
 
 	switch e.ElemType {
 	case GenElemInstrRange:
-		sb.WriteString(fmt.Sprintf("exec range=0x%x:[0x%x] ", e.StAddr, e.EnAddr))
-		sb.WriteString(fmt.Sprintf("num_i(%d) ", e.Payload.NumInstrRange))
-		sb.WriteString(fmt.Sprintf("last_sz(%d) ", e.LastInstrSz))
-		sb.WriteString(fmt.Sprintf("(ISA=%s) ", isaStr[e.ISA]))
+		fmt.Fprintf(&sb, "exec range=0x%x:[0x%x] ", e.StAddr, e.EnAddr)
+		fmt.Fprintf(&sb, "num_i(%d) ", e.Payload.NumInstrRange)
+		fmt.Fprintf(&sb, "last_sz(%d) ", e.LastInstrSz)
+		fmt.Fprintf(&sb, "(ISA=%s) ", isaStr[e.ISA])
 		if e.LastInstrExec {
 			sb.WriteString("E ")
 		} else {
@@ -456,26 +456,26 @@ func (e *TraceElement) String() string {
 		case ocsd.MemSpaceNone:
 			strEx = "None"
 		}
-		sb.WriteString(fmt.Sprintf(" 0x%x; Memspace [0x%x:%s] ", e.StAddr, e.Payload.ExceptionNum, strEx))
+		fmt.Fprintf(&sb, " 0x%x; Memspace [0x%x:%s] ", e.StAddr, e.Payload.ExceptionNum, strEx)
 
 	case GenElemIRangeNopath:
-		sb.WriteString(fmt.Sprintf("first 0x%x:[next 0x%x] ", e.StAddr, e.EnAddr))
-		sb.WriteString(fmt.Sprintf("num_i(%d) ", e.Payload.NumInstrRange))
+		fmt.Fprintf(&sb, "first 0x%x:[next 0x%x] ", e.StAddr, e.EnAddr)
+		fmt.Fprintf(&sb, "num_i(%d) ", e.Payload.NumInstrRange)
 
 	case GenElemException:
 		if e.ExcepRetAddr {
-			sb.WriteString(fmt.Sprintf("pref ret addr:0x%x", e.EnAddr))
+			fmt.Fprintf(&sb, "pref ret addr:0x%x", e.EnAddr)
 			if e.ExcepRetAddrBrTgt {
 				sb.WriteString(" [addr also prev br tgt]")
 			}
 			sb.WriteString("; ")
 		}
-		sb.WriteString(fmt.Sprintf("excep num (0x%02x) ", e.Payload.ExceptionNum))
+		fmt.Fprintf(&sb, "excep num (0x%02x) ", e.Payload.ExceptionNum)
 
 	case GenElemPeContext:
-		sb.WriteString(fmt.Sprintf("(ISA=%s) ", isaStr[e.ISA]))
+		fmt.Fprintf(&sb, "(ISA=%s) ", isaStr[e.ISA])
 		if e.Context.ExceptionLevel > ocsd.ELUnknown && e.Context.ELValid() {
-			sb.WriteString(fmt.Sprintf("EL%d", e.Context.ExceptionLevel))
+			fmt.Fprintf(&sb, "EL%d", e.Context.ExceptionLevel)
 		}
 		switch e.Context.SecurityLevel {
 		case ocsd.SecSecure:
@@ -493,19 +493,19 @@ func (e *TraceElement) String() string {
 			sb.WriteString("32-bit; ")
 		}
 		if e.Context.VMIDValid() {
-			sb.WriteString(fmt.Sprintf("VMID=0x%x; ", e.Context.VMID))
+			fmt.Fprintf(&sb, "VMID=0x%x; ", e.Context.VMID)
 		}
 		if e.Context.CtxtIDValid() {
-			sb.WriteString(fmt.Sprintf("CTXTID=0x%x; ", e.Context.ContextID))
+			fmt.Fprintf(&sb, "CTXTID=0x%x; ", e.Context.ContextID)
 		}
 
 	case GenElemTraceOn:
 		if s, ok := traceOnStr[e.Payload.TraceOnReason]; ok {
-			sb.WriteString(fmt.Sprintf(" [%s]", s))
+			fmt.Fprintf(&sb, " [%s]", s)
 		}
 
 	case GenElemTimestamp:
-		sb.WriteString(fmt.Sprintf(" [ TS=0x%012x]; ", e.Timestamp))
+		fmt.Fprintf(&sb, " [ TS=0x%012x]; ", e.Timestamp)
 
 	case GenElemSWTrace:
 		e.printSWInfoPkt(&sb)
@@ -517,18 +517,18 @@ func (e *TraceElement) String() string {
 		if e.Payload.TraceEvent.EvType == EventTrigger {
 			sb.WriteString(" Trigger; ")
 		} else if e.Payload.TraceEvent.EvType == EventNumbered {
-			sb.WriteString(fmt.Sprintf(" Numbered:%d; ", e.Payload.TraceEvent.EvNumber))
+			fmt.Fprintf(&sb, " Numbered:%d; ", e.Payload.TraceEvent.EvNumber)
 		}
 
 	case GenElemEOTrace, GenElemNoSync:
 		if e.Payload.UnsyncEOTInfo <= UnsyncEOT {
-			sb.WriteString(fmt.Sprintf(" [%s]", unsyncStr[e.Payload.UnsyncEOTInfo]))
+			fmt.Fprintf(&sb, " [%s]", unsyncStr[e.Payload.UnsyncEOTInfo])
 		}
 
 	case GenElemSyncMarker:
 		typ := e.Payload.SyncMarker.Type
 		if s, ok := markerTypeStr[typ]; ok {
-			sb.WriteString(fmt.Sprintf(" [%s(0x%08x)]", s, e.Payload.SyncMarker.Value))
+			fmt.Fprintf(&sb, " [%s(0x%08x)]", s, e.Payload.SyncMarker.Value)
 		}
 
 	case GenElemMemTrans:
@@ -537,11 +537,11 @@ func (e *TraceElement) String() string {
 		}
 
 	case GenElemInstrumentation:
-		sb.WriteString(fmt.Sprintf("EL%d; 0x%016x", e.Payload.SWIte.EL, e.Payload.SWIte.Value))
+		fmt.Fprintf(&sb, "EL%d; 0x%016x", e.Payload.SWIte.EL, e.Payload.SWIte.Value)
 	}
 
 	if e.HasCC {
-		sb.WriteString(fmt.Sprintf(" [CC=%d]; ", e.CycleCount))
+		fmt.Fprintf(&sb, " [CC=%d]; ", e.CycleCount)
 	}
 
 	sb.WriteString(")")
@@ -552,7 +552,7 @@ func (e *TraceElement) printSWInfoPkt(sb *strings.Builder) {
 	info := e.Payload.SWTraceInfo
 	if !info.GlobalErr() {
 		if info.IDValid() {
-			sb.WriteString(fmt.Sprintf(" (Ma:0x%02x; Ch:0x%02x) ", info.MasterID, info.ChannelID))
+			fmt.Fprintf(sb, " (Ma:0x%02x; Ch:0x%02x) ", info.MasterID, info.ChannelID)
 		} else {
 			sb.WriteString("(Ma:0x??; Ch:0x??) ")
 		}
@@ -561,24 +561,24 @@ func (e *TraceElement) printSWInfoPkt(sb *strings.Builder) {
 			sb.WriteString("0x")
 			switch info.PayloadPktBitsize() {
 			case 4:
-				sb.WriteString(fmt.Sprintf("%x", e.PtrExtendedData[0]&0xF))
+				fmt.Fprintf(sb, "%x", e.PtrExtendedData[0]&0xF)
 			case 8:
-				sb.WriteString(fmt.Sprintf("%02x", e.PtrExtendedData[0]))
+				fmt.Fprintf(sb, "%02x", e.PtrExtendedData[0])
 			case 16:
 				if len(e.PtrExtendedData) >= 2 {
 					val := uint16(e.PtrExtendedData[0]) | (uint16(e.PtrExtendedData[1]) << 8)
-					sb.WriteString(fmt.Sprintf("%04x", val))
+					fmt.Fprintf(sb, "%04x", val)
 				}
 			case 32:
 				if len(e.PtrExtendedData) >= 4 {
 					val := uint32(e.PtrExtendedData[0]) | (uint32(e.PtrExtendedData[1]) << 8) | (uint32(e.PtrExtendedData[2]) << 16) | (uint32(e.PtrExtendedData[3]) << 24)
-					sb.WriteString(fmt.Sprintf("%08x", val))
+					fmt.Fprintf(sb, "%08x", val)
 				}
 			case 64:
 				if len(e.PtrExtendedData) >= 8 {
 					val := uint64(e.PtrExtendedData[0]) | (uint64(e.PtrExtendedData[1]) << 8) | (uint64(e.PtrExtendedData[2]) << 16) | (uint64(e.PtrExtendedData[3]) << 24) |
 						(uint64(e.PtrExtendedData[4]) << 32) | (uint64(e.PtrExtendedData[5]) << 40) | (uint64(e.PtrExtendedData[6]) << 48) | (uint64(e.PtrExtendedData[7]) << 56)
-					sb.WriteString(fmt.Sprintf("%016x", val))
+					fmt.Fprintf(sb, "%016x", val)
 				}
 			default:
 				sb.WriteString("{Data Error : unsupported bit width.}")
@@ -593,7 +593,7 @@ func (e *TraceElement) printSWInfoPkt(sb *strings.Builder) {
 			sb.WriteString("Trig ")
 		}
 		if info.HasTimestamp() {
-			sb.WriteString(fmt.Sprintf(" [ TS=0x%012x]; ", e.Timestamp))
+			fmt.Fprintf(sb, " [ TS=0x%012x]; ", e.Timestamp)
 		}
 		if info.Frequency() {
 			sb.WriteString("Freq")
@@ -618,12 +618,12 @@ func (e *TraceElement) printSWInfoPktItm(sb *strings.Builder) {
 	switch itm.PktType {
 	case SWITPayload:
 		width := int(itm.PayloadSize) * 2
-		sb.WriteString(fmt.Sprintf("ITM_SWIT (ch: 0x%x; Data: 0x%0*x) ", itm.PayloadSrcID, width, itm.Value))
+		fmt.Fprintf(sb, "ITM_SWIT (ch: 0x%x; Data: 0x%0*x) ", itm.PayloadSrcID, width, itm.Value)
 	case DWTPayload:
 		width := int(itm.PayloadSize) * 2
-		sb.WriteString(fmt.Sprintf("ITM_DWT (desc: 0x%x; Data: 0x%0*x) ", itm.PayloadSrcID, width, itm.Value))
+		fmt.Fprintf(sb, "ITM_DWT (desc: 0x%x; Data: 0x%0*x) ", itm.PayloadSrcID, width, itm.Value)
 	case TSGlobal:
-		sb.WriteString(fmt.Sprintf("ITM_TS_GLOBAL ( TS: 0x%016x) ", e.Timestamp))
+		fmt.Fprintf(sb, "ITM_TS_GLOBAL ( TS: 0x%016x) ", e.Timestamp)
 	case TSSync:
 		tsLocalDesc = "TS Sync"
 	case TSDelay:
@@ -635,7 +635,7 @@ func (e *TraceElement) printSWInfoPktItm(sb *strings.Builder) {
 	}
 
 	if tsLocalDesc != "" {
-		sb.WriteString(fmt.Sprintf("ITM_TS_LOCAL ( TS delta: 0x%08x, { %s}; ", itm.Value, tsLocalDesc))
-		sb.WriteString(fmt.Sprintf("TS cumulative: 0x%016x) ", e.Timestamp))
+		fmt.Fprintf(sb, "ITM_TS_LOCAL ( TS delta: 0x%08x, { %s}; ", itm.Value, tsLocalDesc)
+		fmt.Fprintf(sb, "TS cumulative: 0x%016x) ", e.Timestamp)
 	}
 }

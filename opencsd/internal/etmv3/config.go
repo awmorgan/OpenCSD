@@ -3,6 +3,7 @@ package etmv3
 import (
 	"fmt"
 	"opencsd/internal/ocsd"
+	"strings"
 )
 
 // Config represents the hardware configuration for an ETMv3 trace macrocell.
@@ -109,5 +110,7 @@ func (c *Config) TraceID() uint8 { return uint8(c.RegTrcID & 0x7F) }
 
 // String returns a brief description of the config.
 func (c *Config) String() string {
-	return fmt.Sprintf("ETMv3 Config [ID=0x%02x, IDR=0x%08x, CTRL=0x%08x]", c.TraceID(), c.RegIDR, c.RegCtrl)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "ETMv3 Config [ID=0x%02x, IDR=0x%08x, CTRL=0x%08x]", c.TraceID(), c.RegIDR, c.RegCtrl)
+	return sb.String()
 }

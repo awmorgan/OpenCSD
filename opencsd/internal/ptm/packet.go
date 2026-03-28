@@ -205,18 +205,18 @@ func (p *Packet) IsBadPacket() bool {
 func (p *Packet) String() string {
 	name, desc := packetTypeName(p.Type)
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s : %s; ", name, desc))
+	fmt.Fprintf(&sb, "%s : %s; ", name, desc)
 
 	switch p.Type {
 	case PktBadSequence:
 		errName, _ := packetTypeName(p.ErrType)
-		sb.WriteString(fmt.Sprintf("[%s]; ", errName))
+		fmt.Fprintf(&sb, "[%s]; ", errName)
 	case PktAtom:
 		sb.WriteString(p.getAtomStr())
 	case PktContextID:
-		sb.WriteString(fmt.Sprintf("CtxtID=0x%08x; ", p.Context.CtxtID))
+		fmt.Fprintf(&sb, "CtxtID=0x%08x; ", p.Context.CtxtID)
 	case PktVMID:
-		sb.WriteString(fmt.Sprintf("VMID=0x%02x; ", p.Context.VMID))
+		fmt.Fprintf(&sb, "VMID=0x%02x; ", p.Context.VMID)
 	case PktWPointUpdate, PktBranchAddress:
 		sb.WriteString(p.getBranchAddressStr())
 	case PktISync:
@@ -323,8 +323,8 @@ func (p *Packet) getExcepStr() string {
 func (p *Packet) getISyncStr() string {
 	reasons := []string{"Periodic", "Trace Enable", "Restart Overflow", "Debug Exit"}
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("(%s); ", reasons[int(p.ISyncReason)]))
-	sb.WriteString(fmt.Sprintf("Addr=0x%08x; ", uint32(p.AddrVal)))
+	fmt.Fprintf(&sb, "(%s); ", reasons[int(p.ISyncReason)])
+	fmt.Fprintf(&sb, "Addr=0x%08x; ", uint32(p.AddrVal))
 
 	if p.Context.CurrNS {
 		sb.WriteString("NS; ")
@@ -337,7 +337,7 @@ func (p *Packet) getISyncStr() string {
 	}
 
 	if p.Context.UpdatedC {
-		sb.WriteString(fmt.Sprintf("CtxtID=%08x; ", p.Context.CtxtID))
+		fmt.Fprintf(&sb, "CtxtID=%08x; ", p.Context.CtxtID)
 	}
 
 	sb.WriteString(p.getISAStr())
@@ -439,13 +439,13 @@ func formatTraceValueHex(totalBits int, validBits int, value uint64, updateBits 
 		sb.WriteByte('?')
 	}
 	if validChars > 0 {
-		sb.WriteString(fmt.Sprintf("%0*X", validChars, value&maskBits64(validBits)))
+		fmt.Fprintf(&sb, "%0*X", validChars, value&maskBits64(validBits))
 	}
 	if validBits < totalBits {
-		sb.WriteString(fmt.Sprintf(" (%d:0)", validBits-1))
+		fmt.Fprintf(&sb, " (%d:0)", validBits-1)
 	}
 	if updateBits > 0 {
-		sb.WriteString(fmt.Sprintf(" ~[0x%X]", value&maskBits64(updateBits)))
+		fmt.Fprintf(&sb, " ~[0x%X]", value&maskBits64(updateBits))
 	}
 	return sb.String()
 }
