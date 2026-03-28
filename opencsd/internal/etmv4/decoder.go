@@ -927,7 +927,7 @@ func (d *PktDecode) commitElements() error {
 
 func (d *PktDecode) setInstrInfoInAddrISA(addr ocsd.VAddr, isa uint8) {
 	d.instrInfo.InstrAddr = addr
-	d.instrInfo.Isa = d.calcISA(d.is64bit, isa)
+	d.instrInfo.ISA = d.calcISA(d.is64bit, isa)
 }
 
 func (d *PktDecode) nextRangeCheckClear() {
@@ -1017,7 +1017,7 @@ func (d *PktDecode) updateContext(p0elem *p0Elem, elem *ocsd.TraceElement) {
 	}
 
 	elem.ISA = d.calcISA(d.is64bit, p0elem.addrIS)
-	d.instrInfo.Isa = elem.ISA
+	d.instrInfo.ISA = elem.ISA
 	d.peContext = elem.Context // keep local copy updated
 	d.needCtxt = false
 }
@@ -1033,7 +1033,7 @@ func (d *PktDecode) returnStackPop() error {
 			err = d.handlePacketSeqErr(err, ocsd.BadTrcIndex, "Trace Return Stack Overflow.")
 		} else {
 			d.instrInfo.InstrAddr = popAddr
-			d.instrInfo.Isa = *isa
+			d.instrInfo.ISA = *isa
 			d.needAddr = false
 		}
 	}
@@ -1124,14 +1124,14 @@ func (d *PktDecode) setElemTraceRange(elem *ocsd.TraceElement, addrRange instrRa
 
 func (d *PktDecode) setElemTraceRangeInstr(elem *ocsd.TraceElement, addrRange instrRange, executed bool, instr *ocsd.InstrInfo) {
 	elem.SetType(ocsd.GenElemInstrRange)
-	elem.SetLastInstrInfo(executed, instr.Type, instr.SubType, instr.InstrSize)
-	elem.ISA = instr.Isa
+	elem.SetLastInstrInfo(executed, instr.Type, instr.Subtype, instr.InstrSize)
+	elem.ISA = instr.ISA
 	elem.LastInstrCond = instr.IsConditional != 0
-	elem.StAddr = addrRange.stAddr
-	elem.EnAddr = addrRange.enAddr
+	elem.StartAddr = addrRange.stAddr
+	elem.EndAddr = addrRange.enAddr
 	elem.Payload.NumInstrRange = addrRange.numInstr
 	if executed {
-		instr.Isa = instr.NextIsa
+		instr.ISA = instr.NextISA
 	}
 }
 
@@ -1171,7 +1171,7 @@ func (d *PktDecode) traceInstrToWP(rangeOut *instrRange, res *wpRes, traceToAddr
 			} else if d.instrInfo.Type != ocsd.InstrOther {
 				*res = wpFound
 			}
-		} else if bytesRead == 2 && d.instrInfo.Isa == ocsd.ISAThumb2 {
+		} else if bytesRead == 2 && d.instrInfo.ISA == ocsd.ISAThumb2 {
 			// Fallback for 16-bit Thumb instructions at a memory region boundary.
 			val := uint16(memData[0]) | uint16(memData[1])<<8
 			if (val & 0xF800) < 0xE800 { // valid 16-bit Thumb encoding
@@ -1236,17 +1236,17 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, elem *p0Elem) error {
 			if atom == ocsd.AtomE {
 				d.instrInfo.InstrAddr = d.instrInfo.BranchAddr
 				if d.instrInfo.IsLink != 0 {
-					d.returnStack.Push(nextAddr, d.instrInfo.Isa)
+					d.returnStack.Push(nextAddr, d.instrInfo.ISA)
 				}
 			}
 		case ocsd.InstrBrIndirect:
 			if atom == ocsd.AtomE {
 				d.needAddr = true
 				if d.instrInfo.IsLink != 0 {
-					d.returnStack.Push(nextAddr, d.instrInfo.Isa)
+					d.returnStack.Push(nextAddr, d.instrInfo.ISA)
 				}
 				d.returnStack.SetPopPending(true)
-				if d.config.MajVersion() >= 0x5 && d.instrInfo.SubType == ocsd.SInstrV8Eret {
+				if d.config.MajVersion() >= 0x5 && d.instrInfo.Subtype == ocsd.SInstrV8Eret {
 					ETE_ERET = true // simulate ETE ERET
 				}
 			}
@@ -1286,7 +1286,7 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, elem *p0Elem) error {
 
 		if WPRes == wpNacc && err == nil {
 			d.outElem.CurrElem().SetType(ocsd.GenElemAddrNacc)
-			d.outElem.CurrElem().StAddr = d.instrInfo.InstrAddr
+			d.outElem.CurrElem().StartAddr = d.instrInfo.InstrAddr
 
 			currMemSpace := d.getCurrMemSpace()
 			d.outElem.CurrElem().Payload.ExceptionNum = uint32(currMemSpace)
@@ -1323,19 +1323,19 @@ func (d *PktDecode) processException(elem *p0Elem) error {
 		excepRetAddr = pAddressElem.addrVal
 
 		if branchTarget {
-			b64bit := d.instrInfo.Isa == ocsd.ISAAArch64
+			b64bit := d.instrInfo.ISA == ocsd.ISAAArch64
 			if pCtxtElem != nil {
 				b64bit = pCtxtElem.context.SF
 			}
 			d.instrInfo.InstrAddr = excepRetAddr
 			if pAddressElem.addrIS == 0 {
 				if b64bit {
-					d.instrInfo.Isa = ocsd.ISAAArch64
+					d.instrInfo.ISA = ocsd.ISAAArch64
 				} else {
-					d.instrInfo.Isa = ocsd.ISAArm
+					d.instrInfo.ISA = ocsd.ISAArm
 				}
 			} else {
-				d.instrInfo.Isa = ocsd.ISAThumb2
+				d.instrInfo.ISA = ocsd.ISAThumb2
 			}
 			d.needAddr = false
 		}
@@ -1396,7 +1396,7 @@ func (d *PktDecode) processException(elem *p0Elem) error {
 
 		if WPRes == wpNacc {
 			d.outElem.CurrElem().SetType(ocsd.GenElemAddrNacc)
-			d.outElem.CurrElem().StAddr = d.instrInfo.InstrAddr
+			d.outElem.CurrElem().StartAddr = d.instrInfo.InstrAddr
 			d.outElem.CurrElem().Payload.ExceptionNum = uint32(d.getCurrMemSpace())
 
 			err = d.outElem.AddElem(excepPktIndex)
@@ -1407,13 +1407,13 @@ func (d *PktDecode) processException(elem *p0Elem) error {
 	}
 
 	d.outElem.CurrElem().SetType(ocsd.GenElemException)
-	d.outElem.CurrElem().EnAddr = excepRetAddr
-	d.outElem.CurrElem().ExcepRetAddr = true
+	d.outElem.CurrElem().EndAddr = excepRetAddr
+	d.outElem.CurrElem().ExceptionRetAddr = true
 	if mTailChain {
-		d.outElem.CurrElem().ExcepRetAddr = false
-		d.outElem.CurrElem().ExcepMTailChain = true
+		d.outElem.CurrElem().ExceptionRetAddr = false
+		d.outElem.CurrElem().ExceptionMTailChain = true
 	}
-	d.outElem.CurrElem().ExcepRetAddrBrTgt = branchTarget
+	d.outElem.CurrElem().ExceptionRetAddrBrTgt = branchTarget
 	d.outElem.CurrElem().Payload.ExceptionNum = uint32(pExceptElem.excepNum)
 
 	// Remove processed elements from p0Stack
@@ -1445,7 +1445,7 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 
 	if bytesRead != 4 {
 		err = d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemAddrNacc)
-		d.outElem.CurrElem().StAddr = srcAddr
+		d.outElem.CurrElem().StartAddr = srcAddr
 		d.outElem.CurrElem().Payload.ExceptionNum = uint32(d.getCurrMemSpace())
 		return err
 	}
@@ -1471,7 +1471,7 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 	outRange.enAddr = d.instrInfo.InstrAddr
 
 	if outRange.enAddr-outRange.stAddr > ocsd.VAddr(d.instrInfo.InstrSize) {
-		if d.instrInfo.Isa != ocsd.ISAThumb2 && !splitRangeOnN {
+		if d.instrInfo.ISA != ocsd.ISAThumb2 && !splitRangeOnN {
 			outRange.numInstr = uint32(outRange.enAddr-outRange.stAddr) / 4
 		} else {
 			instr := d.instrInfo
@@ -1510,7 +1510,7 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 					if err != nil {
 						return err
 					}
-					d.outElem.CurrElem().StAddr = srcAddr
+					d.outElem.CurrElem().StartAddr = srcAddr
 					d.outElem.CurrElem().Payload.ExceptionNum = uint32(d.getCurrMemSpace())
 					outRange.numInstr = 1
 					outRange.stAddr = srcAddr
@@ -1523,18 +1523,18 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 	switch d.instrInfo.Type {
 	case ocsd.InstrBr:
 		if d.instrInfo.IsLink != 0 {
-			d.returnStack.Push(d.instrInfo.InstrAddr, d.instrInfo.Isa)
+			d.returnStack.Push(d.instrInfo.InstrAddr, d.instrInfo.ISA)
 		}
 		d.instrInfo.InstrAddr = d.instrInfo.BranchAddr
 
 	case ocsd.InstrBrIndirect:
 		d.needAddr = true
 		if d.instrInfo.IsLink != 0 {
-			d.returnStack.Push(d.instrInfo.InstrAddr, d.instrInfo.Isa)
+			d.returnStack.Push(d.instrInfo.InstrAddr, d.instrInfo.ISA)
 		}
 		d.returnStack.SetPopPending(true)
 	}
-	d.instrInfo.Isa = d.instrInfo.NextIsa
+	d.instrInfo.ISA = d.instrInfo.NextISA
 
 	d.outElem.AddElem(elem.rootIndex)
 	d.setElemTraceRange(d.outElem.CurrElem(), outRange, true)
@@ -1612,7 +1612,7 @@ func (d *PktDecode) processQElement(elem *p0Elem) error {
 			if isBranch {
 				break
 			}
-		} else if bytesRead == 2 && d.instrInfo.Isa == ocsd.ISAThumb2 {
+		} else if bytesRead == 2 && d.instrInfo.ISA == ocsd.ISAThumb2 {
 			// Fallback for 16-bit Thumb instructions at a memory region boundary.
 			val := uint16(memData[0]) | uint16(memData[1])<<8
 			if (val & 0xF800) < 0xE800 { // valid 16-bit Thumb encoding
@@ -1651,8 +1651,8 @@ func (d *PktDecode) processQElement(elem *p0Elem) error {
 		addrRange.numInstr = uint32(iCount)
 
 		d.outElem.CurrElem().SetType(ocsd.GenElemIRangeNopath)
-		d.outElem.CurrElem().StAddr = addrRange.stAddr
-		d.outElem.CurrElem().EnAddr = addrRange.enAddr
+		d.outElem.CurrElem().StartAddr = addrRange.stAddr
+		d.outElem.CurrElem().EndAddr = addrRange.enAddr
 		d.outElem.CurrElem().Payload.NumInstrRange = addrRange.numInstr
 		d.outElem.CurrElem().ISA = d.calcISA(d.is64bit, qIs)
 	}

@@ -20,8 +20,8 @@ func TestTraceElementString_AddressWidthFormatting(t *testing.T) {
 
 func TestTraceElementString_ExceptionRetAddressFormatting(t *testing.T) {
 	e := NewTraceElementWithType(GenElemException)
-	e.ExcepRetAddr = true
-	e.EnAddr = 0xDEADBEEF
+	e.ExceptionRetAddr = true
+	e.EndAddr = 0xDEADBEEF
 	e.SetExceptionNum(0x11)
 
 	s := e.String()
@@ -45,7 +45,7 @@ func TestTraceElementString_AddrNaccMemSpaceFormatting(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := NewTraceElementWithType(GenElemAddrNacc)
-			e.StAddr = 0x1000
+			e.StartAddr = 0x1000
 			e.SetExceptionNum(uint32(tt.space))
 
 			s := e.String()

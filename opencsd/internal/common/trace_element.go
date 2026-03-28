@@ -1,641 +1,102 @@
 package common
 
 import (
-	"fmt"
-	"strings"
-
 	"opencsd/internal/ocsd"
 )
 
-// GenElemType represents the generic trace element type.
-type GenElemType uint32
+// Aliases for types moved to internal/ocsd
+type GenElemType = ocsd.GenElemType
 
 const (
-	GenElemUnknown         GenElemType = 0
-	GenElemNoSync          GenElemType = 1
-	GenElemTraceOn         GenElemType = 2
-	GenElemEOTrace         GenElemType = 3
-	GenElemPeContext       GenElemType = 4
-	GenElemInstrRange      GenElemType = 5
-	GenElemIRangeNopath    GenElemType = 6
-	GenElemAddrNacc        GenElemType = 7
-	GenElemAddrUnknown     GenElemType = 8
-	GenElemException       GenElemType = 9
-	GenElemExceptionRet    GenElemType = 10
-	GenElemTimestamp       GenElemType = 11
-	GenElemCycleCount      GenElemType = 12
-	GenElemEvent           GenElemType = 13
-	GenElemSWTrace         GenElemType = 14
-	GenElemSyncMarker      GenElemType = 15
-	GenElemMemTrans        GenElemType = 16
-	GenElemInstrumentation GenElemType = 17
-	GenElemITMTrace        GenElemType = 18
-	GenElemCustom          GenElemType = 19
+	GenElemUnknown         = ocsd.GenElemUnknown
+	GenElemNoSync          = ocsd.GenElemNoSync
+	GenElemTraceOn         = ocsd.GenElemTraceOn
+	GenElemEOTrace         = ocsd.GenElemEOTrace
+	GenElemPeContext       = ocsd.GenElemPeContext
+	GenElemInstrRange      = ocsd.GenElemInstrRange
+	GenElemIRangeNopath    = ocsd.GenElemIRangeNopath
+	GenElemAddrNacc        = ocsd.GenElemAddrNacc
+	GenElemAddrUnknown     = ocsd.GenElemAddrUnknown
+	GenElemException       = ocsd.GenElemException
+	GenElemExceptionRet    = ocsd.GenElemExceptionRet
+	GenElemTimestamp       = ocsd.GenElemTimestamp
+	GenElemCycleCount      = ocsd.GenElemCycleCount
+	GenElemEvent           = ocsd.GenElemEvent
+	GenElemSWTrace         = ocsd.GenElemSWTrace
+	GenElemSyncMarker      = ocsd.GenElemSyncMarker
+	GenElemMemTrans        = ocsd.GenElemMemTrans
+	GenElemInstrumentation = ocsd.GenElemInstrumentation
+	GenElemITMTrace        = ocsd.GenElemITMTrace
+	GenElemCustom          = ocsd.GenElemCustom
 )
 
-type TraceOnReason uint32
+type TraceOnReason = ocsd.TraceOnReason
 
 const (
-	TraceOnNormal   TraceOnReason = 0
-	TraceOnOverflow TraceOnReason = 1
-	TraceOnExDebug  TraceOnReason = 2
+	TraceOnNormal   = ocsd.TraceOnNormal
+	TraceOnOverflow = ocsd.TraceOnOverflow
+	TraceOnExDebug  = ocsd.TraceOnExDebug
 )
 
-type EventType uint16
+type EventType = ocsd.EventType
 
 const (
-	EventUnknown  EventType = 0
-	EventTrigger  EventType = 1
-	EventNumbered EventType = 2
+	EventUnknown  = ocsd.EventUnknown
+	EventTrigger  = ocsd.EventTrigger
+	EventNumbered = ocsd.EventNumbered
 )
 
-type TraceEvent struct {
-	EvType   EventType
-	EvNumber uint16
-}
-
-type UnsyncInfo uint32
+type TraceEvent = ocsd.TraceEvent
+type UnsyncInfo = ocsd.UnsyncInfo
 
 const (
-	UnsyncUnknown      UnsyncInfo = 0
-	UnsyncInitDecoder  UnsyncInfo = 1
-	UnsyncResetDecoder UnsyncInfo = 2
-	UnsyncOverflow     UnsyncInfo = 3
-	UnsyncDiscard      UnsyncInfo = 4
-	UnsyncBadPacket    UnsyncInfo = 5
-	UnsyncBadImage     UnsyncInfo = 6
-	UnsyncEOT          UnsyncInfo = 7
+	UnsyncUnknown      = ocsd.UnsyncUnknown
+	UnsyncInitDecoder  = ocsd.UnsyncInitDecoder
+	UnsyncResetDecoder = ocsd.UnsyncResetDecoder
+	UnsyncOverflow     = ocsd.UnsyncOverflow
+	UnsyncDiscard      = ocsd.UnsyncDiscard
+	UnsyncBadPacket    = ocsd.UnsyncBadPacket
+	UnsyncBadImage     = ocsd.UnsyncBadImage
+	UnsyncEOT          = ocsd.UnsyncEOT
 )
 
-type TraceSyncMarker uint32
+type TraceSyncMarker = ocsd.TraceSyncMarker
 
 const (
-	ElemMarkerTS TraceSyncMarker = 0
+	ElemMarkerTS = ocsd.ElemMarkerTS
 )
 
-type TraceMarkerPayload struct {
-	Type  TraceSyncMarker
-	Value uint32
-}
-
-type TraceMemtrans uint32
+type TraceMarkerPayload = ocsd.TraceMarkerPayload
+type TraceMemtrans = ocsd.TraceMemtrans
 
 const (
-	MemTransTraceInit TraceMemtrans = 0
-	MemTransStart     TraceMemtrans = 1
-	MemTransCommit    TraceMemtrans = 2
-	MemTransFail      TraceMemtrans = 3
+	MemTransTraceInit = ocsd.MemTransTraceInit
+	MemTransStart     = ocsd.MemTransStart
+	MemTransCommit    = ocsd.MemTransCommit
+	MemTransFail      = ocsd.MemTransFail
 )
 
-type TraceSWIte struct {
-	EL    uint8
-	Value uint64
-}
-
-type SWTItmType uint32
+type TraceSWIte = ocsd.TraceSWIte
+type SWTItmType = ocsd.SWTItmType
 
 const (
-	SWITPayload  SWTItmType = 0
-	DWTPayload   SWTItmType = 1
-	TSSync       SWTItmType = 2
-	TSDelay      SWTItmType = 3
-	TSPKTDelay   SWTItmType = 4
-	TSPKTTSDelay SWTItmType = 5
-	TSGlobal     SWTItmType = 6
+	SWITPayload  = ocsd.SWITPayload
+	DWTPayload   = ocsd.DWTPayload
+	TSSync       = ocsd.TSSync
+	TSDelay      = ocsd.TSDelay
+	TSPKTDelay   = ocsd.TSPKTDelay
+	TSPKTTSDelay = ocsd.TSPKTTSDelay
+	TSGlobal     = ocsd.TSGlobal
 )
 
-type SWTItmInfo struct {
-	PktType      SWTItmType
-	PayloadSrcID uint8
-	PayloadSize  uint8
-	Value        uint32
-	Overflow     uint8
-}
+type SWTItmInfo = ocsd.SWTItmInfo
+type TraceElement = ocsd.TraceElement
 
-// TraceElement corresponds to OcsdTraceElement
-type TraceElement struct {
-	ElemType     GenElemType
-	ISA          ocsd.ISA
-	StAddr       ocsd.VAddr
-	EnAddr       ocsd.VAddr
-	Context      ocsd.PEContext
-	Timestamp    uint64
-	CycleCount   uint32
-	LastIType    ocsd.InstrType
-	LastISubtype ocsd.InstrSubtype
-
-	LastInstrExec     bool
-	LastInstrSz       uint8
-	HasCC             bool
-	CPUFreqChange     bool
-	ExcepRetAddr      bool
-	ExcepDataMarker   bool
-	ExtendedData      bool
-	HasTS             bool
-	LastInstrCond     bool
-	ExcepRetAddrBrTgt bool
-	ExcepMTailChain   bool
-
-	Payload struct {
-		ExceptionNum  uint32
-		TraceEvent    TraceEvent
-		TraceOnReason TraceOnReason
-		SWTraceInfo   ocsd.SWTInfo
-		NumInstrRange uint32
-		UnsyncEOTInfo UnsyncInfo
-		SyncMarker    TraceMarkerPayload
-		MemTrans      TraceMemtrans
-		SWIte         TraceSWIte
-		SWTItm        SWTItmInfo
-	}
-
-	PtrExtendedData []byte
-}
-
-func (e *TraceElement) clearPerPktData() {
-	e.LastInstrExec = false
-	e.LastInstrSz = 0
-	e.HasCC = false
-	e.CPUFreqChange = false
-	e.ExcepRetAddr = false
-	e.ExcepDataMarker = false
-	e.ExtendedData = false
-	e.HasTS = false
-	e.LastInstrCond = false
-	e.ExcepRetAddrBrTgt = false
-	e.ExcepMTailChain = false
-
-	e.Payload = struct {
-		ExceptionNum  uint32
-		TraceEvent    TraceEvent
-		TraceOnReason TraceOnReason
-		SWTraceInfo   ocsd.SWTInfo
-		NumInstrRange uint32
-		UnsyncEOTInfo UnsyncInfo
-		SyncMarker    TraceMarkerPayload
-		MemTrans      TraceMemtrans
-		SWIte         TraceSWIte
-		SWTItm        SWTItmInfo
-	}{}
-	e.PtrExtendedData = nil
-}
-
-// Construct with default state
+// NewTraceElement constructs with default state
 func NewTraceElement() *TraceElement {
-	te := &TraceElement{}
-	te.Init()
-	return te
+	return ocsd.NewTraceElement()
 }
 
 func NewTraceElementWithType(typ GenElemType) *TraceElement {
-	te := &TraceElement{}
-	te.Init()
-	te.ElemType = typ
-	return te
-}
-
-func (e *TraceElement) Init() {
-	e.StAddr = ^ocsd.VAddr(0) // -1
-	e.EnAddr = ^ocsd.VAddr(0) // -1
-	e.ISA = ocsd.ISAUnknown
-
-	e.CycleCount = 0
-	e.Timestamp = 0
-
-	e.Context.SetCtxtIDValid(false)
-	e.Context.SetVMIDValid(false)
-	e.Context.SetELValid(false)
-
-	e.LastIType = ocsd.InstrOther
-	e.LastISubtype = ocsd.SInstrNone
-
-	e.clearPerPktData()
-}
-
-// set elements API
-func (e *TraceElement) SetType(typ GenElemType) {
-	e.ElemType = typ
-	e.clearPerPktData()
-}
-
-func (e *TraceElement) UpdateType(typ GenElemType) {
-	e.ElemType = typ
-}
-
-func (e *TraceElement) SetContext(newCtx ocsd.PEContext) {
-	e.Context = newCtx
-}
-
-func (e *TraceElement) SetISA(isa ocsd.ISA) {
-	e.ISA = min(isa, ocsd.ISAUnknown)
-}
-
-func (e *TraceElement) SetCycleCount(cycleCount uint32) {
-	e.CycleCount = cycleCount
-	e.HasCC = true
-}
-
-func (e *TraceElement) SetEvent(evType EventType, number uint16) {
-	e.Payload.TraceEvent.EvType = evType
-	if evType == EventNumbered {
-		e.Payload.TraceEvent.EvNumber = number
-	} else {
-		e.Payload.TraceEvent.EvNumber = 0
-	}
-}
-
-func (e *TraceElement) SetTS(ts uint64, freqChange bool) {
-	e.Timestamp = ts
-	e.CPUFreqChange = freqChange
-	e.HasTS = true
-}
-
-func (e *TraceElement) SetExcepMarker() {
-	e.ExcepDataMarker = true
-}
-
-func (e *TraceElement) SetExceptionNum(excepNum uint32) {
-	e.Payload.ExceptionNum = excepNum
-}
-
-func (e *TraceElement) SetTraceOnReason(reason TraceOnReason) {
-	e.Payload.TraceOnReason = reason
-}
-
-func (e *TraceElement) SetUnSyncEOTReason(reason UnsyncInfo) {
-	e.Payload.UnsyncEOTInfo = reason
-}
-
-func (e *TraceElement) SetTransactionType(trans TraceMemtrans) {
-	e.Payload.MemTrans = trans
-}
-
-func (e *TraceElement) SetAddrRange(stAddr, enAddr ocsd.VAddr, numInstr uint32) {
-	e.StAddr = stAddr
-	e.EnAddr = enAddr
-	e.Payload.NumInstrRange = numInstr
-}
-
-func (e *TraceElement) SetLastInstrInfo(exec bool, lastIType ocsd.InstrType, lastISubtype ocsd.InstrSubtype, size uint8) {
-	e.LastInstrExec = exec
-	e.LastInstrSz = size & 0x7
-	e.LastIType = lastIType
-	e.LastISubtype = lastISubtype
-}
-
-func (e *TraceElement) SetAddrStart(stAddr ocsd.VAddr) {
-	e.StAddr = stAddr
-}
-
-func (e *TraceElement) SetSWTInfo(swtInfo ocsd.SWTInfo) {
-	e.Payload.SWTraceInfo = swtInfo
-}
-
-func (e *TraceElement) SetExtendedDataPtr(data []byte) {
-	e.ExtendedData = true
-	e.PtrExtendedData = data
-}
-
-func (e *TraceElement) SetITEInfo(swInstrumentation TraceSWIte) {
-	e.Payload.SWIte = swInstrumentation
-}
-
-func (e *TraceElement) SetSWTITMInfo(itmInfo SWTItmInfo) {
-	e.Payload.SWTItm = itmInfo
-}
-
-func (e *TraceElement) SetSyncMarker(marker TraceMarkerPayload) {
-	e.Payload.SyncMarker = marker
-}
-
-func (e *TraceElement) CopyPersistentData(src *TraceElement) {
-	e.ISA = src.ISA
-	e.Context = src.Context
-}
-
-var sElemDescs = map[GenElemType]string{
-	GenElemUnknown:         "OCSD_GEN_TRC_ELEM_UNKNOWN",
-	GenElemNoSync:          "OCSD_GEN_TRC_ELEM_NO_SYNC",
-	GenElemTraceOn:         "OCSD_GEN_TRC_ELEM_TRACE_ON",
-	GenElemEOTrace:         "OCSD_GEN_TRC_ELEM_EO_TRACE",
-	GenElemPeContext:       "OCSD_GEN_TRC_ELEM_PE_CONTEXT",
-	GenElemInstrRange:      "OCSD_GEN_TRC_ELEM_INSTR_RANGE",
-	GenElemIRangeNopath:    "OCSD_GEN_TRC_ELEM_I_RANGE_NOPATH",
-	GenElemAddrNacc:        "OCSD_GEN_TRC_ELEM_ADDR_NACC",
-	GenElemAddrUnknown:     "OCSD_GEN_TRC_ELEM_ADDR_UNKNOWN",
-	GenElemException:       "OCSD_GEN_TRC_ELEM_EXCEPTION",
-	GenElemExceptionRet:    "OCSD_GEN_TRC_ELEM_EXCEPTION_RET",
-	GenElemTimestamp:       "OCSD_GEN_TRC_ELEM_TIMESTAMP",
-	GenElemCycleCount:      "OCSD_GEN_TRC_ELEM_CYCLE_COUNT",
-	GenElemEvent:           "OCSD_GEN_TRC_ELEM_EVENT",
-	GenElemSWTrace:         "OCSD_GEN_TRC_ELEM_SWTRACE",
-	GenElemSyncMarker:      "OCSD_GEN_TRC_ELEM_SYNC_MARKER",
-	GenElemMemTrans:        "OCSD_GEN_TRC_ELEM_MEMTRANS",
-	GenElemInstrumentation: "OCSD_GEN_TRC_ELEM_INSTRUMENTATION",
-	GenElemITMTrace:        "OCSD_GEN_TRC_ELEM_ITMTRACE",
-	GenElemCustom:          "OCSD_GEN_TRC_ELEM_CUSTOM",
-}
-
-var instrTypeStr = map[ocsd.InstrType]string{
-	ocsd.InstrOther:      "--- ",
-	ocsd.InstrBr:         "BR  ",
-	ocsd.InstrBrIndirect: "iBR ",
-	ocsd.InstrIsb:        "ISB ",
-	ocsd.InstrDsbDmb:     "DSB.DMB",
-	ocsd.InstrWfiWfe:     "WFI.WFE",
-	ocsd.InstrTstart:     "TSTART",
-}
-
-var instrSubtypeStr = map[ocsd.InstrSubtype]string{
-	ocsd.SInstrNone:         "--- ",
-	ocsd.SInstrBrLink:       "b+link ",
-	ocsd.SInstrV8Ret:        "A64:ret ",
-	ocsd.SInstrV8Eret:       "A64:eret ",
-	ocsd.SInstrV7ImpliedRet: "V7:impl ret",
-}
-
-var traceOnStr = map[TraceOnReason]string{
-	TraceOnNormal:   "begin or filter",
-	TraceOnOverflow: "overflow",
-	TraceOnExDebug:  "debug restart",
-}
-
-var isaStr = map[ocsd.ISA]string{
-	ocsd.ISAArm:     "A32",
-	ocsd.ISAThumb2:  "T32",
-	ocsd.ISAAArch64: "A64",
-	ocsd.ISATee:     "TEE",
-	ocsd.ISAJazelle: "Jaz",
-	ocsd.ISACustom:  "Cst",
-	ocsd.ISAUnknown: "Unk",
-}
-
-var unsyncStr = map[UnsyncInfo]string{
-	UnsyncUnknown:      "undefined",
-	UnsyncInitDecoder:  "init-decoder",
-	UnsyncResetDecoder: "reset-decoder",
-	UnsyncOverflow:     "overflow",
-	UnsyncDiscard:      "discard",
-	UnsyncBadPacket:    "bad-packet",
-	UnsyncBadImage:     "bad-program-image",
-	UnsyncEOT:          "end-of-trace",
-}
-
-var transTypeStr = map[TraceMemtrans]string{
-	MemTransTraceInit: "Init",
-	MemTransStart:     "Start",
-	MemTransCommit:    "Commit",
-	MemTransFail:      "Fail",
-}
-
-var markerTypeStr = map[TraceSyncMarker]string{
-	ElemMarkerTS: "Timestamp marker",
-}
-
-// String implements OcsdTraceElement::toString
-func (e *TraceElement) String() string {
-	var sb strings.Builder
-
-	desc, ok := sElemDescs[e.ElemType]
-	if !ok {
-		return "OCSD_GEN_TRC_ELEM??: index out of range."
-	}
-	sb.WriteString(desc)
-	sb.WriteString("(")
-
-	switch e.ElemType {
-	case GenElemInstrRange:
-		fmt.Fprintf(&sb, "exec range=0x%x:[0x%x] ", e.StAddr, e.EnAddr)
-		fmt.Fprintf(&sb, "num_i(%d) ", e.Payload.NumInstrRange)
-		fmt.Fprintf(&sb, "last_sz(%d) ", e.LastInstrSz)
-		fmt.Fprintf(&sb, "(ISA=%s) ", isaStr[e.ISA])
-		if e.LastInstrExec {
-			sb.WriteString("E ")
-		} else {
-			sb.WriteString("N ")
-		}
-		if s, ok := instrTypeStr[e.LastIType]; ok {
-			sb.WriteString(s)
-		}
-		if e.LastISubtype != ocsd.SInstrNone {
-			if s, ok := instrSubtypeStr[e.LastISubtype]; ok {
-				sb.WriteString(s)
-			}
-		}
-		if e.LastInstrCond {
-			sb.WriteString(" <cond>")
-		}
-
-	case GenElemAddrNacc:
-		var strEx string
-		switch ocsd.MemSpaceAcc(e.Payload.ExceptionNum) {
-		case ocsd.MemSpaceEL1S:
-			strEx = "EL1S"
-		case ocsd.MemSpaceEL1N:
-			strEx = "EL1N"
-		case ocsd.MemSpaceEL2:
-			strEx = "EL2"
-		case ocsd.MemSpaceEL3:
-			strEx = "EL3"
-		case ocsd.MemSpaceEL2S:
-			strEx = "EL2S"
-		case ocsd.MemSpaceEL1R:
-			strEx = "EL1R"
-		case ocsd.MemSpaceEL2R:
-			strEx = "EL2R"
-		case ocsd.MemSpaceRoot:
-			strEx = "Root"
-		case ocsd.MemSpaceS:
-			strEx = "S"
-		case ocsd.MemSpaceN:
-			strEx = "N"
-		case ocsd.MemSpaceR:
-			strEx = "R"
-		case ocsd.MemSpaceAny:
-			strEx = "Any"
-		case ocsd.MemSpaceNone:
-			strEx = "None"
-		}
-		fmt.Fprintf(&sb, " 0x%x; Memspace [0x%x:%s] ", e.StAddr, e.Payload.ExceptionNum, strEx)
-
-	case GenElemIRangeNopath:
-		fmt.Fprintf(&sb, "first 0x%x:[next 0x%x] ", e.StAddr, e.EnAddr)
-		fmt.Fprintf(&sb, "num_i(%d) ", e.Payload.NumInstrRange)
-
-	case GenElemException:
-		if e.ExcepRetAddr {
-			fmt.Fprintf(&sb, "pref ret addr:0x%x", e.EnAddr)
-			if e.ExcepRetAddrBrTgt {
-				sb.WriteString(" [addr also prev br tgt]")
-			}
-			sb.WriteString("; ")
-		}
-		fmt.Fprintf(&sb, "excep num (0x%02x) ", e.Payload.ExceptionNum)
-
-	case GenElemPeContext:
-		fmt.Fprintf(&sb, "(ISA=%s) ", isaStr[e.ISA])
-		if e.Context.ExceptionLevel > ocsd.ELUnknown && e.Context.ELValid() {
-			fmt.Fprintf(&sb, "EL%d", e.Context.ExceptionLevel)
-		}
-		switch e.Context.SecurityLevel {
-		case ocsd.SecSecure:
-			sb.WriteString("S; ")
-		case ocsd.SecNonsecure:
-			sb.WriteString("N; ")
-		case ocsd.SecRoot:
-			sb.WriteString("Root; ")
-		case ocsd.SecRealm:
-			sb.WriteString("Realm; ")
-		}
-		if e.Context.Bits64() {
-			sb.WriteString("64-bit; ")
-		} else {
-			sb.WriteString("32-bit; ")
-		}
-		if e.Context.VMIDValid() {
-			fmt.Fprintf(&sb, "VMID=0x%x; ", e.Context.VMID)
-		}
-		if e.Context.CtxtIDValid() {
-			fmt.Fprintf(&sb, "CTXTID=0x%x; ", e.Context.ContextID)
-		}
-
-	case GenElemTraceOn:
-		if s, ok := traceOnStr[e.Payload.TraceOnReason]; ok {
-			fmt.Fprintf(&sb, " [%s]", s)
-		}
-
-	case GenElemTimestamp:
-		fmt.Fprintf(&sb, " [ TS=0x%012x]; ", e.Timestamp)
-
-	case GenElemSWTrace:
-		e.printSWInfoPkt(&sb)
-
-	case GenElemITMTrace:
-		e.printSWInfoPktItm(&sb)
-
-	case GenElemEvent:
-		if e.Payload.TraceEvent.EvType == EventTrigger {
-			sb.WriteString(" Trigger; ")
-		} else if e.Payload.TraceEvent.EvType == EventNumbered {
-			fmt.Fprintf(&sb, " Numbered:%d; ", e.Payload.TraceEvent.EvNumber)
-		}
-
-	case GenElemEOTrace, GenElemNoSync:
-		if e.Payload.UnsyncEOTInfo <= UnsyncEOT {
-			fmt.Fprintf(&sb, " [%s]", unsyncStr[e.Payload.UnsyncEOTInfo])
-		}
-
-	case GenElemSyncMarker:
-		typ := e.Payload.SyncMarker.Type
-		if s, ok := markerTypeStr[typ]; ok {
-			fmt.Fprintf(&sb, " [%s(0x%08x)]", s, e.Payload.SyncMarker.Value)
-		}
-
-	case GenElemMemTrans:
-		if s, ok := transTypeStr[e.Payload.MemTrans]; ok {
-			sb.WriteString(s)
-		}
-
-	case GenElemInstrumentation:
-		fmt.Fprintf(&sb, "EL%d; 0x%016x", e.Payload.SWIte.EL, e.Payload.SWIte.Value)
-	}
-
-	if e.HasCC {
-		fmt.Fprintf(&sb, " [CC=%d]; ", e.CycleCount)
-	}
-
-	sb.WriteString(")")
-	return sb.String()
-}
-
-func (e *TraceElement) printSWInfoPkt(sb *strings.Builder) {
-	info := e.Payload.SWTraceInfo
-	if !info.GlobalErr() {
-		if info.IDValid() {
-			fmt.Fprintf(sb, " (Ma:0x%02x; Ch:0x%02x) ", info.MasterID, info.ChannelID)
-		} else {
-			sb.WriteString("(Ma:0x??; Ch:0x??) ")
-		}
-
-		if info.PayloadPktBitsize() > 0 && len(e.PtrExtendedData) > 0 {
-			sb.WriteString("0x")
-			switch info.PayloadPktBitsize() {
-			case 4:
-				fmt.Fprintf(sb, "%x", e.PtrExtendedData[0]&0xF)
-			case 8:
-				fmt.Fprintf(sb, "%02x", e.PtrExtendedData[0])
-			case 16:
-				if len(e.PtrExtendedData) >= 2 {
-					val := uint16(e.PtrExtendedData[0]) | (uint16(e.PtrExtendedData[1]) << 8)
-					fmt.Fprintf(sb, "%04x", val)
-				}
-			case 32:
-				if len(e.PtrExtendedData) >= 4 {
-					val := uint32(e.PtrExtendedData[0]) | (uint32(e.PtrExtendedData[1]) << 8) | (uint32(e.PtrExtendedData[2]) << 16) | (uint32(e.PtrExtendedData[3]) << 24)
-					fmt.Fprintf(sb, "%08x", val)
-				}
-			case 64:
-				if len(e.PtrExtendedData) >= 8 {
-					val := uint64(e.PtrExtendedData[0]) | (uint64(e.PtrExtendedData[1]) << 8) | (uint64(e.PtrExtendedData[2]) << 16) | (uint64(e.PtrExtendedData[3]) << 24) |
-						(uint64(e.PtrExtendedData[4]) << 32) | (uint64(e.PtrExtendedData[5]) << 40) | (uint64(e.PtrExtendedData[6]) << 48) | (uint64(e.PtrExtendedData[7]) << 56)
-					fmt.Fprintf(sb, "%016x", val)
-				}
-			default:
-				sb.WriteString("{Data Error : unsupported bit width.}")
-			}
-			sb.WriteString("; ")
-		}
-
-		if info.MarkerPacket() {
-			sb.WriteString("+Mrk ")
-		}
-		if info.TriggerEvent() {
-			sb.WriteString("Trig ")
-		}
-		if info.HasTimestamp() {
-			fmt.Fprintf(sb, " [ TS=0x%012x]; ", e.Timestamp)
-		}
-		if info.Frequency() {
-			sb.WriteString("Freq")
-		}
-		if info.MasterErr() {
-			sb.WriteString("{Master Error.}")
-		}
-	} else {
-		sb.WriteString("{Global Error.}")
-	}
-}
-
-func (e *TraceElement) printSWInfoPktItm(sb *strings.Builder) {
-	itm := e.Payload.SWTItm
-
-	if itm.Overflow != 0 {
-		sb.WriteString("ITM_OVERFLOW; ")
-	}
-
-	var tsLocalDesc string
-
-	switch itm.PktType {
-	case SWITPayload:
-		width := int(itm.PayloadSize) * 2
-		fmt.Fprintf(sb, "ITM_SWIT (ch: 0x%x; Data: 0x%0*x) ", itm.PayloadSrcID, width, itm.Value)
-	case DWTPayload:
-		width := int(itm.PayloadSize) * 2
-		fmt.Fprintf(sb, "ITM_DWT (desc: 0x%x; Data: 0x%0*x) ", itm.PayloadSrcID, width, itm.Value)
-	case TSGlobal:
-		fmt.Fprintf(sb, "ITM_TS_GLOBAL ( TS: 0x%016x) ", e.Timestamp)
-	case TSSync:
-		tsLocalDesc = "TS Sync"
-	case TSDelay:
-		tsLocalDesc = "TS Delay"
-	case TSPKTDelay:
-		tsLocalDesc = "Packet Delay"
-	case TSPKTTSDelay:
-		tsLocalDesc = "TS and Packet Delay"
-	}
-
-	if tsLocalDesc != "" {
-		fmt.Fprintf(sb, "ITM_TS_LOCAL ( TS delta: 0x%08x, { %s}; ", itm.Value, tsLocalDesc)
-		fmt.Fprintf(sb, "TS cumulative: 0x%016x) ", e.Timestamp)
-	}
+	return ocsd.NewTraceElementWithType(typ)
 }

@@ -1153,7 +1153,7 @@ func TestDecoderAtomMultiStep(t *testing.T) {
 
 // TestDecoderAtomRange_NoWPFound exercises the !bWPFound path in processAtomRange
 // by using hitAfter:-1 (always InstrOther) and failAfter:2 (memNacc after 2 reads).
-// When StAddr != EnAddr the partial range element is emitted from the else branch.
+// When StartAddr != EndAddr the partial range element is emitted from the else branch.
 func TestDecoderAtomRange_NoWPFound(t *testing.T) {
 	config := NewConfig()
 	dec := NewPktDecode(nil, nil)

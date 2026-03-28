@@ -343,7 +343,7 @@ func (d *PktDecode) emitPendingNacc() ocsd.DatapathResp {
 	}
 
 	elem.SetType(ocsd.GenElemAddrNacc)
-	elem.StAddr = ocsd.VAddr(d.pendingNaccAdr)
+	elem.StartAddr = ocsd.VAddr(d.pendingNaccAdr)
 	elem.Payload.ExceptionNum = uint32(d.pendingNaccMem)
 	d.clearPendingNacc()
 	return ocsd.RespCont
@@ -434,7 +434,7 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, pktDone bool) {
 		elem, err = d.getNextOpElem()
 		if err == nil {
 			elem.SetType(ocsd.GenElemException)
-			elem.ExcepDataMarker = true
+			elem.ExceptionDataMarker = true
 		}
 	case PktExceptionExit:
 		elem, err = d.getNextOpElem()
@@ -772,15 +772,15 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 						return ocsd.RespFatalSysErr
 					}
 					elem.SetType(ocsd.GenElemInstrRange)
-					elem.StAddr = d.codeFollower.RangeSt()
-					elem.EnAddr = d.codeFollower.RangeEn()
+					elem.StartAddr = d.codeFollower.RangeSt()
+					elem.EndAddr = d.codeFollower.RangeEn()
 					elem.Payload.NumInstrRange = d.codeFollower.NumInstructs()
 
 					instrInfo := d.codeFollower.InstrInfo()
-					elem.LastInstrExec = val == ocsd.AtomE
-					elem.LastIType = instrInfo.Type
-					elem.LastISubtype = instrInfo.SubType
-					elem.LastInstrSz = instrInfo.InstrSize
+					elem.LastInstrExecuted = val == ocsd.AtomE
+					elem.LastInstrType = instrInfo.Type
+					elem.LastInstrSubtype = instrInfo.Subtype
+					elem.LastInstrSize = instrInfo.InstrSize
 					elem.LastInstrCond = instrInfo.IsConditional != 0
 					elem.ISA = isa
 
@@ -789,7 +789,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					}
 
 					d.iAddr = uint64(d.codeFollower.NextAddr())
-					isa = instrInfo.NextIsa
+					isa = instrInfo.NextISA
 
 					if !d.codeFollower.HasNext() {
 						d.setNeedAddr(true)
@@ -797,18 +797,15 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 				}
 
 				if errors.Is(errCF, ocsd.ErrMemNacc) {
-					naccAddr := uint64(d.codeFollower.NaccAddr())
 					if d.outputElemList.NumElem() > 0 && d.outputElemList.ElemType(d.outputElemList.NumElem()-1) == ocsd.GenElemInstrRange {
-						d.queuePendingNacc(naccAddr, memSpace)
+						d.queuePendingNacc(uint64(d.codeFollower.NaccAddr()), memSpace)
 					} else {
 						elem, err = d.getNextOpElem()
-						if err != nil {
-							d.Base.LogError(ocsd.ErrSevError, err)
-							return ocsd.RespFatalSysErr
+						if err == nil {
+							elem.SetType(ocsd.GenElemAddrNacc)
+							elem.StartAddr = ocsd.VAddr(d.codeFollower.NaccAddr())
+							elem.Payload.ExceptionNum = uint32(memSpace)
 						}
-						elem.SetType(ocsd.GenElemAddrNacc)
-						elem.StAddr = ocsd.VAddr(naccAddr)
-						elem.Payload.ExceptionNum = uint32(memSpace)
 					}
 					d.setNeedAddr(true)
 					d.codeFollower.ClearNaccError()

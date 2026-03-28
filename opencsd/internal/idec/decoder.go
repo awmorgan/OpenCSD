@@ -27,7 +27,7 @@ func (d *Decoder) DecodeInstruction(instrInfo *ocsd.InstrInfo) error {
 
 	var err error
 
-	switch instrInfo.Isa {
+	switch instrInfo.ISA {
 	case ocsd.ISAArm:
 		err = d.decodeA32(instrInfo, info)
 	case ocsd.ISAThumb2:
@@ -41,7 +41,7 @@ func (d *Decoder) DecodeInstruction(instrInfo *ocsd.InstrInfo) error {
 		err = ocsd.ErrUnsupportedISA
 	}
 
-	instrInfo.SubType = info.InstrSubType
+	instrInfo.Subtype = info.InstrSubType
 	return err
 }
 
@@ -51,7 +51,7 @@ func (d *Decoder) decodeA32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) error {
 
 	instrInfo.InstrSize = 4           // instruction size A32
 	instrInfo.Type = ocsd.InstrOther  // default type
-	instrInfo.NextIsa = instrInfo.Isa // assume same ISA
+	instrInfo.NextISA = instrInfo.ISA // assume same ISA
 	instrInfo.IsLink = 0
 	instrInfo.ThumbItConditions = 0 // not thumb
 
@@ -66,7 +66,7 @@ func (d *Decoder) decodeA32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) error {
 		branchAddr, _ = InstARMBranchDestination(uint32(instrInfo.InstrAddr), instrInfo.Opcode)
 		instrInfo.Type = ocsd.InstrBr
 		if (branchAddr & 0x1) != 0 {
-			instrInfo.NextIsa = ocsd.ISAThumb2
+			instrInfo.NextISA = ocsd.ISAThumb2
 			branchAddr &= ^uint32(0x1)
 		}
 		instrInfo.BranchAddr = ocsd.VAddr(branchAddr)
@@ -105,7 +105,7 @@ func (d *Decoder) decodeA64(instrInfo *ocsd.InstrInfo, info *DecodeInfo) error {
 
 	instrInfo.InstrSize = 4           // default address update
 	instrInfo.Type = ocsd.InstrOther  // default type
-	instrInfo.NextIsa = instrInfo.Isa // assume same ISA
+	instrInfo.NextISA = instrInfo.ISA // assume same ISA
 	instrInfo.IsLink = 0
 	instrInfo.ThumbItConditions = 0
 
@@ -172,7 +172,7 @@ func (d *Decoder) decodeT32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) error {
 		instrInfo.InstrSize = 2
 	}
 	instrInfo.Type = ocsd.InstrOther  // default type
-	instrInfo.NextIsa = instrInfo.Isa // assume same ISA
+	instrInfo.NextISA = instrInfo.ISA // assume same ISA
 	instrInfo.IsLink = 0
 	instrInfo.IsConditional = 0
 
@@ -191,7 +191,7 @@ func (d *Decoder) decodeT32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) error {
 		instrInfo.Type = ocsd.InstrBr
 		instrInfo.BranchAddr = ocsd.VAddr(branchAddr & ^uint32(0x1))
 		if (branchAddr & 0x1) == 0 {
-			instrInfo.NextIsa = ocsd.ISAArm
+			instrInfo.NextISA = ocsd.ISAArm
 		}
 	} else if isBranch, isLink := InstThumbIsIndirectBranchLink(instrInfo.Opcode, info); isBranch {
 		if isLink {

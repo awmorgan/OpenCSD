@@ -147,7 +147,7 @@ const (
 )
 
 type CacheBlock struct {
-	StAddr      ocsd.VAddr
+	StartAddr   ocsd.VAddr
 	ValidLen    uint32
 	Data        []byte
 	TrcID       uint8
@@ -240,7 +240,7 @@ func (c *Cache) InvalidateByTraceID(trcID uint8) {
 
 func (c *Cache) clearPage(block *CacheBlock) {
 	block.UseSequence = 0
-	block.StAddr = 0
+	block.StartAddr = 0
 	block.ValidLen = 0
 	block.TrcID = ocsd.BadCSSrcID
 }
@@ -276,7 +276,7 @@ func (c *Cache) Read(acc Accessor, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc
 	// Check if block is in cache
 	if c.blockInCache(address, reqBytes, trcID) {
 		// Found in page (mruIdx set by blockInCache)
-		offset := address - c.blocks[c.mruIdx].StAddr
+		offset := address - c.blocks[c.mruIdx].StartAddr
 		copy(buffer, c.blocks[c.mruIdx].Data[offset:offset+ocsd.VAddr(reqBytes)])
 		bytesRead = reqBytes
 		c.incSequence()
@@ -308,14 +308,14 @@ func (c *Cache) Read(acc Accessor, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc
 		return 0, ocsd.ErrMemAccBadLen
 	}
 
-	c.blocks[newIdx].StAddr = pageBase
+	c.blocks[newIdx].StartAddr = pageBase
 	c.blocks[newIdx].ValidLen = read
 	c.blocks[newIdx].TrcID = trcID
 	c.incSequence()
 
 	// Now try to satisfied the original request from the new page
 	if c.blockInPage(newIdx, address, reqBytes, trcID) {
-		offset := address - c.blocks[newIdx].StAddr
+		offset := address - c.blocks[newIdx].StartAddr
 		copy(buffer, c.blocks[newIdx].Data[offset:offset+ocsd.VAddr(reqBytes)])
 		bytesRead = reqBytes
 	}
@@ -327,7 +327,7 @@ func (c *Cache) blockInPage(idx int, address ocsd.VAddr, reqBytes uint32, trcID 
 	if block.TrcID != trcID || block.ValidLen == 0 {
 		return false
 	}
-	return address >= block.StAddr && (address+ocsd.VAddr(reqBytes)) <= (block.StAddr+ocsd.VAddr(block.ValidLen))
+	return address >= block.StartAddr && (address+ocsd.VAddr(reqBytes)) <= (block.StartAddr+ocsd.VAddr(block.ValidLen))
 }
 
 func (c *Cache) blockInCache(address ocsd.VAddr, reqBytes uint32, trcID uint8) bool {

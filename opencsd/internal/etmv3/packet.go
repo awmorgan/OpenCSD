@@ -389,23 +389,21 @@ func packetTypeNameDesc(pt PktType) (string, string) {
 	}
 }
 
-// addrValStr formats a 32-bit address like C++ getValStr: uppercase hex, 8 digits,
-// with an optional ~[0xNN] suffix showing the low pktBits of the value.
-func addrValStr(addr uint64, pktBits int) string {
-	s := fmt.Sprintf("0x%08X", uint32(addr))
+func (p *Packet) addrValStr() string {
+	s := fmt.Sprintf("0x%08X", uint32(p.Addr))
+	pktBits := p.AddrPktBits
 	if pktBits > 0 && pktBits <= 32 {
 		mask := uint32(0xFFFFFFFF)
 		if pktBits < 32 {
 			mask = uint32((1 << pktBits) - 1)
 		}
-		s += fmt.Sprintf(" ~[0x%X]", uint32(addr)&mask)
+		s += fmt.Sprintf(" ~[0x%X]", uint32(p.Addr)&mask)
 	}
 	return s
 }
 
-// buildISAStr returns the ISA string matching C++ getISAStr output (e.g. "ISA=ARM(32); ").
-func buildISAStr(isa ocsd.ISA) string {
-	switch isa {
+func (p *Packet) getISAStr() string {
+	switch p.CurrISA {
 	case ocsd.ISAArm:
 		return "ISA=ARM(32); "
 	case ocsd.ISAThumb2:
@@ -504,7 +502,7 @@ func (p *Packet) writeISyncStr(sb *strings.Builder) {
 	if p.ISyncInfo.NoAddress {
 		return
 	}
-	sb.WriteString(buildISAStr(p.CurrISA))
+	sb.WriteString(p.getISAStr())
 	if p.ISyncInfo.HasCycleCount {
 		fmt.Fprintf(sb, "Cycles=%d; ", p.CycleCount)
 	}
@@ -518,10 +516,10 @@ func (p *Packet) buildISyncStr() string {
 
 func (p *Packet) writeBranchAddressStr(sb *strings.Builder) {
 	sb.WriteString("Addr=")
-	sb.WriteString(addrValStr(p.Addr, p.AddrPktBits))
+	sb.WriteString(p.addrValStr())
 	sb.WriteString("; ")
 	if p.CurrISA != p.PrevISA {
-		sb.WriteString(buildISAStr(p.CurrISA))
+		sb.WriteString(p.getISAStr())
 	}
 	if p.Context.Updated {
 		if p.Context.CurrNS {

@@ -112,27 +112,27 @@ type SWTItmInfo struct {
 
 // TraceElement corresponds to OcsdTraceElement
 type TraceElement struct {
-	ElemType     GenElemType
-	ISA          ISA
-	StAddr       VAddr
-	EnAddr       VAddr
-	Context      PEContext
-	Timestamp    uint64
-	CycleCount   uint32
-	LastIType    InstrType
-	LastISubtype InstrSubtype
+	ElemType         GenElemType
+	ISA              ISA
+	StartAddr        VAddr
+	EndAddr          VAddr
+	Context          PEContext
+	Timestamp        uint64
+	CycleCount       uint32
+	LastInstrType    InstrType
+	LastInstrSubtype InstrSubtype
 
-	LastInstrExec     bool
-	LastInstrSz       uint8
-	HasCC             bool
-	CPUFreqChange     bool
-	ExcepRetAddr      bool
-	ExcepDataMarker   bool
-	ExtendedData      bool
-	HasTS             bool
-	LastInstrCond     bool
-	ExcepRetAddrBrTgt bool
-	ExcepMTailChain   bool
+	LastInstrExecuted     bool
+	LastInstrSize         uint8
+	HasCC                 bool
+	CPUFreqChange         bool
+	ExceptionRetAddr      bool
+	ExceptionDataMarker   bool
+	ExtendedData          bool
+	HasTS                 bool
+	LastInstrCond         bool
+	ExceptionRetAddrBrTgt bool
+	ExceptionMTailChain   bool
 
 	Payload struct {
 		ExceptionNum  uint32
@@ -151,17 +151,17 @@ type TraceElement struct {
 }
 
 func (e *TraceElement) clearPerPktData() {
-	e.LastInstrExec = false
-	e.LastInstrSz = 0
+	e.LastInstrExecuted = false
+	e.LastInstrSize = 0
 	e.HasCC = false
 	e.CPUFreqChange = false
-	e.ExcepRetAddr = false
-	e.ExcepDataMarker = false
+	e.ExceptionRetAddr = false
+	e.ExceptionDataMarker = false
 	e.ExtendedData = false
 	e.HasTS = false
 	e.LastInstrCond = false
-	e.ExcepRetAddrBrTgt = false
-	e.ExcepMTailChain = false
+	e.ExceptionRetAddrBrTgt = false
+	e.ExceptionMTailChain = false
 
 	e.Payload = struct {
 		ExceptionNum  uint32
@@ -193,8 +193,8 @@ func NewTraceElementWithType(typ GenElemType) *TraceElement {
 }
 
 func (e *TraceElement) Init() {
-	e.StAddr = ^VAddr(0) // -1
-	e.EnAddr = ^VAddr(0) // -1
+	e.StartAddr = ^VAddr(0) // -1
+	e.EndAddr = ^VAddr(0)   // -1
 	e.ISA = ISAUnknown
 
 	e.CycleCount = 0
@@ -204,8 +204,8 @@ func (e *TraceElement) Init() {
 	e.Context.SetVMIDValid(false)
 	e.Context.SetELValid(false)
 
-	e.LastIType = InstrOther
-	e.LastISubtype = SInstrNone
+	e.LastInstrType = InstrOther
+	e.LastInstrSubtype = SInstrNone
 
 	e.clearPerPktData()
 }
@@ -249,7 +249,7 @@ func (e *TraceElement) SetTS(ts uint64, freqChange bool) {
 }
 
 func (e *TraceElement) SetExcepMarker() {
-	e.ExcepDataMarker = true
+	e.ExceptionDataMarker = true
 }
 
 func (e *TraceElement) SetExceptionNum(excepNum uint32) {
@@ -269,20 +269,20 @@ func (e *TraceElement) SetTransactionType(trans TraceMemtrans) {
 }
 
 func (e *TraceElement) SetAddrRange(stAddr, enAddr VAddr, numInstr uint32) {
-	e.StAddr = stAddr
-	e.EnAddr = enAddr
+	e.StartAddr = stAddr
+	e.EndAddr = enAddr
 	e.Payload.NumInstrRange = numInstr
 }
 
 func (e *TraceElement) SetLastInstrInfo(exec bool, lastIType InstrType, lastISubtype InstrSubtype, size uint8) {
-	e.LastInstrExec = exec
-	e.LastInstrSz = size & 0x7
-	e.LastIType = lastIType
-	e.LastISubtype = lastISubtype
+	e.LastInstrExecuted = exec
+	e.LastInstrSize = size & 0x7
+	e.LastInstrType = lastIType
+	e.LastInstrSubtype = lastISubtype
 }
 
 func (e *TraceElement) SetAddrStart(stAddr VAddr) {
-	e.StAddr = stAddr
+	e.StartAddr = stAddr
 }
 
 func (e *TraceElement) SetSWTInfo(swtInfo SWTInfo) {
@@ -311,7 +311,7 @@ func (e *TraceElement) CopyPersistentData(src *TraceElement) {
 	e.Context = src.Context
 }
 
-var sElemDescs = map[GenElemType]string{
+var elemDescs = map[GenElemType]string{
 	GenElemUnknown:         "OCSD_GEN_TRC_ELEM_UNKNOWN",
 	GenElemNoSync:          "OCSD_GEN_TRC_ELEM_NO_SYNC",
 	GenElemTraceOn:         "OCSD_GEN_TRC_ELEM_TRACE_ON",
@@ -334,7 +334,7 @@ var sElemDescs = map[GenElemType]string{
 	GenElemCustom:          "OCSD_GEN_TRC_ELEM_CUSTOM",
 }
 
-var instrTypeStr = map[InstrType]string{
+var instrTypeNames = map[InstrType]string{
 	InstrOther:      "--- ",
 	InstrBr:         "BR  ",
 	InstrBrIndirect: "iBR ",
@@ -344,7 +344,7 @@ var instrTypeStr = map[InstrType]string{
 	InstrTstart:     "TSTART",
 }
 
-var instrSubtypeStr = map[InstrSubtype]string{
+var instrSubtypeNames = map[InstrSubtype]string{
 	SInstrNone:         "--- ",
 	SInstrBrLink:       "b+link ",
 	SInstrV8Ret:        "A64:ret ",
@@ -352,13 +352,13 @@ var instrSubtypeStr = map[InstrSubtype]string{
 	SInstrV7ImpliedRet: "V7:impl ret",
 }
 
-var traceOnStr = map[TraceOnReason]string{
+var traceOnNames = map[TraceOnReason]string{
 	TraceOnNormal:   "begin or filter",
 	TraceOnOverflow: "overflow",
 	TraceOnExDebug:  "debug restart",
 }
 
-var isaStr = map[ISA]string{
+var isaNames = map[ISA]string{
 	ISAArm:     "A32",
 	ISAThumb2:  "T32",
 	ISAAArch64: "A64",
@@ -368,7 +368,7 @@ var isaStr = map[ISA]string{
 	ISAUnknown: "Unk",
 }
 
-var unsyncStr = map[UnsyncInfo]string{
+var unsyncNames = map[UnsyncInfo]string{
 	UnsyncUnknown:      "undefined",
 	UnsyncInitDecoder:  "init-decoder",
 	UnsyncResetDecoder: "reset-decoder",
@@ -379,14 +379,14 @@ var unsyncStr = map[UnsyncInfo]string{
 	UnsyncEOT:          "end-of-trace",
 }
 
-var transTypeStr = map[TraceMemtrans]string{
+var transTypeNames = map[TraceMemtrans]string{
 	MemTransTraceInit: "Init",
 	MemTransStart:     "Start",
 	MemTransCommit:    "Commit",
 	MemTransFail:      "Fail",
 }
 
-var markerTypeStr = map[TraceSyncMarker]string{
+var markerTypeNames = map[TraceSyncMarker]string{
 	ElemMarkerTS: "Timestamp marker",
 }
 
@@ -453,7 +453,7 @@ func traceElemMemSpaceString(memSpace MemSpaceAcc) string {
 func (e *TraceElement) String() string {
 	var sb strings.Builder
 
-	desc, ok := sElemDescs[e.ElemType]
+	desc, ok := elemDescs[e.ElemType]
 	if !ok {
 		return "OCSD_GEN_TRC_ELEM??: index out of range."
 	}
@@ -462,20 +462,20 @@ func (e *TraceElement) String() string {
 
 	switch e.ElemType {
 	case GenElemInstrRange:
-		fmt.Fprintf(&sb, "exec range=0x%x:[0x%x] ", e.StAddr, e.EnAddr)
+		fmt.Fprintf(&sb, "exec range=0x%x:[0x%x] ", e.StartAddr, e.EndAddr)
 		fmt.Fprintf(&sb, "num_i(%d) ", e.Payload.NumInstrRange)
-		fmt.Fprintf(&sb, "last_sz(%d) ", e.LastInstrSz)
-		fmt.Fprintf(&sb, "(ISA=%s) ", isaStr[e.ISA])
-		if e.LastInstrExec {
+		fmt.Fprintf(&sb, "last_sz(%d) ", e.LastInstrSize)
+		fmt.Fprintf(&sb, "(ISA=%s) ", isaNames[e.ISA])
+		if e.LastInstrExecuted {
 			sb.WriteString("E ")
 		} else {
 			sb.WriteString("N ")
 		}
-		if s, ok := instrTypeStr[e.LastIType]; ok {
+		if s, ok := instrTypeNames[e.LastInstrType]; ok {
 			sb.WriteString(s)
 		}
-		if e.LastISubtype != SInstrNone {
-			if s, ok := instrSubtypeStr[e.LastISubtype]; ok {
+		if e.LastInstrSubtype != SInstrNone {
+			if s, ok := instrSubtypeNames[e.LastInstrSubtype]; ok {
 				sb.WriteString(s)
 			}
 		}
@@ -485,16 +485,16 @@ func (e *TraceElement) String() string {
 
 	case GenElemAddrNacc:
 		strEx := traceElemMemSpaceString(MemSpaceAcc(e.Payload.ExceptionNum))
-		fmt.Fprintf(&sb, " 0x%x; Memspace [0x%x:%s] ", e.StAddr, e.Payload.ExceptionNum, strEx)
+		fmt.Fprintf(&sb, " 0x%x; Memspace [0x%x:%s] ", e.StartAddr, e.Payload.ExceptionNum, strEx)
 
 	case GenElemIRangeNopath:
-		fmt.Fprintf(&sb, "first 0x%x:[next 0x%x] ", e.StAddr, e.EnAddr)
+		fmt.Fprintf(&sb, "first 0x%x:[next 0x%x] ", e.StartAddr, e.EndAddr)
 		fmt.Fprintf(&sb, "num_i(%d) ", e.Payload.NumInstrRange)
 
 	case GenElemException:
-		if e.ExcepRetAddr {
-			fmt.Fprintf(&sb, "pref ret addr:0x%x", e.EnAddr)
-			if e.ExcepRetAddrBrTgt {
+		if e.ExceptionRetAddr {
+			fmt.Fprintf(&sb, "pref ret addr:0x%x", e.EndAddr)
+			if e.ExceptionRetAddrBrTgt {
 				sb.WriteString(" [addr also prev br tgt]")
 			}
 			sb.WriteString("; ")
@@ -502,7 +502,7 @@ func (e *TraceElement) String() string {
 		fmt.Fprintf(&sb, "excep num (0x%02x) ", e.Payload.ExceptionNum)
 
 	case GenElemPeContext:
-		fmt.Fprintf(&sb, "(ISA=%s) ", isaStr[e.ISA])
+		fmt.Fprintf(&sb, "(ISA=%s) ", isaNames[e.ISA])
 		if e.Context.ExceptionLevel > ELUnknown && e.Context.ELValid() {
 			fmt.Fprintf(&sb, "EL%d", e.Context.ExceptionLevel)
 		}
@@ -529,7 +529,7 @@ func (e *TraceElement) String() string {
 		}
 
 	case GenElemTraceOn:
-		if s, ok := traceOnStr[e.Payload.TraceOnReason]; ok {
+		if s, ok := traceOnNames[e.Payload.TraceOnReason]; ok {
 			fmt.Fprintf(&sb, " [%s]", s)
 		}
 
@@ -552,17 +552,17 @@ func (e *TraceElement) String() string {
 
 	case GenElemEOTrace, GenElemNoSync:
 		if e.Payload.UnsyncEOTInfo <= UnsyncEOT {
-			fmt.Fprintf(&sb, " [%s]", unsyncStr[e.Payload.UnsyncEOTInfo])
+			fmt.Fprintf(&sb, " [%s]", unsyncNames[e.Payload.UnsyncEOTInfo])
 		}
 
 	case GenElemSyncMarker:
 		typ := e.Payload.SyncMarker.Type
-		if s, ok := markerTypeStr[typ]; ok {
+		if s, ok := markerTypeNames[typ]; ok {
 			fmt.Fprintf(&sb, " [%s(0x%08x)]", s, e.Payload.SyncMarker.Value)
 		}
 
 	case GenElemMemTrans:
-		if s, ok := transTypeStr[e.Payload.MemTrans]; ok {
+		if s, ok := transTypeNames[e.Payload.MemTrans]; ok {
 			sb.WriteString(s)
 		}
 
@@ -666,6 +666,6 @@ func (e *TraceElement) printSWInfoPktItm(sb *strings.Builder) {
 
 	if tsLocalDesc != "" {
 		fmt.Fprintf(sb, "ITM_TS_LOCAL ( TS delta: 0x%08x, { %s}; ", itm.Value, tsLocalDesc)
-		fmt.Fprintf(sb, "TS cumulative: 0x%x) ", e.Timestamp)
+		fmt.Fprintf(sb, "TS cumulative: 0x%016x) ", e.Timestamp)
 	}
 }

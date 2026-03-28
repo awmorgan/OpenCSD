@@ -13,7 +13,7 @@ func TestTraceElement_InitAndDefaults(t *testing.T) {
 		t.Errorf("Expected element type %v, got %v", GenElemUnknown, elem.ElemType)
 	}
 
-	if elem.StAddr != ^ocsd.VAddr(0) || elem.EnAddr != ^ocsd.VAddr(0) {
+	if elem.StartAddr != ^ocsd.VAddr(0) || elem.EndAddr != ^ocsd.VAddr(0) {
 		t.Errorf("Expected addresses to be initialized to -1")
 	}
 
@@ -50,7 +50,7 @@ func TestTraceElement_Setters(t *testing.T) {
 
 	// Test Instr Info
 	elem.SetLastInstrInfo(true, ocsd.InstrBr, ocsd.SInstrBrLink, 4)
-	if !elem.LastInstrExec || elem.LastInstrSz != 4 || elem.LastIType != ocsd.InstrBr || elem.LastISubtype != ocsd.SInstrBrLink {
+	if !elem.LastInstrExecuted || elem.LastInstrSize != 4 || elem.LastInstrType != ocsd.InstrBr || elem.LastInstrSubtype != ocsd.SInstrBrLink {
 		t.Errorf("SetLastInstrInfo failed")
 	}
 
@@ -78,12 +78,12 @@ func TestTraceElement_Setters(t *testing.T) {
 
 	// Test Addr Range
 	elem.SetAddrRange(0x1000, 0x2000, 10)
-	if elem.StAddr != 0x1000 || elem.EnAddr != 0x2000 || elem.Payload.NumInstrRange != 10 {
+	if elem.StartAddr != 0x1000 || elem.EndAddr != 0x2000 || elem.Payload.NumInstrRange != 10 {
 		t.Errorf("SetAddrRange failed")
 	}
 
 	elem.SetAddrStart(0x3000)
-	if elem.StAddr != 0x3000 {
+	if elem.StartAddr != 0x3000 {
 		t.Errorf("SetAddrStart failed")
 	}
 
@@ -93,7 +93,7 @@ func TestTraceElement_Setters(t *testing.T) {
 	}
 
 	elem.SetExcepMarker()
-	if !elem.ExcepDataMarker {
+	if !elem.ExceptionDataMarker {
 		t.Errorf("SetExcepMarker failed")
 	}
 
@@ -190,9 +190,9 @@ func TestTraceElement_Strings(t *testing.T) {
 			setup: func(e *TraceElement) {
 				e.SetType(GenElemException)
 				e.SetExceptionNum(0x11)
-				e.EnAddr = 0x4000
-				e.ExcepRetAddr = true
-				e.ExcepRetAddrBrTgt = true
+				e.EndAddr = 0x4000
+				e.ExceptionRetAddr = true
+				e.ExceptionRetAddrBrTgt = true
 			},
 			expected: "OCSD_GEN_TRC_ELEM_EXCEPTION(pref ret addr:0x4000 [addr also prev br tgt]; excep num (0x11) )",
 		},
@@ -248,16 +248,16 @@ func TestTraceElement_Strings(t *testing.T) {
 			name: "AddrNacc",
 			setup: func(e *TraceElement) {
 				e.SetType(GenElemAddrNacc)
-				e.StAddr = 0x5555
+				e.StartAddr = 0x5555
 				e.SetExceptionNum(uint32(ocsd.MemSpaceEL2))
 			},
-			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0x5555; Memspace [0x4:EL2] )",
+			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0x5555; Memspace [0x4:EL2N] )",
 		},
 		{
 			name: "AddrNacc Various",
 			setup: func(e *TraceElement) {
 				e.SetType(GenElemAddrNacc)
-				e.StAddr = 0x123
+				e.StartAddr = 0x123
 				e.SetExceptionNum(uint32(ocsd.MemSpaceEL1S))
 			},
 			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0x123; Memspace [0x1:EL1S] )",
@@ -320,7 +320,7 @@ func TestTraceElement_Strings(t *testing.T) {
 			name: "AddrNacc EL3",
 			setup: func(e *TraceElement) {
 				e.SetType(GenElemAddrNacc)
-				e.StAddr = 0xAA
+				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceEL3))
 			},
 			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0xaa; Memspace [0x8:EL3] )",
@@ -329,7 +329,7 @@ func TestTraceElement_Strings(t *testing.T) {
 			name: "AddrNacc EL2S",
 			setup: func(e *TraceElement) {
 				e.SetType(GenElemAddrNacc)
-				e.StAddr = 0xAA
+				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceEL2S))
 			},
 			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0xaa; Memspace [0x10:EL2S] )",
@@ -338,7 +338,7 @@ func TestTraceElement_Strings(t *testing.T) {
 			name: "AddrNacc EL1R",
 			setup: func(e *TraceElement) {
 				e.SetType(GenElemAddrNacc)
-				e.StAddr = 0xAA
+				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceEL1R))
 			},
 			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0xaa; Memspace [0x20:EL1R] )",
@@ -347,7 +347,7 @@ func TestTraceElement_Strings(t *testing.T) {
 			name: "AddrNacc EL2R",
 			setup: func(e *TraceElement) {
 				e.SetType(GenElemAddrNacc)
-				e.StAddr = 0xAA
+				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceEL2R))
 			},
 			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0xaa; Memspace [0x40:EL2R] )",
@@ -356,7 +356,7 @@ func TestTraceElement_Strings(t *testing.T) {
 			name: "AddrNacc Root",
 			setup: func(e *TraceElement) {
 				e.SetType(GenElemAddrNacc)
-				e.StAddr = 0xAA
+				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceRoot))
 			},
 			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0xaa; Memspace [0x80:Root] )",
@@ -365,34 +365,34 @@ func TestTraceElement_Strings(t *testing.T) {
 			name: "AddrNacc S N R Any None",
 			setup: func(e *TraceElement) {
 				e.SetType(GenElemAddrNacc)
-				e.StAddr = 0xAA
+				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceS))
 			},
-			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0xaa; Memspace [0x19:S] )",
+			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0xaa; Memspace [0x19:Any S] )",
 		},
 		{
 			name: "AddrNacc N",
 			setup: func(e *TraceElement) {
 				e.SetType(GenElemAddrNacc)
-				e.StAddr = 0xAA
+				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceN))
 			},
-			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0xaa; Memspace [0x6:N] )",
+			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0xaa; Memspace [0x6:Any NS] )",
 		},
 		{
 			name: "AddrNacc R",
 			setup: func(e *TraceElement) {
 				e.SetType(GenElemAddrNacc)
-				e.StAddr = 0xAA
+				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceR))
 			},
-			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0xaa; Memspace [0x60:R] )",
+			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0xaa; Memspace [0x60:Any R] )",
 		},
 		{
 			name: "AddrNacc Any",
 			setup: func(e *TraceElement) {
 				e.SetType(GenElemAddrNacc)
-				e.StAddr = 0xAA
+				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceAny))
 			},
 			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0xaa; Memspace [0xff:Any] )",
@@ -401,7 +401,7 @@ func TestTraceElement_Strings(t *testing.T) {
 			name: "AddrNacc None",
 			setup: func(e *TraceElement) {
 				e.SetType(GenElemAddrNacc)
-				e.StAddr = 0xAA
+				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceNone))
 			},
 			expected: "OCSD_GEN_TRC_ELEM_ADDR_NACC( 0xaa; Memspace [0x0:None] )",
@@ -564,13 +564,13 @@ func TestTraceElement_CopyPersistentInfo(t *testing.T) {
 
 func TestTraceElement_Flags(t *testing.T) {
 	e := NewTraceElement()
-	e.ExcepRetAddrBrTgt = true
-	if !e.ExcepRetAddrBrTgt {
-		t.Errorf("ExcepRetAddrBrTgt failed")
+	e.ExceptionRetAddrBrTgt = true
+	if !e.ExceptionRetAddrBrTgt {
+		t.Errorf("ExceptionRetAddrBrTgt failed")
 	}
-	e.ExcepMTailChain = true
-	if !e.ExcepMTailChain {
-		t.Errorf("ExcepMTailChain failed")
+	e.ExceptionMTailChain = true
+	if !e.ExceptionMTailChain {
+		t.Errorf("ExceptionMTailChain failed")
 	}
 
 	e.UpdateType(GenElemEvent)

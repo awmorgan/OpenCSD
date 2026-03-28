@@ -186,7 +186,7 @@ func (d *PktDecode) resetDecoder() {
 	d.currState = decodeNoSync
 	d.needIsync = true
 
-	d.instrInfo.Isa = ocsd.ISAUnknown
+	d.instrInfo.ISA = ocsd.ISAUnknown
 	d.memNaccPending = false
 
 	d.peContext.SetCtxtIDValid(false)
@@ -476,10 +476,10 @@ func (d *PktDecode) processBranch() ocsd.DatapathResp {
 		if pkt.Exception.Present {
 			d.outputElem.SetType(ocsd.GenElemException)
 			d.outputElem.SetExceptionNum(uint32(pkt.Exception.Number))
-			d.outputElem.ExcepRetAddr = false
+			d.outputElem.ExceptionRetAddr = false
 			if d.currPeState.valid {
-				d.outputElem.ExcepRetAddr = true
-				d.outputElem.EnAddr = d.currPeState.instrAddr
+				d.outputElem.ExceptionRetAddr = true
+				d.outputElem.EndAddr = d.currPeState.instrAddr
 			}
 			if pkt.CCValid {
 				d.outputElem.SetCycleCount(pkt.CycleCount)
@@ -543,7 +543,7 @@ func (d *PktDecode) processAtom() ocsd.DatapathResp {
 func (d *PktDecode) checkPendingNacc(resp *ocsd.DatapathResp) {
 	if d.memNaccPending && ocsd.DataRespIsCont(*resp) {
 		d.outputElem.SetType(ocsd.GenElemAddrNacc)
-		d.outputElem.StAddr = d.naccAddr
+		d.outputElem.StartAddr = d.naccAddr
 		if d.peContext.SecurityLevel == ocsd.SecSecure {
 			d.outputElem.SetExceptionNum(uint32(ocsd.MemSpaceS))
 		} else {
@@ -561,7 +561,7 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 	var err error
 
 	d.instrInfo.InstrAddr = d.currPeState.instrAddr
-	d.instrInfo.Isa = d.currPeState.isa
+	d.instrInfo.ISA = d.currPeState.isa
 
 	d.outputElem.SetType(ocsd.GenElemInstrRange)
 
@@ -584,16 +584,16 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 			if A == ocsd.AtomE {
 				d.instrInfo.InstrAddr = d.instrInfo.BranchAddr
 				if d.instrInfo.IsLink != 0 {
-					d.returnStack.Push(nextAddr, d.instrInfo.Isa)
+					d.returnStack.Push(nextAddr, d.instrInfo.ISA)
 				}
 			}
 		case ocsd.InstrBrIndirect:
 			if A == ocsd.AtomE {
 				d.currPeState.valid = false
-				if d.returnStack.IsActive() && d.CurrPacketIn.Type == PktAtom && (d.instrInfo.SubType == ocsd.SInstrV8Ret || d.instrInfo.SubType == ocsd.SInstrV7ImpliedRet) {
+				if d.returnStack.IsActive() && d.CurrPacketIn.Type == PktAtom && (d.instrInfo.Subtype == ocsd.SInstrV8Ret || d.instrInfo.Subtype == ocsd.SInstrV7ImpliedRet) {
 					var nextIsa ocsd.ISA
 					d.instrInfo.InstrAddr = d.returnStack.Pop(&nextIsa)
-					d.instrInfo.NextIsa = nextIsa
+					d.instrInfo.NextISA = nextIsa
 
 					if d.returnStack.Overflow() {
 						d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Return stack error processing %s packet", ocsd.ErrRetStackOverflow, pktMsg))
@@ -603,12 +603,12 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 					}
 				}
 				if d.instrInfo.IsLink != 0 {
-					d.returnStack.Push(nextAddr, d.instrInfo.Isa)
+					d.returnStack.Push(nextAddr, d.instrInfo.ISA)
 				}
 			}
 		}
 
-		d.outputElem.SetLastInstrInfo(A == ocsd.AtomE, d.instrInfo.Type, d.instrInfo.SubType, d.instrInfo.InstrSize)
+		d.outputElem.SetLastInstrInfo(A == ocsd.AtomE, d.instrInfo.Type, d.instrInfo.Subtype, d.instrInfo.InstrSize)
 		d.outputElem.SetISA(d.currPeState.isa)
 		if d.CurrPacketIn.CCValid {
 			d.outputElem.SetCycleCount(d.CurrPacketIn.CycleCount)
@@ -617,11 +617,11 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 		resp = d.Base.OutputTraceElementIdx(d.Base.IndexCurrPkt, d.csID, &d.outputElem)
 
 		d.currPeState.instrAddr = d.instrInfo.InstrAddr
-		d.currPeState.isa = d.instrInfo.NextIsa
+		d.currPeState.isa = d.instrInfo.NextISA
 	} else {
 		d.currPeState.valid = false
-		if d.outputElem.StAddr != d.outputElem.EnAddr {
-			d.outputElem.SetLastInstrInfo(true, d.instrInfo.Type, d.instrInfo.SubType, d.instrInfo.InstrSize)
+		if d.outputElem.StartAddr != d.outputElem.EndAddr {
+			d.outputElem.SetLastInstrInfo(true, d.instrInfo.Type, d.instrInfo.Subtype, d.instrInfo.InstrSize)
 			d.outputElem.SetISA(d.currPeState.isa)
 			d.outputElem.LastInstrCond = d.instrInfo.IsConditional != 0
 			resp = d.Base.OutputTraceElementIdx(d.Base.IndexCurrPkt, d.csID, &d.outputElem)
@@ -640,8 +640,8 @@ func (d *PktDecode) traceInstrToWP(traceWPOp waypointTraceOp, nextAddrMatch ocsd
 		memSpace = ocsd.MemSpaceEL1S
 	}
 
-	d.outputElem.StAddr = d.instrInfo.InstrAddr
-	d.outputElem.EnAddr = d.instrInfo.InstrAddr
+	d.outputElem.StartAddr = d.instrInfo.InstrAddr
+	d.outputElem.EndAddr = d.instrInfo.InstrAddr
 	d.outputElem.Payload.NumInstrRange = 0
 
 	wpFound = false
@@ -656,7 +656,7 @@ func (d *PktDecode) traceInstrToWP(traceWPOp waypointTraceOp, nextAddrMatch ocsd
 		}
 
 		canDecode := bytesRead == 4
-		if !canDecode && d.instrInfo.Isa == ocsd.ISAThumb2 && bytesRead >= 2 {
+		if !canDecode && d.instrInfo.ISA == ocsd.ISAThumb2 && bytesRead >= 2 {
 			instHW := uint16(memData[0]) | uint16(memData[1])<<8
 			if !idec.IsWideThumb(instHW) {
 				canDecode = true
@@ -684,13 +684,13 @@ func (d *PktDecode) traceInstrToWP(traceWPOp waypointTraceOp, nextAddrMatch ocsd
 			}
 
 			d.instrInfo.InstrAddr += ocsd.VAddr(d.instrInfo.InstrSize)
-			d.outputElem.EnAddr = d.instrInfo.InstrAddr
+			d.outputElem.EndAddr = d.instrInfo.InstrAddr
 			d.outputElem.Payload.NumInstrRange++
-			d.outputElem.LastIType = d.instrInfo.Type
+			d.outputElem.LastInstrType = d.instrInfo.Type
 
 			if traceWPOp != traceWaypoint {
 				if traceWPOp == traceToAddrExcl {
-					wpFound = d.outputElem.EnAddr == nextAddrMatch
+					wpFound = d.outputElem.EndAddr == nextAddrMatch
 				} else {
 					wpFound = currOpAddress == nextAddrMatch
 				}

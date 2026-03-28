@@ -641,31 +641,31 @@ func (p *TracePacket) HeaderString() string {
 		if p.VAddrPktBits < 32 {
 			updateBits = p.VAddrPktBits
 		}
-		fmt.Fprintf(&desc, "; Addr=%s; %s", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits), p.contextStr())
+		fmt.Fprintf(&desc, "; Addr=%s; %s", p.addrValStr(updateBits), p.contextStr())
 	case PktAddrL_32IS0, PktAddrL_32IS1, ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1:
 		updateBits := uint8(0)
 		if p.VAddrPktBits < 32 {
 			updateBits = p.VAddrPktBits
 		}
-		fmt.Fprintf(&desc, "; Addr=%s; ", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits))
+		fmt.Fprintf(&desc, "; Addr=%s; ", p.addrValStr(updateBits))
 	case PktAddrCtxtL_64IS0, PktAddrCtxtL_64IS1:
 		updateBits := uint8(0)
 		if p.VAddrPktBits < 64 {
 			updateBits = p.VAddrPktBits
 		}
-		fmt.Fprintf(&desc, "; Addr=%s; %s", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits), p.contextStr())
+		fmt.Fprintf(&desc, "; Addr=%s; %s", p.addrValStr(updateBits), p.contextStr())
 	case PktAddrL_64IS0, PktAddrL_64IS1, ETE_PktSrcAddrL_64IS0, ETE_PktSrcAddrL_64IS1:
 		updateBits := uint8(0)
 		if p.VAddrPktBits < 64 {
 			updateBits = p.VAddrPktBits
 		}
-		fmt.Fprintf(&desc, "; Addr=%s; ", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits))
+		fmt.Fprintf(&desc, "; Addr=%s; ", p.addrValStr(updateBits))
 	case PktCtxt:
 		fmt.Fprintf(&desc, "; %s", p.contextStr())
 	case PktAddrS_IS0, PktAddrS_IS1, ETE_PktSrcAddrS_IS0, ETE_PktSrcAddrS_IS1:
-		fmt.Fprintf(&desc, "; Addr=%s", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, p.VAddrPktBits))
+		fmt.Fprintf(&desc, "; Addr=%s", p.addrValStr(p.VAddrPktBits))
 	case PktAddrMatch, ETE_PktSrcAddrMatch:
-		fmt.Fprintf(&desc, "; Addr=%s; ", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, 0))
+		fmt.Fprintf(&desc, "; Addr=%s; ", p.addrValStr(0))
 	case PktAtomF1, PktAtomF2, PktAtomF3, PktAtomF4, PktAtomF5, PktAtomF6:
 		fmt.Fprintf(&desc, "; %s", p.getAtomStr())
 	case PktExcept:
@@ -718,7 +718,7 @@ func (p *TracePacket) HeaderString() string {
 			if p.VAddrPktBits < 64 {
 				updateBits = p.VAddrPktBits
 			}
-			fmt.Fprintf(&desc, "; Addr=%s", addrValStr(uint64(p.VAddr), p.VAddrValidBits > 32, updateBits))
+			fmt.Fprintf(&desc, "; Addr=%s", p.addrValStr(updateBits))
 		}
 	case ETE_PktITE:
 		fmt.Fprintf(&desc, "; EL%d; Payload=0x%x", p.ITEPkt.EL, p.ITEPkt.Value)
@@ -728,17 +728,17 @@ func (p *TracePacket) HeaderString() string {
 	return sb.String()
 }
 
-func addrValStr(addr uint64, is64 bool, updateBits uint8) string {
+func (p *TracePacket) addrValStr(updateBits uint8) string {
 	s := ""
-	if is64 {
-		s = fmt.Sprintf("0x%016X", uint64(addr))
+	if p.VAddrValidBits > 32 {
+		s = fmt.Sprintf("0x%016X", uint64(p.VAddr))
 	} else {
-		s = fmt.Sprintf("0x%08X", uint32(addr))
+		s = fmt.Sprintf("0x%08X", uint32(p.VAddr))
 	}
 
 	if updateBits > 0 {
 		mask := uint64((1 << updateBits) - 1)
-		s += fmt.Sprintf(" ~[0x%X]", uint64(addr)&mask)
+		s += fmt.Sprintf(" ~[0x%X]", uint64(p.VAddr)&mask)
 	}
 	return s
 }

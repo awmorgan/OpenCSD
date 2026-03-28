@@ -280,7 +280,7 @@ const (
 
 type InstrInfo struct {
 	PeType          ArchProfile
-	Isa             ISA
+	ISA             ISA
 	InstrAddr       VAddr
 	Opcode          uint32
 	DsbDmbWaypoints uint8
@@ -289,12 +289,12 @@ type InstrInfo struct {
 
 	Type              InstrType
 	BranchAddr        VAddr
-	NextIsa           ISA
+	NextISA           ISA
 	InstrSize         uint8
 	IsConditional     uint8
 	IsLink            uint8
 	ThumbItConditions uint8
-	SubType           InstrSubtype
+	Subtype           InstrSubtype
 }
 
 type PEContext struct {

@@ -1,6 +1,7 @@
 package common
 
 import (
+	"encoding/binary"
 	"errors"
 	"opencsd/internal/ocsd"
 )
@@ -70,7 +71,7 @@ func (cf *CodeFollower) SetTraceID(traceID uint8) {
 
 func (cf *CodeFollower) SetISA(isa ocsd.ISA) {
 	cf.isa = isa
-	cf.instrInfo.Isa = isa
+	cf.instrInfo.ISA = isa
 }
 
 func (cf *CodeFollower) SetDSBDMBasWP() {
@@ -106,7 +107,7 @@ func (cf *CodeFollower) InstrType() ocsd.InstrType {
 }
 
 func (cf *CodeFollower) InstrSubType() ocsd.InstrSubtype {
-	return cf.instrInfo.SubType
+	return cf.instrInfo.Subtype
 }
 
 func (cf *CodeFollower) IsCondInstr() bool {
@@ -118,11 +119,11 @@ func (cf *CodeFollower) IsLink() bool {
 }
 
 func (cf *CodeFollower) ISAChanged() bool {
-	return cf.instrInfo.Isa != cf.instrInfo.NextIsa
+	return cf.instrInfo.ISA != cf.instrInfo.NextISA
 }
 
 func (cf *CodeFollower) NextISA() ocsd.ISA {
-	return cf.instrInfo.NextIsa
+	return cf.instrInfo.NextISA
 }
 
 func (cf *CodeFollower) InstrSize() uint8 {
@@ -161,10 +162,7 @@ func (cf *CodeFollower) DecodeSingleOpCode() error {
 	}
 
 	if readBytes == 4 && len(pData) >= 4 {
-		cf.instrInfo.Opcode = 0
-		for i := range 4 {
-			cf.instrInfo.Opcode |= uint32(pData[i]) << (i * 8)
-		}
+		cf.instrInfo.Opcode = binary.LittleEndian.Uint32(pData[:4])
 
 		err = cf.idDecode.DecodeInstruction(&cf.instrInfo)
 		return err

@@ -92,8 +92,8 @@ func TestProcessBranchAddrContextWithoutException(t *testing.T) {
 	if out.elements[0].Context.ExceptionLevel != ocsd.EL2 {
 		t.Fatalf("expected EL2 context, got %v", out.elements[0].Context.ExceptionLevel)
 	}
-	if dec.codeFollower.InstrInfo().Isa != ocsd.ISAThumb2 {
-		t.Fatalf("expected code follower ISA to track branch ISA, got %v", dec.codeFollower.InstrInfo().Isa)
+	if dec.codeFollower.InstrInfo().ISA != ocsd.ISAThumb2 {
+		t.Fatalf("expected code follower ISA to track branch ISA, got %v", dec.codeFollower.InstrInfo().ISA)
 	}
 }
 
@@ -127,8 +127,8 @@ func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 	if out.elements[1].ElemType != ocsd.GenElemAddrNacc {
 		t.Fatalf("expected second element to be GenElemAddrNacc, got %v", out.elements[1].ElemType)
 	}
-	if out.elements[1].StAddr != 0x3300 {
-		t.Fatalf("expected NACC address 0x3300, got 0x%X", out.elements[1].StAddr)
+	if out.elements[1].StartAddr != 0x3300 {
+		t.Fatalf("expected NACC address 0x3300, got 0x%X", out.elements[1].StartAddr)
 	}
 	if out.elements[2].ElemType != ocsd.GenElemEvent {
 		t.Fatalf("expected third element to be GenElemEvent, got %v", out.elements[2].ElemType)

@@ -55,7 +55,7 @@ func TestDecoder_DecodeA32(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			info := &ocsd.InstrInfo{
 				PeType:          ocsd.ArchProfile{Arch: ocsd.ArchV7},
-				Isa:             ocsd.ISAArm,
+				ISA:             ocsd.ISAArm,
 				InstrAddr:       0x1000,
 				Opcode:          tt.opcode,
 				DsbDmbWaypoints: 1,
@@ -68,8 +68,8 @@ func TestDecoder_DecodeA32(t *testing.T) {
 			if info.Type != tt.expected {
 				t.Errorf("Expected type %v, got %v", tt.expected, info.Type)
 			}
-			if info.SubType != tt.subType {
-				t.Errorf("Expected subtype %v, got %v", tt.subType, info.SubType)
+			if info.Subtype != tt.subType {
+				t.Errorf("Expected subtype %v, got %v", tt.subType, info.Subtype)
 			}
 			if info.IsLink != tt.isLink {
 				t.Errorf("Expected isLInk %v, got %v", tt.isLink, info.IsLink)
@@ -135,7 +135,7 @@ func TestDecoder_DecodeT32(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			info := &ocsd.InstrInfo{
 				PeType:          ocsd.ArchProfile{Arch: ocsd.ArchV7},
-				Isa:             ocsd.ISAThumb2,
+				ISA:             ocsd.ISAThumb2,
 				InstrAddr:       0x1000,
 				Opcode:          tt.opcode,
 				DsbDmbWaypoints: 1,
@@ -148,8 +148,8 @@ func TestDecoder_DecodeT32(t *testing.T) {
 			if info.Type != tt.expected {
 				t.Errorf("Expected type %v, got %v", tt.expected, info.Type)
 			}
-			if info.SubType != tt.subType {
-				t.Errorf("Expected subtype %v, got %v", tt.subType, info.SubType)
+			if info.Subtype != tt.subType {
+				t.Errorf("Expected subtype %v, got %v", tt.subType, info.Subtype)
 			}
 			if info.IsLink != tt.isLink {
 				t.Errorf("Expected islink %v, got %v", tt.isLink, info.IsLink)
@@ -204,7 +204,7 @@ func TestDecoder_DecodeA64(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			info := &ocsd.InstrInfo{
 				PeType:          ocsd.ArchProfile{Arch: ocsd.ArchAA64},
-				Isa:             ocsd.ISAAArch64,
+				ISA:             ocsd.ISAAArch64,
 				InstrAddr:       0x1000,
 				Opcode:          tt.opcode,
 				DsbDmbWaypoints: 1,
@@ -217,8 +217,8 @@ func TestDecoder_DecodeA64(t *testing.T) {
 			if info.Type != tt.expected {
 				t.Errorf("Expected type %v, got %v", tt.expected, info.Type)
 			}
-			if info.SubType != tt.subType {
-				t.Errorf("Expected subtype %v, got %v", tt.subType, info.SubType)
+			if info.Subtype != tt.subType {
+				t.Errorf("Expected subtype %v, got %v", tt.subType, info.Subtype)
 			}
 			if info.IsLink != tt.isLink {
 				t.Errorf("Expected isLInk %v, got %v", tt.isLink, info.IsLink)
@@ -229,7 +229,7 @@ func TestDecoder_DecodeA64(t *testing.T) {
 	t.Run("Bad Opcode", func(t *testing.T) {
 		info := &ocsd.InstrInfo{
 			PeType:    ocsd.ArchProfile{Arch: ocsd.ArchAA64},
-			Isa:       ocsd.ISAAArch64,
+			ISA:       ocsd.ISAAArch64,
 			InstrAddr: 0x1000,
 			Opcode:    0x0000FFFF, // Top 16 bits are 0x0000
 		}
@@ -288,12 +288,12 @@ func TestDecoder_HelperClassificationAndDestinations(t *testing.T) {
 		t.Fatalf("unexpected barrier classification")
 	}
 
-	unsuppInfo := &ocsd.InstrInfo{Isa: ocsd.ISATee}
+	unsuppInfo := &ocsd.InstrInfo{ISA: ocsd.ISATee}
 	if err := dec.DecodeInstruction(unsuppInfo); err != ocsd.ErrUnsupportedISA {
 		t.Fatalf("expected unsupported ISA error, got %v", err)
 	}
 
-	itThumb := &ocsd.InstrInfo{Isa: ocsd.ISAThumb2, Opcode: 0x00004400, TrackItBlock: 1, ThumbItConditions: 1}
+	itThumb := &ocsd.InstrInfo{ISA: ocsd.ISAThumb2, Opcode: 0x00004400, TrackItBlock: 1, ThumbItConditions: 1}
 	if err := dec.DecodeInstruction(itThumb); err != nil || itThumb.ThumbItConditions != 0 {
 		t.Fatalf("expected IT condition decrement, err=%v cond=%d", err, itThumb.ThumbItConditions)
 	}

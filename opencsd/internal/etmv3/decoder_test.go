@@ -346,12 +346,12 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 	}
 	for _, e := range out.elements[n0:] {
 		if e.ElemType == ocsd.GenElemInstrRange {
-			if e.StAddr != 0x1000 {
-				t.Errorf("expected StAddr=0x1000, got 0x%X", e.StAddr)
+			if e.StartAddr != 0x1000 {
+				t.Errorf("expected StartAddr=0x1000, got 0x%X", e.StartAddr)
 			}
-			// E-atom with InstrBr: LastInstrExec should be true
-			if !e.LastInstrExec {
-				t.Error("expected LastInstrExec=true for E-atom with InstrBr")
+			// E-atom with InstrBr: LastInstrExecuted should be true
+			if !e.LastInstrExecuted {
+				t.Error("expected LastInstrExecuted=true for E-atom with InstrBr")
 			}
 			return
 		}
