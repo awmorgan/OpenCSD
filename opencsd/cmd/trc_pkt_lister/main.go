@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
@@ -729,6 +730,7 @@ func printMappedRanges(out io.Writer, ranges []mappedRange) {
 
 func configureOutput(opts options) (io.Writer, func(), error) {
 	outputs := make([]io.Writer, 0, 3)
+	flushers := make([]*bufio.Writer, 0, 3)
 	closers := make([]io.Closer, 0, 1)
 
 	if opts.logStdout {
@@ -750,16 +752,26 @@ func configureOutput(opts options) (io.Writer, func(), error) {
 		outputs = append(outputs, os.Stdout)
 	}
 
+	bufferedOutputs := make([]io.Writer, 0, len(outputs))
+	for _, out := range outputs {
+		bw := bufio.NewWriter(out)
+		flushers = append(flushers, bw)
+		bufferedOutputs = append(bufferedOutputs, bw)
+	}
+
 	closeFn := func() {
+		for _, f := range flushers {
+			_ = f.Flush()
+		}
 		for _, c := range closers {
 			_ = c.Close()
 		}
 	}
 
-	if len(outputs) == 1 {
-		return outputs[0], closeFn, nil
+	if len(bufferedOutputs) == 1 {
+		return bufferedOutputs[0], closeFn, nil
 	}
-	return io.MultiWriter(outputs...), closeFn, nil
+	return io.MultiWriter(bufferedOutputs...), closeFn, nil
 }
 
 // idListValue implements flag.Value to allow multiple -id flags to be parsed into a slice.
