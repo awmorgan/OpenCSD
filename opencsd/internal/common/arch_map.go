@@ -1,6 +1,7 @@
 package common
 
 import (
+	"maps"
 	"strings"
 
 	"opencsd/internal/ocsd"
@@ -51,10 +52,10 @@ type CoreArchProfileMap struct {
 
 // NewCoreArchProfileMap creates a new map.
 func NewCoreArchProfileMap() *CoreArchProfileMap {
-	m := &CoreArchProfileMap{
-		coreMap: defaultCoreMap,
-	}
-	return m
+	m := make(map[string]ocsd.ArchProfile, len(defaultCoreMap))
+	maps.Copy(m, defaultCoreMap)
+
+	return &CoreArchProfileMap{coreMap: m}
 }
 
 // ArchProfile returns the architecture profile for a given core name.

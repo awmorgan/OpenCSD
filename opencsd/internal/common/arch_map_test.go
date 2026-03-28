@@ -52,3 +52,14 @@ func TestArchProfileMap(t *testing.T) {
 		t.Errorf("Expected Unknown for invalid core")
 	}
 }
+
+func TestNewCoreArchProfileMapDoesNotShareDefaultMap(t *testing.T) {
+	m1 := NewCoreArchProfileMap()
+	m2 := NewCoreArchProfileMap()
+
+	m1.coreMap["Unit-Test-Core"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM}
+
+	if _, ok := m2.coreMap["Unit-Test-Core"]; ok {
+		t.Fatalf("expected second map to be unchanged when first map is mutated")
+	}
+}
