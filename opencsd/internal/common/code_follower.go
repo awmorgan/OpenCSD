@@ -3,6 +3,7 @@ package common
 import (
 	"encoding/binary"
 	"errors"
+	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
 )
 
@@ -157,6 +158,16 @@ func (cf *CodeFollower) DecodeSingleOpCode() error {
 	// Read memory location for opcode
 	readBytes, pData, err := cf.memAccess.ReadTargetMemory(cf.instrInfo.InstrAddr, cf.traceID, cf.memSpace, bytesReq)
 
+	// Treat both ErrNoAccessor and too-short reads as memory unavailable
+	if errors.Is(err, memacc.ErrNoAccessor) || (err == nil && readBytes < 4) {
+		// Memory unavailable
+		cf.hasNaccErr = true
+		cf.noAccessAddr = cf.instrInfo.InstrAddr
+		cf.hasNext = false
+		cf.nextAddr = cf.instrInfo.InstrAddr
+		return ocsd.ErrMemNacc
+	}
+
 	if err != nil {
 		return err
 	}
@@ -168,7 +179,7 @@ func (cf *CodeFollower) DecodeSingleOpCode() error {
 		return err
 	}
 
-	// Memory unavailable
+	// Defensive: should not reach here given the check above, but handle it
 	cf.hasNaccErr = true
 	cf.noAccessAddr = cf.instrInfo.InstrAddr
 	cf.hasNext = false

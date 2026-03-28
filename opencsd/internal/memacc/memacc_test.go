@@ -779,3 +779,134 @@ func TestRemoveAccessor_MemoryLeak(t *testing.T) {
 		t.Fatalf("Memory leak: removed accessor pointer not zeroed out")
 	}
 }
+
+// TestSentinelError_NoAccessor verifies ErrNoAccessor is returned when no accessor can service a request.
+func TestSentinelError_NoAccessor(t *testing.T) {
+	mapper := NewGlobalMapper()
+	// No accessors added
+
+	// Attempt to read from unmapped location
+	buf := make([]byte, 4)
+	_, err := mapper.Read(0x1000, 0, ocsd.MemSpaceAny, 4, buf)
+	if !errors.Is(err, ErrNoAccessor) {
+		t.Fatalf("expected ErrNoAccessor for no accessors, got %v", err)
+	}
+
+	// Add an accessor that doesn't cover the requested address
+	acc := NewBufferAccessor(0x2000, []byte{0x11, 0x22, 0x33, 0x44})
+	acc.SetMemSpace(ocsd.MemSpaceEL1N)
+	mapper.AddAccessor(acc, 0)
+
+	// Try to read outside the mapped range
+	_, err = mapper.Read(0x1000, 0, ocsd.MemSpaceEL1N, 4, buf)
+	if !errors.Is(err, ErrNoAccessor) {
+		t.Fatalf("expected ErrNoAccessor for address outside mapped range, got %v", err)
+	}
+
+	// Try to read with wrong memory space (no accessor supports it)
+	_, err = mapper.Read(0x2000, 0, ocsd.MemSpaceEL2, 4, buf)
+	if !errors.Is(err, ErrNoAccessor) {
+		t.Fatalf("expected ErrNoAccessor for unsupported memory space, got %v", err)
+	}
+}
+
+// TestSentinelError_PartialRead verifies partial reads return bytes read without sentinel errors.
+func TestSentinelError_PartialRead(t *testing.T) {
+	mapper := NewGlobalMapper()
+
+	// Add an accessor
+	acc := NewBufferAccessor(0x1000, []byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66})
+	acc.SetMemSpace(ocsd.MemSpaceEL1N)
+	mapper.AddAccessor(acc, 0)
+
+	// Request 4 bytes - get full read
+	buf := make([]byte, 4)
+	read, err := mapper.Read(0x1000, 0, ocsd.MemSpaceEL1N, 4, buf)
+	if err != nil {
+		t.Fatalf("full read should succeed, got error %v", err)
+	}
+	if read != 4 {
+		t.Fatalf("expected 4 bytes, got %d", read)
+	}
+
+	// Request partial read through callback that returns less
+	cbAcc := NewCallbackAccessor(0x2000, 0x2FFF, ocsd.MemSpaceEL1N)
+	cbAcc.SetCallback(func(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
+		// Callback returns only 2 bytes (partial read)
+		copy(buffer, []byte{0xAA, 0xBB})
+		return 2
+	})
+	mapper.AddAccessor(cbAcc, 0)
+
+	// Request 4 bytes, but accessor only returns 2 (partial read)
+	buf = make([]byte, 4)
+	read, err = mapper.Read(0x2000, 0, ocsd.MemSpaceEL1N, 4, buf)
+	if err != nil {
+		t.Fatalf("partial read should not return error, got %v", err)
+	}
+	if read != 2 {
+		t.Fatalf("expected 2 bytes from partial read, got %d", read)
+	}
+	if buf[0] != 0xAA || buf[1] != 0xBB {
+		t.Fatalf("unexpected partial read data: got %x %x", buf[0], buf[1])
+	}
+}
+
+// TestSentinelError_CallbackBothModes verifies callback accessors work in both callback modes.
+func TestSentinelError_CallbackBothModes(t *testing.T) {
+	mapper := NewGlobalMapper()
+
+	// Test TraceID-aware callback (with trace ID parameter)
+	cbAccWithID := NewCallbackAccessor(0x1000, 0x1FFF, ocsd.MemSpaceEL1N)
+	traceIDCallbackInvoked := false
+	cbAccWithID.SetTraceIDCallback(func(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32 {
+		traceIDCallbackInvoked = true
+		if trcID != 0x42 {
+			t.Errorf("expected trace ID 0x42, got 0x%02X", trcID)
+		}
+		copy(buffer, []byte{0xCC, 0xDD, 0xEE, 0xFF})
+		return 4
+	})
+	mapper.AddAccessor(cbAccWithID, 0)
+
+	buf := make([]byte, 4)
+	read, err := mapper.Read(0x1000, 0x42, ocsd.MemSpaceEL1N, 4, buf)
+	if err != nil {
+		t.Fatalf("TraceID callback read failed: %v", err)
+	}
+	if read != 4 {
+		t.Fatalf("expected 4 bytes from ID callback, got %d", read)
+	}
+	if !traceIDCallbackInvoked {
+		t.Fatalf("TraceID callback not invoked")
+	}
+	if buf[0] != 0xCC {
+		t.Fatalf("unexpected TraceID callback data")
+	}
+
+	// Test non-TraceID-aware callback (legacy callback without trace ID)
+	mapper.RemoveAllAccessors()
+	cbAccNoID := NewCallbackAccessor(0x2000, 0x2FFF, ocsd.MemSpaceEL1N)
+	simpleCallbackInvoked := false
+	cbAccNoID.SetCallback(func(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
+		simpleCallbackInvoked = true
+		copy(buffer, []byte{0x11, 0x22, 0x33, 0x44})
+		return 4
+	})
+	mapper.AddAccessor(cbAccNoID, 0)
+
+	buf = make([]byte, 4)
+	read, err = mapper.Read(0x2000, 0x99, ocsd.MemSpaceEL1N, 4, buf)
+	if err != nil {
+		t.Fatalf("simple callback read failed: %v", err)
+	}
+	if read != 4 {
+		t.Fatalf("expected 4 bytes from simple callback, got %d", read)
+	}
+	if !simpleCallbackInvoked {
+		t.Fatalf("simple callback not invoked")
+	}
+	if buf[0] != 0x11 {
+		t.Fatalf("unexpected simple callback data")
+	}
+}

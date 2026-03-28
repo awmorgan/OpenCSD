@@ -1,12 +1,14 @@
 package etmv4
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
 	"opencsd/internal/common"
+	"opencsd/internal/memacc"
 
 	"opencsd/internal/ocsd"
 )
@@ -910,6 +912,11 @@ func (d *PktDecode) commitElements() error {
 				d.returnStack.Flush()
 			}
 			if popElem {
+				if len(d.p0Stack) == 0 {
+					err = d.handlePacketSeqErr(ocsd.ErrCommitPktOverrun, errIdx, "Element stack underflow during commit pop")
+					d.elemRes.P0Commit = 0
+					break
+				}
 				e := d.p0Stack[0]
 				d.poppedElems = append(d.poppedElems, e)
 				d.p0Stack = d.p0Stack[1:] // pop_front
@@ -1147,6 +1154,10 @@ func (d *PktDecode) traceInstrToWP(rangeOut *instrRange, res *wpRes, traceToAddr
 		currMemSpace := d.getCurrMemSpace()
 		bytesRead, memData, errMem := d.accessMemory(d.instrInfo.InstrAddr, currMemSpace, bytesReq)
 		if errMem != nil {
+			if errors.Is(errMem, memacc.ErrNoAccessor) {
+				*res = wpNacc
+				continue
+			}
 			return errMem
 		}
 
@@ -1439,6 +1450,12 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 	bytesReq := uint32(4)
 	bytesRead, memData, errMem := d.accessMemory(srcAddr, d.getCurrMemSpace(), bytesReq)
 	if errMem != nil {
+		if errors.Is(errMem, memacc.ErrNoAccessor) {
+			err = d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemAddrNacc)
+			d.outElem.CurrElem().StartAddr = srcAddr
+			d.outElem.CurrElem().Payload.ExceptionNum = uint32(d.getCurrMemSpace())
+			return err
+		}
 		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Mem access error processing source address packet", errMem))
 		return errMem
 	}
@@ -1482,6 +1499,19 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 			for instr.InstrAddr < outRange.enAddr && !memAccErr {
 				bytesRead, mData, eMem := d.accessMemory(instr.InstrAddr, d.getCurrMemSpace(), bytesReq)
 				if eMem != nil {
+					if errors.Is(eMem, memacc.ErrNoAccessor) {
+						memAccErr = true
+						err = d.outElem.AddElemType(elem.rootIndex, ocsd.GenElemAddrNacc)
+						if err != nil {
+							return err
+						}
+						d.outElem.CurrElem().StartAddr = srcAddr
+						d.outElem.CurrElem().Payload.ExceptionNum = uint32(d.getCurrMemSpace())
+						outRange.numInstr = 1
+						outRange.stAddr = srcAddr
+						outRange.enAddr = d.instrInfo.InstrAddr
+						continue
+					}
 					return eMem
 				}
 

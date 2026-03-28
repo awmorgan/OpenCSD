@@ -6,6 +6,7 @@ import (
 
 	"opencsd/internal/common"
 	"opencsd/internal/idec"
+	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
 )
 
@@ -651,6 +652,11 @@ func (d *PktDecode) traceInstrToWP(traceWPOp waypointTraceOp, nextAddrMatch ocsd
 		currOpAddress = d.instrInfo.InstrAddr
 		bytesRead, memData, errMem := d.Base.AccessMemory(d.instrInfo.InstrAddr, d.csID, memSpace, bytesReq)
 		if errMem != nil {
+			if errors.Is(errMem, memacc.ErrNoAccessor) {
+				d.memNaccPending = true
+				d.naccAddr = d.instrInfo.InstrAddr
+				break
+			}
 			err = errMem
 			break
 		}

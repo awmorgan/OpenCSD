@@ -9,8 +9,18 @@
 package memacc
 
 import (
+	"errors"
 	"math/bits"
 	"opencsd/internal/ocsd"
+)
+
+// Sentinel errors for memory access lookups.
+var (
+	// ErrNoAccessor indicates no memory accessor can service the request.
+	ErrNoAccessor = errors.New("no memory accessor")
+
+	// ErrAddressNotMapped indicates the address is not mapped in any accessor.
+	ErrAddressNotMapped = errors.New("address not mapped")
 )
 
 // Mapper defines the interface for mapping and reading target memory.
@@ -92,7 +102,7 @@ func (m *GlobalMapper) ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpac
 
 	if !found {
 		*numBytes = 0
-		return nil // Or ocsd.ErrMemNacc? C++ returns OCSD_OK but readBytes is 0.
+		return ErrNoAccessor
 	}
 
 	// Read from cache if enabled
