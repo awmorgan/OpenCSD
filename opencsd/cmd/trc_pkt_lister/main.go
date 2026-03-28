@@ -213,14 +213,22 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 		return errors.New("trace packet lister: no supported protocols found")
 	}
 
-	configureFrameDemux(tree, out, opts)
-	applyAdditionalFlags(tree, opts.additionalFlags)
+	if err := configureFrameDemux(tree, out, opts); err != nil {
+		return err
+	}
+	if err := applyAdditionalFlags(tree, opts.additionalFlags); err != nil {
+		return err
+	}
 
 	mapper := memacc.NewGlobalMapper()
 	if opts.memCacheDisable {
-		_ = mapper.EnableCaching(false)
+		if err := mapper.EnableCaching(false); err != nil {
+			return fmt.Errorf("trace packet lister: configure memory cache disable=true failed: %w", err)
+		}
 	} else {
-		_ = mapper.EnableCaching(true)
+		if err := mapper.EnableCaching(true); err != nil {
+			return fmt.Errorf("trace packet lister: configure memory cache disable=false failed: %w", err)
+		}
 		if opts.memCachePageSize != 0 || opts.memCachePageNum != 0 {
 			pageSize := opts.memCachePageSize
 			if pageSize == 0 {
@@ -230,11 +238,16 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 			if numPages == 0 {
 				numPages = uint32(memacc.DefaultNumPages)
 			}
-			_ = mapper.SetCacheSizes(uint16(pageSize), int(numPages), false)
+			if err := mapper.SetCacheSizes(uint16(pageSize), int(numPages), false); err != nil {
+				return fmt.Errorf("trace packet lister: configure memory cache sizes page_size=%d page_num=%d failed: %w", pageSize, numPages, err)
+			}
 		}
 	}
 	tree.SetMemAccessI(&memAccAdapter{mapper: mapper})
-	mapped := mapMemoryRanges(mapper, opts.ssDir, reader)
+	mapped, err := mapMemoryRanges(mapper, opts.ssDir, reader)
+	if err != nil {
+		return err
+	}
 
 	genPrinter := printers.NewGenericElementPrinter(out)
 	genAdapter := &filteredGenElemPrinter{
@@ -332,7 +345,12 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 				if genPrinter.NeedAckWait() {
 					genPrinter.AckWait()
 				}
-				_, dataPathResp, _ = tree.TraceDataIn(ocsd.OpFlush, 0, nil)
+				var dpErr error
+				_, dataPathResp, dpErr = tree.TraceDataIn(ocsd.OpFlush, 0, nil)
+				if dpErr != nil {
+					dataPathErr = fmt.Errorf("flush after wait: %w", dpErr)
+					return
+				}
 				continue
 			}
 
@@ -448,33 +466,44 @@ func frameAlignment(tree *dcdtree.DecodeTree) int {
 	return 16
 }
 
-func applyAdditionalFlags(tree *dcdtree.DecodeTree, flags uint32) {
+func applyAdditionalFlags(tree *dcdtree.DecodeTree, flags uint32) error {
 	if tree == nil || flags == 0 {
-		return
+		return nil
 	}
 
-	apply := func(component any) {
+	apply := func(component any) error {
 		opComp, ok := component.(opModeComponent)
 		if !ok || opComp == nil {
-			return
+			return nil
 		}
 		supported := opComp.SupportedOpModes()
 		applyFlags := flags & supported
 		if applyFlags == 0 {
-			return
+			return nil
 		}
-		_ = opComp.SetComponentOpMode(opComp.ComponentOpMode() | applyFlags)
+		if err := opComp.SetComponentOpMode(opComp.ComponentOpMode() | applyFlags); err != nil {
+			return fmt.Errorf("set op mode for %T with flags 0x%x: %w", component, applyFlags, err)
+		}
+		return nil
 	}
+	var applyErr error
 
 	tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
-		if elem == nil {
+		if elem == nil || applyErr != nil {
 			return
 		}
-		apply(elem.DecoderHandle)
+		if err := apply(elem.DecoderHandle); err != nil {
+			applyErr = err
+			return
+		}
 		if elem.DataIn != elem.DecoderHandle {
-			apply(elem.DataIn)
+			if err := apply(elem.DataIn); err != nil {
+				applyErr = err
+			}
 		}
 	})
+
+	return applyErr
 }
 
 func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options) int {
@@ -571,10 +600,10 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 	}
 	return attached
 }
-func configureFrameDemux(tree *dcdtree.DecodeTree, out io.Writer, opts options) {
+func configureFrameDemux(tree *dcdtree.DecodeTree, out io.Writer, opts options) error {
 	deformatter := tree.FrameDeformatter()
 	if deformatter == nil {
-		return
+		return nil
 	}
 
 	flags := deformatter.ConfigFlags()
@@ -598,16 +627,20 @@ func configureFrameDemux(tree *dcdtree.DecodeTree, out io.Writer, opts options) 
 		flags |= ocsd.DfrmtrUnpackedRawOut
 	}
 
-	_ = deformatter.Configure(flags)
+	if err := deformatter.Configure(flags); err != nil {
+		return fmt.Errorf("configure frame deformatter flags=0x%x: %w", flags, err)
+	}
 	if opts.outRawPacked || opts.outRawUnpacked {
 		rp := printers.NewRawFramePrinter(out)
 		deformatter.SetRawTraceFrame(rp)
 	}
+	return nil
 }
 
-func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader) []mappedRange {
+func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader) ([]mappedRange, error) {
 	ranges := make([]mappedRange, 0)
 	seenFiles := make(map[string]struct{})
+	seenAccessors := make(map[string]struct{})
 	for _, dev := range reader.ParsedDeviceList {
 		if !strings.EqualFold(dev.DeviceClass, "core") {
 			continue
@@ -635,9 +668,14 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 			acc := memacc.NewBufferAccessor(ocsd.VAddr(memParams.Address), b)
 			space := parseMemSpace(memParams.Space)
 			acc.SetMemSpace(space)
-			if err := mapper.AddAccessor(acc, 0); err != nil {
+			accKey := fmt.Sprintf("%s|%s|0x%x|%d|%d", memacc.MemSpaceString(space), filepath.ToSlash(filePath), memParams.Address, len(b), memParams.Offset)
+			if _, seen := seenAccessors[accKey]; seen {
 				continue
 			}
+			if err := mapper.AddAccessor(acc, 0); err != nil {
+				return nil, fmt.Errorf("add memory accessor for %s @0x%x: %w", filePath, memParams.Address, err)
+			}
+			seenAccessors[accKey] = struct{}{}
 
 			normPath := filepath.ToSlash(filePath)
 			if _, seen := seenFiles[normPath]; seen {
@@ -654,7 +692,7 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 		}
 	}
 
-	return ranges
+	return ranges, nil
 }
 
 func printMappedRanges(out io.Writer, ranges []mappedRange) {
