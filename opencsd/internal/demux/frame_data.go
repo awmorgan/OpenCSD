@@ -1,6 +1,7 @@
 package demux
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"opencsd/internal/ocsd"
@@ -34,18 +35,16 @@ func (d *FrameDeformatter) checkForSync(dataBlockSize uint32) bool {
 }
 
 func (d *FrameDeformatter) findfirstFSync(dataBlockSize uint32) uint32 {
-	var processed uint32
-	const FSYNC_PATTERN uint32 = 0x7FFFFFFF
-
-	for processed+3 < dataBlockSize {
-		val := binary.LittleEndian.Uint32(d.inBlockBase[processed:])
-		if val == FSYNC_PATTERN {
-			d.frameSynced = true
-			break
-		}
-		processed++
+	if dataBlockSize < 4 {
+		return dataBlockSize
 	}
-	return processed
+
+	idx := bytes.Index(d.inBlockBase[:int(dataBlockSize)], []byte{0xff, 0xff, 0xff, 0x7f})
+	if idx >= 0 {
+		d.frameSynced = true
+		return uint32(idx)
+	}
+	return dataBlockSize - 3
 }
 
 func (d *FrameDeformatter) outputUnsyncedBytes(numBytes uint32) {

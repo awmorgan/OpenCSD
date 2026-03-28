@@ -1,6 +1,48 @@
 package common
 
-import "opencsd/internal/ocsd"
+import (
+	"strings"
+
+	"opencsd/internal/ocsd"
+)
+
+var defaultCoreMap = map[string]ocsd.ArchProfile{
+	// Cortex-A Series
+	"Cortex-A77": {Arch: ocsd.ArchV8r3, Profile: ocsd.ProfileCortexA},
+	"Cortex-A76": {Arch: ocsd.ArchV8r3, Profile: ocsd.ProfileCortexA},
+	"Cortex-A75": {Arch: ocsd.ArchV8r3, Profile: ocsd.ProfileCortexA},
+	"Cortex-A73": {Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA},
+	"Cortex-A72": {Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA},
+	"Cortex-A65": {Arch: ocsd.ArchV8r3, Profile: ocsd.ProfileCortexA},
+	"Cortex-A57": {Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA},
+	"Cortex-A55": {Arch: ocsd.ArchV8r3, Profile: ocsd.ProfileCortexA},
+	"Cortex-A53": {Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA},
+	"Cortex-A35": {Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA},
+	"Cortex-A32": {Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA},
+	"Cortex-A17": {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA},
+	"Cortex-A15": {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA},
+	"Cortex-A12": {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA},
+	"Cortex-A9":  {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA},
+	"Cortex-A8":  {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA},
+	"Cortex-A7":  {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA},
+	"Cortex-A5":  {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA},
+
+	// Cortex-R Series
+	"Cortex-R52": {Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexR},
+	"Cortex-R8":  {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexR},
+	"Cortex-R7":  {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexR},
+	"Cortex-R5":  {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexR},
+	"Cortex-R4":  {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexR},
+
+	// Cortex-M Series
+	"Cortex-M55": {Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexM},
+	"Cortex-M33": {Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexM},
+	"Cortex-M23": {Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexM},
+	"Cortex-M4":  {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM},
+	"Cortex-M3":  {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM},
+	"Cortex-M0+": {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM},
+	"Cortex-M0":  {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM},
+}
 
 // CoreArchProfileMap maps core names to architecture profiles.
 type CoreArchProfileMap struct {
@@ -10,48 +52,9 @@ type CoreArchProfileMap struct {
 // NewCoreArchProfileMap creates a new map.
 func NewCoreArchProfileMap() *CoreArchProfileMap {
 	m := &CoreArchProfileMap{
-		coreMap: make(map[string]ocsd.ArchProfile),
+		coreMap: defaultCoreMap,
 	}
-	m.loadMap()
 	return m
-}
-
-func (m *CoreArchProfileMap) loadMap() {
-	// Cortex-A Series
-	m.coreMap["Cortex-A77"] = ocsd.ArchProfile{Arch: ocsd.ArchV8r3, Profile: ocsd.ProfileCortexA} // Assuming ArchV8r3 exists
-	m.coreMap["Cortex-A76"] = ocsd.ArchProfile{Arch: ocsd.ArchV8r3, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A75"] = ocsd.ArchProfile{Arch: ocsd.ArchV8r3, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A73"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A72"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A65"] = ocsd.ArchProfile{Arch: ocsd.ArchV8r3, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A57"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A55"] = ocsd.ArchProfile{Arch: ocsd.ArchV8r3, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A53"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A35"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A32"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A17"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A15"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A12"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A9"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A8"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A7"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA}
-	m.coreMap["Cortex-A5"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexA}
-
-	// Cortex-R Series
-	m.coreMap["Cortex-R52"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexR}
-	m.coreMap["Cortex-R8"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexR}
-	m.coreMap["Cortex-R7"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexR}
-	m.coreMap["Cortex-R5"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexR}
-	m.coreMap["Cortex-R4"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexR}
-
-	// Cortex-M Series
-	m.coreMap["Cortex-M55"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexM}
-	m.coreMap["Cortex-M33"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexM}
-	m.coreMap["Cortex-M23"] = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexM}
-	m.coreMap["Cortex-M4"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM}
-	m.coreMap["Cortex-M3"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM}
-	m.coreMap["Cortex-M0+"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM}
-	m.coreMap["Cortex-M0"] = ocsd.ArchProfile{Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM}
 }
 
 // ArchProfile returns the architecture profile for a given core name.
@@ -70,30 +73,22 @@ func (m *CoreArchProfileMap) ArchProfile(coreName string) (ocsd.ArchProfile, boo
 func getPatternMatchCoreName(coreName string) (ocsd.ArchProfile, bool) {
 	ap := ocsd.ArchProfile{Arch: ocsd.ArchUnknown, Profile: ocsd.ProfileUnknown}
 
-	if len(coreName) >= 5 && coreName[:4] == "ARMv" {
-		if len(coreName) <= 4 {
+	if rest, ok := strings.CutPrefix(coreName, "ARMv"); ok {
+		if len(rest) == 0 || rest[0] < '0' || rest[0] > '9' {
 			return ap, false
 		}
 
-		majver := int(coreName[4] - '0')
+		majver := int(rest[0] - '0')
 		minver := 0
-		dotoffset := 0
+		profileOffset := 1
 
-		dotPos := -1
-		for i := 0; i < len(coreName); i++ {
-			if coreName[i] == '.' {
-				dotPos = i
-				break
-			}
-		}
-
-		if dotPos == 5 {
-			if len(coreName) <= 6 {
+		if strings.HasPrefix(rest[1:], ".") {
+			if len(rest) < 3 || rest[2] < '0' || rest[2] > '9' {
 				return ap, false
 			}
-			minver = int(coreName[6] - '0')
-			dotoffset = 2
-		} else if dotPos != -1 {
+			minver = int(rest[2] - '0')
+			profileOffset = 3
+		} else if strings.IndexByte(rest, '.') >= 0 {
 			return ap, false
 		}
 
@@ -112,26 +107,17 @@ func getPatternMatchCoreName(coreName string) (ocsd.ArchProfile, bool) {
 			return ap, false
 		}
 
-		dashPos := -1
-		for i := 4; i < len(coreName); i++ {
-			if coreName[i] == '-' {
-				dashPos = i
-				break
-			}
+		if len(rest) <= profileOffset || rest[profileOffset] != '-' {
+			ap.Arch = ocsd.ArchUnknown
+			return ap, false
 		}
-
-		if dashPos != 5+dotoffset {
+		profileIdx := profileOffset + 1
+		if profileIdx >= len(rest) {
 			ap.Arch = ocsd.ArchUnknown
 			return ap, false
 		}
 
-		profileIdx := 6 + dotoffset
-		if profileIdx >= len(coreName) {
-			ap.Arch = ocsd.ArchUnknown
-			return ap, false
-		}
-
-		switch coreName[profileIdx] {
+		switch rest[profileIdx] {
 		case 'A':
 			ap.Profile = ocsd.ProfileCortexA
 		case 'R':
@@ -146,14 +132,14 @@ func getPatternMatchCoreName(coreName string) (ocsd.ArchProfile, bool) {
 		return ap, true
 	}
 
-	if len(coreName) >= 8 && coreName[:4] == "ARM-" {
-		if coreName[4:8] == "aa64" || coreName[4:8] == "AA64" {
+	if rest, ok := strings.CutPrefix(coreName, "ARM-"); ok {
+		if strings.HasPrefix(rest, "aa64") || strings.HasPrefix(rest, "AA64") {
 			ap.Arch = ocsd.ArchAA64
 			ap.Profile = ocsd.ProfileCortexA
-			if len(coreName) > 9 && coreName[8] == '-' {
-				if coreName[9] == 'R' {
+			if len(rest) > 5 && rest[4] == '-' {
+				if rest[5] == 'R' {
 					ap.Profile = ocsd.ProfileCortexR
-				} else if coreName[9] == 'M' {
+				} else if rest[5] == 'M' {
 					ap.Profile = ocsd.ProfileCortexM
 				}
 			}

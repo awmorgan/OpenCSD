@@ -11,9 +11,9 @@ import (
 // It maps section names to a map of key-value pairs.
 // Global properties (before any section) are stored in the "" (empty string) section.
 // SectionOrder records the order in which sections were first encountered in the file.
-// When a key appears more than once within a section, its values are joined with ",".
 type IniFile struct {
 	Sections     map[string]map[string]string
+	SectionVals  map[string]map[string][]string
 	SectionOrder []string
 }
 
@@ -21,6 +21,7 @@ type IniFile struct {
 func NewIniFile() *IniFile {
 	return &IniFile{
 		Sections:     make(map[string]map[string]string),
+		SectionVals:  make(map[string]map[string][]string),
 		SectionOrder: []string{},
 	}
 }
@@ -31,6 +32,7 @@ func ParseIni(r io.Reader) *IniFile {
 	scanner := bufio.NewScanner(r)
 	currentSection := ""
 	ini.Sections[currentSection] = make(map[string]string)
+	ini.SectionVals[currentSection] = make(map[string][]string)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -49,6 +51,7 @@ func ParseIni(r io.Reader) *IniFile {
 			currentSection = sectionName
 			if _, exists := ini.Sections[currentSection]; !exists {
 				ini.Sections[currentSection] = make(map[string]string)
+				ini.SectionVals[currentSection] = make(map[string][]string)
 				ini.SectionOrder = append(ini.SectionOrder, currentSection)
 			}
 			continue
@@ -59,13 +62,9 @@ func ParseIni(r io.Reader) *IniFile {
 		if len(parts) == 2 {
 			key := strings.TrimSpace(parts[0])
 			val := strings.TrimSpace(stripInlineComment(parts[1]))
-
-			// Accumulate duplicate keys with "," as separator.
-			if existing, ok := ini.Sections[currentSection][key]; ok {
-				ini.Sections[currentSection][key] = existing + "," + val
-			} else {
-				ini.Sections[currentSection][key] = val
-			}
+			ini.SectionVals[currentSection][key] = append(ini.SectionVals[currentSection][key], val)
+			// Preserve legacy single-string API by joining duplicates.
+			ini.Sections[currentSection][key] = strings.Join(ini.SectionVals[currentSection][key], ",")
 		}
 	}
 

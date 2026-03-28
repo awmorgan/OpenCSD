@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"testing"
 
 	"opencsd/internal/snapshot"
 )
@@ -172,21 +173,38 @@ func FindParsedDeviceByName(devs map[string]*snapshot.ParsedDevice, name string)
 	return nil
 }
 
-func ParseHexOrDec(s string) uint64 {
+func parseHexOrDecErr(s string) (uint64, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return 0
+		return 0, nil
 	}
 	if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
 		v, err := strconv.ParseUint(s[2:], 16, 64)
 		if err != nil {
-			panic(fmt.Sprintf("failed to parse hex string %q: %v", s, err))
+			return 0, fmt.Errorf("failed to parse hex string %q: %w", s, err)
 		}
-		return v
+		return v, nil
 	}
 	v, err := strconv.ParseUint(s, 10, 64)
 	if err != nil {
-		panic(fmt.Sprintf("failed to parse dec string %q: %v", s, err))
+		return 0, fmt.Errorf("failed to parse dec string %q: %w", s, err)
+	}
+	return v, nil
+}
+
+func ParseHexOrDec(s string) uint64 {
+	v, err := parseHexOrDecErr(s)
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
+func ParseHexOrDecTB(t testing.TB, s string) uint64 {
+	t.Helper()
+	v, err := parseHexOrDecErr(s)
+	if err != nil {
+		t.Fatalf("%v", err)
 	}
 	return v
 }

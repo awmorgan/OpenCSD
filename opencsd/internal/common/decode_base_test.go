@@ -77,7 +77,7 @@ func TestDecoderBase(t *testing.T) {
 }
 
 func TestProcBase(t *testing.T) {
-	b := &ProcBase{}
+	b := &ProcBase[any]{}
 	b.Init("testProc", nil)
 
 	if b.Name != "testProc" {

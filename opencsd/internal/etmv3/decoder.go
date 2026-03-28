@@ -17,6 +17,13 @@ const (
 	sendPkts
 )
 
+var isyncOnReasonMap = [...]ocsd.TraceOnReason{
+	ocsd.TraceOnNormal,
+	ocsd.TraceOnNormal,
+	ocsd.TraceOnOverflow,
+	ocsd.TraceOnExDebug,
+}
+
 // PktDecode implements the ETMv3 packet decoder converting packets to generic TraceElements
 // Ported from trc_pkt_decode_etmv3.cpp
 type PktDecode struct {
@@ -489,8 +496,6 @@ func (d *PktDecode) setNeedAddr(needAddr bool) {
 }
 
 func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp {
-	onMap := []ocsd.TraceOnReason{ocsd.TraceOnNormal, ocsd.TraceOnNormal, ocsd.TraceOnOverflow, ocsd.TraceOnExDebug}
-
 	packetIn := d.CurrPacketIn
 	ctxtUpdate := packetIn.Context.UpdatedC || packetIn.Context.UpdatedV || packetIn.Context.Updated
 
@@ -504,8 +509,8 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 
 	if firstSync || packetIn.ISyncInfo.Reason != ocsd.ISyncPeriodic {
 		elem.SetType(ocsd.GenElemTraceOn)
-		if int(packetIn.ISyncInfo.Reason) < len(onMap) {
-			elem.Payload.TraceOnReason = onMap[packetIn.ISyncInfo.Reason]
+		if int(packetIn.ISyncInfo.Reason) < len(isyncOnReasonMap) {
+			elem.Payload.TraceOnReason = isyncOnReasonMap[packetIn.ISyncInfo.Reason]
 		}
 		elem, err = d.getNextOpElem()
 		if err != nil {
@@ -569,6 +574,44 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 	}
 
 	return ocsd.RespCont
+}
+
+func (d *PktDecode) atomCC(packetIn *Packet, atomsNum uint8, isCCPacket bool) uint32 {
+	if !isCCPacket {
+		return 0
+	}
+	switch packetIn.PHdrFmt {
+	case 3:
+		return packetIn.CycleCount
+	case 2:
+		if atomsNum > 1 {
+			return 1
+		}
+		return 0
+	case 1:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func (d *PktDecode) remainCC(packetIn *Packet, atomsNum uint8, isCCPacket bool) uint32 {
+	if !isCCPacket {
+		return 0
+	}
+	switch packetIn.PHdrFmt {
+	case 3:
+		return packetIn.CycleCount
+	case 2:
+		if atomsNum > 1 {
+			return 1
+		}
+		return 0
+	case 1:
+		return uint32(atomsNum)
+	default:
+		return 0
+	}
 }
 
 func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
@@ -682,44 +725,6 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 
 	isCCPacket := d.Config.IsCycleAcc()
 
-	getAtomCC := func() uint32 {
-		if !isCCPacket {
-			return 0
-		}
-		switch packetIn.PHdrFmt {
-		case 3:
-			return packetIn.CycleCount
-		case 2:
-			if atomsNum > 1 {
-				return 1
-			}
-			return 0
-		case 1:
-			return 1
-		default:
-			return 0
-		}
-	}
-
-	getRemainCC := func() uint32 {
-		if !isCCPacket {
-			return 0
-		}
-		switch packetIn.PHdrFmt {
-		case 3:
-			return packetIn.CycleCount
-		case 2:
-			if atomsNum > 1 {
-				return 1
-			}
-			return 0
-		case 1:
-			return uint32(atomsNum)
-		default:
-			return 0
-		}
-	}
-
 	memSpace := ocsd.MemSpaceN
 	if d.peContext.SecurityLevel == ocsd.SecSecure {
 		memSpace = ocsd.MemSpaceS
@@ -745,7 +750,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					elem.SetType(ocsd.GenElemAddrUnknown)
 				}
 				if d.Config.IsCycleAcc() {
-					elem.SetCycleCount(getRemainCC())
+					elem.SetCycleCount(d.remainCC(packetIn, atomsNum, isCCPacket))
 				}
 				d.sentUnknown = true
 			}
@@ -785,7 +790,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					elem.ISA = isa
 
 					if d.Config.IsCycleAcc() {
-						elem.SetCycleCount(getAtomCC())
+						elem.SetCycleCount(d.atomCC(packetIn, atomsNum, isCCPacket))
 					}
 
 					d.iAddr = uint64(d.codeFollower.NextAddr())
@@ -818,7 +823,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					return ocsd.RespFatalSysErr
 				}
 				elem.SetType(ocsd.GenElemCycleCount)
-				elem.SetCycleCount(getRemainCC())
+				elem.SetCycleCount(d.remainCC(packetIn, atomsNum, isCCPacket))
 			}
 		}
 

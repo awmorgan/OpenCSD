@@ -156,22 +156,22 @@ func (b *DecoderBase) InvalidateMemAccCache(traceID uint8) error {
 
 // ProcBase holds the shared state for a packet processor.
 // Concrete processors hold it as a named field and call its methods explicitly.
-type ProcBase struct {
+type ProcBase[P any] struct {
 	Name             string
 	Logger           ocsd.Logger
 	ErrVerbosity     ocsd.ErrSeverity
 	OpFlags          uint32
 	SupportedOpFlags uint32
 
-	PktOutI    any // ocsd.PacketProcessor[P] stored as any; processors access it via their own typed field
-	PktRawMonI any // ocsd.PacketMonitor[P] stored as any; same
+	PktOutI    ocsd.PacketProcessor[P]
+	PktRawMonI ocsd.PacketMonitor[P]
 
 	Stats     ocsd.DecodeStats
 	statsInit bool
 }
 
 // Init sets up the ProcBase.
-func (b *ProcBase) Init(name string, logger ocsd.Logger) {
+func (b *ProcBase[P]) Init(name string, logger ocsd.Logger) {
 	b.Name = name
 	b.Logger = logger
 	b.ErrVerbosity = ocsd.ErrSevNone
@@ -179,7 +179,7 @@ func (b *ProcBase) Init(name string, logger ocsd.Logger) {
 }
 
 // LogError logs an error if the logger is set and severity threshold is met.
-func (b *ProcBase) LogError(sev ocsd.ErrSeverity, err error) {
+func (b *ProcBase[P]) LogError(sev ocsd.ErrSeverity, err error) {
 	if err == nil {
 		return
 	}
@@ -189,34 +189,34 @@ func (b *ProcBase) LogError(sev ocsd.ErrSeverity, err error) {
 }
 
 // LogMessage logs a message at the given severity level.
-func (b *ProcBase) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
+func (b *ProcBase[P]) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
 	if filterLevel <= b.ErrVerbosity && b.Logger != nil {
 		b.Logger.LogMessage(filterLevel, msg)
 	}
 }
 
 // IsLoggingErrorLevel reports whether errors at the given severity should be logged.
-func (b *ProcBase) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
+func (b *ProcBase[P]) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
 	return level <= b.ErrVerbosity
 }
 
 // ConfigureComponentOpMode applies opFlags masked to the supported set.
-func (b *ProcBase) ConfigureComponentOpMode(opFlags uint32) error {
+func (b *ProcBase[P]) ConfigureComponentOpMode(opFlags uint32) error {
 	b.OpFlags = opFlags & b.SupportedOpFlags
 	return nil
 }
 
 // ComponentOpMode returns the current operational mode flags.
-func (b *ProcBase) ComponentOpMode() uint32 { return b.OpFlags }
+func (b *ProcBase[P]) ComponentOpMode() uint32 { return b.OpFlags }
 
 // SupportedOpModes returns the supported operational mode bitmask.
-func (b *ProcBase) SupportedOpModes() uint32 { return b.SupportedOpFlags }
+func (b *ProcBase[P]) SupportedOpModes() uint32 { return b.SupportedOpFlags }
 
 // ConfigureSupportedOpModes sets which op-mode flags this processor supports.
-func (b *ProcBase) ConfigureSupportedOpModes(flags uint32) { b.SupportedOpFlags = flags }
+func (b *ProcBase[P]) ConfigureSupportedOpModes(flags uint32) { b.SupportedOpFlags = flags }
 
 // StatsBlock returns the decode statistics, or ErrNotInit if stats were never initialized.
-func (b *ProcBase) StatsBlock() (*ocsd.DecodeStats, error) {
+func (b *ProcBase[P]) StatsBlock() (*ocsd.DecodeStats, error) {
 	if !b.statsInit {
 		return &b.Stats, ocsd.ErrNotInit
 	}
@@ -225,10 +225,10 @@ func (b *ProcBase) StatsBlock() (*ocsd.DecodeStats, error) {
 
 // HasRawMon reports whether a raw packet monitor has been attached.
 // Processors call this to check the PktRawMonI field directly.
-func (b *ProcBase) HasRawMon() bool { return b.PktRawMonI != nil }
+func (b *ProcBase[P]) HasRawMon() bool { return b.PktRawMonI != nil }
 
 // ResetStats zeroes all decode statistics fields.
-func (b *ProcBase) ResetStats() {
+func (b *ProcBase[P]) ResetStats() {
 	b.Stats.Version = ocsd.VerNum
 	b.Stats.Revision = ocsd.StatsRevision
 	b.Stats.ChannelTotal = 0
@@ -241,16 +241,16 @@ func (b *ProcBase) ResetStats() {
 }
 
 // StatsInit marks the statistics block as initialized.
-func (b *ProcBase) StatsInit() { b.statsInit = true }
+func (b *ProcBase[P]) StatsInit() { b.statsInit = true }
 
 // StatsAddTotalCount adds to the total channel bytes counter.
-func (b *ProcBase) StatsAddTotalCount(count uint64) { b.Stats.ChannelTotal += count }
+func (b *ProcBase[P]) StatsAddTotalCount(count uint64) { b.Stats.ChannelTotal += count }
 
 // StatsAddUnsyncCount adds to the unsynced channel bytes counter.
-func (b *ProcBase) StatsAddUnsyncCount(count uint64) { b.Stats.ChannelUnsynced += count }
+func (b *ProcBase[P]) StatsAddUnsyncCount(count uint64) { b.Stats.ChannelUnsynced += count }
 
 // StatsAddBadSeqCount adds to the bad-sequence-error counter.
-func (b *ProcBase) StatsAddBadSeqCount(count uint32) { b.Stats.BadSequenceErrs += count }
+func (b *ProcBase[P]) StatsAddBadSeqCount(count uint32) { b.Stats.BadSequenceErrs += count }
 
 // StatsAddBadHdrCount adds to the bad-header-error counter.
-func (b *ProcBase) StatsAddBadHdrCount(count uint32) { b.Stats.BadHeaderErrs += count }
+func (b *ProcBase[P]) StatsAddBadHdrCount(count uint32) { b.Stats.BadHeaderErrs += count }

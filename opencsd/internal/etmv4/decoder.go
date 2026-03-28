@@ -193,7 +193,7 @@ func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 	if cfg != nil {
 		instIDNum = int(cfg.TraceID())
 	}
-	d.Base.Init(fmt.Sprintf("%s_%d", "DCD_ETMV4", instIDNum), logger)
+	d.Base.Init(fmt.Sprintf("DCD_ETMV4_%d", instIDNum), logger)
 	d.Base.ConfigureSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms | ocsd.OpflgPktdecAA64OpcodeChk)
 	if cfg != nil {
 		_ = d.SetProtocolConfig(cfg)

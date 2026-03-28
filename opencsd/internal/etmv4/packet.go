@@ -2,6 +2,7 @@ package etmv4
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"opencsd/internal/ocsd"
@@ -729,16 +730,21 @@ func (p *TracePacket) HeaderString() string {
 }
 
 func (p *TracePacket) addrValStr(updateBits uint8) string {
-	s := ""
+	width := 8
+	value := uint64(uint32(p.VAddr))
 	if p.VAddrValidBits > 32 {
-		s = fmt.Sprintf("0x%016X", uint64(p.VAddr))
-	} else {
-		s = fmt.Sprintf("0x%08X", uint32(p.VAddr))
+		width = 16
+		value = uint64(p.VAddr)
 	}
 
+	hex := strings.ToUpper(strconv.FormatUint(value, 16))
+	if len(hex) < width {
+		hex = strings.Repeat("0", width-len(hex)) + hex
+	}
+	s := "0x" + hex
 	if updateBits > 0 {
 		mask := uint64((1 << updateBits) - 1)
-		s += fmt.Sprintf(" ~[0x%X]", uint64(p.VAddr)&mask)
+		s += " ~[0x" + strings.ToUpper(strconv.FormatUint(uint64(p.VAddr)&mask, 16)) + "]"
 	}
 	return s
 }

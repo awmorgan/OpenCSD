@@ -184,9 +184,16 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 	resp := ocsd.RespCont
 	consumed := 0
 
-	for consumed < len(dataBlock) || p.processState == SendPkt {
+	for ocsd.DataRespIsCont(resp) {
+		if consumed >= len(dataBlock) && p.processState != SendPkt {
+			break
+		}
+
 		switch p.processState {
 		case ProcHdr:
+			if consumed >= len(dataBlock) {
+				break
+			}
 			p.packetIndex = p.blockIndex + ocsd.TrcIndex(consumed)
 			if p.isSync {
 				nextByte := dataBlock[consumed]
@@ -223,10 +230,6 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 
 		case ProcErr:
 			return uint32(consumed), resp, nil
-		}
-
-		if !ocsd.DataRespIsCont(resp) {
-			break
 		}
 	}
 

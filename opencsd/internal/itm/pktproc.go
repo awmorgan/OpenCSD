@@ -1,6 +1,7 @@
 package itm
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 
@@ -31,7 +32,7 @@ const (
 
 // PktProc converts incoming byte stream into ITM packets
 type PktProc struct {
-	Base       common.ProcBase
+	Base       common.ProcBase[Packet]
 	Config     *Config
 	PktOutI    ocsd.PacketProcessor[Packet]
 	PktRawMonI ocsd.PacketMonitor[Packet]
@@ -43,6 +44,7 @@ type PktProc struct {
 	dataIn      []byte
 	dataInSize  uint32
 	dataInUsed  uint32
+	dataReader  *bytes.Reader
 	packetIndex ocsd.TrcIndex
 
 	headerByte        uint8
@@ -178,7 +180,10 @@ func (p *PktProc) setProcUnsynced() {
 }
 
 func (p *PktProc) dataToProcess() bool {
-	return (p.dataInUsed < p.dataInSize) || (p.procState == procSendPkt)
+	if p.procState == procSendPkt {
+		return true
+	}
+	return p.dataReader != nil && p.dataReader.Len() > 0
 }
 
 func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
@@ -187,6 +192,7 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, oc
 	p.dataIn = dataBlock
 	p.dataInSize = uint32(len(dataBlock))
 	p.dataInUsed = 0
+	p.dataReader = bytes.NewReader(dataBlock)
 
 	for p.dataToProcess() && ocsd.DataRespIsCont(resp) {
 		errResp, loopErr, handled := p.processStateLoop(index)
@@ -307,11 +313,13 @@ func (p *PktProc) savePacketByte(val byte) {
 }
 
 func (p *PktProc) readByte() (byte, bool) {
-	if p.dataInUsed < p.dataInSize {
-		b := p.dataIn[p.dataInUsed]
-		p.dataInUsed++
-		p.savePacketByte(b)
-		return b, true
+	if p.dataReader != nil {
+		b, err := p.dataReader.ReadByte()
+		if err == nil {
+			p.dataInUsed = p.dataInSize - uint32(p.dataReader.Len())
+			p.savePacketByte(b)
+			return b, true
+		}
 	}
 	return 0, false
 }

@@ -171,9 +171,9 @@ func (d *FrameDeformatter) outputRawMonBytes(op ocsd.DatapathOp, index ocsd.TrcI
 }
 
 func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocsd.TrcIndex) ocsd.DatapathResp {
-	for id := range 128 {
-		if d.idStreams[id] != nil { // if attached
-			_, resp, err := d.idStreams[id].TraceDataIn(op, index, nil)
+	for _, stream := range d.idStreams {
+		if stream != nil { // if attached
+			_, resp, err := stream.TraceDataIn(op, index, nil)
 			d.collateDataPathResp(resp)
 			if err != nil {
 				d.collateDataPathResp(ocsd.RespFatalInvalidData)
@@ -294,6 +294,7 @@ func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byt
 		d.pendingData = d.pendingData[int(alignedProcessed):]
 		d.pendingIndex += ocsd.TrcIndex(alignedProcessed)
 		if len(d.pendingData) == 0 {
+			d.pendingData = nil
 			d.pendingIndex = ocsd.BadTrcIndex
 		}
 	}

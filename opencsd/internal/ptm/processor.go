@@ -50,7 +50,7 @@ const (
 )
 
 type PktProc struct {
-	Base       common.ProcBase
+	Base       common.ProcBase[Packet]
 	Config     *Config
 	PktOutI    ocsd.PacketProcessor[Packet]
 	PktRawMonI ocsd.PacketMonitor[Packet]

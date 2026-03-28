@@ -103,17 +103,50 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 		}
 	}
 
+	const processChunk = 64 * 1024
+	processWithContext := func(proc ocsd.TrcDataProcessor) (uint32, ocsd.DatapathResp, error) {
+		if proc == nil {
+			return 0, ocsd.RespFatalNotInit, nil
+		}
+		if ctx == nil || op != ocsd.OpData || len(data) <= processChunk {
+			return proc.TraceDataIn(op, index, data)
+		}
+
+		var total uint32
+		resp := ocsd.RespCont
+		for offset := 0; offset < len(data); {
+			select {
+			case <-ctx.Done():
+				return total, ocsd.RespFatalSysErr, ctx.Err()
+			default:
+			}
+
+			end := min(offset+processChunk, len(data))
+
+			chunkIdx := index + ocsd.TrcIndex(offset)
+			amt, chunkResp, err := proc.TraceDataIn(op, chunkIdx, data[offset:end])
+			total += amt
+			resp = chunkResp
+			if err != nil || !ocsd.DataRespIsCont(chunkResp) {
+				return total, chunkResp, err
+			}
+			if amt == 0 {
+				break
+			}
+			offset += int(amt)
+		}
+		return total, resp, nil
+	}
+
 	if dt.decoderRoot != nil {
-		amt, resp, err := dt.decoderRoot.TraceDataIn(op, index, data)
-		return amt, resp, err
+		return processWithContext(dt.decoderRoot)
 	}
 
 	// Unformatted single trace source fallback
 	if dt.treeType == ocsd.TrcSrcSingle {
 		elem := dt.decodeElements[0]
 		if elem != nil && elem.DataIn != nil {
-			amt, resp, err := elem.DataIn.TraceDataIn(op, index, data)
-			return amt, resp, err
+			return processWithContext(elem.DataIn)
 		}
 	}
 	return 0, ocsd.RespFatalNotInit, nil

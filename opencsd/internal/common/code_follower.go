@@ -152,7 +152,7 @@ func (cf *CodeFollower) MemSpace() ocsd.MemSpaceAcc {
 
 // DecodeSingleOpCode decodes a single opcode at instrInfo.InstrAddr.
 func (cf *CodeFollower) DecodeSingleOpCode() error {
-	var bytesReq uint32 = 4
+	const bytesReq uint32 = 4
 
 	// Read memory location for opcode
 	readBytes, pData, err := cf.memAccess.ReadTargetMemory(cf.instrInfo.InstrAddr, cf.traceID, cf.memSpace, bytesReq)
