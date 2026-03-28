@@ -317,6 +317,7 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 	pending := make([]byte, 0, 2048)
 	align := frameAlignment(tree)
 	isFramed := tree.FrameDeformatter() != nil
+	var footer [8]byte
 
 	pushPending := func() {
 		for len(pending) > 0 && !ocsd.DataRespIsFatal(dataPathResp) {
@@ -389,8 +390,7 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 		}
 
 		if opts.dstreamFormat {
-			footer := make([]byte, 8)
-			_, ferr := io.ReadFull(file, footer)
+			_, ferr := io.ReadFull(file, footer[:])
 			if ferr == nil && opts.outRawPacked {
 				fmt.Fprint(out, "DSTREAM footer [")
 				for _, b := range footer {

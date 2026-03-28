@@ -8,6 +8,12 @@ import (
 	"opencsd/internal/ocsd"
 )
 
+// WaitAcker provides an interface for test/output behavior that interacts with the datapath.
+type WaitAcker interface {
+	NeedAckWait() bool
+	AckWait()
+}
+
 // GenericElementPrinter translates the C++ TrcGenericElementPrinter class.
 type GenericElementPrinter struct {
 	ItemPrinter
