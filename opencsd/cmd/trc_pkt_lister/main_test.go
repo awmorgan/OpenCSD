@@ -17,6 +17,34 @@ var (
 	reExtractType  = regexp.MustCompile(`(?i)(?:RCTDL|OCSD)_GEN_TRC_ELEM_([A-Z0-9_]+)`)
 )
 
+// goldenBoolFlags is the canonical set of boolean behavioral flags that
+// parseOptionsFromGolden recognises and forwards verbatim into extraFlags.
+// It mirrors every boolean flag in parseOptions that materially affects decode
+// output and should therefore be re-applied when replaying a golden test case.
+var goldenBoolFlags = map[string]struct{}{
+	"-multi_session":      {},
+	"-dstream_format":     {},
+	"-tpiu":               {},
+	"-tpiu_hsync":         {},
+	"-o_raw_packed":       {},
+	"-o_raw_unpacked":     {},
+	"-direct_br_cond":     {},
+	"-strict_br_cond":     {},
+	"-range_cont":         {},
+	"-halt_err":           {},
+	"-src_addr_n":         {},
+	"-aa64_opcode_chk":    {},
+	"-pkt_mon":            {},
+	"-macc_cache_disable": {},
+}
+
+// goldenValueFlags is the canonical set of flags that take a single value
+// argument and should be forwarded as "flag value" pairs into extraFlags.
+var goldenValueFlags = map[string]struct{}{
+	"-macc_cache_p_size": {},
+	"-macc_cache_p_num":  {},
+}
+
 type listerGoldenCase struct {
 	name        string
 	decoder     string
@@ -268,6 +296,16 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 	return testCases
 }
 
+// parseOptionsFromGolden extracts behavioural replay arguments from a golden
+// .ppl file. It returns the trace-source ID (if any), whether full decode was
+// requested, and all extra flags that must be re-applied when running the
+// golden test case.
+//
+// Flag recognition is table-driven: goldenBoolFlags and goldenValueFlags are
+// the authoritative sets, so adding a new flag here is a one-line change.
+// Flags that are either handled through other fields (e.g. -id, -src_name) or
+// irrelevant to output comparison (-ss_dir, -logfilename, …) are consumed but
+// not forwarded to extraFlags.
 func parseOptionsFromGolden(name, ppl string) (string, bool, []string) {
 	decode := strings.Contains(strings.ToLower(name), "-dcd-")
 	id := ""
@@ -282,27 +320,50 @@ func parseOptionsFromGolden(name, ppl string) (string, bool, []string) {
 		return id, decode, extraFlags
 	}
 
+	// Flags that take a value argument but whose value should NOT be forwarded
+	// (they are either handled via other struct fields or irrelevant to output).
+	skipValueFlags := map[string]struct{}{
+		"-ss_dir":      {},
+		"-src_name":    {}, // extracted via extractSourceName; forwarding would duplicate it
+		"-logfilename": {},
+		"-test_waits":  {},
+	}
+
 	fields := strings.Fields(cmdLine)
-	for i := range fields {
+	for i := 0; i < len(fields); i++ {
 		tok := fields[i]
 		switch tok {
 		case "-decode", "-decode_only":
 			decode = true
+
 		case "-id":
+			// Consumed and returned as the id return value, not forwarded.
 			if i+1 < len(fields) {
-				parsed := strings.ToLower(strings.TrimSuffix(fields[i+1], ","))
+				i++
+				parsed := strings.ToLower(strings.TrimSuffix(fields[i], ","))
 				if parsed != "" {
 					if _, err := strconv.ParseUint(parsed, 0, 8); err == nil {
 						id = parsed
 					}
 				}
 			}
-		case "-src_addr_n", "-multi_session", "-pkt_mon", "-aa64_opcode_chk":
-			// These flags should be passed through
-			extraFlags = append(extraFlags, tok)
-		case "-dstream_format", "-o_raw_packed", "-o_raw_unpacked":
-			// These flags should be passed through
-			extraFlags = append(extraFlags, tok)
+
+		default:
+			if _, ok := goldenBoolFlags[tok]; ok {
+				extraFlags = append(extraFlags, tok)
+			} else if _, ok := goldenValueFlags[tok]; ok {
+				if i+1 < len(fields) {
+					i++
+					extraFlags = append(extraFlags, tok, fields[i])
+				}
+			} else if _, ok := skipValueFlags[tok]; ok {
+				// Consume the following value so it isn't mistaken for a flag.
+				if i+1 < len(fields) {
+					i++
+				}
+			}
+			// Unknown/non-behavioural flags (e.g. -stats, -profile) are silently
+			// ignored; they do not affect decode output.
 		}
 	}
 
@@ -650,4 +711,70 @@ func normalizeNewlines(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.ReplaceAll(s, "\r", "\n")
 	return s
+}
+
+// TestParseOptionsFromGoldenAllBehavioralFlags verifies that every flag listed
+// in goldenBoolFlags and goldenValueFlags is actually recognised and forwarded
+// by parseOptionsFromGolden. If a new flag is added to either table but the
+// parser loop is not updated, this test will catch the regression.
+func TestParseOptionsFromGoldenAllBehavioralFlags(t *testing.T) {
+	// Build a synthetic command line that includes every known behavioral flag.
+	// -ss_dir, -decode, and -id are included to exercise the special-case paths.
+	cmdParts := []string{
+		"trc_pkt_lister",
+		"-ss_dir", "testdir",
+		"-decode",
+		"-decode_only", // also sets decode; harmless duplicate
+		"-id", "0x10",
+		"-src_name", "ETM_0", // should be consumed-but-not-forwarded
+	}
+	for flag := range goldenBoolFlags {
+		cmdParts = append(cmdParts, flag)
+	}
+	for flag := range goldenValueFlags {
+		cmdParts = append(cmdParts, flag, "42")
+	}
+
+	ppl := "Test Command Line:-\n" + strings.Join(cmdParts, " ") + "\n\nTrace Packet Lister : stub\n"
+
+	id, decode, extraFlags := parseOptionsFromGolden("golden-test", ppl)
+
+	if !decode {
+		t.Errorf("expected decode=true from -decode flag in synthetic command line")
+	}
+	if id != "0x10" {
+		t.Errorf("expected id=0x10, got %q", id)
+	}
+
+	// Index extraFlags for fast membership testing.
+	extraIndex := make(map[string]int, len(extraFlags)) // flag → position
+	for i, f := range extraFlags {
+		extraIndex[f] = i
+	}
+
+	// Every bool flag must appear exactly once in extraFlags.
+	for flag := range goldenBoolFlags {
+		if _, ok := extraIndex[flag]; !ok {
+			t.Errorf("parseOptionsFromGolden did not forward bool flag %s", flag)
+		}
+	}
+
+	// Every value flag must appear in extraFlags followed by its value ("42").
+	for flag := range goldenValueFlags {
+		pos, ok := extraIndex[flag]
+		if !ok {
+			t.Errorf("parseOptionsFromGolden did not forward value flag %s", flag)
+			continue
+		}
+		if pos+1 >= len(extraFlags) || extraFlags[pos+1] != "42" {
+			t.Errorf("parseOptionsFromGolden did not forward value for flag %s (extraFlags=%v)", flag, extraFlags)
+		}
+	}
+
+	// Verify that -src_name was NOT forwarded (it is handled via extractSourceName).
+	for _, f := range extraFlags {
+		if f == "-src_name" {
+			t.Errorf("parseOptionsFromGolden forwarded -src_name into extraFlags; it should be consumed but not forwarded")
+		}
+	}
 }
