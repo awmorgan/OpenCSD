@@ -647,28 +647,56 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 		}
 		for _, memParams := range dev.DumpDefs {
 			filePath := filepath.Join(ssDir, memParams.Path)
-			b, err := os.ReadFile(filePath)
-			if err != nil {
+			normPath := filepath.ToSlash(filePath)
+			space := parseMemSpace(memParams.Space)
+
+			// Early deduplication by path: skip if this file has already been seen.
+			if _, seen := seenFiles[normPath]; seen {
 				continue
 			}
 
-			if memParams.Offset > 0 {
-				if memParams.Offset >= uint64(len(b)) {
-					continue
-				}
-				b = b[memParams.Offset:]
+			// Open the file to get its size without loading the full content.
+			f, err := os.Open(filePath)
+			if err != nil {
+				continue
 			}
-			if memParams.Length > 0 && memParams.Length < uint64(len(b)) {
-				b = b[:memParams.Length]
+			defer f.Close()
+
+			// Get file size via Stat.
+			stat, err := f.Stat()
+			if err != nil {
+				continue
 			}
-			if len(b) == 0 {
+			fileSize := stat.Size()
+
+			// Validate that offset is within bounds.
+			if memParams.Offset >= uint64(fileSize) {
+				continue
+			}
+
+			// Compute the exact window length: from offset to EOF if Length==0,
+			// otherwise clamp Length to remaining bytes.
+			var windowLen uint64
+			if memParams.Length == 0 {
+				windowLen = uint64(fileSize) - memParams.Offset
+			} else {
+				remaining := uint64(fileSize) - memParams.Offset
+				windowLen = min(memParams.Length, remaining)
+			}
+
+			if windowLen == 0 {
+				continue
+			}
+
+			// Allocate only the exact slice and read just that window using ReadAt.
+			b := make([]byte, windowLen)
+			if _, err := f.ReadAt(b, int64(memParams.Offset)); err != nil && err != io.EOF {
 				continue
 			}
 
 			acc := memacc.NewBufferAccessor(ocsd.VAddr(memParams.Address), b)
-			space := parseMemSpace(memParams.Space)
 			acc.SetMemSpace(space)
-			accKey := fmt.Sprintf("%s|%s|0x%x|%d|%d", memacc.MemSpaceString(space), filepath.ToSlash(filePath), memParams.Address, len(b), memParams.Offset)
+			accKey := fmt.Sprintf("%s|%s|0x%x|%d|%d", memacc.MemSpaceString(space), normPath, memParams.Address, windowLen, memParams.Offset)
 			if _, seen := seenAccessors[accKey]; seen {
 				continue
 			}
@@ -676,16 +704,11 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 				return nil, fmt.Errorf("add memory accessor for %s @0x%x: %w", filePath, memParams.Address, err)
 			}
 			seenAccessors[accKey] = struct{}{}
-
-			normPath := filepath.ToSlash(filePath)
-			if _, seen := seenFiles[normPath]; seen {
-				continue
-			}
 			seenFiles[normPath] = struct{}{}
 
 			ranges = append(ranges, mappedRange{
 				start: ocsd.VAddr(memParams.Address),
-				end:   ocsd.VAddr(memParams.Address + uint64(len(b)) - 1),
+				end:   ocsd.VAddr(memParams.Address + windowLen - 1),
 				space: space,
 				path:  normPath,
 			})
