@@ -26,12 +26,14 @@ type listerGoldenCase struct {
 	id          string
 	decode      bool
 	extraFlags  []string
+	normalized  bool // true: use normalizeTraceListerOutput; false (default): use strictTraceListerOutput
 }
 
 type listerGoldenManifestEntry struct {
-	decoder      string
-	goldenName   string
-	snapshotName string
+	decoder         string
+	goldenName      string
+	snapshotName    string
+	normalizeReason string // non-empty opts into normalizeTraceListerOutput; describes why strict comparison cannot be used
 }
 
 func TestTraceListerGoldens(t *testing.T) {
@@ -69,8 +71,14 @@ func TestTraceListerGoldens(t *testing.T) {
 				t.Fatalf("read golden %s: %v", tc.goldenPath, err)
 			}
 
-			got := sanitizeTraceListerPPL(string(gotBytes))
-			want := sanitizeTraceListerPPL(string(wantBytes))
+			var got, want string
+			if tc.normalized {
+				got = normalizeTraceListerOutput(string(gotBytes))
+				want = normalizeTraceListerOutput(string(wantBytes))
+			} else {
+				got = strictTraceListerOutput(string(gotBytes))
+				want = strictTraceListerOutput(string(wantBytes))
+			}
 
 			if got != want {
 				gotLines := strings.Split(got, "\n")
@@ -87,14 +95,26 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 	manifest := []listerGoldenManifestEntry{
 		{decoder: "ete", goldenName: "001-ack_test", snapshotName: "001-ack_test"},
 		{decoder: "ete", goldenName: "002-ack_test_scr", snapshotName: "002-ack_test_scr"},
-		{decoder: "ete", goldenName: "002-ack_test_scr_src_addr_N", snapshotName: "002-ack_test_scr"},
+		{
+			decoder: "ete", goldenName: "002-ack_test_scr_src_addr_N", snapshotName: "002-ack_test_scr",
+			normalizeReason: "legacy ETE generic-element range classification drift with -src_addr_n (known Go/C++ parity gap)",
+		},
 		{decoder: "ete", goldenName: "ete-bc-instr", snapshotName: "ete-bc-instr"},
 		{decoder: "ete", goldenName: "ete-ite-instr", snapshotName: "ete-ite-instr"},
 		{decoder: "ete", goldenName: "ete-ite-instr_multi_sess", snapshotName: "ete-ite-instr"},
-		{decoder: "ete", goldenName: "ete-wfet", snapshotName: "ete-wfet"},
+		{
+			decoder: "ete", goldenName: "ete-wfet", snapshotName: "ete-wfet",
+			normalizeReason: "legacy ETE WFI/WFE element formatting and range-end drift (known Go/C++ parity gap)",
+		},
 		{decoder: "ete", goldenName: "ete_ip", snapshotName: "ete_ip"},
-		{decoder: "ete", goldenName: "ete_ip_src_addr_N", snapshotName: "ete_ip"},
-		{decoder: "ete", goldenName: "ete_mem", snapshotName: "ete_mem"},
+		{
+			decoder: "ete", goldenName: "ete_ip_src_addr_N", snapshotName: "ete_ip",
+			normalizeReason: "legacy ETE generic-element range classification drift with -src_addr_n (known Go/C++ parity gap)",
+		},
+		{
+			decoder: "ete", goldenName: "ete_mem", snapshotName: "ete_mem",
+			normalizeReason: "legacy ETE branch-classification and range-length mismatch in decoded generic elements",
+		},
 		{decoder: "ete", goldenName: "ete_spec_1", snapshotName: "ete_spec_1"},
 		{decoder: "ete", goldenName: "ete_spec_2", snapshotName: "ete_spec_2"},
 		{decoder: "ete", goldenName: "ete_spec_3", snapshotName: "ete_spec_3"},
@@ -103,10 +123,22 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 		{decoder: "ete", goldenName: "infrastructure", snapshotName: "infrastructure"},
 		{decoder: "ete", goldenName: "maxspec0_commopt1", snapshotName: "maxspec0_commopt1"},
 		{decoder: "ete", goldenName: "maxspec78_commopt0", snapshotName: "maxspec78_commopt0"},
-		{decoder: "ete", goldenName: "pauth_lr", snapshotName: "pauth_lr"},
-		{decoder: "ete", goldenName: "pauth_lr_Rm", snapshotName: "pauth_lr_Rm"},
-		{decoder: "ete", goldenName: "pauth_lr_Rm_multi_sess", snapshotName: "pauth_lr_Rm"},
-		{decoder: "ete", goldenName: "pauth_lr_multi_sess", snapshotName: "pauth_lr"},
+		{
+			decoder: "ete", goldenName: "pauth_lr", snapshotName: "pauth_lr",
+			normalizeReason: "legacy ETE PAUTH return-range length mismatch in decoded generic elements",
+		},
+		{
+			decoder: "ete", goldenName: "pauth_lr_Rm", snapshotName: "pauth_lr_Rm",
+			normalizeReason: "legacy ETE PAUTH return-range length mismatch in decoded generic elements",
+		},
+		{
+			decoder: "ete", goldenName: "pauth_lr_Rm_multi_sess", snapshotName: "pauth_lr_Rm",
+			normalizeReason: "legacy ETE PAUTH return-range length mismatch in decoded generic elements",
+		},
+		{
+			decoder: "ete", goldenName: "pauth_lr_multi_sess", snapshotName: "pauth_lr",
+			normalizeReason: "legacy ETE PAUTH return-range length mismatch in decoded generic elements",
+		},
 		{decoder: "ete", goldenName: "q_elem", snapshotName: "q_elem"},
 		{decoder: "ete", goldenName: "q_elem_multi_sess", snapshotName: "q_elem"},
 		{decoder: "ete", goldenName: "rme_test", snapshotName: "rme_test"},
@@ -114,19 +146,37 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 		{decoder: "ete", goldenName: "s_9001", snapshotName: "s_9001"},
 		{decoder: "ete", goldenName: "s_9001_multi_sess", snapshotName: "s_9001"},
 		{decoder: "ete", goldenName: "src_addr", snapshotName: "src_addr"},
-		{decoder: "ete", goldenName: "src_addr_src_addr_N", snapshotName: "src_addr"},
+		{
+			decoder: "ete", goldenName: "src_addr_src_addr_N", snapshotName: "src_addr",
+			normalizeReason: "legacy ETE generic-element range classification drift with -src_addr_n (known Go/C++ parity gap)",
+		},
 		{decoder: "ete", goldenName: "ss_ib_el1ns", snapshotName: "ss_ib_el1ns"},
 		{decoder: "ete", goldenName: "ss_ib_el1ns_multi_sess", snapshotName: "ss_ib_el1ns"},
-		{decoder: "ete", goldenName: "texit-poe2", snapshotName: "texit-poe2"},
-		{decoder: "ete", goldenName: "tme_simple", snapshotName: "tme_simple"},
+		{
+			decoder: "ete", goldenName: "texit-poe2", snapshotName: "texit-poe2",
+			normalizeReason: "legacy ETE exception-return element classification/range mismatch (known Go/C++ parity gap)",
+		},
+		{
+			decoder: "ete", goldenName: "tme_simple", snapshotName: "tme_simple",
+			normalizeReason: "legacy ETE TME element classification mismatch (TSTART represented as branch range)",
+		},
 		{decoder: "ete", goldenName: "tme_tcancel", snapshotName: "tme_tcancel"},
-		{decoder: "ete", goldenName: "tme_test", snapshotName: "tme_test"},
+		{
+			decoder: "ete", goldenName: "tme_test", snapshotName: "tme_test",
+			normalizeReason: "legacy ETE TME element classification mismatch (TSTART represented as branch range)",
+		},
 		{decoder: "ete", goldenName: "trace_file_cid_vmid", snapshotName: "trace_file_cid_vmid"},
 		{decoder: "ete", goldenName: "trace_file_vmid", snapshotName: "trace_file_vmid"},
 		{decoder: "ete", goldenName: "ts_bit64_set", snapshotName: "ts_bit64_set"},
 		{decoder: "ete", goldenName: "ts_marker", snapshotName: "ts_marker"},
-		{decoder: "etmv3", goldenName: "TC2", snapshotName: "TC2"},
-		{decoder: "etmv4", goldenName: "a55-test-tpiu", snapshotName: "a55-test-tpiu"},
+		{
+			decoder: "etmv3", goldenName: "TC2", snapshotName: "TC2",
+			normalizeReason: "legacy ETMv3 TC2 packet-vs-generic-element sequencing mismatch around P-header emission",
+		},
+		{
+			decoder: "etmv4", goldenName: "a55-test-tpiu", snapshotName: "a55-test-tpiu",
+			normalizeReason: "legacy ETMv4 packet formatting instability (raw-byte prefix presence differs)",
+		},
 		{decoder: "etmv4", goldenName: "a57_single_step", snapshotName: "a57_single_step"},
 		{decoder: "etmv4", goldenName: "armv8_1m_branches", snapshotName: "armv8_1m_branches"},
 		{decoder: "etmv4", goldenName: "init-short-addr", snapshotName: "init-short-addr"},
@@ -134,20 +184,57 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 		{decoder: "etmv4", goldenName: "juno-uname-001", snapshotName: "juno-uname-001"},
 		{decoder: "etmv4", goldenName: "juno-uname-002", snapshotName: "juno-uname-002"},
 		{decoder: "etmv4", goldenName: "juno_r1_1", snapshotName: "juno_r1_1"},
-		{decoder: "etmv4", goldenName: "juno_r1_1_badopcode", snapshotName: "juno_r1_1"},
-		{decoder: "etmv4", goldenName: "juno_r1_1_badopcode_flag", snapshotName: "juno_r1_1"},
-		{decoder: "etmv4", goldenName: "juno_r1_1_rangelimit", snapshotName: "juno_r1_1"},
-		{decoder: "etmv4", goldenName: "test-file-mem-offsets", snapshotName: "test-file-mem-offsets"},
+		{
+			decoder: "etmv4", goldenName: "juno_r1_1_badopcode", snapshotName: "juno_r1_1",
+			normalizeReason: "legacy ETMv4 bad-opcode recovery behavior differs (bad-packet no-sync vs decoded range)",
+		},
+		{
+			decoder: "etmv4", goldenName: "juno_r1_1_badopcode_flag", snapshotName: "juno_r1_1",
+			normalizeReason: "legacy ETMv4 bad-opcode recovery behavior differs (bad-packet no-sync vs decoded range)",
+		},
+		{
+			decoder: "etmv4", goldenName: "juno_r1_1_rangelimit", snapshotName: "juno_r1_1",
+			normalizeReason: "legacy ETMv4 range-limit recovery behavior differs from C++ golden output",
+		},
+		{
+			decoder: "etmv4", goldenName: "test-file-mem-offsets", snapshotName: "test-file-mem-offsets",
+			normalizeReason: "legacy ETMv4 memory-access fault handling differs (ADDR_NACC placement vs C++ golden)",
+		},
 		{decoder: "itm", goldenName: "itm_only_csformat", snapshotName: "itm_only_csformat"},
 		{decoder: "itm", goldenName: "itm_only_raw", snapshotName: "itm_only_raw"},
-		{decoder: "ptm", goldenName: "Snowball", snapshotName: "Snowball"},
-		{decoder: "ptm", goldenName: "TC2", snapshotName: "TC2"},
-		{decoder: "ptm", goldenName: "tc2-ptm-rstk-t32", snapshotName: "tc2-ptm-rstk-t32"},
-		{decoder: "ptm", goldenName: "trace_cov_a15", snapshotName: "trace_cov_a15"},
+		{
+			decoder: "ptm", goldenName: "Snowball", snapshotName: "Snowball",
+			normalizeReason: "legacy PTM packet text formatting instability (spacing/token formatting drift)",
+		},
+		{
+			decoder: "ptm", goldenName: "TC2", snapshotName: "TC2",
+			normalizeReason: "legacy PTM TC2 packet-vs-generic-element sequencing mismatch around P-header emission",
+		},
+		{
+			decoder: "ptm", goldenName: "tc2-ptm-rstk-t32", snapshotName: "tc2-ptm-rstk-t32",
+			// The C++ trc_pkt_lister outputs raw PTM packets with the frame-demux
+			// trace ID (0x00) while generic elements carry the logical PTM source
+			// ID (0x02). The Go implementation assigns the same logical ID to both
+			// layers, so packet and gen-elem lines appear under different IDs in the
+			// two outputs. Normalized comparison re-keys on content rather than ID.
+			normalizeReason: "legacy PTM packet-layer vs. generic-element trace-ID skew (C++ ID:0 packets / ID:2 gen-elems)",
+		},
+		{
+			decoder: "ptm", goldenName: "trace_cov_a15", snapshotName: "trace_cov_a15",
+			// Same C++ PTM ID skew as tc2-ptm-rstk-t32: raw packets at ID:0,
+			// generic elements at ID:2.
+			normalizeReason: "legacy PTM packet-layer vs. generic-element trace-ID skew (C++ ID:0 packets / ID:2 gen-elems)",
+		},
 		{decoder: "stm", goldenName: "stm-issue-27", snapshotName: "stm-issue-27"},
-		{decoder: "stm", goldenName: "stm_only-2", snapshotName: "stm_only-2"},
+		{
+			decoder: "stm", goldenName: "stm_only-2", snapshotName: "stm_only-2",
+			normalizeReason: "legacy STM packet-byte wrapping/segment formatting instability in NOTSYNC records",
+		},
 		{decoder: "stm", goldenName: "stm_only-juno", snapshotName: "stm_only-juno"},
-		{decoder: "stm", goldenName: "stm_only", snapshotName: "stm_only"},
+		{
+			decoder: "stm", goldenName: "stm_only", snapshotName: "stm_only",
+			normalizeReason: "legacy STM packet-byte wrapping/segment formatting instability in NOTSYNC records",
+		},
 	}
 
 	testCases := make([]listerGoldenCase, 0, len(manifest))
@@ -174,6 +261,7 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 			id:          id,
 			decode:      decode,
 			extraFlags:  extraFlags,
+			normalized:  entry.normalizeReason != "",
 		})
 	}
 
@@ -263,7 +351,52 @@ func extractSourceName(ppl string) string {
 	return ""
 }
 
-func sanitizeTraceListerPPL(ppl string) string {
+// strictTraceListerOutput performs in-order comparison of stable semantic
+// output only:
+// - SOURCE:<name> lines
+// - MAP_RANGE:<start:end> lines
+// - raw Idx: records (including packet/gen-elem interleaving as emitted)
+//
+// This intentionally excludes run-specific/structural noise such as command
+// lines, file paths, summary trailers, and buffer-complete banners.
+// No line deduplication or multi-ID reordering is performed.
+func strictTraceListerOutput(s string) string {
+	lines := strings.Split(normalizeNewlines(s), "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimRight(line, " \t")
+		text := strings.TrimSpace(trimmed)
+
+		if text == "" {
+			continue
+		}
+
+		if sourceLine, ok := normalizeSourceLine(text); ok {
+			out = append(out, sourceLine)
+			continue
+		}
+
+		// Keep only address-range payload from memory mapping lines.
+		if mappedRange, ok := normalizeMappedRangeLine(text); ok {
+			out = append(out, mappedRange)
+			continue
+		}
+
+		records := splitIdxRecords(trimmed)
+		if len(records) == 0 {
+			continue
+		}
+		out = append(out, records...)
+	}
+	return strings.Join(out, "\n")
+}
+
+// normalizeTraceListerOutput applies aggressive normalization: blank-line
+// stripping, no-sync deduplication, idx-record canonicalization, and—when
+// multiple trace IDs are present—no-sync removal and ID-sorted reordering.
+// Use only for golden entries where a documented structural mismatch prevents
+// strict comparison (e.g. legacy PTM packet-layer vs. generic-element ID skew).
+func normalizeTraceListerOutput(ppl string) string {
 	lines := strings.Split(normalizeNewlines(ppl), "\n")
 	out := make([]string, 0, len(lines))
 	for _, raw := range lines {
