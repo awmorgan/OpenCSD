@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -17,6 +16,7 @@ import (
 	"opencsd/internal/printers"
 	ptm "opencsd/internal/ptm"
 	"opencsd/internal/snapshot"
+	"opencsd/internal/testutil"
 )
 
 type mapperAdapter struct {
@@ -91,7 +91,7 @@ func TestPTMSnapshotsAgainstGolden(t *testing.T) {
 			if got != want {
 				gotLines := strings.Split(got, "\n")
 				wantLines := strings.Split(want, "\n")
-				line, gotLine, wantLine := firstDiff(gotLines, wantLines)
+				line, gotLine, wantLine := testutil.FirstDiff(gotLines, wantLines)
 				t.Fatalf("snapshot mismatch at line %d\nwant: %s\n got: %s", line, wantLine, gotLine)
 			}
 		})
@@ -141,7 +141,7 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 
 	ptmDecoders := 0
 	for srcDevName := range sourceTree.SourceCoreAssoc {
-		dev := findParsedDeviceByName(reader.ParsedDeviceList, srcDevName)
+		dev := testutil.FindParsedDeviceByName(reader.ParsedDeviceList, srcDevName)
 		if dev == nil {
 			continue
 		}
@@ -152,16 +152,16 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 
 		cfg := ptm.NewConfig()
 		if val, ok := dev.RegValue("etmcr"); ok {
-			cfg.RegCtrl = uint32(parseHexOrDec(val))
+			cfg.RegCtrl = uint32(testutil.ParseHexOrDec(val))
 		}
 		if val, ok := dev.RegValue("etmtraceidr"); ok {
-			cfg.RegTrcID = uint32(parseHexOrDec(val))
+			cfg.RegTrcID = uint32(testutil.ParseHexOrDec(val))
 		}
 		if val, ok := dev.RegValue("etmidr"); ok {
-			cfg.RegIDR = uint32(parseHexOrDec(val))
+			cfg.RegIDR = uint32(testutil.ParseHexOrDec(val))
 		}
 		if val, ok := dev.RegValue("etmccer"); ok {
-			cfg.RegCCER = uint32(parseHexOrDec(val))
+			cfg.RegCCER = uint32(testutil.ParseHexOrDec(val))
 		}
 
 		if err := tree.CreateFullDecoder(ocsd.BuiltinDcdPTM, cfg); err != nil {
@@ -289,13 +289,13 @@ func sanitizePPL(s string, traceIDs []string) string {
 			continue
 		}
 
-		for _, idxLine := range splitIdxRecords(line) {
-			normalized := normalizeSnapshotLine(idxLine)
+		for _, idxLine := range testutil.SplitIdxRecords(line) {
+			normalized := testutil.NormalizeSnapshotLine(idxLine)
 			if normalized == "" {
 				continue
 			}
 
-			idVal, ok := extractLineID(idxLine)
+			idVal, ok := testutil.ExtractLineID(idxLine)
 			if !ok {
 				continue
 			}
@@ -327,7 +327,7 @@ func sanitizePPL(s string, traceIDs []string) string {
 		for _, entry := range parsed {
 			if strings.Contains(entry.line, "OCSD_GEN_TRC_ELEM_") {
 				hasGeneric = true
-				if containsLine(out, entry.line) {
+				if slices.Contains(out, entry.line) {
 					hasKeptGeneric = true
 				}
 			}
@@ -342,114 +342,4 @@ func sanitizePPL(s string, traceIDs []string) string {
 	}
 
 	return strings.Join(out, "\n")
-}
-
-func splitIdxRecords(line string) []string {
-	if !strings.Contains(line, "Idx:") {
-		return nil
-	}
-	starts := make([]int, 0, 2)
-	for pos := 0; pos < len(line); {
-		i := strings.Index(line[pos:], "Idx:")
-		if i < 0 {
-			break
-		}
-		starts = append(starts, pos+i)
-		pos += i + len("Idx:")
-	}
-	if len(starts) == 0 {
-		return nil
-	}
-	records := make([]string, 0, len(starts))
-	for i, st := range starts {
-		end := len(line)
-		if i+1 < len(starts) {
-			end = starts[i+1]
-		}
-		rec := strings.TrimSpace(line[st:end])
-		if strings.HasPrefix(rec, "Idx:") {
-			records = append(records, rec)
-		}
-	}
-	return records
-}
-
-func normalizeSnapshotLine(line string) string {
-	if strings.Contains(line, "OCSD_GEN_TRC_ELEM_") {
-		return line
-	}
-
-	left, right, ok := strings.Cut(line, "\t")
-	if !ok {
-		return ""
-	}
-	packetType := extractPacketType(strings.TrimSpace(right))
-	if packetType == "" {
-		return ""
-	}
-	return strings.TrimSpace(left) + "\t" + packetType
-}
-
-func extractPacketType(s string) string {
-	if s == "" {
-		return ""
-	}
-	before, _, ok := strings.Cut(s, ":")
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(before)
-}
-
-func containsLine(lines []string, target string) bool {
-	return slices.Contains(lines, target)
-}
-
-func firstDiff(got, want []string) (int, string, string) {
-	maxLen := max(len(want), len(got))
-	for i := range maxLen {
-		var gotLine, wantLine string
-		if i < len(got) {
-			gotLine = got[i]
-		}
-		if i < len(want) {
-			wantLine = want[i]
-		}
-		if gotLine != wantLine {
-			return i + 1, gotLine, wantLine
-		}
-	}
-	return 0, "", ""
-}
-
-func findParsedDeviceByName(devs map[string]*snapshot.ParsedDevice, name string) *snapshot.ParsedDevice {
-	for _, dev := range devs {
-		if dev != nil && dev.DeviceName == name {
-			return dev
-		}
-	}
-	return nil
-}
-
-func parseHexOrDec(s string) uint64 {
-	s = strings.TrimSpace(s)
-	if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
-		v, _ := strconv.ParseUint(s[2:], 16, 64)
-		return v
-	}
-	v, _ := strconv.ParseUint(s, 10, 64)
-	return v
-}
-
-func extractLineID(line string) (string, bool) {
-	_, after, ok := strings.Cut(line, "ID:")
-	if !ok {
-		return "", false
-	}
-	rest := after
-	before, _, ok := strings.Cut(rest, ";")
-	if !ok {
-		return "", false
-	}
-	return strings.ToLower(strings.TrimSpace(before)), true
 }

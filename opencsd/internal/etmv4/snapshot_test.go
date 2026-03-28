@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -18,6 +17,7 @@ import (
 	"opencsd/internal/ocsd"
 	"opencsd/internal/printers"
 	"opencsd/internal/snapshot"
+	"opencsd/internal/testutil"
 )
 
 type mapperAdapter struct {
@@ -180,7 +180,7 @@ func TestETMv4SnapshotsAgainstGolden(t *testing.T) {
 			if got != want {
 				gotLines := strings.Split(got, "\n")
 				wantLines := strings.Split(want, "\n")
-				line, gotLine, wantLine := firstDiff(gotLines, wantLines)
+				line, gotLine, wantLine := testutil.FirstDiff(gotLines, wantLines)
 
 				// Write context around diff to help debugging
 				const ctx = 5
@@ -296,7 +296,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 
 	etmv4Decoders := 0
 	for srcDevName := range sourceTree.SourceCoreAssoc {
-		dev := findParsedDeviceByName(reader.ParsedDeviceList, srcDevName)
+		dev := testutil.FindParsedDeviceByName(reader.ParsedDeviceList, srcDevName)
 		if dev == nil {
 			continue
 		}
@@ -310,40 +310,40 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 
 		var val string
 		val, _ = dev.RegValue("TRCIDR0")
-		cfg.RegIdr0 = uint32(parseHexOrDec(val))
+		cfg.RegIdr0 = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCIDR1")
-		cfg.RegIdr1 = uint32(parseHexOrDec(val))
+		cfg.RegIdr1 = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCIDR2")
-		cfg.RegIdr2 = uint32(parseHexOrDec(val))
+		cfg.RegIdr2 = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCIDR8")
-		cfg.RegIdr8 = uint32(parseHexOrDec(val))
+		cfg.RegIdr8 = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCIDR9")
-		cfg.RegIdr9 = uint32(parseHexOrDec(val))
+		cfg.RegIdr9 = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCIDR10")
-		cfg.RegIdr10 = uint32(parseHexOrDec(val))
+		cfg.RegIdr10 = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCIDR11")
-		cfg.RegIdr11 = uint32(parseHexOrDec(val))
+		cfg.RegIdr11 = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCIDR12")
-		cfg.RegIdr12 = uint32(parseHexOrDec(val))
+		cfg.RegIdr12 = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCIDR13")
-		cfg.RegIdr13 = uint32(parseHexOrDec(val))
+		cfg.RegIdr13 = uint32(testutil.ParseHexOrDec(val))
 
 		val, _ = dev.RegValue("TRCCONFIGR")
-		cfg.RegConfigr = uint32(parseHexOrDec(val))
+		cfg.RegConfigr = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCTRACEIDR")
-		cfg.RegTraceidr = uint32(parseHexOrDec(val))
+		cfg.RegTraceidr = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCVIPCSSCTLR")
-		cfg.RegVipcssctlr = uint32(parseHexOrDec(val))
+		cfg.RegVipcssctlr = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCVINSTCCTLR")
-		cfg.RegVinstcctlr = uint32(parseHexOrDec(val))
+		cfg.RegVinstcctlr = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCVIIECTLR")
-		cfg.RegViiectlr = uint32(parseHexOrDec(val))
+		cfg.RegViiectlr = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCVISSCTLR")
-		cfg.RegVissctlr = uint32(parseHexOrDec(val))
+		cfg.RegVissctlr = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCVIPCIECTLR")
-		cfg.RegVipciectlr = uint32(parseHexOrDec(val))
+		cfg.RegVipciectlr = uint32(testutil.ParseHexOrDec(val))
 		val, _ = dev.RegValue("TRCVSEQR")
-		cfg.RegVseqr = uint32(parseHexOrDec(val))
+		cfg.RegVseqr = uint32(testutil.ParseHexOrDec(val))
 
 		// Core architecture profile
 		cfg.ArchVer = ocsd.ArchV8
@@ -561,13 +561,13 @@ func sanitizePPL(s string, traceIDs []string, includeGenElems bool) string {
 			continue
 		}
 
-		for _, idxLine := range splitIdxRecords(line) {
+		for _, idxLine := range testutil.SplitIdxRecords(line) {
 			normalized := normalizeSnapshotLine(idxLine, includeGenElems)
 			if normalized == "" {
 				continue
 			}
 
-			idVal, ok := extractLineID(idxLine)
+			idVal, ok := testutil.ExtractLineID(idxLine)
 			if !ok {
 				continue
 			}
@@ -636,7 +636,7 @@ func normalizeSnapshotLine(line string, includeGenElems bool) string {
 		return ""
 	}
 	left = normalizeIdxPrefix(left)
-	packetType := extractPacketType(strings.TrimSpace(right))
+	packetType := testutil.ExtractPacketType(strings.TrimSpace(right))
 	if packetType == "" {
 		return ""
 	}
@@ -660,43 +660,6 @@ func normalizeIdxPrefix(left string) string {
 	}
 
 	return fmt.Sprintf("%s; %s;", idxPart, idPart)
-}
-
-func extractPacketType(s string) string {
-	if s == "" {
-		return ""
-	}
-	before, _, ok := strings.Cut(s, ":")
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(before)
-}
-
-func firstDiff(got, want []string) (int, string, string) {
-	maxLen := max(len(want), len(got))
-	for i := range maxLen {
-		var gotLine, wantLine string
-		if i < len(got) {
-			gotLine = got[i]
-		}
-		if i < len(want) {
-			wantLine = want[i]
-		}
-		if gotLine != wantLine {
-			return i + 1, gotLine, wantLine
-		}
-	}
-	return 0, "", ""
-}
-
-func findParsedDeviceByName(devs map[string]*snapshot.ParsedDevice, name string) *snapshot.ParsedDevice {
-	for _, dev := range devs {
-		if dev != nil && dev.DeviceName == name {
-			return dev
-		}
-	}
-	return nil
 }
 
 func resolveETMv4SourceName(requested string, trace *snapshot.ParsedTrace, devs map[string]*snapshot.ParsedDevice) string {
@@ -732,7 +695,7 @@ func resolveETMv4SourceName(requested string, trace *snapshot.ParsedTrace, devs 
 
 func sourceTreeHasETMv4Devices(sourceTree *snapshot.TraceBufferSourceTree, devs map[string]*snapshot.ParsedDevice) bool {
 	for srcDevName := range sourceTree.SourceCoreAssoc {
-		dev := findParsedDeviceByName(devs, srcDevName)
+		dev := testutil.FindParsedDeviceByName(devs, srcDevName)
 		if dev == nil {
 			continue
 		}
@@ -742,27 +705,4 @@ func sourceTreeHasETMv4Devices(sourceTree *snapshot.TraceBufferSourceTree, devs 
 		}
 	}
 	return false
-}
-
-func parseHexOrDec(s string) uint64 {
-	s = strings.TrimSpace(s)
-	if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
-		v, _ := strconv.ParseUint(s[2:], 16, 64)
-		return v
-	}
-	v, _ := strconv.ParseUint(s, 10, 64)
-	return v
-}
-
-func extractLineID(line string) (string, bool) {
-	_, after, ok := strings.Cut(line, "ID:")
-	if !ok {
-		return "", false
-	}
-	rest := after
-	before, _, ok := strings.Cut(rest, ";")
-	if !ok {
-		return "", false
-	}
-	return strings.ToLower(strings.TrimSpace(before)), true
 }

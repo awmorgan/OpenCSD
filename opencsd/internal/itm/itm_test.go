@@ -452,3 +452,14 @@ func TestITMPacketStringVariants(t *testing.T) {
 		}
 	}
 }
+
+func TestExtractContVal_SliceUnderflow(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("extractContVal32 panicked: %v", r)
+		}
+	}()
+	proc := PktProc{}
+	proc.packetData = []byte{}
+	proc.extractContVal32()
+}

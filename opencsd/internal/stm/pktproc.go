@@ -463,11 +463,17 @@ func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {
 	if !bGotData || p.numNibbles > 22 {
 		p.currPacket.SetPacketType(PktNotSync, false)
 		if p.PktRawMonI != nil {
-			nibblesToSend := uint32(p.numNibbles - p.numFNibbles)
-			if p.isSync {
-				nibblesToSend = uint32(p.numNibbles - 22)
+			nibblesToSend := int(p.numNibbles) - int(p.numFNibbles)
+			if nibblesToSend < 0 {
+				nibblesToSend = 0
 			}
-			bytesToSend := (nibblesToSend / 2) + (nibblesToSend % 2)
+			if p.isSync {
+				nibblesToSend = int(p.numNibbles) - 22
+				if nibblesToSend < 0 {
+					nibblesToSend = 0
+				}
+			}
+			bytesToSend := uint32((nibblesToSend / 2) + (nibblesToSend % 2))
 			// Clamp to the bytes actually available in the current dataIn window.
 			// If clearSyncCount() reset numFNibbles to 0 mid-loop, nibblesToSend
 			// would overcount and cause an out-of-bounds access.

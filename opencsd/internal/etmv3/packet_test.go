@@ -93,3 +93,18 @@ func TestPacket(t *testing.T) {
 		t.Errorf("expected fmt 4, got %d", p.PHdrFmt)
 	}
 }
+
+func TestUpdateAddress_Panic(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("UpdateAddress panicked: %v", r)
+		}
+	}()
+	p := &Packet{}
+	p.ResetState()
+	p.Addr = 0
+	p.UpdateAddress(0xFFFFFFFFFFFFFFFF, 64)
+	if p.Addr != 0xFFFFFFFFFFFFFFFF {
+		t.Fatalf("Address mismatch for 64-bit update: expected 0xFFFFFFFFFFFFFFFF, got %#x", p.Addr)
+	}
+}

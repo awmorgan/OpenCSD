@@ -23,13 +23,14 @@ type AddrReturnStack struct {
 	popPending    bool
 	tInfoWaitAddr bool
 	overflow      bool
-	stack         []RetStackElement
+	stack         [retStackCap]RetStackElement
+	head          int // points to oldest element
+	count         int // number of valid elements
 }
 
 // NewAddrReturnStack returns a new initialised AddrReturnStack.
 func NewAddrReturnStack() *AddrReturnStack {
 	s := &AddrReturnStack{}
-	s.stack = make([]RetStackElement, 0, retStackCap)
 	s.Flush()
 	return s
 }
@@ -43,15 +44,16 @@ func (s *AddrReturnStack) IsActive() bool {
 }
 
 // Push pushes addr/isa onto the top of the stack. When the stack is already
-// at capacity the oldest (bottom) entry is discarded before appending.
+// at capacity the oldest (bottom) entry is overwritten.
 func (s *AddrReturnStack) Push(addr ocsd.VAddr, isa ocsd.ISA) {
 	if s.active && !s.tInfoWaitAddr {
-		if len(s.stack) >= retStackCap {
-			// Drop oldest entry (bottom of slice) — same as ring-buffer wrap.
-			s.stack[0] = RetStackElement{} // zero before reslice (value type, but good hygiene)
-			s.stack = s.stack[1:]
+		if s.count == retStackCap {
+			s.head = (s.head + 1) % retStackCap
+			s.count--
 		}
-		s.stack = append(s.stack, RetStackElement{RetAddr: addr, RetISA: isa})
+		tail := (s.head + s.count) % retStackCap
+		s.stack[tail] = RetStackElement{RetAddr: addr, RetISA: isa}
+		s.count++
 		s.popPending = false
 	}
 }
@@ -62,13 +64,13 @@ func (s *AddrReturnStack) Push(addr ocsd.VAddr, isa ocsd.ISA) {
 func (s *AddrReturnStack) Pop(isa *ocsd.ISA) ocsd.VAddr {
 	var addr ocsd.VAddr = ocsd.VAddr(ocsd.VAMask)
 	if s.active {
-		n := len(s.stack)
-		if n > 0 {
-			top := s.stack[n-1]
-			addr = top.RetAddr
-			*isa = top.RetISA
-			s.stack[n-1] = RetStackElement{} // zero before reslice
-			s.stack = s.stack[:n-1]
+		if s.count > 0 {
+			top := (s.head + s.count - 1) % retStackCap
+			elem := s.stack[top]
+			addr = elem.RetAddr
+			*isa = elem.RetISA
+			s.stack[top] = RetStackElement{} // zero before decrement
+			s.count--
 			s.overflow = false
 		} else {
 			// Match C++ behaviour: an empty pop signals underflow.
@@ -81,7 +83,8 @@ func (s *AddrReturnStack) Pop(isa *ocsd.ISA) ocsd.VAddr {
 
 // Flush clears the stack and resets the overflow flag.
 func (s *AddrReturnStack) Flush() {
-	s.stack = s.stack[:0]
+	s.head = 0
+	s.count = 0
 	s.overflow = false
 	s.popPending = false
 }

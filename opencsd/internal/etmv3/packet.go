@@ -201,9 +201,11 @@ func (p *Packet) IsBadPacket() bool {
 }
 
 func (p *Packet) UpdateAddress(partAddrVal uint64, updateBits int) {
-	mask := uint64(0xFFFFFFFF)
-	if updateBits < 32 {
-		mask >>= (32 - updateBits)
+	var mask uint64
+	if updateBits >= 64 {
+		mask = ^uint64(0)
+	} else if updateBits > 0 {
+		mask = (uint64(1) << updateBits) - 1
 	}
 	p.Addr = (p.Addr & ^mask) | (partAddrVal & mask)
 	p.AddrPktBits = updateBits

@@ -11,6 +11,12 @@ import (
 	"testing"
 )
 
+var (
+	reDeviceSuffix = regexp.MustCompile(`(?i)(?:_|-dcd-)0x([0-9a-f]+)$`)
+	reExtractID    = regexp.MustCompile(`(?i)\bID:([0-9a-f]+)\b`)
+	reExtractType  = regexp.MustCompile(`(?i)(?:RCTDL|OCSD)_GEN_TRC_ELEM_([A-Z0-9_]+)`)
+)
+
 type listerGoldenCase struct {
 	name        string
 	decoder     string
@@ -179,7 +185,7 @@ func parseOptionsFromGolden(name, ppl string) (string, bool, []string) {
 	id := ""
 	var extraFlags []string
 
-	if m := regexp.MustCompile(`(?i)(?:_|-dcd-)0x([0-9a-f]+)$`).FindStringSubmatch(name); len(m) == 2 {
+	if m := reDeviceSuffix.FindStringSubmatch(name); len(m) == 2 {
 		id = "0x" + strings.ToLower(m[1])
 	}
 
@@ -461,7 +467,7 @@ func normalizeSourceLine(line string) (string, bool) {
 }
 
 func extractLineID(line string) (string, bool) {
-	re := regexp.MustCompile(`(?i)\bID:([0-9a-f]+)\b`)
+	re := reExtractID
 	m := re.FindStringSubmatch(line)
 	if len(m) != 2 {
 		return "", false
@@ -482,7 +488,7 @@ func extractPacketType(s string) string {
 }
 
 func extractGenElemType(line string) string {
-	re := regexp.MustCompile(`(?i)(?:RCTDL|OCSD)_GEN_TRC_ELEM_([A-Z0-9_]+)`)
+	re := reExtractType
 	m := re.FindStringSubmatch(line)
 	if len(m) != 2 {
 		return ""

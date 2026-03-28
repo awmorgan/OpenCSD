@@ -15,7 +15,7 @@ func TestAddrReturnStack(t *testing.T) {
 
 	// Push while inactive shouldn't do anything
 	s.Push(0x1000, ocsd.ISAThumb2)
-	if len(s.stack) != 0 {
+	if s.count != 0 {
 		t.Errorf("Push while inactive modified stack")
 	}
 
@@ -32,7 +32,7 @@ func TestAddrReturnStack(t *testing.T) {
 		t.Errorf("SetTInfoWaitAddr failed")
 	}
 	s.Push(0x2000, ocsd.ISAArm) // shouldn't push because tInfoWaitAddr
-	if len(s.stack) != 0 {
+	if s.count != 0 {
 		t.Errorf("Push while tInfoWaitAddr modified stack")
 	}
 	s.SetTInfoWaitAddr(false)
@@ -44,18 +44,18 @@ func TestAddrReturnStack(t *testing.T) {
 	s.Push(0x10C, ocsd.ISAArm)
 	s.Push(0x110, ocsd.ISAArm)
 
-	if len(s.stack) != 5 {
-		t.Errorf("Expected 5 entries, got %d", len(s.stack))
+	if s.count != 5 {
+		t.Errorf("Expected 5 entries, got %d", s.count)
 	}
 
 	var isa ocsd.ISA
 	addr := s.Pop(&isa)
-	if addr != 0x110 || isa != ocsd.ISAArm || len(s.stack) != 4 {
+	if addr != 0x110 || isa != ocsd.ISAArm || s.count != 4 {
 		t.Errorf("Pop failed, got 0x%X", addr)
 	}
 
 	s.Flush()
-	if len(s.stack) != 0 {
+	if s.count != 0 {
 		t.Errorf("Flush failed")
 	}
 
@@ -70,8 +70,8 @@ func TestAddrReturnStack(t *testing.T) {
 	for i := range 20 {
 		s.Push(ocsd.VAddr(0x1000+i*4), ocsd.ISAArm)
 	}
-	if len(s.stack) != 16 {
-		t.Errorf("Expected max 16 entries, got %d", len(s.stack))
+	if s.count != 16 {
+		t.Errorf("Expected max 16 entries, got %d", s.count)
 	}
 
 	// Because of ring buffer logic, the oldest 4 should be overwritten.

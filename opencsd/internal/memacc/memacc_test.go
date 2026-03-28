@@ -730,3 +730,27 @@ func TestPrioritizationSwitchesFromAnyToSpecific(t *testing.T) {
 		t.Fatalf("expected specific accessor after Any cached current, got 0x%X", buf[0])
 	}
 }
+
+func TestRemoveAccessor_MemoryLeak(t *testing.T) {
+	mapper := NewGlobalMapper()
+	acc1 := NewBufferAccessor(0x0000, make([]byte, 64))
+	acc2 := NewBufferAccessor(0x1000, make([]byte, 64))
+	if err := mapper.AddAccessor(acc1, 0); err != nil {
+		t.Fatalf("add acc1 failed: %v", err)
+	}
+	if err := mapper.AddAccessor(acc2, 0); err != nil {
+		t.Fatalf("add acc2 failed: %v", err)
+	}
+
+	mapper.RemoveAccessor(acc1)
+
+	// After removing acc1, the length is 1, capacity is still 2.
+	// Ensure the last element in the capacity (which is now index 1) is nil.
+	if cap(mapper.accessors) < 2 {
+		t.Fatalf("expected capacity >= 2, got %d", cap(mapper.accessors))
+	}
+	s := mapper.accessors[:cap(mapper.accessors)]
+	if s[1] != nil {
+		t.Fatalf("Memory leak: removed accessor pointer not zeroed out")
+	}
+}

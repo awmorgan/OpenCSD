@@ -374,3 +374,23 @@ func TestSTMTypedConstructors(t *testing.T) {
 func isErrorCode(err error, code error) bool {
 	return errors.Is(err, code)
 }
+
+type dummyMon struct{}
+
+func (d *dummyMon) RawPacketDataMon(op ocsd.DatapathOp, index ocsd.TrcIndex, pkt *Packet, data []byte) {
+}
+
+func TestWaitForSync_WrapAround(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("waitForSync panicked: %v", r)
+		}
+	}()
+	proc := &PktProc{}
+	proc.PktRawMonI = &dummyMon{}
+	proc.numNibbles = 5
+	proc.numFNibbles = 6
+	proc.dataInSize = 10
+	proc.dataIn = make([]byte, 10)
+	proc.waitForSync(0)
+}

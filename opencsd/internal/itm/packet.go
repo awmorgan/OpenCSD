@@ -84,15 +84,15 @@ func (p *Packet) SetSrcID(srcID uint8) {
 	p.SrcID = srcID
 }
 
+var valMasks = [...]uint32{0xFF, 0xFFFF, 0xFFFFFF, 0xFFFFFFFF}
+
 // SetValue sets the packet payload value.
 func (p *Packet) SetValue(val uint32, valSzBytes uint8) {
-	masks := []uint32{0xFF, 0xFFFF, 0xFFFFFF, 0xFFFFFFFF}
-
 	p.ValSz = valSzBytes
 	if p.ValSz < 1 || p.ValSz > 4 {
 		p.ValSz = 4
 	}
-	p.Value = val & masks[p.ValSz-1]
+	p.Value = val & valMasks[p.ValSz-1]
 }
 
 // SetExtValue sets the extended value (size is always 5).
@@ -178,23 +178,26 @@ func (p *Packet) hexVal() string {
 	return fmt.Sprintf("0x%0*x", valSz*2, p.Value)
 }
 
+var dwtFlags = [...]struct {
+	bit DwtEcntr
+	str string
+}{
+	{DwtEcntrCPI, "CPI"},
+	{DwtEcntrEXC, "EXC"},
+	{DwtEcntrSLP, "Sleep"},
+	{DwtEcntrLSU, "LSU"},
+	{DwtEcntrFLD, "Fold"},
+	{DwtEcntrCYC, "CYC"},
+}
+
+var dwtExcepFn = [...]string{"reserved", "entered", "exited", "returned to"}
+
 func (p *Packet) dwtPacketBody() string {
 	var sb strings.Builder
 
 	if p.SrcID == 0 {
 		fmt.Fprintf(&sb, "[Event Counter: 0x%02x; Flags: ", p.Value)
-		flags := []struct {
-			bit DwtEcntr
-			str string
-		}{
-			{DwtEcntrCPI, "CPI"},
-			{DwtEcntrEXC, "EXC"},
-			{DwtEcntrSLP, "Sleep"},
-			{DwtEcntrLSU, "LSU"},
-			{DwtEcntrFLD, "Fold"},
-			{DwtEcntrCYC, "CYC"},
-		}
-		for _, f := range flags {
+		for _, f := range dwtFlags {
 			if p.Value&uint32(f.bit) != 0 {
 				fmt.Fprintf(&sb, " %s ", f.str)
 			} else {
@@ -206,9 +209,8 @@ func (p *Packet) dwtPacketBody() string {
 	}
 
 	if p.SrcID == 1 {
-		excepFn := []string{"reserved", "entered", "exited", "returned to"}
 		action := (p.Value >> 12) & 0x3
-		fmt.Fprintf(&sb, "[Exception Num:  0x%04x(%s) ]", p.Value&0x1FF, excepFn[action])
+		fmt.Fprintf(&sb, "[Exception Num:  0x%04x(%s) ]", p.Value&0x1FF, dwtExcepFn[action])
 		return sb.String()
 	}
 
@@ -243,25 +245,27 @@ func (p *Packet) dwtPacketBody() string {
 	return "[Reserved discriminator value] "
 }
 
-func (p *Packet) tsLocalPacketBody() string {
-	tsType := []string{
-		"TS Sync",
-		"TS Delayed",
-		"TS Sync, Packet Delayed",
-		"TS Delayed, Packet Delayed",
-	}
-	return fmt.Sprintf("%s { %s }", p.hexVal(), tsType[p.SrcID&3])
+var tsLocalTypes = [...]string{
+	"TS Sync",
+	"TS Delayed",
+	"TS Sync, Packet Delayed",
+	"TS Delayed, Packet Delayed",
 }
 
+func (p *Packet) tsLocalPacketBody() string {
+	return fmt.Sprintf("%s { %s }", p.hexVal(), tsLocalTypes[p.SrcID&3])
+}
+
+var tsGlobal1BitSizes = [...]int{6, 13, 20, 25}
+
 func (p *Packet) tsGlobal1PacketBody() string {
-	gts1BitSize := []int{6, 13, 20, 25}
 	idx := max(int(p.ValSz)-1, 0)
-	if idx >= len(gts1BitSize) {
-		idx = len(gts1BitSize) - 1
+	if idx >= len(tsGlobal1BitSizes) {
+		idx = len(tsGlobal1BitSizes) - 1
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "{ TS bits [%d:0]", gts1BitSize[idx])
+	fmt.Fprintf(&sb, "{ TS bits [%d:0]", tsGlobal1BitSizes[idx])
 	if p.SrcID&0x1 != 0 {
 		sb.WriteString(", Clk change")
 	}

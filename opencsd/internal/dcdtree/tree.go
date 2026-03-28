@@ -21,6 +21,11 @@ var (
 )
 
 // DecodeTree manages the decoding of trace data from a single trace sink.
+//
+// IMPORTANT: DecodeTree is strictly thread-unsafe. The underlying elements map
+// (decodeElements) is written to during CreateFullDecoder/RemoveDecoder
+// and read from during TraceDataIn. Concurrent configuration and data processing
+// will result in a runtime panic.
 type DecodeTree struct {
 	registry         *DecoderRegister
 	treeType         ocsd.DcdTreeSrc

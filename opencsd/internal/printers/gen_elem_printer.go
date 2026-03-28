@@ -84,31 +84,31 @@ func (p *GenericElementPrinter) PrintStats() {
 	p.ItemPrintLine(sb.String())
 }
 
-func elemName(t ocsd.GenElemType) string {
-	names := map[ocsd.GenElemType]string{
-		ocsd.GenElemUnknown:         "OCSD_GEN_TRC_ELEM_UNKNOWN",
-		ocsd.GenElemNoSync:          "OCSD_GEN_TRC_ELEM_NO_SYNC",
-		ocsd.GenElemTraceOn:         "OCSD_GEN_TRC_ELEM_TRACE_ON",
-		ocsd.GenElemEOTrace:         "OCSD_GEN_TRC_ELEM_EO_TRACE",
-		ocsd.GenElemPeContext:       "OCSD_GEN_TRC_ELEM_PE_CONTEXT",
-		ocsd.GenElemInstrRange:      "OCSD_GEN_TRC_ELEM_INSTR_RANGE",
-		ocsd.GenElemIRangeNopath:    "OCSD_GEN_TRC_ELEM_I_RANGE_NOPATH",
-		ocsd.GenElemAddrNacc:        "OCSD_GEN_TRC_ELEM_ADDR_NACC",
-		ocsd.GenElemAddrUnknown:     "OCSD_GEN_TRC_ELEM_ADDR_UNKNOWN",
-		ocsd.GenElemException:       "OCSD_GEN_TRC_ELEM_EXCEPTION",
-		ocsd.GenElemExceptionRet:    "OCSD_GEN_TRC_ELEM_EXCEPTION_RET",
-		ocsd.GenElemTimestamp:       "OCSD_GEN_TRC_ELEM_TIMESTAMP",
-		ocsd.GenElemCycleCount:      "OCSD_GEN_TRC_ELEM_CYCLE_COUNT",
-		ocsd.GenElemEvent:           "OCSD_GEN_TRC_ELEM_EVENT",
-		ocsd.GenElemSWTrace:         "OCSD_GEN_TRC_ELEM_SWTRACE",
-		ocsd.GenElemSyncMarker:      "OCSD_GEN_TRC_ELEM_SYNC_MARKER",
-		ocsd.GenElemMemTrans:        "OCSD_GEN_TRC_ELEM_MEMTRANS",
-		ocsd.GenElemInstrumentation: "OCSD_GEN_TRC_ELEM_INSTRUMENTATION",
-		ocsd.GenElemITMTrace:        "OCSD_GEN_TRC_ELEM_ITMTRACE",
-		ocsd.GenElemCustom:          "OCSD_GEN_TRC_ELEM_CUSTOM",
-	}
+var elemNames = map[ocsd.GenElemType]string{
+	ocsd.GenElemUnknown:         "OCSD_GEN_TRC_ELEM_UNKNOWN",
+	ocsd.GenElemNoSync:          "OCSD_GEN_TRC_ELEM_NO_SYNC",
+	ocsd.GenElemTraceOn:         "OCSD_GEN_TRC_ELEM_TRACE_ON",
+	ocsd.GenElemEOTrace:         "OCSD_GEN_TRC_ELEM_EO_TRACE",
+	ocsd.GenElemPeContext:       "OCSD_GEN_TRC_ELEM_PE_CONTEXT",
+	ocsd.GenElemInstrRange:      "OCSD_GEN_TRC_ELEM_INSTR_RANGE",
+	ocsd.GenElemIRangeNopath:    "OCSD_GEN_TRC_ELEM_I_RANGE_NOPATH",
+	ocsd.GenElemAddrNacc:        "OCSD_GEN_TRC_ELEM_ADDR_NACC",
+	ocsd.GenElemAddrUnknown:     "OCSD_GEN_TRC_ELEM_ADDR_UNKNOWN",
+	ocsd.GenElemException:       "OCSD_GEN_TRC_ELEM_EXCEPTION",
+	ocsd.GenElemExceptionRet:    "OCSD_GEN_TRC_ELEM_EXCEPTION_RET",
+	ocsd.GenElemTimestamp:       "OCSD_GEN_TRC_ELEM_TIMESTAMP",
+	ocsd.GenElemCycleCount:      "OCSD_GEN_TRC_ELEM_CYCLE_COUNT",
+	ocsd.GenElemEvent:           "OCSD_GEN_TRC_ELEM_EVENT",
+	ocsd.GenElemSWTrace:         "OCSD_GEN_TRC_ELEM_SWTRACE",
+	ocsd.GenElemSyncMarker:      "OCSD_GEN_TRC_ELEM_SYNC_MARKER",
+	ocsd.GenElemMemTrans:        "OCSD_GEN_TRC_ELEM_MEMTRANS",
+	ocsd.GenElemInstrumentation: "OCSD_GEN_TRC_ELEM_INSTRUMENTATION",
+	ocsd.GenElemITMTrace:        "OCSD_GEN_TRC_ELEM_ITMTRACE",
+	ocsd.GenElemCustom:          "OCSD_GEN_TRC_ELEM_CUSTOM",
+}
 
-	if name, ok := names[t]; ok {
+func elemName(t ocsd.GenElemType) string {
+	if name, ok := elemNames[t]; ok {
 		return name
 	}
 	return "OCSD_GEN_TRC_ELEM_UNKNOWN"

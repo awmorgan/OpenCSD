@@ -430,6 +430,9 @@ func (p *PktProc) readContBytes(limit int) bool {
 }
 
 func (p *PktProc) extractContVal32() uint32 {
+	if len(p.packetData) == 0 {
+		return 0
+	}
 	var value uint32 = 0
 	shift := 0
 	idxMax := len(p.packetData) - 1
@@ -442,6 +445,9 @@ func (p *PktProc) extractContVal32() uint32 {
 }
 
 func (p *PktProc) extractContVal64() uint64 {
+	if len(p.packetData) == 0 {
+		return 0
+	}
 	var value uint64 = 0
 	shift := 0
 	idxMax := len(p.packetData) - 1

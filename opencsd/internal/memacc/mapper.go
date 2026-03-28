@@ -123,7 +123,9 @@ func (m *GlobalMapper) AddAccessor(accessor Accessor, trcID uint8) error {
 func (m *GlobalMapper) RemoveAccessor(accessor Accessor) error {
 	for i, a := range m.accessors {
 		if a == accessor {
-			m.accessors = append(m.accessors[:i], m.accessors[i+1:]...)
+			copy(m.accessors[i:], m.accessors[i+1:])
+			m.accessors[len(m.accessors)-1] = nil
+			m.accessors = m.accessors[:len(m.accessors)-1]
 			if m.accCurr == accessor {
 				m.accCurr = nil
 			}
