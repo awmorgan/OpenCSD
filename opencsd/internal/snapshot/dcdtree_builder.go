@@ -20,6 +20,8 @@ import (
 // archProfileMap is a package-level cache of the core architecture map (shared, read-only after init).
 var archProfileMap = common.NewCoreArchProfileMap()
 
+var newDecodeTree = dcdtree.NewDecodeTree
+
 type mapperAdapter struct {
 	mapper memacc.Mapper
 }
@@ -159,12 +161,13 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 		formatterFlags = ocsd.DfrmtrHasFsyncs
 	}
 
-	b.tree = dcdtree.NewDecodeTree(srcFormat, formatterFlags, b.registry)
-	if b.tree == nil {
-		err := fmt.Errorf("failed to create decode tree object")
+	newTree, err := newDecodeTree(srcFormat, formatterFlags, b.registry)
+	if err != nil {
+		err = fmt.Errorf("failed to create decode tree object: %w", err)
 		b.reader.logError(err.Error())
 		return nil, err
 	}
+	b.tree = newTree
 
 	if df := b.tree.FrameDeformatter(); df != nil {
 		df.SetErrorLogger(&snapshotErrorLogger{reader: b.reader})

@@ -18,6 +18,8 @@ var (
 	ErrCreateFullDecoder = errors.New("create full decoder failed")
 	// ErrCreatePacketProcessor indicates packet processor creation failed.
 	ErrCreatePacketProcessor = errors.New("create packet processor failed")
+	// ErrCreateDecodeTree indicates decode-tree creation failed.
+	ErrCreateDecodeTree = errors.New("create decode tree failed")
 )
 
 // DecodeTree manages the decoding of trace data from a single trace sink.
@@ -47,9 +49,9 @@ type traceIDConfig interface {
 
 // NewDecodeTree creates a new Trace Decode Tree using the supplied decoder registry.
 // A non-nil registry is required.
-func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32, registry *DecoderRegister) *DecodeTree {
+func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32, registry *DecoderRegister) (*DecodeTree, error) {
 	if registry == nil {
-		return nil
+		return nil, fmt.Errorf("%w: nil decoder registry", ErrCreateDecodeTree)
 	}
 
 	dt := &DecodeTree{
@@ -61,22 +63,28 @@ func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32, registry *
 
 	if srcType == ocsd.TrcSrcFrameFormatted {
 		dt.frameDeformatter = demux.NewFrameDeformatter()
-		dt.frameDeformatter.Configure(formatterCfgFlags)
+		if err := dt.frameDeformatter.Configure(formatterCfgFlags); err != nil {
+			return nil, fmt.Errorf("%w: configure frame deformatter: %w", ErrCreateDecodeTree, err)
+		}
 		dt.decoderRoot = dt.frameDeformatter
 	}
 
-	return dt
+	return dt, nil
 }
 
 // NewDefaultDecodeTree creates a new Trace Decode Tree using a fresh built-in registry.
-func NewDefaultDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) *DecodeTree {
+func NewDefaultDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) (*DecodeTree, error) {
 	return NewDecodeTree(srcType, formatterCfgFlags, NewBuiltinDecoderRegister())
 }
 
 // CreateDecodeTree creates a new Trace Decode Tree using the package default registry.
 // Deprecated: prefer NewDefaultDecodeTree.
 func CreateDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) *DecodeTree {
-	return NewDefaultDecodeTree(srcType, formatterCfgFlags)
+	tree, err := NewDefaultDecodeTree(srcType, formatterCfgFlags)
+	if err != nil {
+		return nil
+	}
+	return tree
 }
 
 // Destroy cleans up memory accessors (although GC does mostly).

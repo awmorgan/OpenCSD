@@ -1,6 +1,8 @@
 package snapshot
 
 import (
+	"errors"
+	"path/filepath"
 	"testing"
 
 	"opencsd/internal/dcdtree"
@@ -44,9 +46,13 @@ func TestCreatePEDecoderRoutesETMv4(t *testing.T) {
 	t.Parallel()
 
 	b := NewDecodeTreeBuilder(NewReader())
-	b.tree = dcdtree.NewDecodeTree(ocsd.TrcSrcSingle, ocsd.DfrmtrFrameMemAlign, dcdtree.NewBuiltinDecoderRegister())
+	tree, err := dcdtree.NewDecodeTree(ocsd.TrcSrcSingle, ocsd.DfrmtrFrameMemAlign, dcdtree.NewBuiltinDecoderRegister())
+	if err != nil {
+		t.Fatalf("NewDecodeTree returned error: %v", err)
+	}
+	b.tree = tree
 	if b.tree == nil {
-		t.Fatal("CreateDecodeTree returned nil")
+		t.Fatal("NewDecodeTree returned nil")
 	}
 
 	devSrc := NewParsedDevice()
@@ -65,5 +71,76 @@ func TestNewDecodeTreeBuilderWithRegistryStoresRegistry(t *testing.T) {
 	b := NewDecodeTreeBuilderWithRegistry(NewReader(), reg)
 	if b.registry != reg {
 		t.Fatal("expected builder to keep the injected registry")
+	}
+}
+
+func TestBuildPropagatesFormatterConfigFailure(t *testing.T) {
+	reader := NewReader()
+	reader.readOK = true
+	reader.SnapshotPath = "C:/snapshot"
+	reader.ParsedTrace = &ParsedTrace{
+		TraceBuffers: []TraceBufferInfo{{
+			BufferName:   "BUF0",
+			DataFileName: "trace.bin",
+			DataFormat:   "frame_data",
+		}},
+		SourceBufferAssoc: map[string]string{},
+		CPUSourceAssoc:    map[string]string{},
+	}
+
+	b := NewDecodeTreeBuilder(reader)
+
+	origNewDecodeTree := newDecodeTree
+	t.Cleanup(func() { newDecodeTree = origNewDecodeTree })
+	newDecodeTree = func(srcType ocsd.DcdTreeSrc, _ uint32, registry *dcdtree.DecoderRegister) (*dcdtree.DecodeTree, error) {
+		return dcdtree.NewDecodeTree(srcType, 0, registry)
+	}
+
+	tree, err := b.Build("BUF0", true)
+	if err == nil {
+		t.Fatal("expected formatter configuration failure to propagate from builder")
+	}
+	if !errors.Is(err, dcdtree.ErrCreateDecodeTree) {
+		t.Fatalf("expected ErrCreateDecodeTree, got %v", err)
+	}
+	if tree != nil {
+		t.Fatal("expected nil tree on formatter configuration failure")
+	}
+}
+
+func TestBuildStillCreatesDecodeTreeOnValidFormatterConfig(t *testing.T) {
+	reader := NewReader()
+	reader.readOK = true
+	reader.SnapshotPath = "C:/snapshot"
+	reader.ParsedTrace = &ParsedTrace{
+		TraceBuffers: []TraceBufferInfo{{
+			BufferName:   "BUF0",
+			DataFileName: "trace.bin",
+			DataFormat:   "dstream_coresight",
+		}},
+		SourceBufferAssoc: map[string]string{
+			"STM_0": "BUF0",
+		},
+		CPUSourceAssoc: map[string]string{},
+	}
+	reader.ParsedDeviceList["STM_0"] = &ParsedDevice{
+		DeviceName:     "STM_0",
+		DeviceTypeName: "STM",
+		RegDefs:        map[string]string{"stmtcsr": "0x0"},
+	}
+
+	b := NewDecodeTreeBuilder(reader)
+	tree, err := b.Build("BUF0", true)
+	if err != nil {
+		t.Fatalf("expected build success, got %v", err)
+	}
+	if tree == nil {
+		t.Fatal("expected non-nil tree")
+	}
+	if tree.FrameDeformatter() == nil {
+		t.Fatal("expected frame deformatter to remain configured")
+	}
+	if b.BufferFileName() != filepath.Join("C:/snapshot", "trace.bin") {
+		t.Fatalf("unexpected buffer file name: %s", b.BufferFileName())
 	}
 }

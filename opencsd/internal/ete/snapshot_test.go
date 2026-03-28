@@ -165,7 +165,10 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 		srcType = ocsd.TrcSrcSingle
 	}
 
-	tree := dcdtree.NewDefaultDecodeTree(srcType, formatterFlags)
+	tree, err := dcdtree.NewDefaultDecodeTree(srcType, formatterFlags)
+	if err != nil {
+		return nil, fmt.Errorf("create decode tree: %w", err)
+	}
 	if tree == nil {
 		return nil, fmt.Errorf("nil decode tree")
 	}
