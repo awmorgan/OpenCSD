@@ -179,7 +179,7 @@ func run(args []string) error {
 			for _, src := range sourceNames {
 				fmt.Fprintln(out, src)
 			}
-			return nil
+			return fmt.Errorf("trace packet lister: trace source name %q not found", opts.srcName)
 		}
 	}
 
@@ -302,6 +302,20 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 	return nil
 }
 
+func fatalDataPathError(resp ocsd.DatapathResp, traceIndex uint32, pendingLen int) error {
+	return fmt.Errorf(
+		"trace packet lister: data path fatal response=%d trace_index=%d pending=%d",
+		resp, traceIndex, pendingLen,
+	)
+}
+
+func framedTailError(traceIndex uint32, pendingLen, align int) error {
+	return fmt.Errorf(
+		"trace packet lister: leftover framed tail bytes at EOF: trace_index=%d pending=%d align=%d",
+		traceIndex, pendingLen, align,
+	)
+}
+
 func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, genPrinter *printers.GenericElementPrinter, opts options) error {
 	file, err := os.Open(fileName)
 	if err != nil {
@@ -343,6 +357,10 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 				traceIndex += used
 			}
 
+			if ocsd.DataRespIsFatal(dataPathResp) {
+				return
+			}
+
 			if ocsd.DataRespIsWait(dataPathResp) {
 				if genPrinter.NeedAckWait() {
 					genPrinter.AckWait()
@@ -351,6 +369,9 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 				_, dataPathResp, dpErr = tree.TraceDataIn(ocsd.OpFlush, 0, nil)
 				if dpErr != nil {
 					dataPathErr = fmt.Errorf("flush after wait: %w", dpErr)
+					return
+				}
+				if ocsd.DataRespIsFatal(dataPathResp) {
 					return
 				}
 				continue
@@ -388,6 +409,9 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 		if n > 0 {
 			pending = append(pending, buf[:n]...)
 			pushPending()
+			if dataPathErr != nil || ocsd.DataRespIsFatal(dataPathResp) {
+				break
+			}
 		}
 
 		if opts.dstreamFormat {
@@ -400,6 +424,10 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 				fmt.Fprintln(out, "]")
 			}
 			if ferr == io.EOF || ferr == io.ErrUnexpectedEOF {
+				break
+			}
+			if ferr != nil {
+				err = ferr
 				break
 			}
 		}
@@ -418,19 +446,20 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 	}
 
 	if ocsd.DataRespIsFatal(dataPathResp) {
-		fmt.Fprintln(out, "trace packet lister: data path fatal error")
-		if opts.ssVerbose {
-			fmt.Fprintf(os.Stderr, "[trc_pkt_lister] fatal response=%d at trace index=%d pending=%d\n", dataPathResp, traceIndex, len(pending))
-		}
-	} else {
-		if _, _, err := tree.TraceDataIn(ocsd.OpEOT, 0, nil); err != nil {
-			return fmt.Errorf("trace packet lister: OpEOT error: %w", err)
-		}
+		return fatalDataPathError(dataPathResp, traceIndex, len(pending))
+	}
 
-		if opts.multiSession {
-			if _, _, err := tree.TraceDataIn(ocsd.OpReset, 0, nil); err != nil {
-				return fmt.Errorf("trace packet lister: OpReset error: %w", err)
-			}
+	if isFramed && len(pending) > 0 {
+		return framedTailError(traceIndex, len(pending), align)
+	}
+
+	if _, _, err := tree.TraceDataIn(ocsd.OpEOT, 0, nil); err != nil {
+		return fmt.Errorf("trace packet lister: OpEOT error: %w", err)
+	}
+
+	if opts.multiSession {
+		if _, _, err := tree.TraceDataIn(ocsd.OpReset, 0, nil); err != nil {
+			return fmt.Errorf("trace packet lister: OpReset error: %w", err)
 		}
 	}
 
@@ -452,6 +481,7 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 
 	return nil
 }
+
 func frameAlignment(tree *dcdtree.DecodeTree) int {
 	deformatter := tree.FrameDeformatter()
 	if deformatter == nil {

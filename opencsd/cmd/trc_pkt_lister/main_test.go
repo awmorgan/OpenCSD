@@ -46,22 +46,24 @@ var goldenValueFlags = map[string]struct{}{
 }
 
 type listerGoldenCase struct {
-	name        string
-	decoder     string
-	goldenPath  string
-	snapshotDir string
-	sourceName  string
-	id          string
-	decode      bool
-	extraFlags  []string
-	normalized  bool // true: use normalizeTraceListerOutput; false (default): use strictTraceListerOutput
+	name             string
+	decoder          string
+	goldenPath       string
+	snapshotDir      string
+	sourceName       string
+	id               string
+	decode           bool
+	extraFlags       []string
+	normalized       bool
+	expectedRunError string
 }
 
 type listerGoldenManifestEntry struct {
-	decoder         string
-	goldenName      string
-	snapshotName    string
-	normalizeReason string // non-empty opts into normalizeTraceListerOutput; describes why strict comparison cannot be used
+	decoder          string
+	goldenName       string
+	snapshotName     string
+	normalizeReason  string
+	expectedRunError string
 }
 
 func TestTraceListerGoldens(t *testing.T) {
@@ -86,8 +88,18 @@ func TestTraceListerGoldens(t *testing.T) {
 			}
 
 			outPath := args[3]
-			if err := run(args); err != nil {
-				t.Fatalf("run(%v) failed: %v", args, err)
+			err := run(args)
+			if tc.expectedRunError == "" {
+				if err != nil {
+					t.Fatalf("run(%v) failed: %v", args, err)
+				}
+			} else {
+				if err == nil {
+					t.Fatalf("run(%v) succeeded; expected error containing %q", args, tc.expectedRunError)
+				}
+				if !strings.Contains(err.Error(), tc.expectedRunError) {
+					t.Fatalf("run(%v) error = %v; want substring %q", args, err, tc.expectedRunError)
+				}
 			}
 
 			gotBytes, err := os.ReadFile(outPath)
@@ -258,7 +270,10 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 			decoder: "stm", goldenName: "stm_only-2", snapshotName: "stm_only-2",
 			normalizeReason: "legacy STM packet-byte wrapping/segment formatting instability in NOTSYNC records",
 		},
-		{decoder: "stm", goldenName: "stm_only-juno", snapshotName: "stm_only-juno"},
+		{
+			decoder: "stm", goldenName: "stm_only-juno", snapshotName: "stm_only-juno",
+			expectedRunError: "trace packet lister: data path fatal response=",
+		},
 		{
 			decoder: "stm", goldenName: "stm_only", snapshotName: "stm_only",
 			normalizeReason: "legacy STM packet-byte wrapping/segment formatting instability in NOTSYNC records",
@@ -281,15 +296,16 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 		ppl := string(goldenBytes)
 		id, decode, extraFlags := parseOptionsFromGolden(entry.goldenName, ppl)
 		testCases = append(testCases, listerGoldenCase{
-			name:        filepath.ToSlash(filepath.Join(entry.decoder, entry.snapshotName, entry.goldenName+".ppl")),
-			decoder:     entry.decoder,
-			goldenPath:  goldenPath,
-			snapshotDir: snapshotDir,
-			sourceName:  extractSourceName(ppl),
-			id:          id,
-			decode:      decode,
-			extraFlags:  extraFlags,
-			normalized:  entry.normalizeReason != "",
+			name:             filepath.ToSlash(filepath.Join(entry.decoder, entry.snapshotName, entry.goldenName+".ppl")),
+			decoder:          entry.decoder,
+			goldenPath:       goldenPath,
+			snapshotDir:      snapshotDir,
+			sourceName:       extractSourceName(ppl),
+			id:               id,
+			decode:           decode,
+			extraFlags:       extraFlags,
+			normalized:       entry.normalizeReason != "",
+			expectedRunError: entry.expectedRunError,
 		})
 	}
 
@@ -776,5 +792,77 @@ func TestParseOptionsFromGoldenAllBehavioralFlags(t *testing.T) {
 		if f == "-src_name" {
 			t.Errorf("parseOptionsFromGolden forwarded -src_name into extraFlags; it should be consumed but not forwarded")
 		}
+	}
+}
+
+func TestRunUnknownSourceNameReturnsError(t *testing.T) {
+	snapshotDir := filepath.Join("..", "..", "internal", "ete", "testdata", "001-ack_test")
+	outPath := filepath.Join(t.TempDir(), "out.ppl")
+
+	err := run([]string{
+		"-ss_dir", snapshotDir,
+		"-src_name", "__definitely_not_a_real_source__",
+		"-logfilename", outPath,
+		"-no_time_print",
+	})
+	if err == nil {
+		t.Fatal("expected error for unknown source name, got nil")
+	}
+	if !strings.Contains(err.Error(), `trace source name "__definitely_not_a_real_source__" not found`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	gotBytes, readErr := os.ReadFile(outPath)
+	if readErr != nil {
+		t.Fatalf("read output %s: %v", outPath, readErr)
+	}
+	got := string(gotBytes)
+	if !strings.Contains(got, "Valid source names are:-") {
+		t.Fatalf("expected valid-source list in output, got:\n%s", got)
+	}
+}
+
+func TestRunForcedFatalDatapathReturnsError(t *testing.T) {
+	snapshotDir := filepath.Join("..", "..", "internal", "stm", "testdata", "stm_only-juno")
+	outPath := filepath.Join(t.TempDir(), "out.ppl")
+
+	err := run([]string{
+		"-ss_dir", snapshotDir,
+		"-src_name", "ETB_1",
+		"-decode",
+		"-logfilename", outPath,
+		"-no_time_print",
+	})
+	if err == nil {
+		t.Fatal("expected fatal datapath error, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "data path fatal response=") {
+		t.Fatalf("expected fatal response in error, got: %v", err)
+	}
+	if !strings.Contains(msg, "trace_index=") {
+		t.Fatalf("expected trace_index in error, got: %v", err)
+	}
+	if !strings.Contains(msg, "pending=") {
+		t.Fatalf("expected pending in error, got: %v", err)
+	}
+}
+func TestFramedTailErrorIncludesContext(t *testing.T) {
+	err := framedTailError(1024, 1, 4)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "leftover framed tail bytes at EOF") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(msg, "trace_index=1024") {
+		t.Fatalf("expected trace_index in error, got: %v", err)
+	}
+	if !strings.Contains(msg, "pending=1") {
+		t.Fatalf("expected pending in error, got: %v", err)
+	}
+	if !strings.Contains(msg, "align=4") {
+		t.Fatalf("expected align in error, got: %v", err)
 	}
 }
