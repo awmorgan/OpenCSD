@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"opencsd/internal/memacc"
+	"opencsd/internal/snapshot"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -46,24 +48,26 @@ var goldenValueFlags = map[string]struct{}{
 }
 
 type listerGoldenCase struct {
-	name             string
-	decoder          string
-	goldenPath       string
-	snapshotDir      string
-	sourceName       string
-	id               string
-	decode           bool
-	extraFlags       []string
-	normalized       bool
-	expectedRunError string
+	name               string
+	decoder            string
+	goldenPath         string
+	snapshotDir        string
+	sourceName         string
+	id                 string
+	decode             bool
+	extraFlags         []string
+	normalized         bool
+	ignoreMappedRanges bool
+	expectedRunError   string
 }
 
 type listerGoldenManifestEntry struct {
-	decoder          string
-	goldenName       string
-	snapshotName     string
-	normalizeReason  string
-	expectedRunError string
+	decoder            string
+	goldenName         string
+	snapshotName       string
+	normalizeReason    string
+	ignoreMappedRanges bool
+	expectedRunError   string
 }
 
 func TestTraceListerGoldens(t *testing.T) {
@@ -113,11 +117,11 @@ func TestTraceListerGoldens(t *testing.T) {
 
 			var got, want string
 			if tc.normalized {
-				got = normalizeTraceListerOutput(string(gotBytes))
-				want = normalizeTraceListerOutput(string(wantBytes))
+				got = normalizeTraceListerOutput(string(gotBytes), tc.ignoreMappedRanges)
+				want = normalizeTraceListerOutput(string(wantBytes), tc.ignoreMappedRanges)
 			} else {
-				got = strictTraceListerOutput(string(gotBytes))
-				want = strictTraceListerOutput(string(wantBytes))
+				got = strictTraceListerOutput(string(gotBytes), tc.ignoreMappedRanges)
+				want = strictTraceListerOutput(string(wantBytes), tc.ignoreMappedRanges)
 			}
 
 			if got != want {
@@ -237,8 +241,11 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 			normalizeReason: "legacy ETMv4 range-limit recovery behavior differs from C++ golden output",
 		},
 		{
-			decoder: "etmv4", goldenName: "test-file-mem-offsets", snapshotName: "test-file-mem-offsets",
-			normalizeReason: "legacy ETMv4 memory-access fault handling differs (ADDR_NACC placement vs C++ golden)",
+			decoder:            "etmv4",
+			goldenName:         "test-file-mem-offsets",
+			snapshotName:       "test-file-mem-offsets",
+			normalizeReason:    "legacy ETMv4 memory-access fault handling differs (ADDR_NACC placement vs C++ golden)",
+			ignoreMappedRanges: true,
 		},
 		{decoder: "itm", goldenName: "itm_only_csformat", snapshotName: "itm_only_csformat"},
 		{decoder: "itm", goldenName: "itm_only_raw", snapshotName: "itm_only_raw"},
@@ -296,16 +303,17 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 		ppl := string(goldenBytes)
 		id, decode, extraFlags := parseOptionsFromGolden(entry.goldenName, ppl)
 		testCases = append(testCases, listerGoldenCase{
-			name:             filepath.ToSlash(filepath.Join(entry.decoder, entry.snapshotName, entry.goldenName+".ppl")),
-			decoder:          entry.decoder,
-			goldenPath:       goldenPath,
-			snapshotDir:      snapshotDir,
-			sourceName:       extractSourceName(ppl),
-			id:               id,
-			decode:           decode,
-			extraFlags:       extraFlags,
-			normalized:       entry.normalizeReason != "",
-			expectedRunError: entry.expectedRunError,
+			name:               filepath.ToSlash(filepath.Join(entry.decoder, entry.snapshotName, entry.goldenName+".ppl")),
+			decoder:            entry.decoder,
+			goldenPath:         goldenPath,
+			snapshotDir:        snapshotDir,
+			sourceName:         extractSourceName(ppl),
+			id:                 id,
+			decode:             decode,
+			extraFlags:         extraFlags,
+			normalized:         entry.normalizeReason != "",
+			ignoreMappedRanges: entry.ignoreMappedRanges,
+			expectedRunError:   entry.expectedRunError,
 		})
 	}
 
@@ -437,7 +445,7 @@ func extractSourceName(ppl string) string {
 // This intentionally excludes run-specific/structural noise such as command
 // lines, file paths, summary trailers, and buffer-complete banners.
 // No line deduplication or multi-ID reordering is performed.
-func strictTraceListerOutput(s string) string {
+func strictTraceListerOutput(s string, ignoreMappedRanges bool) string {
 	lines := strings.Split(normalizeNewlines(s), "\n")
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
@@ -455,7 +463,9 @@ func strictTraceListerOutput(s string) string {
 
 		// Keep only address-range payload from memory mapping lines.
 		if mappedRange, ok := normalizeMappedRangeLine(text); ok {
-			out = append(out, mappedRange)
+			if !ignoreMappedRanges {
+				out = append(out, mappedRange)
+			}
 			continue
 		}
 
@@ -473,7 +483,7 @@ func strictTraceListerOutput(s string) string {
 // multiple trace IDs are present—no-sync removal and ID-sorted reordering.
 // Use only for golden entries where a documented structural mismatch prevents
 // strict comparison (e.g. legacy PTM packet-layer vs. generic-element ID skew).
-func normalizeTraceListerOutput(ppl string) string {
+func normalizeTraceListerOutput(ppl string, ignoreMappedRanges bool) string {
 	lines := strings.Split(normalizeNewlines(ppl), "\n")
 	out := make([]string, 0, len(lines))
 	for _, raw := range lines {
@@ -483,7 +493,9 @@ func normalizeTraceListerOutput(ppl string) string {
 		}
 
 		if mappedRange, ok := normalizeMappedRangeLine(raw); ok {
-			out = append(out, mappedRange)
+			if !ignoreMappedRanges {
+				out = append(out, mappedRange)
+			}
 			continue
 		}
 
@@ -864,5 +876,174 @@ func TestFramedTailErrorIncludesContext(t *testing.T) {
 	}
 	if !strings.Contains(msg, "align=4") {
 		t.Fatalf("expected align in error, got: %v", err)
+	}
+}
+
+func TestMapMemoryRangesSameFileDifferentOffsetsBothMapped(t *testing.T) {
+	dir := t.TempDir()
+	memFile := filepath.Join(dir, "mem.bin")
+	if err := os.WriteFile(memFile, []byte{0, 1, 2, 3, 4, 5, 6, 7}, 0o644); err != nil {
+		t.Fatalf("write memory file: %v", err)
+	}
+
+	reader := &snapshot.Reader{
+		ParsedDeviceList: map[string]*snapshot.ParsedDevice{
+			"cpu_0": {
+				DeviceName:  "cpu_0",
+				DeviceClass: "core",
+				DumpDefs: []snapshot.DumpDef{
+					{
+						Path:    "mem.bin",
+						Address: 0x1000,
+						Offset:  0,
+						Length:  4,
+						Space:   "N",
+					},
+					{
+						Path:    "mem.bin",
+						Address: 0x2000,
+						Offset:  4,
+						Length:  4,
+						Space:   "N",
+					},
+				},
+			},
+		},
+	}
+
+	mapper := memacc.NewGlobalMapper()
+	ranges, err := mapMemoryRanges(mapper, dir, reader)
+	if err != nil {
+		t.Fatalf("mapMemoryRanges returned error: %v", err)
+	}
+	if len(ranges) != 2 {
+		t.Fatalf("expected 2 mapped ranges, got %d", len(ranges))
+	}
+	if ranges[0].start != 0x1000 || ranges[0].end != 0x1003 {
+		t.Fatalf("unexpected first range: %#v", ranges[0])
+	}
+	if ranges[1].start != 0x2000 || ranges[1].end != 0x2003 {
+		t.Fatalf("unexpected second range: %#v", ranges[1])
+	}
+}
+
+func TestMapMemoryRangesBadOffsetReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	memFile := filepath.Join(dir, "mem.bin")
+	if err := os.WriteFile(memFile, []byte{0, 1, 2, 3}, 0o644); err != nil {
+		t.Fatalf("write memory file: %v", err)
+	}
+
+	reader := &snapshot.Reader{
+		ParsedDeviceList: map[string]*snapshot.ParsedDevice{
+			"cpu_0": {
+				DeviceName:  "cpu_0",
+				DeviceClass: "core",
+				DumpDefs: []snapshot.DumpDef{
+					{
+						Path:    "mem.bin",
+						Address: 0x1000,
+						Offset:  99,
+						Length:  4,
+						Space:   "N",
+					},
+				},
+			},
+		},
+	}
+
+	mapper := memacc.NewGlobalMapper()
+	_, err := mapMemoryRanges(mapper, dir, reader)
+	if err == nil {
+		t.Fatal("expected error for bad offset, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "offset beyond EOF") {
+		t.Fatalf("expected offset error, got: %v", err)
+	}
+	if !strings.Contains(msg, "requested_offset=99") {
+		t.Fatalf("expected requested offset in error, got: %v", err)
+	}
+	if !strings.Contains(msg, "file_size=4") {
+		t.Fatalf("expected file size in error, got: %v", err)
+	}
+	if !strings.Contains(msg, "mem.bin") {
+		t.Fatalf("expected file path in error, got: %v", err)
+	}
+}
+
+func TestMapMemoryRangesUnreadableFileIgnored(t *testing.T) {
+	dir := t.TempDir()
+
+	reader := &snapshot.Reader{
+		ParsedDeviceList: map[string]*snapshot.ParsedDevice{
+			"cpu_0": {
+				DeviceName:  "cpu_0",
+				DeviceClass: "core",
+				DumpDefs: []snapshot.DumpDef{
+					{
+						Path:    "missing.bin",
+						Address: 0x1000,
+						Offset:  0,
+						Length:  4,
+						Space:   "N",
+					},
+				},
+			},
+		},
+	}
+
+	mapper := memacc.NewGlobalMapper()
+	ranges, err := mapMemoryRanges(mapper, dir, reader)
+	if err != nil {
+		t.Fatalf("expected missing dump file to be ignored, got error: %v", err)
+	}
+	if len(ranges) != 0 {
+		t.Fatalf("expected no mapped ranges, got %d", len(ranges))
+	}
+}
+
+func TestMapMemoryRangesDuplicateSemanticMappingIgnored(t *testing.T) {
+	dir := t.TempDir()
+	memFile := filepath.Join(dir, "mem.bin")
+	if err := os.WriteFile(memFile, []byte{0, 1, 2, 3}, 0o644); err != nil {
+		t.Fatalf("write memory file: %v", err)
+	}
+
+	reader := &snapshot.Reader{
+		ParsedDeviceList: map[string]*snapshot.ParsedDevice{
+			"cpu_0": {
+				DeviceName:  "cpu_0",
+				DeviceClass: "core",
+				DumpDefs: []snapshot.DumpDef{
+					{
+						Path:    "mem.bin",
+						Address: 0x1000,
+						Offset:  0,
+						Length:  4,
+						Space:   "N",
+					},
+					{
+						Path:    "mem.bin",
+						Address: 0x1000,
+						Offset:  0,
+						Length:  4,
+						Space:   "N",
+					},
+				},
+			},
+		},
+	}
+
+	mapper := memacc.NewGlobalMapper()
+	ranges, err := mapMemoryRanges(mapper, dir, reader)
+	if err != nil {
+		t.Fatalf("mapMemoryRanges returned error: %v", err)
+	}
+	if len(ranges) != 1 {
+		t.Fatalf("expected 1 mapped range after semantic dedupe, got %d", len(ranges))
+	}
+	if ranges[0].start != 0x1000 || ranges[0].end != 0x1003 {
+		t.Fatalf("unexpected mapped range: %#v", ranges[0])
 	}
 }

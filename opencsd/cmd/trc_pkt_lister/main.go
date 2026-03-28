@@ -670,43 +670,55 @@ func configureFrameDemux(tree *dcdtree.DecodeTree, out io.Writer, opts options) 
 
 func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader) ([]mappedRange, error) {
 	ranges := make([]mappedRange, 0)
-	seenFiles := make(map[string]struct{})
 	seenAccessors := make(map[string]struct{})
+	loadErrs := make([]string, 0)
+
+	recordLoadErr := func(filePath string, memParams snapshot.DumpDef, format string, args ...any) {
+		msg := fmt.Sprintf(format, args...)
+		loadErrs = append(loadErrs, fmt.Sprintf(
+			"path=%s address=0x%x offset=%d length=%d space=%q: %s",
+			filepath.ToSlash(filePath),
+			memParams.Address,
+			memParams.Offset,
+			memParams.Length,
+			memParams.Space,
+			msg,
+		))
+	}
+
 	for _, dev := range reader.ParsedDeviceList {
-		if !strings.EqualFold(dev.DeviceClass, "core") {
+		if dev == nil || !strings.EqualFold(dev.DeviceClass, "core") {
 			continue
 		}
 		for _, memParams := range dev.DumpDefs {
+			if strings.TrimSpace(memParams.Path) == "" {
+				continue
+			}
+
 			filePath := filepath.Join(ssDir, memParams.Path)
 			normPath := filepath.ToSlash(filePath)
 			space := parseMemSpace(memParams.Space)
 
-			// Early deduplication by path: skip if this file has already been seen.
-			if _, seen := seenFiles[normPath]; seen {
-				continue
-			}
-
-			// Open the file to get its size without loading the full content.
 			f, err := os.Open(filePath)
 			if err != nil {
+				// Missing/unreadable external dump images are non-fatal: match snapshot builder behavior.
 				continue
 			}
-			defer f.Close()
 
-			// Get file size via Stat.
 			stat, err := f.Stat()
 			if err != nil {
+				_ = f.Close()
+				recordLoadErr(filePath, memParams, "stat failed: %v", err)
 				continue
 			}
 			fileSize := stat.Size()
 
-			// Validate that offset is within bounds.
 			if memParams.Offset >= uint64(fileSize) {
+				_ = f.Close()
+				recordLoadErr(filePath, memParams, "offset beyond EOF: file_size=%d requested_offset=%d", fileSize, memParams.Offset)
 				continue
 			}
 
-			// Compute the exact window length: from offset to EOF if Length==0,
-			// otherwise clamp Length to remaining bytes.
 			var windowLen uint64
 			if memParams.Length == 0 {
 				windowLen = uint64(fileSize) - memParams.Offset
@@ -716,26 +728,42 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 			}
 
 			if windowLen == 0 {
+				_ = f.Close()
+				recordLoadErr(filePath, memParams, "effective mapping length is zero")
 				continue
 			}
 
-			// Allocate only the exact slice and read just that window using ReadAt.
+			accKey := fmt.Sprintf(
+				"%s|%s|0x%x|%d|%d",
+				memacc.MemSpaceString(space),
+				normPath,
+				memParams.Address,
+				windowLen,
+				memParams.Offset,
+			)
+			if _, seen := seenAccessors[accKey]; seen {
+				_ = f.Close()
+				continue
+			}
+
 			b := make([]byte, windowLen)
 			if _, err := f.ReadAt(b, int64(memParams.Offset)); err != nil && err != io.EOF {
+				_ = f.Close()
+				recordLoadErr(filePath, memParams, "read failed: %v", err)
+				continue
+			}
+
+			if err := f.Close(); err != nil {
+				recordLoadErr(filePath, memParams, "close failed: %v", err)
 				continue
 			}
 
 			acc := memacc.NewBufferAccessor(ocsd.VAddr(memParams.Address), b)
 			acc.SetMemSpace(space)
-			accKey := fmt.Sprintf("%s|%s|0x%x|%d|%d", memacc.MemSpaceString(space), normPath, memParams.Address, windowLen, memParams.Offset)
-			if _, seen := seenAccessors[accKey]; seen {
-				continue
-			}
 			if err := mapper.AddAccessor(acc, ocsd.BadCSSrcID); err != nil {
 				return nil, fmt.Errorf("add memory accessor for %s @0x%x: %w", filePath, memParams.Address, err)
 			}
 			seenAccessors[accKey] = struct{}{}
-			seenFiles[normPath] = struct{}{}
 
 			ranges = append(ranges, mappedRange{
 				start: ocsd.VAddr(memParams.Address),
@@ -746,9 +774,12 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 		}
 	}
 
+	if len(loadErrs) > 0 {
+		return nil, fmt.Errorf("trace packet lister: snapshot memory mapping load failures:\n%s", strings.Join(loadErrs, "\n"))
+	}
+
 	return ranges, nil
 }
-
 func printMappedRanges(out io.Writer, ranges []mappedRange) {
 	fmt.Fprintln(out, "Gen_Info : Mapped Memory Accessors")
 	for _, r := range ranges {
