@@ -1,3 +1,11 @@
+// Package memacc provides memory accessor registration and lookup for target-memory reads.
+//
+// Trace ID behavior in this package:
+//   - Accessor registration: trace ID is ignored.
+//   - Accessor lookup: trace ID is ignored; selection uses address and memory space only.
+//   - Cache partitioning: trace ID is part of cache keys and cache invalidation.
+//   - Callback dispatch: trace ID is forwarded to Accessor.ReadBytes, so callback-based
+//     accessors may use it to select source data.
 package memacc
 
 import (
@@ -8,16 +16,23 @@ import (
 // Mapper defines the interface for mapping and reading target memory.
 type Mapper interface {
 	// Read reads up to reqBytes into buffer and returns bytes read with standard Go error.
+	// Accessor selection is based on address and memSpace; trcID does not influence accessor lookup.
+	// trcID is still passed to the selected accessor ReadBytes implementation.
 	Read(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) (uint32, error)
 
 	// ReadTargetMemory reads bytes from the mapped memory accessors.
+	// Accessor selection is based on address and memSpace; trcID does not influence accessor lookup.
+	// trcID is still passed to the selected accessor ReadBytes implementation.
 	ReadTargetMemory(address ocsd.VAddr, trcID uint8, memSpace ocsd.MemSpaceAcc, numBytes *uint32, buffer []byte) error
 
 	// InvalidateMemAccCache invalidates cache entries for a specific Trace ID.
+	// This affects cache partitioning only; it does not add/remove/register accessors.
 	InvalidateMemAccCache(trcID uint8)
 
 	// AddAccessor adds a new memory accessor to the mapper.
-	AddAccessor(accessor Accessor, trcID uint8) error
+	// registrationTraceID is accepted for API compatibility but ignored.
+	// Overlap checks and registration are based on address range and memory space only.
+	AddAccessor(accessor Accessor, registrationTraceID uint8) error
 
 	// RemoveAccessor removes a specific accessor.
 	RemoveAccessor(accessor Accessor) error
@@ -104,7 +119,7 @@ func (m *GlobalMapper) InvalidateMemAccCache(trcID uint8) {
 	}
 }
 
-func (m *GlobalMapper) AddAccessor(accessor Accessor, trcID uint8) error {
+func (m *GlobalMapper) AddAccessor(accessor Accessor, _ uint8) error {
 	if !accessor.ValidateRange() {
 		return ocsd.ErrMemAccRangeInvalid
 	}
@@ -146,7 +161,7 @@ func (m *GlobalMapper) RemoveAllAccessors() {
 	}
 }
 
-func (m *GlobalMapper) findAccessor(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8) bool {
+func (m *GlobalMapper) findAccessor(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, _ uint8) bool {
 	var bestMatch Accessor
 	bestMatchLen := 33 // number of bits set in memory space (0-32)
 

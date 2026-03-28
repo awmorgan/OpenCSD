@@ -470,7 +470,7 @@ func (b *DecodeTreeBuilder) addCoreDumpMemory(mapper memacc.Mapper, dev *ParsedD
 
 		acc := memacc.NewBufferAccessor(ocsd.VAddr(dump.Address), fileBytes)
 		acc.SetMemSpace(mapDumpMemSpace(dump.Space))
-		if err := mapper.AddAccessor(acc, 0); err != nil {
+		if err := mapper.AddAccessor(acc, ocsd.BadCSSrcID); err != nil {
 			b.reader.logError(fmt.Sprintf("Failed to add memory accessor for %s (%s): %v", dev.DeviceName, path, err))
 		}
 	}

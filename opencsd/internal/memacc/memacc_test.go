@@ -99,6 +99,31 @@ func TestOverlapRegions(t *testing.T) {
 	}
 }
 
+func TestAddAccessor_OverlapIgnoresTraceID(t *testing.T) {
+	mapper := NewGlobalMapper()
+
+	acc1 := NewBufferAccessor(0x4000, asByteSlice(&el01NSBlocks, 0))
+	acc1.SetMemSpace(ocsd.MemSpaceEL1N)
+	if err := mapper.AddAccessor(acc1, 0x10); err != nil {
+		t.Fatalf("failed to add first accessor: %v", err)
+	}
+
+	// Same address range and same memspace must overlap even with a different trace ID.
+	acc2 := NewBufferAccessor(0x4000, asByteSlice(&el01NSBlocks, 1))
+	acc2.SetMemSpace(ocsd.MemSpaceEL1N)
+	err := mapper.AddAccessor(acc2, 0x11)
+	if !errors.Is(err, ocsd.ErrMemAccOverlap) {
+		t.Fatalf("expected overlap error independent of trace ID, got: %v", err)
+	}
+
+	// Same address range but disjoint memspace remains valid regardless of trace ID.
+	acc3 := NewBufferAccessor(0x4000, asByteSlice(&el01SBlocks, 0))
+	acc3.SetMemSpace(ocsd.MemSpaceEL1S)
+	if err := mapper.AddAccessor(acc3, 0x22); err != nil {
+		t.Fatalf("expected non-overlap for disjoint memspace independent of trace ID, got: %v", err)
+	}
+}
+
 type testRange struct {
 	sAddr    ocsd.VAddr
 	size     uint32

@@ -700,7 +700,7 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 			if _, seen := seenAccessors[accKey]; seen {
 				continue
 			}
-			if err := mapper.AddAccessor(acc, 0); err != nil {
+			if err := mapper.AddAccessor(acc, ocsd.BadCSSrcID); err != nil {
 				return nil, fmt.Errorf("add memory accessor for %s @0x%x: %w", filePath, memParams.Address, err)
 			}
 			seenAccessors[accKey] = struct{}{}
