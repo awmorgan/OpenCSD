@@ -271,11 +271,7 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 			// generic elements at ID:2.
 			normalizeReason: "legacy PTM packet-layer vs. generic-element trace-ID skew (C++ ID:0 packets / ID:2 gen-elems)",
 		},
-		{decoder: "stm", goldenName: "stm-issue-27", snapshotName: "stm-issue-27"},
-		{
-			decoder: "stm", goldenName: "stm_only-2", snapshotName: "stm_only-2",
-			normalizeReason: "legacy STM packet-byte wrapping/segment formatting instability in NOTSYNC records",
-		},
+		{decoder: "stm", goldenName: "stm-issue-27", snapshotName: "stm-issue-27"}, {decoder: "stm", goldenName: "stm_only-2", snapshotName: "stm_only-2"},
 		{
 			decoder: "stm", goldenName: "stm_only-juno", snapshotName: "stm_only-juno",
 			expectedRunError: "trace packet lister: data path fatal response=",
