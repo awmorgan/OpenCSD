@@ -171,15 +171,16 @@ func (p *Packet) SetCycleAccAtomFromPHdr(pHdr uint8) {
 
 func (p *Packet) SetAtomFromPHdr(pHdr uint8) {
 	atomFmtID := pHdr & 0xF0
-	if atomFmtID == 0x80 {
+	switch atomFmtID {
+	case 0x80:
 		if (pHdr & 0x08) == 0x08 {
 			p.Atom.Num = 2
 		} else {
 			p.Atom.Num = 1
 		}
-	} else if atomFmtID == 0x90 {
+	case 0x90:
 		p.Atom.Num = 3
-	} else {
+	default:
 		if (pHdr & 0xE0) == 0xA0 {
 			p.Atom.Num = 4
 		} else {
