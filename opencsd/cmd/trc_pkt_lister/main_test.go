@@ -576,6 +576,13 @@ func normalizeTraceListerIdxRecord(rec string) string {
 		return ""
 	}
 
+	// Capture the Idx: value (e.g., "Idx:1234")
+	idxPart := ""
+	if strings.HasPrefix(rec, "Idx:") {
+		idxPart, _, _ = strings.Cut(rec, ";")
+		idxPart = strings.TrimSpace(idxPart)
+	}
+
 	right := ""
 	if _, after, ok := strings.Cut(rec, "\t"); ok {
 		right = strings.TrimSpace(after)
@@ -593,7 +600,9 @@ func normalizeTraceListerIdxRecord(rec string) string {
 	}
 	packetHeader := normalizePacketHeader(right)
 	packetDesc := extractPacketDescription(packetHeader)
-	return fmt.Sprintf("ID:%s; PKT:%s; HDR:%s; DESC:%s", id, packetType, packetHeader, packetDesc)
+
+	// Prepend the index to the normalized output string
+	return fmt.Sprintf("%s; ID:%s; PKT:%s; HDR:%s; DESC:%s", idxPart, id, packetType, packetHeader, packetDesc)
 }
 
 func normalizePacketHeader(s string) string {
