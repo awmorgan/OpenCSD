@@ -144,10 +144,7 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 		{decoder: "ete", goldenName: "ete-ite-instr_multi_sess", snapshotName: "ete-ite-instr"},
 		{decoder: "ete", goldenName: "ete-wfet", snapshotName: "ete-wfet"},
 		{decoder: "ete", goldenName: "ete_ip", snapshotName: "ete_ip"},
-		{
-			decoder: "ete", goldenName: "ete_ip_src_addr_N", snapshotName: "ete_ip",
-			normalizeReason: "legacy ETE generic-element range classification drift with -src_addr_n (known Go/C++ parity gap)",
-		},
+		{decoder: "ete", goldenName: "ete_ip_src_addr_N", snapshotName: "ete_ip"},
 		{
 			decoder: "ete", goldenName: "ete_mem", snapshotName: "ete_mem",
 			normalizeReason: "legacy ETE branch-classification and range-length mismatch in decoded generic elements",
