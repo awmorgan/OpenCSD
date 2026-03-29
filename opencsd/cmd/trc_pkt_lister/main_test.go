@@ -256,15 +256,7 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 			decoder: "ptm", goldenName: "TC2", snapshotName: "TC2",
 			normalizeReason: "legacy PTM TC2 packet-vs-generic-element sequencing mismatch around P-header emission",
 		},
-		{
-			decoder: "ptm", goldenName: "tc2-ptm-rstk-t32", snapshotName: "tc2-ptm-rstk-t32",
-			// The C++ trc_pkt_lister outputs raw PTM packets with the frame-demux
-			// trace ID (0x00) while generic elements carry the logical PTM source
-			// ID (0x02). The Go implementation assigns the same logical ID to both
-			// layers, so packet and gen-elem lines appear under different IDs in the
-			// two outputs. Normalized comparison re-keys on content rather than ID.
-			normalizeReason: "legacy PTM packet-layer vs. generic-element trace-ID skew (C++ ID:0 packets / ID:2 gen-elems)",
-		},
+		{decoder: "ptm", goldenName: "tc2-ptm-rstk-t32", snapshotName: "tc2-ptm-rstk-t32"},
 		{
 			decoder: "ptm", goldenName: "trace_cov_a15", snapshotName: "trace_cov_a15",
 			// Same C++ PTM ID skew as tc2-ptm-rstk-t32: raw packets at ID:0,

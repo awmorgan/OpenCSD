@@ -338,9 +338,10 @@ func (p *Packet) getISyncStr() string {
 	}
 
 	if p.Context.UpdatedC {
-		fmt.Fprintf(&sb, "CtxtID=%08x; ", p.Context.CtxtID)
+		fmt.Fprintf(&sb, "CtxtID=0x%08x; ", p.Context.CtxtID)
 	}
 
+	sb.WriteString(" ")
 	sb.WriteString(p.getISAStr())
 
 	if p.CCValid {
