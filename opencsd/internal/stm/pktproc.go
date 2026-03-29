@@ -468,11 +468,11 @@ func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {
 				nibblesToSend = max(int(p.numNibbles)-22, 0)
 			}
 			bytesToSend := uint32((nibblesToSend / 2) + (nibblesToSend % 2))
-			// Clamp to the bytes actually available in the current dataIn window.
-			// If clearSyncCount() reset numFNibbles to 0 mid-loop, nibblesToSend
-			// would overcount and cause an out-of-bounds access.
-			if available := p.dataInSize - startOffset; bytesToSend > available {
-				bytesToSend = available
+			// Clamp output to the bytes actually consumed in this cycle
+			// to prevent reading unparsed future bytes or out-of-bounds memory.
+			consumedBytes := p.dataInUsed - startOffset
+			if bytesToSend > consumedBytes {
+				bytesToSend = consumedBytes
 			}
 			for i := range bytesToSend {
 				p.savePacketByte(p.dataIn[startOffset+i])

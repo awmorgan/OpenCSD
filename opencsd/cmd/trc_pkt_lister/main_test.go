@@ -280,10 +280,7 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 			decoder: "stm", goldenName: "stm_only-juno", snapshotName: "stm_only-juno",
 			expectedRunError: "trace packet lister: data path fatal response=",
 		},
-		{
-			decoder: "stm", goldenName: "stm_only", snapshotName: "stm_only",
-			normalizeReason: "legacy STM packet-byte wrapping/segment formatting instability in NOTSYNC records",
-		},
+		{decoder: "stm", goldenName: "stm_only", snapshotName: "stm_only"},
 	}
 
 	testCases := make([]listerGoldenCase, 0, len(manifest))
