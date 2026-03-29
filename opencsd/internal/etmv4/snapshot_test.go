@@ -596,36 +596,6 @@ func sanitizePPL(s string, traceIDs []string, includeGenElems bool) string {
 	return strings.Join(out, "\n")
 }
 
-func splitIdxRecords(line string) []string {
-	if !strings.Contains(line, "Idx:") {
-		return nil
-	}
-	starts := make([]int, 0, 2)
-	for pos := 0; pos < len(line); {
-		i := strings.Index(line[pos:], "Idx:")
-		if i < 0 {
-			break
-		}
-		starts = append(starts, pos+i)
-		pos += i + len("Idx:")
-	}
-	if len(starts) == 0 {
-		return nil
-	}
-	records := make([]string, 0, len(starts))
-	for i, st := range starts {
-		end := len(line)
-		if i+1 < len(starts) {
-			end = starts[i+1]
-		}
-		rec := strings.TrimSpace(line[st:end])
-		if strings.HasPrefix(rec, "Idx:") {
-			records = append(records, rec)
-		}
-	}
-	return records
-}
-
 func normalizeSnapshotLine(line string, includeGenElems bool) string {
 	if strings.Contains(line, "OCSD_GEN_TRC_ELEM_") {
 		if !includeGenElems {

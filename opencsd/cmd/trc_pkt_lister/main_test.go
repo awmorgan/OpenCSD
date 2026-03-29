@@ -535,22 +535,6 @@ func normalizeMappedRangeLine(line string) (string, bool) {
 	return "MAP_RANGE:" + rangePart, true
 }
 
-func extractNormalizedIDFromLine(line string) (string, bool) {
-	if !strings.HasPrefix(line, "ID:") {
-		return "", false
-	}
-	rest := strings.TrimPrefix(line, "ID:")
-	id, _, ok := strings.Cut(rest, ";")
-	if !ok {
-		return "", false
-	}
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return "", false
-	}
-	return id, true
-}
-
 func isNoSyncPacketLine(line string) bool {
 	return strings.Contains(line, "PKT:I_NOT_SYNC") || strings.Contains(line, "PKT:NOTSYNC") || strings.Contains(line, "PKT:ITM_NOTSYNC")
 }

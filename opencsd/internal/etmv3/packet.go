@@ -466,12 +466,6 @@ func (p *Packet) writeAtomStrCA(sb *strings.Builder) {
 	}
 }
 
-func (p *Packet) buildAtomStrCA() string {
-	var oss strings.Builder
-	p.writeAtomStrCA(&oss)
-	return oss.String()
-}
-
 func (p *Packet) writeISyncStr(sb *strings.Builder) {
 	reasons := []string{"Periodic", "Trace Enable", "Restart Overflow", "Debug Exit"}
 	reason := "Unknown"
@@ -508,12 +502,6 @@ func (p *Packet) writeISyncStr(sb *strings.Builder) {
 	}
 }
 
-func (p *Packet) buildISyncStr() string {
-	var sb strings.Builder
-	p.writeISyncStr(&sb)
-	return sb.String()
-}
-
 func (p *Packet) writeBranchAddressStr(sb *strings.Builder) {
 	sb.WriteString("Addr=")
 	sb.WriteString(p.addrValStr())
@@ -536,12 +524,6 @@ func (p *Packet) writeBranchAddressStr(sb *strings.Builder) {
 	}
 }
 
-func (p *Packet) buildBranchAddressStr() string {
-	var sb strings.Builder
-	p.writeBranchAddressStr(&sb)
-	return sb.String()
-}
-
 var armV7ExcepNames = []string{
 	"No Exception", "Debug Halt", "SMC", "Hyp",
 	"Async Data Abort", "Jazelle", "Reserved", "Reserved",
@@ -561,12 +543,6 @@ func (p *Packet) writeExcepStr(sb *strings.Builder) {
 	if p.ExceptionCancel {
 		sb.WriteString("; Cancel prev instr")
 	}
-}
-
-func (p *Packet) buildExcepStr() string {
-	var sb strings.Builder
-	p.writeExcepStr(&sb)
-	return sb.String()
 }
 
 func (p *Packet) String() string {

@@ -427,7 +427,6 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 				break
 			}
 			if ferr != nil {
-				err = ferr
 				break
 			}
 		}

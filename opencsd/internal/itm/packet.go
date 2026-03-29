@@ -184,12 +184,6 @@ func (p *Packet) writeHexVal(sb *strings.Builder) {
 	fmt.Fprintf(sb, "0x%0*x", valSz*2, p.Value)
 }
 
-func (p *Packet) hexVal() string {
-	var sb strings.Builder
-	p.writeHexVal(&sb)
-	return sb.String()
-}
-
 var dwtFlags = [...]struct {
 	bit DwtEcntr
 	str string
