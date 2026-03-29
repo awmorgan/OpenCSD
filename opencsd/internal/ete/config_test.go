@@ -38,6 +38,8 @@ func TestToETMv4Config_MapsDevArchVersionAndZerosETMOnlyRegs(t *testing.T) {
 	cfg.RegIdr11 = 0x33333333
 	cfg.RegIdr12 = 0x44444444
 	cfg.RegIdr13 = 0x55555555
+	cfg.RegConfigr = 0x0           // Clear it to ensure ToETMv4Config sets the WFI/WFE bit
+	cfg.ArchVer = ocsd.ArchUnknown // Clear it to ensure ToETMv4Config forces AA64
 
 	// maj=0x9 (bits 12-15), min=0x7 (bits 16-19)
 	cfg.RegDevArch = (0x9 << 12) | (0x7 << 16)
@@ -55,6 +57,14 @@ func TestToETMv4Config_MapsDevArchVersionAndZerosETMOnlyRegs(t *testing.T) {
 	min := (v4.RegIdr1 >> 4) & 0xF
 	if maj != 0x9 || min != 0x7 {
 		t.Fatalf("unexpected maj/min from RegDevArch: maj=%d min=%d", maj, min)
+	}
+
+	// NEW: Verify ETE overrides
+	if (v4.RegConfigr & (1 << 17)) == 0 {
+		t.Fatalf("expected RegConfigr bit 17 to be forced high for WFI/WFE branch tracing")
+	}
+	if v4.ArchVer != ocsd.ArchAA64 {
+		t.Fatalf("expected ArchVer to be forced to ArchAA64, got %v", v4.ArchVer)
 	}
 }
 

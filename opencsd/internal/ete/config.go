@@ -53,5 +53,12 @@ func (c *Config) ToETMv4Config() *etmv4.Config {
 	min := (c.RegDevArch >> 16) & 0xF
 	out.RegIdr1 = (out.RegIdr1 &^ uint32(0xFF0)) | (maj << 8) | (min << 4)
 
+	// Force WFI/WFE branch tracing (TRCCONFIGR bit 17).
+	// ETE always traces these, but the ETMv4 base decoder relies on this bit.
+	out.RegConfigr |= (1 << 17)
+
+	// Enforce AA64 architecture.
+	out.ArchVer = ocsd.ArchAA64
+
 	return &out
 }
