@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -478,11 +477,6 @@ func strictTraceListerOutput(s string, ignoreMappedRanges bool) string {
 	return strings.Join(out, "\n")
 }
 
-// normalizeTraceListerOutput applies aggressive normalization: blank-line
-// stripping, no-sync deduplication, idx-record canonicalization, and—when
-// multiple trace IDs are present—no-sync removal and ID-sorted reordering.
-// Use only for golden entries where a documented structural mismatch prevents
-// strict comparison (e.g. legacy PTM packet-layer vs. generic-element ID skew).
 func normalizeTraceListerOutput(ppl string, ignoreMappedRanges bool) string {
 	lines := strings.Split(normalizeNewlines(ppl), "\n")
 	out := make([]string, 0, len(lines))
@@ -519,42 +513,6 @@ func normalizeTraceListerOutput(ppl string, ignoreMappedRanges bool) string {
 			continue
 		}
 		collapsed = append(collapsed, line)
-	}
-
-	idSet := map[string]struct{}{}
-	for _, line := range collapsed {
-		if id, ok := extractNormalizedIDFromLine(line); ok {
-			idSet[id] = struct{}{}
-		}
-	}
-	if len(idSet) > 1 {
-		filtered := collapsed[:0]
-		for _, line := range collapsed {
-			if isNoSyncPacketLine(line) {
-				continue
-			}
-			filtered = append(filtered, line)
-		}
-		collapsed = filtered
-
-		ids := make([]string, 0, len(idSet))
-		for id := range idSet {
-			ids = append(ids, id)
-		}
-		slices.Sort(ids)
-
-		byID := make(map[string][]string, len(ids))
-		for _, line := range collapsed {
-			if id, ok := extractNormalizedIDFromLine(line); ok {
-				byID[id] = append(byID[id], line)
-			}
-		}
-
-		reordered := make([]string, 0, len(collapsed))
-		for _, id := range ids {
-			reordered = append(reordered, byID[id]...)
-		}
-		collapsed = reordered
 	}
 
 	return strings.Join(collapsed, "\n")
