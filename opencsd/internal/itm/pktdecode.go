@@ -60,9 +60,9 @@ func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.Base.MemAccess 
 // SetInstrDecode satisfies dcdtree's instrDecodeSetterOwner interface.
 func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.Base.InstrDecode = dec }
 
-// ConfigureComponentOpMode delegates to Base.
-func (d *PktDecode) ConfigureComponentOpMode(flags uint32) error {
-	return d.Base.ConfigureComponentOpMode(flags)
+// SetComponentOpMode delegates to Base.
+func (d *PktDecode) SetComponentOpMode(flags uint32) error {
+	return d.Base.SetComponentOpMode(flags)
 }
 
 // ComponentOpMode delegates to Base.

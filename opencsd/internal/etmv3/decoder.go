@@ -90,9 +90,9 @@ func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) { d.Base.TraceEle
 // traceElemOutIf returns the downstream GenElemProcessor (used as a func reference for outputElemList).
 func (d *PktDecode) traceElemOutIf() ocsd.GenElemProcessor { return d.Base.TraceElemOut }
 
-// ConfigureComponentOpMode delegates to Base.
-func (d *PktDecode) ConfigureComponentOpMode(flags uint32) error {
-	return d.Base.ConfigureComponentOpMode(flags)
+// SetComponentOpMode delegates to Base.
+func (d *PktDecode) SetComponentOpMode(flags uint32) error {
+	return d.Base.SetComponentOpMode(flags)
 }
 
 // ComponentOpMode delegates to Base.

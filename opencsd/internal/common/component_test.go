@@ -38,7 +38,7 @@ func TestComponentRuntimeViaDecoderBase(t *testing.T) {
 	}
 
 	b.ConfigureSupportedOpModes(0x0F)
-	err := b.ConfigureComponentOpMode(0x01)
+	err := b.SetComponentOpMode(0x01)
 	if err != nil {
 		t.Errorf("expected OK, got %v", err)
 	}
@@ -46,7 +46,7 @@ func TestComponentRuntimeViaDecoderBase(t *testing.T) {
 		t.Errorf("expected op mode 0x01, got 0x%x", b.ComponentOpMode())
 	}
 
-	err = b.ConfigureComponentOpMode(0x10)
+	err = b.SetComponentOpMode(0x10)
 	if err != nil {
 		t.Errorf("expected OK for unsupported-flag mask behaviour, got %v", err)
 	}

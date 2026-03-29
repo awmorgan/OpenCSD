@@ -138,10 +138,7 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 	manifest := []listerGoldenManifestEntry{
 		{decoder: "ete", goldenName: "001-ack_test", snapshotName: "001-ack_test"},
 		{decoder: "ete", goldenName: "002-ack_test_scr", snapshotName: "002-ack_test_scr"},
-		{
-			decoder: "ete", goldenName: "002-ack_test_scr_src_addr_N", snapshotName: "002-ack_test_scr",
-			normalizeReason: "legacy ETE generic-element range classification drift with -src_addr_n (known Go/C++ parity gap)",
-		},
+		{decoder: "ete", goldenName: "002-ack_test_scr_src_addr_N", snapshotName: "002-ack_test_scr"},
 		{decoder: "ete", goldenName: "ete-bc-instr", snapshotName: "ete-bc-instr"},
 		{decoder: "ete", goldenName: "ete-ite-instr", snapshotName: "ete-ite-instr"},
 		{decoder: "ete", goldenName: "ete-ite-instr_multi_sess", snapshotName: "ete-ite-instr"},

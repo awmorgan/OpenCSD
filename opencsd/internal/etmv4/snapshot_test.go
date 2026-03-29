@@ -376,13 +376,13 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 			}
 			if opts.extraOpFlags != 0 {
 				if opComp, ok := elem.DecoderHandle.(interface {
-					ConfigureComponentOpMode(uint32) error
+					SetComponentOpMode(uint32) error
 					ComponentOpMode() uint32
 					SupportedOpModes() uint32
 				}); ok {
 					flags := opts.extraOpFlags & opComp.SupportedOpModes()
 					if flags != 0 {
-						_ = opComp.ConfigureComponentOpMode(opComp.ComponentOpMode() | flags)
+						_ = opComp.SetComponentOpMode(opComp.ComponentOpMode() | flags)
 					}
 				}
 			}

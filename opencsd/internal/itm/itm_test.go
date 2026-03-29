@@ -262,7 +262,7 @@ func TestITMErrorCases(t *testing.T) {
 	}
 
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)
-	proc.ConfigureComponentOpMode(ocsd.OpflgPktprocErrBadPkts)
+	proc.SetComponentOpMode(ocsd.OpflgPktprocErrBadPkts)
 	_, resp, _ = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected fatal response for reserved header (Mode = %x, Resp = %v)", proc.ComponentOpMode(), resp)

@@ -74,8 +74,8 @@ func (b *DecoderBase) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
 	return level <= b.ErrVerbosity
 }
 
-// ConfigureComponentOpMode applies opFlags masked to the supported set.
-func (b *DecoderBase) ConfigureComponentOpMode(opFlags uint32) error {
+// SetComponentOpMode applies opFlags masked to the supported set.
+func (b *DecoderBase) SetComponentOpMode(opFlags uint32) error {
 	b.OpFlags = opFlags & b.SupportedOpFlags
 	return nil
 }
@@ -200,8 +200,8 @@ func (b *ProcBase[P]) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
 	return level <= b.ErrVerbosity
 }
 
-// ConfigureComponentOpMode applies opFlags masked to the supported set.
-func (b *ProcBase[P]) ConfigureComponentOpMode(opFlags uint32) error {
+// SetComponentOpMode applies opFlags masked to the supported set.
+func (b *ProcBase[P]) SetComponentOpMode(opFlags uint32) error {
 	b.OpFlags = opFlags & b.SupportedOpFlags
 	return nil
 }

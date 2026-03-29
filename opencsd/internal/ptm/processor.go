@@ -120,9 +120,9 @@ func (p *PktProc) PktOut() ocsd.PacketProcessor[Packet] { return p.PktOutI }
 // SetPktRawMonitor attaches a raw packet monitor.
 func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor[Packet]) { p.PktRawMonI = mon }
 
-// ConfigureComponentOpMode delegates to Base.
-func (p *PktProc) ConfigureComponentOpMode(flags uint32) error {
-	return p.Base.ConfigureComponentOpMode(flags)
+// SetComponentOpMode delegates to Base.
+func (p *PktProc) SetComponentOpMode(flags uint32) error {
+	return p.Base.SetComponentOpMode(flags)
 }
 
 // ComponentOpMode delegates to Base.

@@ -61,7 +61,7 @@ type eteGoldenTestCase struct {
 }
 
 type opModeComponent interface {
-	ConfigureComponentOpMode(opFlags uint32) error
+	SetComponentOpMode(opFlags uint32) error
 	ComponentOpMode() uint32
 	SupportedOpModes() uint32
 }
@@ -609,7 +609,7 @@ func applyOpModeFlags(tree *dcdtree.DecodeTree, flags uint32) {
 		if applyFlags == 0 {
 			return
 		}
-		_ = opComp.ConfigureComponentOpMode(opComp.ComponentOpMode() | applyFlags)
+		_ = opComp.SetComponentOpMode(opComp.ComponentOpMode() | applyFlags)
 	}
 	tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
 		if elem == nil {
