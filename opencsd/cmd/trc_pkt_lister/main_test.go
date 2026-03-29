@@ -507,15 +507,7 @@ func normalizeTraceListerOutput(ppl string, ignoreMappedRanges bool) string {
 		}
 	}
 
-	collapsed := make([]string, 0, len(out))
-	for _, line := range out {
-		if len(collapsed) > 0 && line == collapsed[len(collapsed)-1] && isNoSyncPacketLine(line) {
-			continue
-		}
-		collapsed = append(collapsed, line)
-	}
-
-	return strings.Join(collapsed, "\n")
+	return strings.Join(out, "\n")
 }
 
 func normalizeMappedRangeLine(line string) (string, bool) {
@@ -533,10 +525,6 @@ func normalizeMappedRangeLine(line string) (string, bool) {
 	// (for example, an unexpected "0x" prefix on the second address), while
 	// ignoring unrelated output differences such as memory-space naming.
 	return "MAP_RANGE:" + rangePart, true
-}
-
-func isNoSyncPacketLine(line string) bool {
-	return strings.Contains(line, "PKT:I_NOT_SYNC") || strings.Contains(line, "PKT:NOTSYNC") || strings.Contains(line, "PKT:ITM_NOTSYNC")
 }
 
 func splitIdxRecords(line string) []string {
