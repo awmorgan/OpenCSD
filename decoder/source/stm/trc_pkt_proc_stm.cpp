@@ -278,6 +278,12 @@ void TrcPktProcStm::waitForSync(const ocsd_trc_index_t blk_st_index)
         {
             uint8_t nibbles_to_send = m_num_nibbles - (m_is_sync ? 22 : m_num_F_nibbles);
             uint8_t bytes_to_send = (nibbles_to_send / 2) + (nibbles_to_send % 2);
+            uint32_t consumed_bytes = m_data_in_used - start_offset;
+            if (bytes_to_send > consumed_bytes) 
+            {
+                bytes_to_send = (uint8_t)consumed_bytes;
+            }
+
             for(uint8_t i = 0; i < bytes_to_send; i++)
                 savePacketByte(m_p_data_in[start_offset+i]);
         }
