@@ -178,6 +178,32 @@ func (dt *DecodeTree) CreatePacketProcessor(decoderName string, config any) erro
 	return fmt.Errorf("%w: %q (%w)", ErrCreatePacketProcessor, decoderName, err)
 }
 
+// AddDecoder registers an already-instantiated decoder into the tree.
+func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessor, handle any) error {
+	if dt.treeType == ocsd.TrcSrcSingle {
+		routeID = 0
+	}
+	if routeID >= 0x80 {
+		return ocsd.ErrInvalidID
+	}
+
+	if _, exists := dt.decodeElements[routeID]; exists {
+		return ocsd.ErrAttachTooMany
+	}
+
+	// No decoder manager is needed for direct injection.
+	elem := NewDecodeTreeElement(name, nil, handle, pktIn, true)
+	elem.Protocol = protocol
+
+	dt.decodeElements[routeID] = elem
+	if dt.frameDeformatter != nil && pktIn != nil {
+		dt.frameDeformatter.SetIDStream(routeID, pktIn)
+	}
+	dt.attachElementDependencies(elem)
+
+	return nil
+}
+
 func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder bool) error {
 	registry := dt.registry
 	if registry == nil {

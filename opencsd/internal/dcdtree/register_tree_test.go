@@ -294,6 +294,65 @@ func TestDecodeTreePrefersTypedManagerPath(t *testing.T) {
 	}
 }
 
+func TestDecodeTreeAddDecoderDirectInjection(t *testing.T) {
+	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0, NewBuiltinDecoderRegister())
+	if err != nil {
+		t.Fatalf("NewDecodeTree returned error: %v", err)
+	}
+	defer tree.Destroy()
+
+	pktIn := &fakeDataIn{}
+	handle := struct{}{}
+	if err := tree.AddDecoder(0x45, "direct", ocsd.ProtocolSTM, pktIn, handle); err != nil {
+		t.Fatalf("AddDecoder failed: %v", err)
+	}
+
+	elem, ok := tree.decodeElements[0]
+	if !ok {
+		t.Fatal("expected direct decoder to be attached at route 0 in single-source mode")
+	}
+	if elem.Protocol != ocsd.ProtocolSTM {
+		t.Fatalf("expected protocol %v, got %v", ocsd.ProtocolSTM, elem.Protocol)
+	}
+	if elem.DataIn != pktIn {
+		t.Fatal("expected injected packet processor to be preserved")
+	}
+	if elem.DecoderHandle != handle {
+		t.Fatal("expected injected decoder handle to be preserved")
+	}
+
+	err = tree.AddDecoder(0x00, "duplicate", ocsd.ProtocolSTM, pktIn, handle)
+	if !errors.Is(err, ocsd.ErrAttachTooMany) {
+		t.Fatalf("expected ErrAttachTooMany for duplicate route, got %v", err)
+	}
+}
+
+func TestDecodeTreeAddDecoderRejectsOutOfRangeRouteID(t *testing.T) {
+	tree, err := NewDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign, NewBuiltinDecoderRegister())
+	if err != nil {
+		t.Fatalf("NewDecodeTree returned error: %v", err)
+	}
+	defer tree.Destroy()
+
+	err = tree.AddDecoder(0x80, "direct", ocsd.ProtocolSTM, &fakeDataIn{}, struct{}{})
+	if !errors.Is(err, ocsd.ErrInvalidID) {
+		t.Fatalf("expected ErrInvalidID for route ID 0x80, got %v", err)
+	}
+}
+
+func TestNewDecodeTreeElementHandlesTypedNilManager(t *testing.T) {
+	var nilMgr *fakeManager
+	var mgr ocsd.DecoderManager = nilMgr
+
+	elem := NewDecodeTreeElement("typed-nil", mgr, struct{}{}, &fakeDataIn{}, true)
+	if elem == nil {
+		t.Fatal("expected non-nil decode tree element")
+	}
+	if elem.Protocol != ocsd.ProtocolUnknown {
+		t.Fatalf("expected unknown protocol when manager is typed nil, got %v", elem.Protocol)
+	}
+}
+
 func TestDecodeTreeErrorWrappersExposeSentinels(t *testing.T) {
 	reg := NewDecoderRegister()
 	if err := reg.Register("STM", &fakeManager{protocol: ocsd.ProtocolSTM}); err != nil {

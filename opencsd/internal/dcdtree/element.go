@@ -1,6 +1,8 @@
 package dcdtree
 
 import (
+	"reflect"
+
 	"opencsd/internal/common"
 
 	"opencsd/internal/ocsd"
@@ -35,7 +37,10 @@ type DecodeTreeElement struct {
 func NewDecodeTreeElement(name string, decoderManager ocsd.DecoderManager, dcdHandle any, dataIn ocsd.TrcDataProcessor, created bool) *DecodeTreeElement {
 	protocol := ocsd.ProtocolUnknown
 	if decoderManager != nil {
-		protocol = decoderManager.Protocol()
+		v := reflect.ValueOf(decoderManager)
+		if v.Kind() != reflect.Pointer || !v.IsNil() {
+			protocol = decoderManager.Protocol()
+		}
 	}
 
 	var setTraceElemOut func(ocsd.GenElemProcessor)
