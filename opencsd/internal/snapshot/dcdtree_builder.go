@@ -161,7 +161,7 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 		formatterFlags = ocsd.DfrmtrHasFsyncs
 	}
 
-	newTree, err := newDecodeTree(srcFormat, formatterFlags, b.registry)
+	newTree, err := newDecodeTree(srcFormat, formatterFlags)
 	if err != nil {
 		err = fmt.Errorf("failed to create decode tree object: %w", err)
 		b.reader.logError(err.Error())

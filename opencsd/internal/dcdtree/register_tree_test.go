@@ -8,12 +8,6 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-type testConfig struct {
-	id uint8
-}
-
-func (c testConfig) TraceID() uint8 { return c.id }
-
 type fakeDataIn struct{}
 
 func (f *fakeDataIn) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
@@ -36,23 +30,6 @@ func (m *fakeManager) CreateDecoder(instID int, config any) (ocsd.TrcDataProcess
 
 func (m *fakeManager) Protocol() ocsd.TraceProtocol {
 	return m.protocol
-}
-
-type fakeTypedManager struct {
-	fakeManager
-	packetProcessorCalled bool
-	decoderCalled         bool
-}
-
-func (m *fakeTypedManager) CreatePacketProcessor(instID int, config any) (ocsd.TrcDataProcessor, any, error) {
-	m.packetProcessorCalled = true
-	proc := &fakeDataIn{}
-	return proc, proc, nil
-}
-
-func (m *fakeTypedManager) CreateDecoder(instID int, config any) (ocsd.TrcDataProcessor, any, error) {
-	m.decoderCalled = true
-	return &fakeDataIn{}, struct{}{}, nil
 }
 
 func TestDecoderRegisterCustomProtocolAllocation(t *testing.T) {
@@ -172,7 +149,7 @@ func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 		}
 	}
 
-	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
+	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)
 	if err != nil {
 		t.Fatalf("NewDecodeTree returned error: %v", err)
 	}
@@ -181,8 +158,8 @@ func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	if err := tree.CreateFullDecoder(name, testConfig{id: 0x23}); err != nil {
-		t.Fatalf("CreateDecoder failed: %v", err)
+	if err := tree.AddDecoder(0x23, name, ocsd.ProtocolSTM, &fakeDataIn{}, struct{}{}); err != nil {
+		t.Fatalf("AddDecoder failed: %v", err)
 	}
 	if _, ok := tree.decodeElements[0]; !ok {
 		t.Fatalf("expected decoder to be routed to ID 0 in single-source mode")
@@ -217,85 +194,8 @@ func TestDecodeTreeElementIterationIsOrdered(t *testing.T) {
 	}
 }
 
-func TestDecodeTreeCreateDecoderRejectsOutOfRangeRouteID(t *testing.T) {
-	reg := NewBuiltinDecoderRegister()
-	name := "TEST_INVALID_ROUTE_ID"
-	if !reg.IsRegisteredDecoder(name) {
-		if err := reg.RegisterDecoderManagerByName(name, &fakeManager{protocol: ocsd.ProtocolSTM}); err != nil {
-			t.Fatalf("register manager failed: %v", err)
-		}
-	}
-
-	tree, err := NewDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign, reg)
-	if err != nil {
-		t.Fatalf("NewDecodeTree returned error: %v", err)
-	}
-	if tree == nil {
-		t.Fatal("NewDecodeTree returned nil")
-	}
-	defer tree.Destroy()
-
-	err = tree.CreateFullDecoder(name, testConfig{id: 0x80})
-	if !errors.Is(err, ocsd.ErrInvalidID) {
-		t.Fatalf("expected ErrInvalidID for route ID 0x80, got %v", err)
-	}
-}
-
-func TestNewDecodeTreeUsesInjectedRegistry(t *testing.T) {
-	const name = "TEST_LOCAL_REGISTRY_ONLY"
-	reg := NewDecoderRegister()
-	if err := reg.RegisterDecoderManagerByName(name, &fakeManager{protocol: ocsd.ProtocolSTM}); err != nil {
-		t.Fatalf("register manager failed: %v", err)
-	}
-
-	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
-	if err != nil {
-		t.Fatalf("NewDecodeTree returned error: %v", err)
-	}
-	if tree == nil {
-		t.Fatal("NewDecodeTree returned nil")
-	}
-	defer tree.Destroy()
-
-	if err := tree.CreateFullDecoder(name, testConfig{id: 0x11}); err != nil {
-		t.Fatalf("CreateDecoder failed using injected registry: %v", err)
-	}
-
-	if _, ok := tree.decodeElements[0]; !ok {
-		t.Fatal("expected decoder created from injected registry")
-	}
-}
-
-func TestDecodeTreePrefersTypedManagerPath(t *testing.T) {
-	const name = "TEST_TYPED_MANAGER_PATH"
-	reg := NewDecoderRegister()
-	mgr := &fakeTypedManager{fakeManager: fakeManager{protocol: ocsd.ProtocolSTM}}
-	if err := reg.RegisterDecoderManagerByName(name, mgr); err != nil {
-		t.Fatalf("register manager failed: %v", err)
-	}
-
-	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0, reg)
-	if err != nil {
-		t.Fatalf("NewDecodeTree returned error: %v", err)
-	}
-	if err := tree.CreateFullDecoder(name, testConfig{id: 0x12}); err != nil {
-		t.Fatalf("CreateDecoder failed: %v", err)
-	}
-	if !mgr.decoderCalled {
-		t.Fatal("expected DecodeTree to prefer the full-decoder path")
-	}
-
-	tree.RemoveDecoder(0x12)
-	if err := tree.CreatePacketProcessor(name, testConfig{id: 0x12}); err != nil {
-		t.Fatalf("CreateDecoder packet-proc path failed: %v", err)
-	}
-	if !mgr.packetProcessorCalled {
-		t.Fatal("expected DecodeTree to prefer the packet-processor path")
-	}
-}
-
 func TestDecodeTreeAddDecoderDirectInjection(t *testing.T) {
-	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0, NewBuiltinDecoderRegister())
+	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)
 	if err != nil {
 		t.Fatalf("NewDecodeTree returned error: %v", err)
 	}
@@ -328,7 +228,7 @@ func TestDecodeTreeAddDecoderDirectInjection(t *testing.T) {
 }
 
 func TestDecodeTreeAddDecoderRejectsOutOfRangeRouteID(t *testing.T) {
-	tree, err := NewDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign, NewBuiltinDecoderRegister())
+	tree, err := NewDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign)
 	if err != nil {
 		t.Fatalf("NewDecodeTree returned error: %v", err)
 	}
@@ -353,36 +253,8 @@ func TestNewDecodeTreeElementHandlesTypedNilManager(t *testing.T) {
 	}
 }
 
-func TestDecodeTreeErrorWrappersExposeSentinels(t *testing.T) {
-	reg := NewDecoderRegister()
-	if err := reg.Register("STM", &fakeManager{protocol: ocsd.ProtocolSTM}); err != nil {
-		t.Fatalf("register manager failed: %v", err)
-	}
-
-	tree, err := NewDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign, reg)
-	if err != nil {
-		t.Fatalf("NewDecodeTree returned error: %v", err)
-	}
-	if tree == nil {
-		t.Fatal("NewDecodeTree returned nil")
-	}
-	defer tree.Destroy()
-
-	if err := tree.CreateFullDecoder("STM", testConfig{id: 0x80}); err == nil {
-		t.Fatal("expected CreateFullDecoder to fail for out-of-range route id")
-	} else if !errors.Is(err, ErrCreateFullDecoder) {
-		t.Fatalf("expected ErrCreateFullDecoder sentinel, got %v", err)
-	}
-
-	if err := tree.CreatePacketProcessor("UNKNOWN_DECODER", testConfig{id: 0x10}); err == nil {
-		t.Fatal("expected CreatePacketProcessor to fail for unknown decoder")
-	} else if !errors.Is(err, ErrCreatePacketProcessor) {
-		t.Fatalf("expected ErrCreatePacketProcessor sentinel, got %v", err)
-	}
-}
-
 func TestDecodeTreeTraceDataInContextCancelled(t *testing.T) {
-	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0, NewBuiltinDecoderRegister())
+	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)
 	if err != nil {
 		t.Fatalf("NewDecodeTree returned error: %v", err)
 	}
@@ -407,7 +279,7 @@ func TestDecodeTreeTraceDataInContextCancelled(t *testing.T) {
 }
 
 func TestNewDecodeTreeFailsOnInvalidFrameFormatterConfig(t *testing.T) {
-	tree, err := NewDecodeTree(ocsd.TrcSrcFrameFormatted, 0, NewBuiltinDecoderRegister())
+	tree, err := NewDecodeTree(ocsd.TrcSrcFrameFormatted, 0)
 	if err == nil {
 		t.Fatal("expected constructor to fail for invalid formatter config")
 	}
@@ -420,7 +292,7 @@ func TestNewDecodeTreeFailsOnInvalidFrameFormatterConfig(t *testing.T) {
 }
 
 func TestNewDecodeTreeBuildsFrameTreeOnValidFormatterConfig(t *testing.T) {
-	tree, err := NewDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign, NewBuiltinDecoderRegister())
+	tree, err := NewDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign)
 	if err != nil {
 		t.Fatalf("expected constructor success, got %v", err)
 	}

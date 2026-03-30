@@ -134,7 +134,7 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		srcType = ocsd.TrcSrcSingle
 	}
 
-	tree, err := dcdtree.NewDefaultDecodeTree(srcType, formatterFlags)
+	tree, err := dcdtree.NewDecodeTree(srcType, formatterFlags)
 	if err != nil {
 		return nil, fmt.Errorf("create decode tree: %w", err)
 	}
@@ -167,8 +167,14 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			cfg.RegCCER = uint32(testutil.ParseHexOrDec(val))
 		}
 
-		if err := tree.CreateFullDecoder(ocsd.BuiltinDcdPTM, cfg); err != nil {
-			return nil, fmt.Errorf("create PTM decoder for %s failed: %v", srcDevName, err)
+		traceID := cfg.TraceID()
+		proc, dec, err := ptm.NewConfiguredPipeline(int(traceID), cfg)
+		if err != nil {
+			return nil, fmt.Errorf("create PTM pipeline for %s failed: %v", srcDevName, err)
+		}
+
+		if err := tree.AddDecoder(traceID, ocsd.BuiltinDcdPTM, ocsd.ProtocolPTM, proc, dec); err != nil {
+			return nil, fmt.Errorf("attach PTM decoder for %s failed: %v", srcDevName, err)
 		}
 		ptmDecoders++
 	}

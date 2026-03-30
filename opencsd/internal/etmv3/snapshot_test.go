@@ -217,7 +217,7 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		srcType = ocsd.TrcSrcSingle
 	}
 
-	tree, err := dcdtree.NewDefaultDecodeTree(srcType, formatterFlags)
+	tree, err := dcdtree.NewDecodeTree(srcType, formatterFlags)
 	if err != nil {
 		return nil, fmt.Errorf("create decode tree: %w", err)
 	}
@@ -255,8 +255,14 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			cfg.RegCCER = uint32(testutil.ParseHexOrDec(val))
 		}
 
-		if err := tree.CreateFullDecoder(ocsd.BuiltinDcdETMV3, cfg); err != nil {
-			return nil, fmt.Errorf("create ETMv3 decoder for %s failed: %v", srcDevName, err)
+		traceID := cfg.TraceID()
+		proc, dec, err := etmv3.NewConfiguredPipeline(int(traceID), cfg)
+		if err != nil {
+			return nil, fmt.Errorf("create ETMv3 pipeline for %s failed: %v", srcDevName, err)
+		}
+
+		if err := tree.AddDecoder(traceID, ocsd.BuiltinDcdETMV3, ocsd.ProtocolETMV3, proc, dec); err != nil {
+			return nil, fmt.Errorf("attach ETMv3 decoder for %s failed: %v", srcDevName, err)
 		}
 		etmDecoders++
 	}

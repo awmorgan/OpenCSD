@@ -126,7 +126,7 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 		srcType = ocsd.TrcSrcSingle
 	}
 
-	tree, err := dcdtree.NewDefaultDecodeTree(srcType, formatterFlags)
+	tree, err := dcdtree.NewDecodeTree(srcType, formatterFlags)
 	if err != nil {
 		return nil, fmt.Errorf("create decode tree: %w", err)
 	}
@@ -149,8 +149,14 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 			cfg.RegTCSR = uint32(testutil.ParseHexOrDec(val))
 		}
 
-		if err := tree.CreateFullDecoder(ocsd.BuiltinDcdSTM, cfg); err != nil {
-			return nil, fmt.Errorf("create STM decoder for %s failed: %v", srcDevName, err)
+		traceID := cfg.TraceID()
+		proc, dec, err := stm.NewConfiguredPipeline(int(traceID), cfg)
+		if err != nil {
+			return nil, fmt.Errorf("create STM pipeline for %s failed: %v", srcDevName, err)
+		}
+
+		if err := tree.AddDecoder(traceID, ocsd.BuiltinDcdSTM, ocsd.ProtocolSTM, proc, dec); err != nil {
+			return nil, fmt.Errorf("attach STM decoder for %s failed: %v", srcDevName, err)
 		}
 		stmDecoders++
 	}

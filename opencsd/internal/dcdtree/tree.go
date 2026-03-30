@@ -29,7 +29,6 @@ var (
 // and read from during TraceDataIn. Concurrent configuration and data processing
 // will result in a runtime panic.
 type DecodeTree struct {
-	registry         *DecoderRegister
 	treeType         ocsd.DcdTreeSrc
 	frameDeformatter *demux.FrameDeformatter
 	decodeElements   map[uint8]*DecodeTreeElement
@@ -43,19 +42,10 @@ type DecodeTree struct {
 	genElemOut  ocsd.GenElemProcessor
 }
 
-type traceIDConfig interface {
-	TraceID() uint8
-}
-
 // NewDecodeTree creates a new Trace Decode Tree using the supplied decoder registry.
 // A non-nil registry is required.
-func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32, registry *DecoderRegister) (*DecodeTree, error) {
-	if registry == nil {
-		return nil, fmt.Errorf("%w: nil decoder registry", ErrCreateDecodeTree)
-	}
-
+func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) (*DecodeTree, error) {
 	dt := &DecodeTree{
-		registry:       registry,
 		treeType:       srcType,
 		decodeElements: make(map[uint8]*DecodeTreeElement),
 		instrDecode:    idec.NewDecoder(),
@@ -70,21 +60,6 @@ func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32, registry *
 	}
 
 	return dt, nil
-}
-
-// NewDefaultDecodeTree creates a new Trace Decode Tree using a fresh built-in registry.
-func NewDefaultDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) (*DecodeTree, error) {
-	return NewDecodeTree(srcType, formatterCfgFlags, NewBuiltinDecoderRegister())
-}
-
-// CreateDecodeTree creates a new Trace Decode Tree using the package default registry.
-// Deprecated: prefer NewDefaultDecodeTree.
-func CreateDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) *DecodeTree {
-	tree, err := NewDefaultDecodeTree(srcType, formatterCfgFlags)
-	if err != nil {
-		return nil
-	}
-	return tree
 }
 
 // Destroy cleans up memory accessors (although GC does mostly).
@@ -160,24 +135,6 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 	return 0, ocsd.RespFatalNotInit, nil
 }
 
-// CreateFullDecoder creates a full decoder within the tree for a generic trace config.
-func (dt *DecodeTree) CreateFullDecoder(decoderName string, config any) error {
-	err := dt.createDecoder(decoderName, config, true)
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("%w: %q (%w)", ErrCreateFullDecoder, decoderName, err)
-}
-
-// CreatePacketProcessor creates a packet processor within the tree for a generic trace config.
-func (dt *DecodeTree) CreatePacketProcessor(decoderName string, config any) error {
-	err := dt.createDecoder(decoderName, config, false)
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("%w: %q (%w)", ErrCreatePacketProcessor, decoderName, err)
-}
-
 // AddDecoder registers an already-instantiated decoder into the tree.
 func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessor, handle any) error {
 	if dt.treeType == ocsd.TrcSrcSingle {
@@ -202,74 +159,6 @@ func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.Trace
 	dt.attachElementDependencies(elem)
 
 	return nil
-}
-
-func (dt *DecodeTree) createDecoder(decoderName string, config any, fullDecoder bool) error {
-	registry := dt.registry
-	if registry == nil {
-		return ocsd.ErrNotInit
-	}
-
-	manager, err := registry.DecoderManagerByName(decoderName)
-	if err != nil {
-		return err
-	}
-
-	routeID, err := dt.routeIDFromConfig(config)
-	if err != nil {
-		return err
-	}
-
-	if _, exists := dt.decodeElements[routeID]; exists {
-		return ocsd.ErrAttachTooMany
-	}
-
-	var pktIn ocsd.TrcDataProcessor
-	var handle any
-
-	if fullDecoder {
-		var err2 error
-		pktIn, handle, err2 = manager.CreateDecoder(int(routeID), config)
-		if err2 != nil {
-			return err2
-		}
-	} else {
-		var err2 error
-		pktIn, handle, err2 = manager.CreatePacketProcessor(int(routeID), config)
-		if err2 != nil {
-			return err2
-		}
-	}
-
-	if handle == nil {
-		return ocsd.ErrFail
-	}
-
-	elem := NewDecodeTreeElement(decoderName, manager, handle, pktIn, true)
-	dt.decodeElements[routeID] = elem
-
-	if dt.frameDeformatter != nil && pktIn != nil {
-		dt.frameDeformatter.SetIDStream(routeID, pktIn)
-	}
-	dt.attachElementDependencies(elem)
-
-	return nil
-}
-
-func (dt *DecodeTree) routeIDFromConfig(config any) (uint8, error) {
-	cfg, ok := config.(traceIDConfig)
-	if !ok {
-		return 0, ocsd.ErrInvalidParamType
-	}
-
-	routeID := cfg.TraceID()
-	if dt.treeType == ocsd.TrcSrcSingle {
-		routeID = 0
-	}
-	if routeID >= 0x80 {
-		return 0, ocsd.ErrInvalidID
-	}
-	return routeID, nil
 }
 
 func (dt *DecodeTree) attachElementDependencies(elem *DecodeTreeElement) {

@@ -284,7 +284,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		srcType = ocsd.TrcSrcSingle
 	}
 
-	tree, err := dcdtree.NewDefaultDecodeTree(srcType, formatterFlags)
+	tree, err := dcdtree.NewDecodeTree(srcType, formatterFlags)
 	if err != nil {
 		return nil, fmt.Errorf("create decode tree: %w", err)
 	}
@@ -352,13 +352,24 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		cfg.ArchVer = ocsd.ArchV8
 		cfg.CoreProf = ocsd.ProfileCortexA
 
+		var proc ocsd.TrcDataProcessor
+		var dec any
 		var err error
+
+		// Conditionally instantiate either the processor alone, or the full pipeline
 		if packetOnly {
-			err = tree.CreatePacketProcessor(ocsd.BuiltinDcdETMV4I, cfg)
+			proc, err = etmv4.NewConfiguredProcessor(cfg)
+			// 'dec' remains nil
 		} else {
-			err = tree.CreateFullDecoder(ocsd.BuiltinDcdETMV4I, cfg)
+			proc, dec, err = etmv4.NewConfiguredPipeline(int(cfg.TraceID()), cfg)
 		}
 
+		if err != nil {
+			return nil, fmt.Errorf("create ETMv4 pipeline for %s failed: %v", srcDevName, err)
+		}
+
+		// Inject into the DecodeTree
+		err = tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec)
 		if err != nil {
 			return nil, fmt.Errorf("create ETMv4 decoder for %s failed: %v", srcDevName, err)
 		}

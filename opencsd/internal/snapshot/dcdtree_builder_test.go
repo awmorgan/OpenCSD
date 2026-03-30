@@ -46,7 +46,7 @@ func TestCreatePEDecoderRoutesETMv4(t *testing.T) {
 	t.Parallel()
 
 	b := NewDecodeTreeBuilder(NewReader())
-	tree, err := dcdtree.NewDecodeTree(ocsd.TrcSrcSingle, ocsd.DfrmtrFrameMemAlign, dcdtree.NewBuiltinDecoderRegister())
+	tree, err := dcdtree.NewDecodeTree(ocsd.TrcSrcSingle, ocsd.DfrmtrFrameMemAlign)
 	if err != nil {
 		t.Fatalf("NewDecodeTree returned error: %v", err)
 	}
@@ -92,8 +92,8 @@ func TestBuildPropagatesFormatterConfigFailure(t *testing.T) {
 
 	origNewDecodeTree := newDecodeTree
 	t.Cleanup(func() { newDecodeTree = origNewDecodeTree })
-	newDecodeTree = func(srcType ocsd.DcdTreeSrc, _ uint32, registry *dcdtree.DecoderRegister) (*dcdtree.DecodeTree, error) {
-		return dcdtree.NewDecodeTree(srcType, 0, registry)
+	newDecodeTree = func(srcType ocsd.DcdTreeSrc, _ uint32) (*dcdtree.DecodeTree, error) {
+		return dcdtree.NewDecodeTree(srcType, 0)
 	}
 
 	tree, err := b.Build("BUF0", true)

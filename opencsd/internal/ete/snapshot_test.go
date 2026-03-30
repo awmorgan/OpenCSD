@@ -165,7 +165,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 		srcType = ocsd.TrcSrcSingle
 	}
 
-	tree, err := dcdtree.NewDefaultDecodeTree(srcType, formatterFlags)
+	tree, err := dcdtree.NewDecodeTree(srcType, formatterFlags)
 	if err != nil {
 		return nil, fmt.Errorf("create decode tree: %w", err)
 	}
@@ -216,11 +216,16 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 			continue
 		}
 
-		if err := tree.CreateFullDecoder(ocsd.BuiltinDcdETE, cfg); err != nil {
+		proc, dec, err := ete.NewConfiguredPipeline(int(traceID), cfg)
+		if err != nil {
+			return nil, fmt.Errorf("create ETE pipeline for %s failed: %v", srcDevName, err)
+		}
+
+		if err := tree.AddDecoder(traceID, ocsd.BuiltinDcdETE, ocsd.ProtocolETE, proc, dec); err != nil {
 			if errors.Is(err, ocsd.ErrAttachTooMany) {
 				continue
 			}
-			return nil, fmt.Errorf("create ETE decoder for %s failed: %v", srcDevName, err)
+			return nil, fmt.Errorf("attach ETE decoder for %s failed: %v", srcDevName, err)
 		}
 		eteDecoders++
 		seenTraceIDs[traceID] = struct{}{}
