@@ -179,6 +179,7 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 		{decoder: "ete", goldenName: "ts_marker", snapshotName: "ts_marker"},
 		{
 			decoder: "etmv3", goldenName: "TC2", snapshotName: "TC2",
+			//todo: remove this (and others)
 			normalizeReason: "legacy ETMv3 TC2 packet-vs-generic-element sequencing mismatch around P-header emission",
 		},
 		{
