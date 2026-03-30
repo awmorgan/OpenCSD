@@ -196,10 +196,7 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 			decoder: "etmv4", goldenName: "juno_r1_1_badopcode", snapshotName: "juno_r1_1",
 			normalizeReason: "legacy ETMv4 bad-opcode recovery behavior differs (bad-packet no-sync vs decoded range)",
 		},
-		{
-			decoder: "etmv4", goldenName: "juno_r1_1_badopcode_flag", snapshotName: "juno_r1_1",
-			normalizeReason: "legacy ETMv4 bad-opcode recovery behavior differs (bad-packet no-sync vs decoded range)",
-		},
+		{decoder: "etmv4", goldenName: "juno_r1_1_badopcode_flag", snapshotName: "juno_r1_1"},
 		{
 			decoder: "etmv4", goldenName: "juno_r1_1_rangelimit", snapshotName: "juno_r1_1",
 			normalizeReason: "legacy ETMv4 range-limit recovery behavior differs from C++ golden output",
@@ -213,21 +210,13 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 		},
 		{decoder: "itm", goldenName: "itm_only_csformat", snapshotName: "itm_only_csformat"},
 		{decoder: "itm", goldenName: "itm_only_raw", snapshotName: "itm_only_raw"},
-		{
-			decoder: "ptm", goldenName: "Snowball", snapshotName: "Snowball",
-			normalizeReason: "legacy PTM packet text formatting instability (spacing/token formatting drift)",
-		},
+		{decoder: "ptm", goldenName: "Snowball", snapshotName: "Snowball"},
 		{
 			decoder: "ptm", goldenName: "TC2", snapshotName: "TC2",
 			normalizeReason: "legacy PTM TC2 packet-vs-generic-element sequencing mismatch around P-header emission",
 		},
 		{decoder: "ptm", goldenName: "tc2-ptm-rstk-t32", snapshotName: "tc2-ptm-rstk-t32"},
-		{
-			decoder: "ptm", goldenName: "trace_cov_a15", snapshotName: "trace_cov_a15",
-			// Same C++ PTM ID skew as tc2-ptm-rstk-t32: raw packets at ID:0,
-			// generic elements at ID:2.
-			normalizeReason: "legacy PTM packet-layer vs. generic-element trace-ID skew (C++ ID:0 packets / ID:2 gen-elems)",
-		},
+		{decoder: "ptm", goldenName: "trace_cov_a15", snapshotName: "trace_cov_a15"},
 		{decoder: "stm", goldenName: "stm-issue-27", snapshotName: "stm-issue-27"}, {decoder: "stm", goldenName: "stm_only-2", snapshotName: "stm_only-2"},
 		{
 			decoder: "stm", goldenName: "stm_only-juno", snapshotName: "stm_only-juno",
