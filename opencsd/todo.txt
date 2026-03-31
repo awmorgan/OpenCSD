@@ -2,26 +2,6 @@ To answer your direct question: **No, using "base classes" like `ProcBase` and `
 
 Here is a step-by-step incremental refactoring plan to rid your codebase of these C++-isms and make it idiomatic Go, moving from easy wins to deeper architectural changes.
 
-### Step 2: Eliminate Two-Phase Initialization (`Init()` methods)
-C++ code often relies on empty constructors followed by an `Init()` method because of how C++ handles virtual tables and memory allocation. 
-```go
-// Current C++-style approach
-d.Base.Init(fmt.Sprintf("%s_%d", "DCD_ETMV3", instID), logger)
-```
-**The Go Way:** Go prefers factory functions (`New...`) that return fully initialized, ready-to-use structs. You should remove the `Init()` methods on the base structs and initialize their fields directly inside your `NewPktDecode` and `NewPktProc` functions.
-```go
-func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
-    return &PktDecode{
-        DecoderBase: common.DecoderBase{
-            Name:         fmt.Sprintf("DCD_ETMV3_%d", instID),
-            Logger:       logger,
-            ErrVerbosity: ocsd.ErrSevNone,
-            // ... other initializations
-        },
-        // ...
-    }
-}
-```
 
 ### Step 3: Break Down the Monolithic Base Classes (Composition)
 `DecoderBase` and `ProcBase` are "God objects." They know about Logging, Error Verbosity, Operational Flags, Memory Access, and Instruction Decoding. In Go, you should separate these concerns into smaller, injected dependencies.
