@@ -14,141 +14,7 @@ func (f *fakeDataIn) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBl
 	return uint32(len(dataBlock)), ocsd.RespCont, nil
 }
 
-type fakeManager struct {
-	protocol ocsd.TraceProtocol
-}
-
-func (m *fakeManager) CreatePacketProcessor(instID int, config any) (ocsd.TrcDataProcessor, any, error) {
-	proc := &fakeDataIn{}
-	return proc, proc, nil
-
-}
-
-func (m *fakeManager) CreateDecoder(instID int, config any) (ocsd.TrcDataProcessor, any, error) {
-	return &fakeDataIn{}, struct{}{}, nil
-}
-
-func (m *fakeManager) Protocol() ocsd.TraceProtocol {
-	return m.protocol
-}
-
-func TestDecoderRegisterCustomProtocolAllocation(t *testing.T) {
-	r := NewDecoderRegister()
-
-	if got := r.NextCustomProtocolID(); got != ocsd.ProtocolCustom0 {
-		t.Fatalf("expected first custom protocol %v, got %v", ocsd.ProtocolCustom0, got)
-	}
-	if got := r.NextCustomProtocolID(); got != ocsd.ProtocolCustom1 {
-		t.Fatalf("expected second custom protocol %v, got %v", ocsd.ProtocolCustom1, got)
-	}
-
-	r.ReleaseLastCustomProtocolID()
-	if got := r.NextCustomProtocolID(); got != ocsd.ProtocolCustom1 {
-		t.Fatalf("expected released id to be reused (%v), got %v", ocsd.ProtocolCustom1, got)
-	}
-}
-
-func TestDecoderRegisterTypeMapKeepsFirst(t *testing.T) {
-	r := NewDecoderRegister()
-	first := &fakeManager{protocol: ocsd.ProtocolSTM}
-	second := &fakeManager{protocol: ocsd.ProtocolSTM}
-
-	if err := r.RegisterDecoderManagerByName("FIRST", first); err != nil {
-		t.Fatalf("register first failed: %v", err)
-	}
-	if err := r.RegisterDecoderManagerByName("SECOND", second); err != nil {
-		t.Fatalf("register second failed: %v", err)
-	}
-
-	m, err := r.DecoderManagerByType(ocsd.ProtocolSTM)
-	if err != nil {
-		t.Fatalf("DecoderManagerByType failed: %v", err)
-	}
-	if m != first {
-		t.Fatalf("expected first manager to stay registered for type, got %p want %p", m, first)
-	}
-}
-
-func TestDecoderRegisterErrorReturningAPIs(t *testing.T) {
-	r := NewDecoderRegister()
-	mgr := &fakeManager{protocol: ocsd.ProtocolSTM}
-
-	if err := r.Register("STM", mgr); err != nil {
-		t.Fatalf("Register failed: %v", err)
-	}
-
-	gotByName, err := r.DecoderManagerByName("STM")
-	if err != nil {
-		t.Fatalf("DecoderManagerByName failed: %v", err)
-	}
-	if gotByName != mgr {
-		t.Fatalf("DecoderManagerByName returned wrong manager: got %p want %p", gotByName, mgr)
-	}
-
-	gotByType, err := r.DecoderManagerByType(ocsd.ProtocolSTM)
-	if err != nil {
-		t.Fatalf("DecoderManagerByType failed: %v", err)
-	}
-	if gotByType != mgr {
-		t.Fatalf("DecoderManagerByType returned wrong manager: got %p want %p", gotByType, mgr)
-	}
-
-	if _, err := r.DecoderManagerByName("UNKNOWN"); err == nil {
-		t.Fatal("DecoderManagerByName expected error for unknown manager")
-	} else if !errors.Is(err, ErrDecoderManagerNotFound) {
-		t.Fatalf("expected ErrDecoderManagerNotFound, got %v", err)
-	}
-
-	if err := r.Register("STM", mgr); err == nil {
-		t.Fatal("expected duplicate register to fail")
-	} else if !errors.Is(err, ErrDecoderRegistration) {
-		t.Fatalf("expected ErrDecoderRegistration, got %v", err)
-	}
-}
-
-func TestDecoderRegisterNamedIterationSorted(t *testing.T) {
-	r := NewDecoderRegister()
-	_ = r.RegisterDecoderManagerByName("ZED", &fakeManager{protocol: ocsd.ProtocolETMV3})
-	_ = r.RegisterDecoderManagerByName("ALPHA", &fakeManager{protocol: ocsd.ProtocolPTM})
-	_ = r.RegisterDecoderManagerByName("MID", &fakeManager{protocol: ocsd.ProtocolITM})
-
-	names := r.Names()
-	want := []string{"ALPHA", "MID", "ZED"}
-	if len(names) != len(want) {
-		t.Fatalf("expected %d names, got %d", len(want), len(names))
-	}
-	for i := range want {
-		if names[i] != want[i] {
-			t.Fatalf("expected sorted names %v, got %v", want, names)
-		}
-	}
-}
-
-func TestNewBuiltinDecoderRegisterIncludesBuiltins(t *testing.T) {
-	r := NewBuiltinDecoderRegister()
-	for _, name := range []string{
-		ocsd.BuiltinDcdSTM,
-		ocsd.BuiltinDcdITM,
-		ocsd.BuiltinDcdPTM,
-		ocsd.BuiltinDcdETMV3,
-		ocsd.BuiltinDcdETMV4I,
-		ocsd.BuiltinDcdETE,
-	} {
-		if !r.IsRegisteredDecoder(name) {
-			t.Fatalf("expected built-in decoder %q to be registered", name)
-		}
-	}
-}
-
 func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
-	reg := NewBuiltinDecoderRegister()
-	name := "TEST_SINGLE_REMOVE_DECODER"
-	if !reg.IsRegisteredDecoder(name) {
-		if err := reg.RegisterDecoderManagerByName(name, &fakeManager{protocol: ocsd.ProtocolSTM}); err != nil {
-			t.Fatalf("register manager failed: %v", err)
-		}
-	}
-
 	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)
 	if err != nil {
 		t.Fatalf("NewDecodeTree returned error: %v", err)
@@ -158,7 +24,7 @@ func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	if err := tree.AddDecoder(0x23, name, ocsd.ProtocolSTM, &fakeDataIn{}, struct{}{}); err != nil {
+	if err := tree.AddDecoder(0x23, "TEST_SINGLE", ocsd.ProtocolSTM, &fakeDataIn{}, struct{}{}); err != nil {
 		t.Fatalf("AddDecoder failed: %v", err)
 	}
 	if _, ok := tree.decodeElements[0]; !ok {
@@ -237,19 +103,6 @@ func TestDecodeTreeAddDecoderRejectsOutOfRangeRouteID(t *testing.T) {
 	err = tree.AddDecoder(0x80, "direct", ocsd.ProtocolSTM, &fakeDataIn{}, struct{}{})
 	if !errors.Is(err, ocsd.ErrInvalidID) {
 		t.Fatalf("expected ErrInvalidID for route ID 0x80, got %v", err)
-	}
-}
-
-func TestNewDecodeTreeElementHandlesTypedNilManager(t *testing.T) {
-	var nilMgr *fakeManager
-	var mgr ocsd.DecoderManager = nilMgr
-
-	elem := NewDecodeTreeElement("typed-nil", mgr, struct{}{}, &fakeDataIn{}, true)
-	if elem == nil {
-		t.Fatal("expected non-nil decode tree element")
-	}
-	if elem.Protocol != ocsd.ProtocolUnknown {
-		t.Fatalf("expected unknown protocol when manager is typed nil, got %v", elem.Protocol)
 	}
 }
 

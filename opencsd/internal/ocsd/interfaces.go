@@ -61,11 +61,3 @@ type PacketMonitor[P any] interface {
 type RawFrameProcessor interface {
 	TraceRawFrameIn(op DatapathOp, index TrcIndex, frameElem RawframeElem, data []byte, traceID uint8) DatapathResp
 }
-
-// DecoderManager identifies a registered decoder manager by protocol.
-// It provides construction of packet processors and full decoders.
-type DecoderManager interface {
-	CreatePacketProcessor(instID int, config any) (TrcDataProcessor, any, error)
-	CreateDecoder(instID int, config any) (TrcDataProcessor, any, error)
-	Protocol() TraceProtocol
-}

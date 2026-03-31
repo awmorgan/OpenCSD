@@ -853,10 +853,6 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 	return ocsd.RespCont
 }
 
-// DecoderManager is the registry factory for ETMv3 decoders
-type DecoderManager struct {
-}
-
 // NewConfiguredPktProc creates an ETMv3 packet processor with a typed config.
 func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, error) {
 	if cfg == nil {
@@ -889,40 +885,4 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, error
 	}
 	proc.SetPktOut(dec)
 	return proc, dec, nil
-}
-
-func typedConfig(config any) (*Config, error) {
-	cfg, ok := config.(*Config)
-	if !ok {
-		return nil, ocsd.ErrInvalidParamType
-	}
-	return cfg, nil
-}
-
-func (m *DecoderManager) CreatePacketProcessor(instID int, config any) (ocsd.TrcDataProcessor, any, error) {
-	cfg, err := typedConfig(config)
-	if err != nil {
-		return nil, nil, err
-	}
-	proc, createErr := NewConfiguredPktProc(instID, cfg)
-	if createErr != nil {
-		return nil, nil, createErr
-	}
-	return proc, proc, nil
-}
-
-func (m *DecoderManager) CreateDecoder(instID int, config any) (ocsd.TrcDataProcessor, any, error) {
-	cfg, err := typedConfig(config)
-	if err != nil {
-		return nil, nil, err
-	}
-	proc, dec, createErr := NewConfiguredPipeline(instID, cfg)
-	if createErr != nil {
-		return nil, nil, createErr
-	}
-	return proc, dec, nil
-}
-
-func (m *DecoderManager) Protocol() ocsd.TraceProtocol {
-	return ocsd.ProtocolETMV3
 }

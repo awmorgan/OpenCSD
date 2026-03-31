@@ -100,7 +100,6 @@ func mapDumpMemSpace(space string) ocsd.MemSpaceAcc {
 // DecodeTreeBuilder builds a decode tree from snapshot metadata.
 type DecodeTreeBuilder struct {
 	reader         *Reader
-	registry       *dcdtree.DecoderRegister
 	tree           *dcdtree.DecodeTree
 	packetProcOnly bool
 	bufferFileName string
@@ -108,18 +107,8 @@ type DecodeTreeBuilder struct {
 
 // NewDecodeTreeBuilder creates a new builder for DecodeTree from a snapshot.
 func NewDecodeTreeBuilder(r *Reader) *DecodeTreeBuilder {
-	return NewDecodeTreeBuilderWithRegistry(r, nil)
-}
-
-// NewDecodeTreeBuilderWithRegistry creates a new builder with an explicit decoder registry.
-// If registry is nil, a new built-in registry instance is created for this builder.
-func NewDecodeTreeBuilderWithRegistry(r *Reader, registry *dcdtree.DecoderRegister) *DecodeTreeBuilder {
-	if registry == nil {
-		registry = dcdtree.NewBuiltinDecoderRegister()
-	}
 	return &DecodeTreeBuilder{
-		reader:   r,
-		registry: registry,
+		reader: r,
 	}
 }
 

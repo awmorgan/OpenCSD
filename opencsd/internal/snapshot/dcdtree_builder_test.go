@@ -64,16 +64,6 @@ func TestCreatePEDecoderRoutesETMv4(t *testing.T) {
 	}
 }
 
-func TestNewDecodeTreeBuilderWithRegistryStoresRegistry(t *testing.T) {
-	t.Parallel()
-
-	reg := dcdtree.NewDecoderRegister()
-	b := NewDecodeTreeBuilderWithRegistry(NewReader(), reg)
-	if b.registry != reg {
-		t.Fatal("expected builder to keep the injected registry")
-	}
-}
-
 func TestBuildPropagatesFormatterConfigFailure(t *testing.T) {
 	reader := NewReader()
 	reader.readOK = true

@@ -149,7 +149,7 @@ func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.Trace
 	}
 
 	// No decoder manager is needed for direct injection.
-	elem := NewDecodeTreeElement(name, nil, handle, pktIn, true)
+	elem := NewDecodeTreeElement(name, handle, pktIn, true)
 	elem.Protocol = protocol
 
 	dt.decodeElements[routeID] = elem

@@ -7,14 +7,7 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-func TestDecoderManagerProtocolType(t *testing.T) {
-	m := &DecoderManager{}
-	if got := m.Protocol(); got != ocsd.ProtocolETE {
-		t.Fatalf("Protocol=%v want %v", got, ocsd.ProtocolETE)
-	}
-}
-
-func TestDecoderManagerCreatePktProcAndDecode(t *testing.T) {
+func TestCreatePktProcAndDecode(t *testing.T) {
 	cfg := NewConfig()
 
 	proc, err := NewConfiguredProcessor(cfg)
@@ -31,18 +24,6 @@ func TestDecoderManagerCreatePktProcAndDecode(t *testing.T) {
 	}
 	if dec == nil {
 		t.Fatalf("NewConfiguredPktDecode returned nil")
-	}
-}
-
-func TestDecoderManagerCreateDecoder(t *testing.T) {
-	cfg := NewConfig()
-
-	in, handle, err := (&DecoderManager{}).CreateDecoder(3, cfg)
-	if err != nil {
-		t.Fatalf("CreateDecoder err=%v", err)
-	}
-	if in == nil || handle == nil {
-		t.Fatalf("CreateDecoder returned nil outputs")
 	}
 }
 
@@ -63,26 +44,6 @@ func TestTypedPipelineConstructors(t *testing.T) {
 	}
 	if procOnly, decOnly, err := NewConfiguredPipeline(0, nil); procOnly != nil || decOnly != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 		t.Fatalf("expected nil-config pipeline constructor failure, got proc=%v dec=%v err=%v", procOnly, decOnly, err)
-	}
-}
-
-func TestDecoderManagerRejectsWrongConfigType(t *testing.T) {
-	m := &DecoderManager{}
-
-	in, handle, err := m.CreatePacketProcessor(0, struct{}{})
-	if !errors.Is(err, ocsd.ErrInvalidParamVal) {
-		t.Fatalf("CreatePacketProcessor err=%v want %v", err, ocsd.ErrInvalidParamVal)
-	}
-	if in != nil || handle != nil {
-		t.Fatalf("CreatePacketProcessor expected nil outputs for wrong config type")
-	}
-
-	in, handle, err = m.CreateDecoder(0, struct{}{})
-	if !errors.Is(err, ocsd.ErrInvalidParamVal) {
-		t.Fatalf("CreateDecoder err=%v want %v", err, ocsd.ErrInvalidParamVal)
-	}
-	if in != nil || handle != nil {
-		t.Fatalf("CreateDecoder expected nil outputs for wrong config type")
 	}
 }
 

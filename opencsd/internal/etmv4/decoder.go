@@ -2016,9 +2016,6 @@ func (d *PktDecode) pushP0ElemITE(rootPkt PktType, rootIndex ocsd.TrcIndex, ite 
 	d.p0Stack = append(d.p0Stack, e)
 }
 
-// DecoderManager is the registry factory for ETMv4 decoders
-type DecoderManager struct{}
-
 // NewConfiguredProcessor creates an ETMv4 packet processor with a typed config.
 func NewConfiguredProcessor(cfg *Config) (*Processor, error) {
 	if cfg == nil {
@@ -2049,40 +2046,4 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, err
 	}
 	proc.SetPktOut(decoder)
 	return proc, decoder, nil
-}
-
-func typedConfig(config any) (*Config, error) {
-	cfg, ok := config.(*Config)
-	if !ok {
-		return nil, ocsd.ErrInvalidParamVal
-	}
-	return cfg, nil
-}
-
-func (m *DecoderManager) CreatePacketProcessor(instID int, config any) (ocsd.TrcDataProcessor, any, error) {
-	cfg, err := typedConfig(config)
-	if err != nil {
-		return nil, nil, err
-	}
-	proc, createErr := NewConfiguredProcessor(cfg)
-	if createErr != nil {
-		return nil, nil, createErr
-	}
-	return proc, proc, nil
-}
-
-func (m *DecoderManager) CreateDecoder(instID int, config any) (ocsd.TrcDataProcessor, any, error) {
-	cfg, err := typedConfig(config)
-	if err != nil {
-		return nil, nil, err
-	}
-	proc, decoder, createErr := NewConfiguredPipeline(instID, cfg)
-	if createErr != nil {
-		return nil, nil, createErr
-	}
-	return proc, decoder, nil
-}
-
-func (m *DecoderManager) Protocol() ocsd.TraceProtocol {
-	return ocsd.ProtocolETMV4I
 }
