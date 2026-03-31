@@ -114,9 +114,8 @@ type elemRes struct {
 }
 
 // PktDecode decodes ETMv4 trace packets into generic trace elements.
-// It uses composition (Base DecoderBase) instead of inheritance.
 type PktDecode struct {
-	Base common.DecoderBase
+	common.DecoderBase
 
 	Config       *Config
 	CurrPacketIn *TracePacket
@@ -170,24 +169,13 @@ type PktDecode struct {
 }
 
 // SetTraceElemOut satisfies dcdtree's traceElemSetterOwner interface.
-func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) { d.Base.TraceElemOut = out }
+func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) { d.TraceElemOut = out }
 
 // SetMemAccess satisfies dcdtree's memAccSetterOwner interface.
-func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.Base.MemAccess = mem }
+func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.MemAccess = mem }
 
 // SetInstrDecode satisfies dcdtree's instrDecodeSetterOwner interface.
-func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.Base.InstrDecode = dec }
-
-// SetComponentOpMode delegates to Base for snapshot-test type assertions.
-func (d *PktDecode) SetComponentOpMode(flags uint32) error {
-	return d.Base.SetComponentOpMode(flags)
-}
-
-// ComponentOpMode delegates to Base for snapshot-test type assertions.
-func (d *PktDecode) ComponentOpMode() uint32 { return d.Base.ComponentOpMode() }
-
-// SupportedOpModes delegates to Base for snapshot-test type assertions.
-func (d *PktDecode) SupportedOpModes() uint32 { return d.Base.SupportedOpModes() }
+func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.InstrDecode = dec }
 
 func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 	d := &PktDecode{}
@@ -195,8 +183,8 @@ func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 	if cfg != nil {
 		instIDNum = int(cfg.TraceID())
 	}
-	d.Base.Init(fmt.Sprintf("DCD_ETMV4_%d", instIDNum), logger)
-	d.Base.ConfigureSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms | ocsd.OpflgPktdecAA64OpcodeChk)
+	d.Init(fmt.Sprintf("DCD_ETMV4_%d", instIDNum), logger)
+	d.ConfigureSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms | ocsd.OpflgPktdecAA64OpcodeChk)
 	if cfg != nil {
 		_ = d.SetProtocolConfig(cfg)
 	} else {
@@ -208,19 +196,19 @@ func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *TracePacket) ocsd.DatapathResp {
 	resp := ocsd.RespCont
 
-	if reason := d.Base.DecodeNotReadyReason(); reason != "" {
-		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason))
+	if reason := d.DecodeNotReadyReason(); reason != "" {
+		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason))
 		return ocsd.RespFatalNotInit
 	}
 
 	switch op {
 	case ocsd.OpData:
 		if pktIn == nil {
-			d.Base.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
+			d.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			d.CurrPacketIn = pktIn
-			d.Base.IndexCurrPkt = indexSOP
+			d.IndexCurrPkt = indexSOP
 			resp = d.ProcessPacket()
 		}
 	case ocsd.OpEOT:
@@ -230,14 +218,14 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 	case ocsd.OpReset:
 		resp = d.OnReset()
 	default:
-		d.Base.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
+		d.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return resp
 }
 
 func (d *PktDecode) accessMemory(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
-	return d.Base.AccessMemory(address, d.TraceID(), memSpace, reqBytes)
+	return d.AccessMemory(address, d.TraceID(), memSpace, reqBytes)
 }
 
 func (d *PktDecode) TraceID() uint8 {
@@ -278,7 +266,7 @@ func (d *PktDecode) configureDecoder() {
 }
 
 // traceElemOutIf returns the downstream GenElemProcessor (used as a func reference for outElem).
-func (d *PktDecode) traceElemOutIf() ocsd.GenElemProcessor { return d.Base.TraceElemOut }
+func (d *PktDecode) traceElemOutIf() ocsd.GenElemProcessor { return d.TraceElemOut }
 
 func (d *PktDecode) SetProtocolConfig(config *Config) error {
 	d.Config = config
@@ -286,7 +274,7 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 	if d.config == nil {
 		return ocsd.ErrInvalidParamVal
 	}
-	d.Base.ConfigInitOK = true
+	d.ConfigInitOK = true
 	// Extract basic config elements
 	d.maxSpecDepth = int(d.config.MaxSpecDepth())
 	d.configureDecoder()
@@ -333,11 +321,11 @@ func (d *PktDecode) SetInstrRangeLimit(limit uint32) {
 }
 
 func (d *PktDecode) syncAA64OpcodeCheckMode() {
-	enabled := d.aa64BadOpcode || (d.Base.ComponentOpMode()&ocsd.OpflgPktdecAA64OpcodeChk) != 0
-	if d.Base.InstrDecode == nil {
+	enabled := d.aa64BadOpcode || (d.ComponentOpMode()&ocsd.OpflgPktdecAA64OpcodeChk) != 0
+	if d.InstrDecode == nil {
 		return
 	}
-	if setter, ok := d.Base.InstrDecode.(interface{ SetAA64ErrOnBadOpcode(bool) }); ok {
+	if setter, ok := d.InstrDecode.(interface{ SetAA64ErrOnBadOpcode(bool) }); ok {
 		setter.SetAA64ErrOnBadOpcode(enabled)
 	}
 }
@@ -392,7 +380,7 @@ func (d *PktDecode) commitElemOnEOT() error {
 	}
 
 	if err == nil {
-		err = d.outElem.AddElemType(d.Base.IndexCurrPkt, ocsd.GenElemEOTrace)
+		err = d.outElem.AddElemType(d.IndexCurrPkt, ocsd.GenElemEOTrace)
 		reason := ocsd.UnsyncEOT
 		if d.prevOverflow {
 			reason = ocsd.UnsyncOverflow
@@ -407,7 +395,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	err := d.commitElemOnEOT()
 	if err != nil {
 		resp = ocsd.RespFatalInvalidData
-		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error flushing element stack at end of trace data", err))
+		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error flushing element stack at end of trace data", err))
 	} else {
 		resp = d.outElem.SendElements()
 	}
@@ -440,7 +428,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 		case noSync:
 			err = d.outElem.ResetElemStack()
 			if err == nil {
-				err = d.outElem.AddElemType(d.Base.IndexCurrPkt, ocsd.GenElemNoSync)
+				err = d.outElem.AddElemType(d.IndexCurrPkt, ocsd.GenElemNoSync)
 				if err == nil {
 					d.outElem.CurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
 					resp = d.outElem.SendElements()
@@ -573,39 +561,39 @@ func (d *PktDecode) decodePacket() error {
 	case PktAsync, PktIgnore:
 		// Do nothing
 	case PktTraceInfo:
-		d.pushP0ElemParam(p0TInfo, false, pkt.Type, d.Base.IndexCurrPkt, nil)
+		d.pushP0ElemParam(p0TInfo, false, pkt.Type, d.IndexCurrPkt, nil)
 	case PktTraceOn:
-		d.pushP0ElemParam(p0TrcOn, false, pkt.Type, d.Base.IndexCurrPkt, nil)
+		d.pushP0ElemParam(p0TrcOn, false, pkt.Type, d.IndexCurrPkt, nil)
 	case PktAtomF1, PktAtomF2, PktAtomF3, PktAtomF4, PktAtomF5, PktAtomF6:
-		d.pushP0ElemAtom(pkt.Type, d.Base.IndexCurrPkt, pkt.Atom)
+		d.pushP0ElemAtom(pkt.Type, d.IndexCurrPkt, pkt.Atom)
 		d.currSpecDepth += int(pkt.Atom.Num)
 	case PktCtxt:
-		d.pushP0ElemContext(pkt.Type, d.Base.IndexCurrPkt, pkt.Context, d.lastIS)
+		d.pushP0ElemContext(pkt.Type, d.IndexCurrPkt, pkt.Context, d.lastIS)
 	case PktAddrMatch:
 		addr := pkt.VAddr
 		d.lastIS = pkt.VAddrISA
-		d.pushP0ElemAddr(pkt.Type, d.Base.IndexCurrPkt, addr, d.lastIS, false)
+		d.pushP0ElemAddr(pkt.Type, d.IndexCurrPkt, addr, d.lastIS, false)
 		isAddr = true
 	case PktAddrCtxtL_64IS0, PktAddrCtxtL_64IS1, PktAddrCtxtL_32IS0, PktAddrCtxtL_32IS1:
 		d.lastIS = pkt.VAddrISA
-		d.pushP0ElemContext(pkt.Type, d.Base.IndexCurrPkt, pkt.Context, d.lastIS)
+		d.pushP0ElemContext(pkt.Type, d.IndexCurrPkt, pkt.Context, d.lastIS)
 		fallthrough
 	case PktAddrL_32IS0, PktAddrL_32IS1, PktAddrL_64IS0, PktAddrL_64IS1, PktAddrS_IS0, PktAddrS_IS1:
 		addr := pkt.VAddr
 		d.lastIS = pkt.VAddrISA
-		d.pushP0ElemAddr(pkt.Type, d.Base.IndexCurrPkt, addr, d.lastIS, false)
+		d.pushP0ElemAddr(pkt.Type, d.IndexCurrPkt, addr, d.lastIS, false)
 		isAddr = true
 	case ETE_PktSrcAddrMatch, ETE_PktSrcAddrS_IS0, ETE_PktSrcAddrS_IS1, ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1, ETE_PktSrcAddrL_64IS0, ETE_PktSrcAddrL_64IS1:
 		addr := pkt.VAddr
 		d.lastIS = pkt.VAddrISA
-		d.pushP0ElemAddr(pkt.Type, d.Base.IndexCurrPkt, addr, d.lastIS, true)
+		d.pushP0ElemAddr(pkt.Type, d.IndexCurrPkt, addr, d.lastIS, true)
 		d.currSpecDepth++
 	case PktExcept:
-		d.pushP0ElemExcept(pkt.Type, d.Base.IndexCurrPkt, pkt.ExceptionInfo.AddrInterp == 0x2, pkt.ExceptionInfo.ExceptionType)
+		d.pushP0ElemExcept(pkt.Type, d.IndexCurrPkt, pkt.ExceptionInfo.AddrInterp == 0x2, pkt.ExceptionInfo.ExceptionType)
 		d.elemPendingAddr = true
 	case PktExceptRtn:
 		bV7MProfile := (d.config.ArchVer == ocsd.ArchV7) && (d.config.CoreProf == ocsd.ProfileCortexM)
-		d.pushP0ElemParam(p0ExcepRet, bV7MProfile, pkt.Type, d.Base.IndexCurrPkt, nil)
+		d.pushP0ElemParam(p0ExcepRet, bV7MProfile, pkt.Type, d.IndexCurrPkt, nil)
 		if bV7MProfile {
 			d.currSpecDepth++
 		}
@@ -615,7 +603,7 @@ func (d *PktDecode) decodePacket() error {
 		e.p0Type = p0Q
 		e.isP0 = true
 		e.rootPkt = pkt.Type
-		e.rootIndex = d.Base.IndexCurrPkt
+		e.rootIndex = d.IndexCurrPkt
 		e.qCount = int(pkt.QPkt.QCount)
 		if pkt.QPkt.AddrPresent {
 			e.qHasAddr = true
@@ -630,21 +618,21 @@ func (d *PktDecode) decodePacket() error {
 	case PktFuncRet:
 		// P0 element iff V8-M profile, otherwise ignored.
 		if ocsd.IsV8Arch(d.config.ArchVer) && d.config.CoreProf == ocsd.ProfileCortexM {
-			d.pushP0ElemParam(p0FuncRet, true, pkt.Type, d.Base.IndexCurrPkt, nil)
+			d.pushP0ElemParam(p0FuncRet, true, pkt.Type, d.IndexCurrPkt, nil)
 			d.currSpecDepth++
 		}
 
 	case PktBadSequence:
-		d.handleBadPacket(d.Base.IndexCurrPkt, "Bad byte sequence in packet.")
+		d.handleBadPacket(d.IndexCurrPkt, "Bad byte sequence in packet.")
 
 	case PktBadTraceMode:
-		d.handleBadPacket(d.Base.IndexCurrPkt, "Invalid packet type for trace mode.")
+		d.handleBadPacket(d.IndexCurrPkt, "Invalid packet type for trace mode.")
 
 	case PktReserved:
-		d.handleBadPacket(d.Base.IndexCurrPkt, "Reserved packet header")
+		d.handleBadPacket(d.IndexCurrPkt, "Reserved packet header")
 
 	case PktReservedCfg:
-		d.handleBadPacket(d.Base.IndexCurrPkt, "Reserved packet header for current configuration")
+		d.handleBadPacket(d.IndexCurrPkt, "Reserved packet header for current configuration")
 
 	// ETE timestamp marker compatibility alias
 	case PktTypeTS_MARKER:
@@ -652,24 +640,24 @@ func (d *PktDecode) decodePacket() error {
 			Type:  ocsd.ElemMarkerTS,
 			Value: 0,
 		}
-		d.pushP0ElemMarker(pkt.Type, d.Base.IndexCurrPkt, marker)
+		d.pushP0ElemMarker(pkt.Type, d.IndexCurrPkt, marker)
 
 	// ETE transactional memory packet compatibility aliases
 	case PktTypeTRANS_ST:
-		d.pushP0ElemParam(p0TransStart, d.config.CommTransP0(), pkt.Type, d.Base.IndexCurrPkt, nil)
+		d.pushP0ElemParam(p0TransStart, d.config.CommTransP0(), pkt.Type, d.IndexCurrPkt, nil)
 		if d.config.CommTransP0() {
 			d.currSpecDepth++
 		}
 
 	case PktTypeTRANS_COMMIT:
-		d.pushP0ElemParam(p0TransCommit, false, pkt.Type, d.Base.IndexCurrPkt, nil)
+		d.pushP0ElemParam(p0TransCommit, false, pkt.Type, d.IndexCurrPkt, nil)
 
 	case PktTypeTRANS_FAIL:
-		d.pushP0ElemParam(p0TransFail, false, pkt.Type, d.Base.IndexCurrPkt, nil)
+		d.pushP0ElemParam(p0TransFail, false, pkt.Type, d.IndexCurrPkt, nil)
 
 	// ETE PE reset (exception without address) compatibility alias
 	case PktTypePE_RESET:
-		d.pushP0ElemExcept(pkt.Type, d.Base.IndexCurrPkt, false, pkt.ExceptionInfo.ExceptionType)
+		d.pushP0ElemExcept(pkt.Type, d.IndexCurrPkt, false, pkt.ExceptionInfo.ExceptionType)
 
 	// ETE instrumentation packet compatibility alias
 	case PktTypeITE:
@@ -677,7 +665,7 @@ func (d *PktDecode) decodePacket() error {
 			EL:    pkt.ITEPkt.EL,
 			Value: pkt.ITEPkt.Value,
 		}
-		d.pushP0ElemITE(pkt.Type, d.Base.IndexCurrPkt, ite)
+		d.pushP0ElemITE(pkt.Type, d.IndexCurrPkt, ite)
 
 	// ETE timestamp marker
 	case ETE_PktTSMarker:
@@ -685,24 +673,24 @@ func (d *PktDecode) decodePacket() error {
 			Type:  ocsd.ElemMarkerTS,
 			Value: 0,
 		}
-		d.pushP0ElemMarker(pkt.Type, d.Base.IndexCurrPkt, marker)
+		d.pushP0ElemMarker(pkt.Type, d.IndexCurrPkt, marker)
 
 	// ETE transactional memory packets
 	case ETE_PktTransSt:
-		d.pushP0ElemParam(p0TransStart, d.config.CommTransP0(), pkt.Type, d.Base.IndexCurrPkt, nil)
+		d.pushP0ElemParam(p0TransStart, d.config.CommTransP0(), pkt.Type, d.IndexCurrPkt, nil)
 		if d.config.CommTransP0() {
 			d.currSpecDepth++
 		}
 
 	case ETE_PktTransCommit:
-		d.pushP0ElemParam(p0TransCommit, false, pkt.Type, d.Base.IndexCurrPkt, nil)
+		d.pushP0ElemParam(p0TransCommit, false, pkt.Type, d.IndexCurrPkt, nil)
 
 	case ETE_PktTransFail:
-		d.pushP0ElemParam(p0TransFail, false, pkt.Type, d.Base.IndexCurrPkt, nil)
+		d.pushP0ElemParam(p0TransFail, false, pkt.Type, d.IndexCurrPkt, nil)
 
 	// ETE PE reset (exception without address)
 	case ETE_PktPeReset:
-		d.pushP0ElemExcept(pkt.Type, d.Base.IndexCurrPkt, false, pkt.ExceptionInfo.ExceptionType)
+		d.pushP0ElemExcept(pkt.Type, d.IndexCurrPkt, false, pkt.ExceptionInfo.ExceptionType)
 
 	// ETE instrumentation packet
 	case ETE_PktITE:
@@ -710,17 +698,17 @@ func (d *PktDecode) decodePacket() error {
 			EL:    pkt.ITEPkt.EL,
 			Value: pkt.ITEPkt.Value,
 		}
-		d.pushP0ElemITE(pkt.Type, d.Base.IndexCurrPkt, ite)
+		d.pushP0ElemITE(pkt.Type, d.IndexCurrPkt, ite)
 
 	// event trace
 	case PktEvent:
 		params := []uint32{uint32(pkt.EventVal)}
-		d.pushP0ElemParam(p0Event, false, pkt.Type, d.Base.IndexCurrPkt, params)
+		d.pushP0ElemParam(p0Event, false, pkt.Type, d.IndexCurrPkt, params)
 
 	// cycle count packets
 	case PktCcntF1, PktCcntF2, PktCcntF3:
 		params := []uint32{pkt.CycleCount}
-		d.pushP0ElemParam(p0CC, false, pkt.Type, d.Base.IndexCurrPkt, params)
+		d.pushP0ElemParam(p0CC, false, pkt.Type, d.IndexCurrPkt, params)
 		d.elemRes.P0Commit = int(pkt.CommitElements)
 
 	// timestamp
@@ -738,13 +726,13 @@ func (d *PktDecode) decodePacket() error {
 		if bTSwithCC {
 			p0Type = p0TSCC
 		}
-		d.pushP0ElemParam(p0Type, false, pkt.Type, d.Base.IndexCurrPkt, params)
+		d.pushP0ElemParam(p0Type, false, pkt.Type, d.IndexCurrPkt, params)
 
 	// speculation - mispredict/cancel with atoms
 	case PktMispredict, PktCancelF1Mispred, PktCancelF2, PktCancelF3:
 		d.elemRes.Mispredict = true
 		if pkt.Atom.Num > 0 {
-			d.pushP0ElemAtom(pkt.Type, d.Base.IndexCurrPkt, pkt.Atom)
+			d.pushP0ElemAtom(pkt.Type, d.IndexCurrPkt, pkt.Atom)
 			d.currSpecDepth += int(pkt.Atom.Num)
 		}
 		d.elemRes.P0Cancel = int(pkt.CancelElements)
@@ -829,7 +817,7 @@ func (d *PktDecode) commitElements() error {
 					if err == nil {
 						d.updateContext(elem, d.outElem.CurrElem())
 						contextFlush = true
-						d.Base.InvalidateMemAccCache(d.TraceID())
+						d.InvalidateMemAccCache(d.TraceID())
 					}
 				}
 
@@ -1164,7 +1152,7 @@ func (d *PktDecode) traceInstrToWP(rangeOut *instrRange, res *wpRes, traceToAddr
 		if bytesRead == 4 {
 			opcode := uint32(memData[0]) | uint32(memData[1])<<8 | uint32(memData[2])<<16 | uint32(memData[3])<<24
 			d.instrInfo.Opcode = opcode
-			err = d.Base.InstrDecodeCall(&d.instrInfo)
+			err = d.InstrDecodeCall(&d.instrInfo)
 			if err != nil {
 				break
 			}
@@ -1187,7 +1175,7 @@ func (d *PktDecode) traceInstrToWP(rangeOut *instrRange, res *wpRes, traceToAddr
 			val := uint16(memData[0]) | uint16(memData[1])<<8
 			if (val & 0xF800) < 0xE800 { // valid 16-bit Thumb encoding
 				d.instrInfo.Opcode = uint32(val)
-				err = d.Base.InstrDecodeCall(&d.instrInfo)
+				err = d.InstrDecodeCall(&d.instrInfo)
 				if err != nil {
 					break
 				}
@@ -1232,7 +1220,7 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, elem *p0Elem) error {
 			d.needAddr = true
 			d.needCtxt = true
 			{
-				d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Warning: unsupported instruction set processing atom packet", err))
+				d.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Warning: unsupported instruction set processing atom packet", err))
 			}
 			return nil
 		}
@@ -1328,7 +1316,7 @@ func (d *PktDecode) processException(elem *p0Elem) error {
 		}
 
 		if idx >= len(d.p0Stack) || d.p0Stack[idx].p0Type != p0Addr {
-			return d.handlePacketSeqErr(ocsd.ErrBadPacketSeq, d.Base.IndexCurrPkt, "Address missing in exception packet.")
+			return d.handlePacketSeqErr(ocsd.ErrBadPacketSeq, d.IndexCurrPkt, "Address missing in exception packet.")
 		}
 		pAddressElem = d.p0Stack[idx]
 		excepRetAddr = pAddressElem.addrVal
@@ -1379,9 +1367,9 @@ func (d *PktDecode) processException(elem *p0Elem) error {
 				if err == ocsd.ErrUnsupportedISA {
 					d.needAddr = true
 					d.needCtxt = true
-					d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Warning: unsupported instruction set processing exception packet", err))
+					d.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Warning: unsupported instruction set processing exception packet", err))
 				} else {
-					d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error processing exception packet", err))
+					d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error processing exception packet", err))
 				}
 				return err
 			}
@@ -1456,7 +1444,7 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 			d.outElem.CurrElem().Payload.ExceptionNum = uint32(d.getCurrMemSpace())
 			return err
 		}
-		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Mem access error processing source address packet", errMem))
+		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Mem access error processing source address packet", errMem))
 		return errMem
 	}
 
@@ -1470,9 +1458,9 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 	opcode := uint32(memData[0]) | uint32(memData[1])<<8 | uint32(memData[2])<<16 | uint32(memData[3])<<24
 	d.instrInfo.Opcode = opcode
 	d.instrInfo.InstrAddr = srcAddr
-	err = d.Base.InstrDecodeCall(&d.instrInfo)
+	err = d.InstrDecodeCall(&d.instrInfo)
 	if err != nil {
-		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Instruction decode error processing source address packet", err))
+		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Instruction decode error processing source address packet", err))
 		return err
 	}
 	d.instrInfo.InstrAddr += ocsd.VAddr(d.instrInfo.InstrSize)
@@ -1517,7 +1505,7 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 
 				if bytesRead == 4 {
 					instr.Opcode = uint32(mData[0]) | uint32(mData[1])<<8 | uint32(mData[2])<<16 | uint32(mData[3])<<24
-					eDec := d.Base.InstrDecodeCall(&instr)
+					eDec := d.InstrDecodeCall(&instr)
 					if eDec != nil {
 						return eDec
 					}
@@ -1589,7 +1577,7 @@ func (d *PktDecode) processQElement(elem *p0Elem) error {
 		}
 
 		if idx >= len(d.p0Stack) || d.p0Stack[idx].p0Type != p0Addr {
-			d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Address missing in Q packet", ocsd.ErrBadPacketSeq))
+			d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Address missing in Q packet", ocsd.ErrBadPacketSeq))
 			return ocsd.ErrBadPacketSeq
 		}
 		pAddressElem = d.p0Stack[idx]
@@ -1630,7 +1618,7 @@ func (d *PktDecode) processQElement(elem *p0Elem) error {
 		if bytesRead == 4 {
 			opcode := uint32(memData[0]) | uint32(memData[1])<<8 | uint32(memData[2])<<16 | uint32(memData[3])<<24
 			d.instrInfo.Opcode = opcode
-			eDec := d.Base.InstrDecodeCall(&d.instrInfo)
+			eDec := d.InstrDecodeCall(&d.instrInfo)
 			if eDec != nil {
 				break
 			}
@@ -1647,7 +1635,7 @@ func (d *PktDecode) processQElement(elem *p0Elem) error {
 			val := uint16(memData[0]) | uint16(memData[1])<<8
 			if (val & 0xF800) < 0xE800 { // valid 16-bit Thumb encoding
 				d.instrInfo.Opcode = uint32(val)
-				eDec := d.Base.InstrDecodeCall(&d.instrInfo)
+				eDec := d.InstrDecodeCall(&d.instrInfo)
 				if eDec != nil {
 					break
 				}
@@ -1735,7 +1723,7 @@ func (d *PktDecode) cancelElements() error {
 			}
 		} else {
 			err = ocsd.ErrCommitPktOverrun
-			err = d.handlePacketSeqErr(err, d.Base.IndexCurrPkt, "Not enough elements to cancel")
+			err = d.handlePacketSeqErr(err, d.IndexCurrPkt, "Not enough elements to cancel")
 			d.elemRes.P0Cancel = 0
 			break
 		}
@@ -1776,7 +1764,7 @@ func (d *PktDecode) mispredictAtom() error {
 	}
 
 	if !foundAtom {
-		err = d.handlePacketSeqErr(ocsd.ErrCommitPktOverrun, d.Base.IndexCurrPkt, "Not found mispredict atom")
+		err = d.handlePacketSeqErr(ocsd.ErrCommitPktOverrun, d.IndexCurrPkt, "Not found mispredict atom")
 	}
 	d.elemRes.Mispredict = false
 	return err
@@ -1825,18 +1813,18 @@ func (d *PktDecode) doTraceInfoPacket() {
 
 	// create unseen
 	for i := 0; i < d.currSpecDepth; i++ {
-		d.pushP0ElemParam(p0UnseenUncommitted, true, pkt.Type, d.Base.IndexCurrPkt, nil)
+		d.pushP0ElemParam(p0UnseenUncommitted, true, pkt.Type, d.IndexCurrPkt, nil)
 	}
 
-	d.pushP0ElemParam(p0TInfo, false, pkt.Type, d.Base.IndexCurrPkt, nil)
+	d.pushP0ElemParam(p0TInfo, false, pkt.Type, d.IndexCurrPkt, nil)
 
 	if pkt.TraceInfo.InTransState {
-		d.pushP0ElemParam(p0TransTraceInit, false, pkt.Type, d.Base.IndexCurrPkt, nil)
+		d.pushP0ElemParam(p0TransTraceInit, false, pkt.Type, d.IndexCurrPkt, nil)
 	}
 }
 
 func (d *PktDecode) handlePacketSeqErr(err error, idx ocsd.TrcIndex, reason string) error {
-	d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", err, reason))
+	d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", err, reason))
 	d.resetDecoderState()
 	d.currState = noSync
 	d.unsyncEOTInfo = ocsd.UnsyncBadPacket
@@ -1845,7 +1833,7 @@ func (d *PktDecode) handlePacketSeqErr(err error, idx ocsd.TrcIndex, reason stri
 }
 
 func (d *PktDecode) handleBadPacket(idx ocsd.TrcIndex, reason string) {
-	d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: %s", ocsd.ErrBadDecodePkt, reason))
+	d.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: %s", ocsd.ErrBadDecodePkt, reason))
 	d.resetDecoderState()
 	d.currState = noSync
 	d.unsyncEOTInfo = ocsd.UnsyncBadPacket
@@ -1853,7 +1841,7 @@ func (d *PktDecode) handleBadPacket(idx ocsd.TrcIndex, reason string) {
 }
 
 func (d *PktDecode) handleBadImageError(reason string) error {
-	d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", ocsd.ErrBadDecodeImage, reason))
+	d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", ocsd.ErrBadDecodeImage, reason))
 	d.resetDecoderState()
 	d.currState = noSync
 	d.unsyncEOTInfo = ocsd.UnsyncBadImage

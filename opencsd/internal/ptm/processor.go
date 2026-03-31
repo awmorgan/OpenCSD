@@ -50,7 +50,7 @@ const (
 )
 
 type PktProc struct {
-	Base       common.ProcBase[Packet]
+	common.ProcBase[Packet]
 	Config     *Config
 	PktOutI    ocsd.PacketProcessor[Packet]
 	PktRawMonI ocsd.PacketMonitor[Packet]
@@ -102,7 +102,7 @@ func NewPktProc(cfg *Config, logger ocsd.Logger) *PktProc {
 	if cfg != nil {
 		instIDNum = int(cfg.TraceID())
 	}
-	p.Base.Init(fmt.Sprintf("%s_%d", "PKTP_PTM", instIDNum), logger)
+	p.Init(fmt.Sprintf("%s_%d", "PKTP_PTM", instIDNum), logger)
 	p.resetProcessorState()
 	p.buildIPacketTable()
 	if cfg != nil {
@@ -119,14 +119,6 @@ func (p *PktProc) PktOut() ocsd.PacketProcessor[Packet] { return p.PktOutI }
 
 // SetPktRawMonitor attaches a raw packet monitor.
 func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor[Packet]) { p.PktRawMonI = mon }
-
-// SetComponentOpMode delegates to Base.
-func (p *PktProc) SetComponentOpMode(flags uint32) error {
-	return p.Base.SetComponentOpMode(flags)
-}
-
-// ComponentOpMode delegates to Base.
-func (p *PktProc) ComponentOpMode() uint32 { return p.Base.ComponentOpMode() }
 
 func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) ocsd.DatapathResp {
 	if p.PktOutI != nil {
@@ -158,7 +150,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 	switch op {
 	case ocsd.OpData:
 		if len(dataBlock) == 0 {
-			p.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Interpreter failed - cannot process payload for unexpected or unsupported packet", ocsd.ErrPktInterpFail))
+			p.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Interpreter failed - cannot process payload for unexpected or unsupported packet", ocsd.ErrPktInterpFail))
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			processed, resp, err = p.ProcessData(index, dataBlock)
@@ -187,7 +179,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			rawMon.RawPacketDataMon(ocsd.OpReset, index, nil, nil)
 		}
 	default:
-		p.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Packet Processor : Unknown Datapath operation", ocsd.ErrInvalidParamVal))
+		p.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Packet Processor : Unknown Datapath operation", ocsd.ErrInvalidParamVal))
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return processed, resp, err
@@ -276,7 +268,7 @@ func (p *PktProc) doProcessLoop() (resp ocsd.DatapathResp, currByte uint8, ok bo
 		if err == nil {
 			return ocsd.RespCont, nil
 		}
-		p.Base.LogError(ocsd.ErrSevError, err)
+		p.LogError(ocsd.ErrSevError, err)
 		if errors.Is(err, ocsd.ErrBadPacketSeq) || errors.Is(err, ocsd.ErrInvalidPcktHdr) {
 			p.processState = stateSendPkt
 			return ocsd.RespCont, err

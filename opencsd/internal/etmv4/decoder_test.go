@@ -114,7 +114,7 @@ func TestDecoderDecodePacketFuncRetV8M(t *testing.T) {
 		RegConfigr: 0,
 	}
 	d.CurrPacketIn = &TracePacket{Type: PktFuncRet}
-	d.Base.IndexCurrPkt = 10
+	d.IndexCurrPkt = 10
 
 	if err := d.decodePacket(); err != nil {
 		t.Fatalf("decodePacket failed: %v", err)

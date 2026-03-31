@@ -74,7 +74,7 @@ func (a *PtmAtoms) clearAll() {
 }
 
 type PktDecode struct {
-	Base         common.DecoderBase
+	common.DecoderBase
 	Config       *Config
 	CurrPacketIn *Packet
 
@@ -101,7 +101,7 @@ func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 	if cfg != nil {
 		instIDNum = int(cfg.TraceID())
 	}
-	d.Base.Init(fmt.Sprintf("%s_%d", "DCD_PTM", instIDNum), logger)
+	d.Init(fmt.Sprintf("%s_%d", "DCD_PTM", instIDNum), logger)
 	d.configureDecoder()
 	if cfg != nil {
 		_ = d.SetProtocolConfig(cfg)
@@ -110,47 +110,36 @@ func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 }
 
 // SetTraceElemOut satisfies dcdtree's traceElemSetterOwner interface.
-func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) { d.Base.TraceElemOut = out }
+func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) { d.TraceElemOut = out }
 
 // SetMemAccess satisfies dcdtree's memAccSetterOwner interface.
-func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.Base.MemAccess = mem }
+func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.MemAccess = mem }
 
 // SetInstrDecode satisfies dcdtree's instrDecodeSetterOwner interface.
-func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.Base.InstrDecode = dec }
-
-// SetComponentOpMode delegates to Base.
-func (d *PktDecode) SetComponentOpMode(flags uint32) error {
-	return d.Base.SetComponentOpMode(flags)
-}
-
-// ComponentOpMode delegates to Base.
-func (d *PktDecode) ComponentOpMode() uint32 { return d.Base.ComponentOpMode() }
-
-// SupportedOpModes delegates to Base.
-func (d *PktDecode) SupportedOpModes() uint32 { return d.Base.SupportedOpModes() }
+func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.InstrDecode = dec }
 
 // SetNeedsMemAccess controls whether memory access is required for decode.
-func (d *PktDecode) SetNeedsMemAccess(needs bool) { d.Base.UsesMemAccess = needs }
+func (d *PktDecode) SetNeedsMemAccess(needs bool) { d.UsesMemAccess = needs }
 
 // SetNeedsInstructionDecode controls whether instruction decode is required.
-func (d *PktDecode) SetNeedsInstructionDecode(needs bool) { d.Base.UsesIDecode = needs }
+func (d *PktDecode) SetNeedsInstructionDecode(needs bool) { d.UsesIDecode = needs }
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) ocsd.DatapathResp {
 	resp := ocsd.RespCont
 
-	if reason := d.Base.DecodeNotReadyReason(); reason != "" {
-		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason))
+	if reason := d.DecodeNotReadyReason(); reason != "" {
+		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason))
 		return ocsd.RespFatalNotInit
 	}
 
 	switch op {
 	case ocsd.OpData:
 		if pktIn == nil {
-			d.Base.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
+			d.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			d.CurrPacketIn = pktIn
-			d.Base.IndexCurrPkt = indexSOP
+			d.IndexCurrPkt = indexSOP
 			resp = d.ProcessPacket()
 		}
 	case ocsd.OpEOT:
@@ -160,7 +149,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 	case ocsd.OpReset:
 		resp = d.OnReset()
 	default:
-		d.Base.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
+		d.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return resp
@@ -210,7 +199,7 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 	if d.Config == nil {
 		return ocsd.ErrNotInit
 	}
-	d.Base.ConfigInitOK = true
+	d.ConfigInitOK = true
 
 	d.csID = d.Config.TraceID()
 
@@ -244,7 +233,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 			if d.currPeState.valid {
 				resp = d.processAtom()
 			} else {
-				d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Dropped atom packet(s) at EOT while PE state is invalid", ocsd.ErrBadPacketSeq))
+				d.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Dropped atom packet(s) at EOT while PE state is invalid", ocsd.ErrBadPacketSeq))
 				d.atoms.clearAll()
 				resp = ocsd.RespWarnCont
 			}
@@ -260,7 +249,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 
 	d.outputElem.SetType(ocsd.GenElemEOTrace)
 	d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncEOT)
-	return d.Base.OutputTraceElement(d.csID, &d.outputElem)
+	return d.OutputTraceElement(d.csID, &d.outputElem)
 }
 
 func (d *PktDecode) OnReset() ocsd.DatapathResp {
@@ -283,7 +272,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 		case decodeNoSync:
 			d.outputElem.SetType(ocsd.GenElemNoSync)
 			d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncInfo(d.unsyncInfo))
-			resp = d.Base.OutputTraceElement(d.csID, &d.outputElem)
+			resp = d.OutputTraceElement(d.csID, &d.outputElem)
 			if d.CurrPacketIn.Type == PktASync {
 				d.currState = decodeWaitISync
 			} else {
@@ -347,7 +336,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 		d.currState = decodeWaitSync
 		d.needIsync = true
 		d.outputElem.SetType(ocsd.GenElemNoSync)
-		resp = d.Base.OutputTraceElement(d.csID, &d.outputElem)
+		resp = d.OutputTraceElement(d.csID, &d.outputElem)
 	case PktASync, PktIgnore:
 		// ignore
 	case PktISync:
@@ -357,7 +346,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 	case PktTrigger:
 		d.outputElem.SetType(ocsd.GenElemEvent)
 		d.outputElem.SetEvent(ocsd.EventTrigger, 0)
-		resp = d.Base.OutputTraceElement(d.csID, &d.outputElem)
+		resp = d.OutputTraceElement(d.csID, &d.outputElem)
 	case PktWPointUpdate:
 		resp = d.processWPUpdate()
 	case PktContextID:
@@ -370,7 +359,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 			d.peContext.SetCtxtIDValid(true)
 			d.outputElem.SetType(ocsd.GenElemPeContext)
 			d.outputElem.SetContext(d.peContext)
-			resp = d.Base.OutputTraceElement(d.csID, &d.outputElem)
+			resp = d.OutputTraceElement(d.csID, &d.outputElem)
 		}
 	case PktVMID:
 		update := true
@@ -382,14 +371,14 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 			d.peContext.SetVMIDValid(true)
 			d.outputElem.SetType(ocsd.GenElemPeContext)
 			d.outputElem.SetContext(d.peContext)
-			resp = d.Base.OutputTraceElement(d.csID, &d.outputElem)
+			resp = d.OutputTraceElement(d.csID, &d.outputElem)
 		}
 	case PktAtom:
 		if d.currPeState.valid {
-			d.atoms.set(pkt.Atom, d.Base.IndexCurrPkt)
+			d.atoms.set(pkt.Atom, d.IndexCurrPkt)
 			resp = d.processAtom()
 		} else {
-			d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Dropped atom packet while PE state is invalid; waiting for branch address or I-Sync", ocsd.ErrBadPacketSeq))
+			d.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Dropped atom packet while PE state is invalid; waiting for branch address or I-Sync", ocsd.ErrBadPacketSeq))
 			resp = ocsd.RespWarnCont
 		}
 	case PktTimestamp:
@@ -398,10 +387,10 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 		if pkt.CCValid {
 			d.outputElem.SetCycleCount(pkt.CycleCount)
 		}
-		resp = d.Base.OutputTraceElement(d.csID, &d.outputElem)
+		resp = d.OutputTraceElement(d.csID, &d.outputElem)
 	case PktExceptionRet:
 		d.outputElem.SetType(ocsd.GenElemExceptionRet)
-		resp = d.Base.OutputTraceElement(d.csID, &d.outputElem)
+		resp = d.OutputTraceElement(d.csID, &d.outputElem)
 	}
 	return resp
 }
@@ -445,7 +434,7 @@ func (d *PktDecode) processIsync() ocsd.DatapathResp {
 			if pkt.CCValid {
 				d.outputElem.SetCycleCount(pkt.CycleCount)
 			}
-			resp = d.Base.OutputTraceElement(d.csID, &d.outputElem)
+			resp = d.OutputTraceElement(d.csID, &d.outputElem)
 		} else {
 			d.iSyncPeCtxt = false
 		}
@@ -457,7 +446,7 @@ func (d *PktDecode) processIsync() ocsd.DatapathResp {
 		d.outputElem.SetType(ocsd.GenElemPeContext)
 		d.outputElem.SetContext(d.peContext)
 		d.outputElem.SetISA(d.currPeState.isa)
-		resp = d.Base.OutputTraceElement(d.csID, &d.outputElem)
+		resp = d.OutputTraceElement(d.csID, &d.outputElem)
 		d.iSyncPeCtxt = false
 	}
 
@@ -485,7 +474,7 @@ func (d *PktDecode) processBranch() ocsd.DatapathResp {
 			if pkt.CCValid {
 				d.outputElem.SetCycleCount(pkt.CycleCount)
 			}
-			resp = d.Base.OutputTraceElement(d.csID, &d.outputElem)
+			resp = d.OutputTraceElement(d.csID, &d.outputElem)
 		} else {
 			if d.currPeState.valid {
 				resp = d.processAtomRange(ocsd.AtomE, "BranchAddr", traceWaypoint, 0)
@@ -550,7 +539,7 @@ func (d *PktDecode) checkPendingNacc(resp *ocsd.DatapathResp) {
 		} else {
 			d.outputElem.SetExceptionNum(uint32(ocsd.MemSpaceN))
 		}
-		*resp = d.Base.OutputTraceElementIdx(d.Base.IndexCurrPkt, d.csID, &d.outputElem)
+		*resp = d.OutputTraceElementIdx(d.IndexCurrPkt, d.csID, &d.outputElem)
 		d.memNaccPending = false
 	}
 }
@@ -570,10 +559,10 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 	if err != nil {
 		if errors.Is(err, ocsd.ErrUnsupportedISA) {
 			d.currPeState.valid = false
-			d.Base.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Warning: unsupported instruction set processing %s packet", err, pktMsg))
+			d.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Warning: unsupported instruction set processing %s packet", err, pktMsg))
 			return ocsd.RespWarnCont
 		}
-		d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error processing %s packet", err, pktMsg))
+		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error processing %s packet", err, pktMsg))
 		return ocsd.RespFatalInvalidData
 	}
 
@@ -597,7 +586,7 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 					d.instrInfo.NextISA = nextIsa
 
 					if d.returnStack.Overflow() {
-						d.Base.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Return stack error processing %s packet", ocsd.ErrRetStackOverflow, pktMsg))
+						d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Return stack error processing %s packet", ocsd.ErrRetStackOverflow, pktMsg))
 						return ocsd.RespFatalInvalidData
 					} else {
 						d.currPeState.valid = true
@@ -615,7 +604,7 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 			d.outputElem.SetCycleCount(d.CurrPacketIn.CycleCount)
 		}
 		d.outputElem.LastInstrCond = d.instrInfo.IsConditional != 0
-		resp = d.Base.OutputTraceElementIdx(d.Base.IndexCurrPkt, d.csID, &d.outputElem)
+		resp = d.OutputTraceElementIdx(d.IndexCurrPkt, d.csID, &d.outputElem)
 
 		d.currPeState.instrAddr = d.instrInfo.InstrAddr
 		d.currPeState.isa = d.instrInfo.NextISA
@@ -625,7 +614,7 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 			d.outputElem.SetLastInstrInfo(true, d.instrInfo.Type, d.instrInfo.Subtype, d.instrInfo.InstrSize)
 			d.outputElem.SetISA(d.currPeState.isa)
 			d.outputElem.LastInstrCond = d.instrInfo.IsConditional != 0
-			resp = d.Base.OutputTraceElementIdx(d.Base.IndexCurrPkt, d.csID, &d.outputElem)
+			resp = d.OutputTraceElementIdx(d.IndexCurrPkt, d.csID, &d.outputElem)
 		}
 	}
 	return resp
@@ -650,7 +639,7 @@ func (d *PktDecode) traceInstrToWP(traceWPOp waypointTraceOp, nextAddrMatch ocsd
 	for !wpFound && !d.memNaccPending {
 		bytesReq = 4
 		currOpAddress = d.instrInfo.InstrAddr
-		bytesRead, memData, errMem := d.Base.AccessMemory(d.instrInfo.InstrAddr, d.csID, memSpace, bytesReq)
+		bytesRead, memData, errMem := d.AccessMemory(d.instrInfo.InstrAddr, d.csID, memSpace, bytesReq)
 		if errMem != nil {
 			if errors.Is(errMem, memacc.ErrNoAccessor) {
 				d.memNaccPending = true
@@ -684,7 +673,7 @@ func (d *PktDecode) traceInstrToWP(traceWPOp waypointTraceOp, nextAddrMatch ocsd
 				opcode |= uint32(memData[3]) << 24
 			}
 			d.instrInfo.Opcode = opcode
-			err = d.Base.InstrDecodeCall(&d.instrInfo)
+			err = d.InstrDecodeCall(&d.instrInfo)
 			if err != nil {
 				break
 			}
