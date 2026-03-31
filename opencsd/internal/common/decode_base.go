@@ -23,15 +23,79 @@ type TrcPktIndexer[Pt any] interface {
 	TracePktIndex(indexSOP ocsd.TrcIndex, pktType Pt)
 }
 
-// DecoderBase holds the shared state for a packet decoder.
-// Concrete decoders hold it as a named field (e.g. Base DecoderBase) and
-// call its methods explicitly — no embedding, no promoted method surface.
-type DecoderBase struct {
-	Name             string
-	Logger           ocsd.Logger
-	ErrVerbosity     ocsd.ErrSeverity
+// OpModeManager provides access to the operational mode flags of a component.
+type OpModeManager interface {
+	ComponentOpMode() uint32
+	SupportedOpModes() uint32
+	SetComponentOpMode(opFlags uint32) error
+	ConfigureSupportedOpModes(flags uint32)
+}
+
+// TraceElementOutputter provides methods to send trace elements downstream.
+type TraceElementOutputter interface {
+	OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp
+	OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp
+}
+
+// BaseLogger is an embeddable component that provides logging functionality.
+// Embed this in a struct to add LogError, LogMessage, and IsLoggingErrorLevel methods.
+type BaseLogger struct {
+	Logger       ocsd.Logger
+	ErrVerbosity ocsd.ErrSeverity
+}
+
+// LogError logs an error if the logger is set and the severity threshold is met.
+func (l *BaseLogger) LogError(sev ocsd.ErrSeverity, err error) {
+	if err == nil {
+		return
+	}
+	if l.Logger != nil && l.IsLoggingErrorLevel(sev) {
+		l.Logger.LogError(sev, err)
+	}
+}
+
+// LogMessage logs a message at the given severity level.
+func (l *BaseLogger) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
+	if filterLevel <= l.ErrVerbosity && l.Logger != nil {
+		l.Logger.LogMessage(filterLevel, msg)
+	}
+}
+
+// IsLoggingErrorLevel reports whether errors at the given severity should be logged.
+func (l *BaseLogger) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
+	return level <= l.ErrVerbosity
+}
+
+// OpMode is an embeddable component that manages operational mode flags.
+// Embed this in a struct to add SetComponentOpMode, ComponentOpMode,
+// SupportedOpModes, and ConfigureSupportedOpModes methods.
+type OpMode struct {
 	OpFlags          uint32
 	SupportedOpFlags uint32
+}
+
+// SetComponentOpMode applies opFlags masked to the supported set.
+func (m *OpMode) SetComponentOpMode(opFlags uint32) error {
+	m.OpFlags = opFlags & m.SupportedOpFlags
+	return nil
+}
+
+// ComponentOpMode returns the current operational mode flags.
+func (m *OpMode) ComponentOpMode() uint32 { return m.OpFlags }
+
+// SupportedOpModes returns the supported operational mode bitmask.
+func (m *OpMode) SupportedOpModes() uint32 { return m.SupportedOpFlags }
+
+// ConfigureSupportedOpModes sets which op-mode flags this component supports.
+func (m *OpMode) ConfigureSupportedOpModes(flags uint32) { m.SupportedOpFlags = flags }
+
+// DecoderBase holds the shared state for a packet decoder.
+// It composes BaseLogger for logging and OpMode for operational flag management.
+// Concrete decoders embed this struct and call its methods via promotion.
+type DecoderBase struct {
+	Name string
+	BaseLogger
+	OpMode
 
 	TraceElemOut ocsd.GenElemProcessor
 	MemAccess    TargetMemAccess
@@ -42,43 +106,6 @@ type DecoderBase struct {
 	UsesMemAccess bool
 	UsesIDecode   bool
 }
-
-// LogError logs an error if the logger is set and the severity threshold is met.
-func (b *DecoderBase) LogError(sev ocsd.ErrSeverity, err error) {
-	if err == nil {
-		return
-	}
-	if b.Logger != nil && b.IsLoggingErrorLevel(sev) {
-		b.Logger.LogError(sev, err)
-	}
-}
-
-// LogMessage logs a message at the given severity level.
-func (b *DecoderBase) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
-	if filterLevel <= b.ErrVerbosity && b.Logger != nil {
-		b.Logger.LogMessage(filterLevel, msg)
-	}
-}
-
-// IsLoggingErrorLevel reports whether errors at the given severity should be logged.
-func (b *DecoderBase) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
-	return level <= b.ErrVerbosity
-}
-
-// SetComponentOpMode applies opFlags masked to the supported set.
-func (b *DecoderBase) SetComponentOpMode(opFlags uint32) error {
-	b.OpFlags = opFlags & b.SupportedOpFlags
-	return nil
-}
-
-// ComponentOpMode returns the current operational mode flags.
-func (b *DecoderBase) ComponentOpMode() uint32 { return b.OpFlags }
-
-// SupportedOpModes returns the supported operational mode bitmask.
-func (b *DecoderBase) SupportedOpModes() uint32 { return b.SupportedOpFlags }
-
-// ConfigureSupportedOpModes sets which op-mode flags this decoder supports.
-func (b *DecoderBase) ConfigureSupportedOpModes(flags uint32) { b.SupportedOpFlags = flags }
 
 // OutputTraceElement sends an element to the downstream consumer using IndexCurrPkt.
 func (b *DecoderBase) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
@@ -146,13 +173,12 @@ func (b *DecoderBase) InvalidateMemAccCache(traceID uint8) error {
 }
 
 // ProcBase holds the shared state for a packet processor.
-// Concrete processors hold it as a named field and call its methods explicitly.
+// It composes BaseLogger for logging and OpMode for operational flag management.
+// Concrete processors embed this struct and call its methods via promotion.
 type ProcBase[P any] struct {
-	Name             string
-	Logger           ocsd.Logger
-	ErrVerbosity     ocsd.ErrSeverity
-	OpFlags          uint32
-	SupportedOpFlags uint32
+	Name string
+	BaseLogger
+	OpMode
 
 	PktOutI    ocsd.PacketProcessor[P]
 	PktRawMonI ocsd.PacketMonitor[P]
@@ -160,43 +186,6 @@ type ProcBase[P any] struct {
 	Stats     ocsd.DecodeStats
 	statsInit bool
 }
-
-// LogError logs an error if the logger is set and severity threshold is met.
-func (b *ProcBase[P]) LogError(sev ocsd.ErrSeverity, err error) {
-	if err == nil {
-		return
-	}
-	if b.Logger != nil && b.IsLoggingErrorLevel(sev) {
-		b.Logger.LogError(sev, err)
-	}
-}
-
-// LogMessage logs a message at the given severity level.
-func (b *ProcBase[P]) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
-	if filterLevel <= b.ErrVerbosity && b.Logger != nil {
-		b.Logger.LogMessage(filterLevel, msg)
-	}
-}
-
-// IsLoggingErrorLevel reports whether errors at the given severity should be logged.
-func (b *ProcBase[P]) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
-	return level <= b.ErrVerbosity
-}
-
-// SetComponentOpMode applies opFlags masked to the supported set.
-func (b *ProcBase[P]) SetComponentOpMode(opFlags uint32) error {
-	b.OpFlags = opFlags & b.SupportedOpFlags
-	return nil
-}
-
-// ComponentOpMode returns the current operational mode flags.
-func (b *ProcBase[P]) ComponentOpMode() uint32 { return b.OpFlags }
-
-// SupportedOpModes returns the supported operational mode bitmask.
-func (b *ProcBase[P]) SupportedOpModes() uint32 { return b.SupportedOpFlags }
-
-// ConfigureSupportedOpModes sets which op-mode flags this processor supports.
-func (b *ProcBase[P]) ConfigureSupportedOpModes(flags uint32) { b.SupportedOpFlags = flags }
 
 // StatsBlock returns the decode statistics, or ErrNotInit if stats were never initialized.
 func (b *ProcBase[P]) StatsBlock() (*ocsd.DecodeStats, error) {

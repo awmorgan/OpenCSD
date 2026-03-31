@@ -47,9 +47,11 @@ func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 	}
 	d := &PktDecode{
 		DecoderBase: common.DecoderBase{
-			Name:          fmt.Sprintf("DCD_STM_%d", instIDNum),
-			Logger:        logger,
-			ErrVerbosity:  ocsd.ErrSevNone,
+			Name: fmt.Sprintf("DCD_STM_%d", instIDNum),
+			BaseLogger: common.BaseLogger{
+				Logger:       logger,
+				ErrVerbosity: ocsd.ErrSevNone,
+			},
 			UsesMemAccess: true,
 			UsesIDecode:   true,
 		},
