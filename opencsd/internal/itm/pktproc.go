@@ -58,12 +58,18 @@ type PktProc struct {
 
 // NewPktProc creates a new ITM packet processor.
 func NewPktProc(cfg *Config, logger ocsd.Logger) *PktProc {
-	p := &PktProc{}
 	instID := 0
 	if cfg != nil {
 		instID = int(cfg.TraceID())
 	}
-	p.Init(fmt.Sprintf("PKTP_ITM_%d", instID), logger)
+	p := &PktProc{
+		ProcBase: common.ProcBase[Packet]{
+			Name:         fmt.Sprintf("PKTP_ITM_%d", instID),
+			Logger:       logger,
+			ErrVerbosity: ocsd.ErrSevNone,
+		},
+	}
+	p.ResetStats()
 	p.ConfigureSupportedOpModes(ocsd.OpflgPktprocCommon)
 	p.resetProcessorState()
 	if cfg != nil {

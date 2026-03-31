@@ -50,12 +50,18 @@ type PktProc struct {
 
 // NewPktProc creates a new ETMv3 packet processor
 func NewPktProc(cfg *Config, logger ocsd.Logger) *PktProc {
-	p := &PktProc{}
 	instID := 0
 	if cfg != nil {
 		instID = int(cfg.TraceID())
 	}
-	p.Init(fmt.Sprintf("%s_%d", "PKTP_ETMV3", instID), logger)
+	p := &PktProc{
+		ProcBase: common.ProcBase[Packet]{
+			Name:         fmt.Sprintf("PKTP_ETMV3_%d", instID),
+			Logger:       logger,
+			ErrVerbosity: ocsd.ErrSevNone,
+		},
+	}
+	p.ResetStats()
 	p.resetProcessorState()
 	if cfg != nil {
 		_ = p.SetProtocolConfig(cfg)

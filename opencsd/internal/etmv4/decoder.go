@@ -178,12 +178,19 @@ func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.MemAccess = mem
 func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.InstrDecode = dec }
 
 func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
-	d := &PktDecode{}
 	instIDNum := 0
 	if cfg != nil {
 		instIDNum = int(cfg.TraceID())
 	}
-	d.Init(fmt.Sprintf("DCD_ETMV4_%d", instIDNum), logger)
+	d := &PktDecode{
+		DecoderBase: common.DecoderBase{
+			Name:          fmt.Sprintf("DCD_ETMV4_%d", instIDNum),
+			Logger:        logger,
+			ErrVerbosity:  ocsd.ErrSevNone,
+			UsesMemAccess: true,
+			UsesIDecode:   true,
+		},
+	}
 	d.ConfigureSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms | ocsd.OpflgPktdecAA64OpcodeChk)
 	if cfg != nil {
 		_ = d.SetProtocolConfig(cfg)

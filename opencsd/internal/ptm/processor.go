@@ -97,12 +97,18 @@ type PktProc struct {
 }
 
 func NewPktProc(cfg *Config, logger ocsd.Logger) *PktProc {
-	p := &PktProc{}
 	instIDNum := 0
 	if cfg != nil {
 		instIDNum = int(cfg.TraceID())
 	}
-	p.Init(fmt.Sprintf("%s_%d", "PKTP_PTM", instIDNum), logger)
+	p := &PktProc{
+		ProcBase: common.ProcBase[Packet]{
+			Name:         fmt.Sprintf("PKTP_PTM_%d", instIDNum),
+			Logger:       logger,
+			ErrVerbosity: ocsd.ErrSevNone,
+		},
+	}
+	p.ResetStats()
 	p.resetProcessorState()
 	p.buildIPacketTable()
 	if cfg != nil {

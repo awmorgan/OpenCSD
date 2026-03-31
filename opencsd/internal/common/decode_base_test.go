@@ -6,8 +6,9 @@ import (
 )
 
 func TestDecoderBase(t *testing.T) {
-	b := &DecoderBase{}
-	b.Init("testDecode", nil)
+	b := &DecoderBase{
+		Name: "testDecode",
+	}
 
 	if b.Name != "testDecode" {
 		t.Errorf("expected name testDecode, got %s", b.Name)
@@ -77,8 +78,10 @@ func TestDecoderBase(t *testing.T) {
 }
 
 func TestProcBase(t *testing.T) {
-	b := &ProcBase[any]{}
-	b.Init("testProc", nil)
+	b := &ProcBase[any]{
+		Name: "testProc",
+	}
+	b.ResetStats()
 
 	if b.Name != "testProc" {
 		t.Errorf("expected name testProc, got %s", b.Name)

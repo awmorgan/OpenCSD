@@ -53,15 +53,22 @@ type PktDecode struct {
 
 // NewPktDecode creates a new ETMv3 trace decoder.
 func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
-	d := &PktDecode{
-		peContext:      &ocsd.PEContext{},
-		outputElemList: common.NewGenElemList(),
-	}
 	instID := 0
 	if cfg != nil {
 		instID = int(cfg.TraceID())
 	}
-	d.Init(fmt.Sprintf("%s_%d", "DCD_ETMV3", instID), logger)
+
+	d := &PktDecode{
+		DecoderBase: common.DecoderBase{
+			Name:          fmt.Sprintf("DCD_ETMV3_%d", instID),
+			Logger:        logger,
+			ErrVerbosity:  ocsd.ErrSevNone,
+			UsesMemAccess: true,
+			UsesIDecode:   true,
+		},
+		peContext:      &ocsd.PEContext{},
+		outputElemList: common.NewGenElemList(),
+	}
 	d.codeFollower = common.NewCodeFollowerWithInterfaces(d.MemAccess, d.InstrDecode)
 	d.configureDecoder()
 	if cfg != nil {

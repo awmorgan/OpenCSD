@@ -43,15 +43,6 @@ type DecoderBase struct {
 	UsesIDecode   bool
 }
 
-// Init sets up the DecoderBase with a component name and optional logger.
-func (b *DecoderBase) Init(name string, logger ocsd.Logger) {
-	b.Name = name
-	b.Logger = logger
-	b.ErrVerbosity = ocsd.ErrSevNone
-	b.UsesMemAccess = true
-	b.UsesIDecode = true
-}
-
 // LogError logs an error if the logger is set and the severity threshold is met.
 func (b *DecoderBase) LogError(sev ocsd.ErrSeverity, err error) {
 	if err == nil {
@@ -168,14 +159,6 @@ type ProcBase[P any] struct {
 
 	Stats     ocsd.DecodeStats
 	statsInit bool
-}
-
-// Init sets up the ProcBase.
-func (b *ProcBase[P]) Init(name string, logger ocsd.Logger) {
-	b.Name = name
-	b.Logger = logger
-	b.ErrVerbosity = ocsd.ErrSevNone
-	b.ResetStats()
 }
 
 // LogError logs an error if the logger is set and severity threshold is met.

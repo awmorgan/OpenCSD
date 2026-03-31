@@ -27,8 +27,10 @@ func (m *mockErrorLog) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
 }
 
 func TestComponentRuntimeViaDecoderBase(t *testing.T) {
-	b := &DecoderBase{}
-	b.Init("TestComp", nil)
+	b := &DecoderBase{
+		Name:         "TestComp",
+		ErrVerbosity: ocsd.ErrSevNone,
+	}
 
 	if b.ErrVerbosity != ocsd.ErrSevNone {
 		t.Errorf("expected default error log level ErrSevNone, got %v", b.ErrVerbosity)
