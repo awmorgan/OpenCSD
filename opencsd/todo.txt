@@ -2,28 +2,6 @@ To answer your direct question: **No, using "base classes" like `ProcBase` and `
 
 Here is a step-by-step incremental refactoring plan to rid your codebase of these C++-isms and make it idiomatic Go, moving from easy wins to deeper architectural changes.
 
-### Step 1: Replace Manual Delegation with Struct Embedding (Quick Win)
-Right now, your code manually delegates method calls to the base class like this:
-```go
-// Current C++-style approach
-type PktDecode struct {
-	Base      common.DecoderBase
-    // ...
-}
-
-func (d *PktDecode) ComponentOpMode() uint32 { return d.Base.ComponentOpMode() }
-```
-**The Go Way:** Use anonymous struct embedding. Go will automatically "promote" the methods of the embedded struct to the outer struct. This allows you to delete all the boilerplate delegation methods immediately without breaking the API.
-```go
-// Idiomatic Go approach
-type PktDecode struct {
-	common.DecoderBase // Anonymous embedding
-    // ...
-}
-// You can now delete `ComponentOpMode()` on PktDecode. 
-// Calling pktDecode.ComponentOpMode() will automatically call the embedded DecoderBase method.
-```
-
 ### Step 2: Eliminate Two-Phase Initialization (`Init()` methods)
 C++ code often relies on empty constructors followed by an `Init()` method because of how C++ handles virtual tables and memory allocation. 
 ```go
