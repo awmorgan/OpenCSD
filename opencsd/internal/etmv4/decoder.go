@@ -177,23 +177,22 @@ func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.MemAccess = mem
 // SetInstrDecode satisfies dcdtree's instrDecodeSetterOwner interface.
 func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.InstrDecode = dec }
 
-func NewPktDecode(cfg *Config) *PktDecode {
-	instIDNum := 0
-	if cfg != nil {
-		instIDNum = int(cfg.TraceID())
+func NewPktDecode(cfg *Config) (*PktDecode, error) {
+	if cfg == nil {
+		return nil, ocsd.ErrInvalidParamVal
 	}
+
+	instIDNum := int(cfg.TraceID())
 	d := &PktDecode{
 		DecoderBase: common.DecoderBase{
 			Name: fmt.Sprintf("DCD_ETMV4_%d", instIDNum),
 		},
 	}
 	d.ConfigureSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms | ocsd.OpflgPktdecAA64OpcodeChk)
-	if cfg != nil {
-		_ = d.SetProtocolConfig(cfg)
-	} else {
-		d.configureDecoder()
+	if err := d.SetProtocolConfig(cfg); err != nil {
+		return nil, err
 	}
-	return d
+	return d, nil
 }
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *TracePacket) (ocsd.DatapathResp, error) {
@@ -2011,12 +2010,8 @@ func NewConfiguredProcessor(cfg *Config) (*Processor, error) {
 
 // NewConfiguredPktDecode creates an ETMv4 packet decoder with a typed config.
 func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
-	if cfg == nil {
-		return nil, ocsd.ErrInvalidParamVal
-	}
 	_ = instID
-	decoder := NewPktDecode(cfg)
-	return decoder, nil
+	return NewPktDecode(cfg)
 }
 
 // NewConfiguredPipeline creates and wires a typed ETMv4 processor/decoder pair.

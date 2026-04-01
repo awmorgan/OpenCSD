@@ -8,9 +8,9 @@ import (
 
 type PktDecode = etmv4.PktDecode
 
-func NewPktDecode(cfg *Config) *PktDecode {
+func NewPktDecode(cfg *Config) (*PktDecode, error) {
 	if cfg == nil {
-		return etmv4.NewPktDecode(nil)
+		return nil, fmt.Errorf("%w: ETE config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
 	return etmv4.NewPktDecode(cfg.ToETMv4Config())
 }
@@ -25,12 +25,8 @@ func NewConfiguredProcessor(cfg *Config) (*Processor, error) {
 
 // NewConfiguredPktDecode creates an ETE packet decoder with a typed config.
 func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("%w: ETE config cannot be nil", ocsd.ErrInvalidParamVal)
-	}
 	_ = instID
-	decoder := NewPktDecode(cfg)
-	return decoder, nil
+	return NewPktDecode(cfg)
 }
 
 // NewConfiguredPipeline creates and wires a typed ETE processor/decoder pair.

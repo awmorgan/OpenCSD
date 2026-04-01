@@ -41,10 +41,9 @@ func isErrorCode(err error, code error) bool {
 }
 
 func TestDecoderOnFlushResolvesPendingState(t *testing.T) {
-	d := NewPktDecode(nil)
-	d.Config = &Config{}
-	if err := d.SetProtocolConfig(d.Config); err != nil {
-		t.Fatalf("OnProtocolConfig failed: %v", err)
+	d, err := NewPktDecode(&Config{})
+	if err != nil {
+		t.Fatalf("NewPktDecode failed: %v", err)
 	}
 
 	d.currState = resolveElem
@@ -58,13 +57,13 @@ func TestDecoderOnFlushResolvesPendingState(t *testing.T) {
 }
 
 func TestDecoderTSRequiresMarkerWhenConfigured(t *testing.T) {
-	d := NewPktDecode(nil)
-	d.Config = &Config{
+	cfg := &Config{
 		RegIdr0: 0x800000,
 		RegIdr1: 0x510, // full version 0x51
 	}
-	if err := d.SetProtocolConfig(d.Config); err != nil {
-		t.Fatalf("OnProtocolConfig failed: %v", err)
+	d, err := NewPktDecode(cfg)
+	if err != nil {
+		t.Fatalf("NewPktDecode failed: %v", err)
 	}
 
 	tsElem := &p0Elem{
@@ -104,14 +103,17 @@ func TestDecoderTSRequiresMarkerWhenConfigured(t *testing.T) {
 }
 
 func TestDecoderDecodePacketFuncRetV8M(t *testing.T) {
-	d := NewPktDecode(nil)
-	d.config = &Config{
+	cfg := &Config{
 		ArchVer:    ocsd.ArchV8,
 		CoreProf:   ocsd.ProfileCortexM,
 		RegIdr0:    0,
 		RegIdr1:    0,
 		RegIdr2:    0,
 		RegConfigr: 0,
+	}
+	d, err := NewPktDecode(cfg)
+	if err != nil {
+		t.Fatalf("NewPktDecode failed: %v", err)
 	}
 	d.CurrPacketIn = &TracePacket{Type: PktFuncRet}
 	d.IndexCurrPkt = 10
