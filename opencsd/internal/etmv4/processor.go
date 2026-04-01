@@ -1086,11 +1086,11 @@ func (p *Processor) update32BitAddress(currAddr ocsd.VAddr, newVal32 uint32) ocs
 	return ocsd.VAddr(newVal32)
 }
 
-func (p *Processor) markMalformedCurrentPacket(errType PktType) {
+func (p *Processor) markMalformedCurrentPacket(malformedType PktType) {
 	if p.processState == SendPkt && errors.Is(p.currPacket.Err, ocsd.ErrBadPacketSeq) {
 		return
 	}
-	p.currPacket.Err = fmt.Errorf("%w: malformed %s", ocsd.ErrBadPacketSeq, errType.String())
+	p.currPacket.Err = fmt.Errorf("%w: malformed %s", ocsd.ErrBadPacketSeq, malformedType.String())
 	p.processState = SendPkt
 }
 
