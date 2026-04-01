@@ -15,6 +15,7 @@ import (
 
 	"opencsd/internal/dcdtree"
 	"opencsd/internal/ete"
+	"opencsd/internal/etmv4"
 	"opencsd/internal/idec"
 	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
@@ -31,7 +32,7 @@ type eteRawPacketPrinter struct {
 	traceID uint8
 }
 
-func (p *eteRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *ete.TracePacket, rawData []byte) {
+func (p *eteRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket, rawData []byte) {
 	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
 		return
 	}
