@@ -64,20 +64,6 @@ type opModeComponent interface {
 	SupportedOpModes() uint32
 }
 
-type memAccAdapter struct {
-	mapper memacc.Mapper
-}
-
-func (m *memAccAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
-	buf := make([]byte, reqBytes)
-	readBytes, err := m.mapper.Read(address, csTraceID, memSpace, reqBytes, buf)
-	return readBytes, buf[:readBytes], err
-}
-
-func (m *memAccAdapter) InvalidateMemAccCache(csTraceID uint8) {
-	m.mapper.InvalidateMemAccCache(csTraceID)
-}
-
 type mappedRange struct {
 	start ocsd.VAddr
 	end   ocsd.VAddr
@@ -221,34 +207,41 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 		return err
 	}
 
-	mapper := memacc.NewGlobalMapper()
-	if opts.memCacheDisable {
-		if err := mapper.EnableCaching(false); err != nil {
-			return fmt.Errorf("trace packet lister: configure memory cache disable=true failed: %w", err)
+	mapped := []mappedRange{}
+	if opts.decode {
+		mapper := builder.MemoryMapper()
+		if mapper == nil {
+			return errors.New("trace packet lister: decode mode requires a memory mapper")
 		}
-	} else {
-		if err := mapper.EnableCaching(true); err != nil {
-			return fmt.Errorf("trace packet lister: configure memory cache disable=false failed: %w", err)
+
+		if opts.memCacheDisable {
+			if err := mapper.EnableCaching(false); err != nil {
+				return fmt.Errorf("trace packet lister: configure memory cache disable=true failed: %w", err)
+			}
+		} else {
+			if err := mapper.EnableCaching(true); err != nil {
+				return fmt.Errorf("trace packet lister: configure memory cache disable=false failed: %w", err)
+			}
+			if opts.memCachePageSize != 0 || opts.memCachePageNum != 0 {
+				pageSize := opts.memCachePageSize
+				if pageSize == 0 {
+					pageSize = memacc.DefaultPageSize
+				}
+				numPages := opts.memCachePageNum
+				if numPages == 0 {
+					numPages = uint32(memacc.DefaultNumPages)
+				}
+				if err := mapper.SetCacheSizes(uint16(pageSize), int(numPages), false); err != nil {
+					return fmt.Errorf("trace packet lister: configure memory cache sizes page_size=%d page_num=%d failed: %w", pageSize, numPages, err)
+				}
+			}
 		}
-		if opts.memCachePageSize != 0 || opts.memCachePageNum != 0 {
-			pageSize := opts.memCachePageSize
-			if pageSize == 0 {
-				pageSize = memacc.DefaultPageSize
-			}
-			numPages := opts.memCachePageNum
-			if numPages == 0 {
-				numPages = uint32(memacc.DefaultNumPages)
-			}
-			if err := mapper.SetCacheSizes(uint16(pageSize), int(numPages), false); err != nil {
-				return fmt.Errorf("trace packet lister: configure memory cache sizes page_size=%d page_num=%d failed: %w", pageSize, numPages, err)
-			}
+
+		var err error
+		mapped, err = mapMemoryRanges(mapper, opts.ssDir, reader)
+		if err != nil {
+			return err
 		}
-	}
-	memIf := &memAccAdapter{mapper: mapper}
-	tree.SetMemAccessI(memIf)
-	mapped, err := mapMemoryRanges(mapper, opts.ssDir, reader)
-	if err != nil {
-		return err
 	}
 
 	genPrinter := printers.NewGenericElementPrinter(out)
@@ -763,7 +756,9 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 			acc := memacc.NewBufferAccessor(ocsd.VAddr(memParams.Address), b)
 			acc.SetMemSpace(space)
 			if err := mapper.AddAccessor(acc, ocsd.BadCSSrcID); err != nil {
-				return nil, fmt.Errorf("add memory accessor for %s @0x%x: %w", filePath, memParams.Address, err)
+				if !errors.Is(err, ocsd.ErrMemAccOverlap) {
+					return nil, fmt.Errorf("add memory accessor for %s @0x%x: %w", filePath, memParams.Address, err)
+				}
 			}
 			seenAccessors[accKey] = struct{}{}
 

@@ -79,6 +79,7 @@ type DecodeTreeBuilder struct {
 	tree           *dcdtree.DecodeTree
 	packetProcOnly bool
 	bufferFileName string
+	mapper         *memacc.GlobalMapper
 	memIf          common.TargetMemAccess
 	instrDecode    common.InstrDecode
 }
@@ -98,6 +99,12 @@ func (b *DecodeTreeBuilder) DecodeTree() *dcdtree.DecodeTree {
 // BufferFileName returns the full path of the trace binary buffer file to load.
 func (b *DecodeTreeBuilder) BufferFileName() string {
 	return b.bufferFileName
+}
+
+// MemoryMapper returns the builder-managed memory mapper used in full decode mode.
+// It returns nil when packet-only mode is selected.
+func (b *DecodeTreeBuilder) MemoryMapper() *memacc.GlobalMapper {
+	return b.mapper
 }
 
 // Build builds the tree for a specific named source buffer (e.g., "ETB_0").
@@ -137,12 +144,12 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 	b.tree = newTree
 
 	// Create a memory accessor mapper in full-decoder mode only.
-	var mapper memacc.Mapper
+	b.mapper = nil
 	b.memIf = nil
 	b.instrDecode = nil
 	if !packetProcOnly {
-		mapper = memacc.NewGlobalMapper()
-		b.memIf = &mapperAdapter{mapper: mapper}
+		b.mapper = memacc.NewGlobalMapper()
+		b.memIf = &mapperAdapter{mapper: b.mapper}
 		b.instrDecode = idec.NewDecoder()
 	}
 
@@ -169,7 +176,7 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 
 			numDecodersCreated++
 			if !packetProcOnly && len(coreDev.DumpDefs) > 0 {
-				b.addCoreDumpMemory(mapper, coreDev)
+				b.addCoreDumpMemory(b.mapper, coreDev)
 			}
 			continue
 		}

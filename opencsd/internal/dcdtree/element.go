@@ -18,8 +18,8 @@ type DecodeTreeElement struct {
 	DecoderTypeName string                // Registered name of the decoder
 	DataIn          ocsd.TrcDataProcessor // Interface for feeding trace data
 	DecoderHandle   any                   // Pointer to the decoder processor (PktDecode)
-	Protocol        ocsd.TraceProtocol // Protocol type
-	Created         bool               // True if decode tree created this element
+	Protocol        ocsd.TraceProtocol    // Protocol type
+	Created         bool                  // True if decode tree created this element
 }
 
 // NewDecodeTreeElement creates a new DecodeTreeElement record.
