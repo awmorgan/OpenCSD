@@ -23,6 +23,7 @@ type PktProc struct {
 	Config     *Config
 	PktOutI    ocsd.PacketProcessor[Packet]
 	PktRawMonI ocsd.PacketMonitor[Packet]
+	lastErr    error
 
 	processState processState
 
@@ -108,7 +109,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 	switch op {
 	case ocsd.OpData:
 		if len(dataBlock) == 0 {
-			p.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Packet Processor: Zero length data block error", ocsd.ErrInvalidParamVal))
+			err = fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			processed, resp, err = p.ProcessData(index, dataBlock)
@@ -137,7 +138,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			rawMon.RawPacketDataMon(ocsd.OpReset, index, nil, nil)
 		}
 	default:
-		p.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Packet Processor : Unknown Datapath operation", ocsd.ErrInvalidParamVal))
+		err = fmt.Errorf("%w: packet processor: unknown datapath operation", ocsd.ErrInvalidParamVal)
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return processed, resp, err
@@ -147,6 +148,7 @@ func (p *PktProc) resetProcessorState() {
 	p.bStreamSync = false
 	p.processState = waitSync
 	p.bStartOfSync = false
+	p.lastErr = nil
 	p.currPacket.ResetState()
 	p.resetPacketState()
 	p.bSendPartPkt = false
@@ -224,6 +226,12 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, oc
 
 	if p.processState == procErr && !ocsd.DataRespIsFatal(resp) {
 		resp = ocsd.RespFatalSysErr
+	}
+	if p.processState == procErr {
+		if p.lastErr == nil {
+			p.lastErr = ocsd.ErrPktInterpFail
+		}
+		return uint32(p.bytesProcessed), resp, p.lastErr
 	}
 
 	return uint32(p.bytesProcessed), resp, nil
@@ -619,7 +627,7 @@ func (p *PktProc) processPayloadByte(by uint8) {
 		p.processState = sendPkt
 	default:
 		p.processState = procErr
-		p.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Interpreter failed - cannot process payload for unexpected or unsupported packet", ocsd.ErrPktInterpFail))
+		p.lastErr = fmt.Errorf("%w: interpreter failed: unsupported packet payload", ocsd.ErrPktInterpFail)
 	}
 }
 
@@ -1158,10 +1166,10 @@ func (p *PktProc) extractTimestamp() (val uint64, tsBits uint8) {
 
 func (p *PktProc) throwPacketHeaderErr(msg string) {
 	p.processState = procErr
-	p.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", ocsd.ErrInvalidPcktHdr, msg))
+	p.lastErr = fmt.Errorf("%w: %s", ocsd.ErrInvalidPcktHdr, msg)
 }
 
 func (p *PktProc) throwMalformedPacketErr(msg string) {
 	p.processState = procErr
-	p.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", ocsd.ErrBadPacketSeq, msg))
+	p.lastErr = fmt.Errorf("%w: %s", ocsd.ErrBadPacketSeq, msg)
 }
