@@ -158,9 +158,21 @@ func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.Trace
 
 func (dt *DecodeTree) attachElementDependencies(elem *DecodeTreeElement) {
 	if dt.genElemOut != nil {
-		if elem.SetTraceElemOut != nil {
-			elem.SetTraceElemOut(dt.genElemOut)
-		}
+		dt.wireTraceElemOut(elem, dt.genElemOut)
+	}
+}
+
+func (dt *DecodeTree) wireTraceElemOut(elem *DecodeTreeElement, outI ocsd.GenElemProcessor) {
+	if elem == nil || outI == nil {
+		return
+	}
+	if owner, ok := elem.DecoderHandle.(traceElemWiringOwner); ok {
+		owner.SetTraceElemOut(outI)
+		return
+	}
+	// Compatibility fallback while migrating away from function pointer extraction.
+	if elem.SetTraceElemOut != nil {
+		elem.SetTraceElemOut(outI)
 	}
 }
 
@@ -181,9 +193,7 @@ func (dt *DecodeTree) RemoveDecoder(csID uint8) {
 func (dt *DecodeTree) SetGenTraceElemOutI(outI ocsd.GenElemProcessor) {
 	dt.genElemOut = outI
 	for _, elem := range dt.decodeElements {
-		if elem.SetTraceElemOut != nil {
-			elem.SetTraceElemOut(outI)
-		}
+		dt.wireTraceElemOut(elem, outI)
 	}
 }
 
