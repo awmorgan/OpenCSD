@@ -655,13 +655,12 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, traceWPOp waypointTraceOp, n
 			if A == ocsd.AtomE {
 				d.currPeState.valid = false
 				if d.returnStack.Active && d.CurrPacketIn.Type == PktAtom && (d.instrInfo.Subtype == ocsd.SInstrV8Ret || d.instrInfo.Subtype == ocsd.SInstrV7ImpliedRet) {
-					var nextIsa ocsd.ISA
-					d.instrInfo.InstrAddr = d.returnStack.Pop(&nextIsa)
-					d.instrInfo.NextISA = nextIsa
-
-					if d.returnStack.Overflow {
+					popAddr, nextIsa, ok := d.returnStack.Pop()
+					if !ok {
 						return ocsd.RespFatalInvalidData
 					} else {
+						d.instrInfo.InstrAddr = popAddr
+						d.instrInfo.NextISA = nextIsa
 						d.currPeState.valid = true
 					}
 				}

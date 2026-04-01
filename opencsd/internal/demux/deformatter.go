@@ -15,7 +15,7 @@ type outDataEntry struct {
 }
 
 type datapathState struct {
-	err         error
+	err error
 }
 
 func newDatapathState() *datapathState {
@@ -265,7 +265,7 @@ func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, 
 		if len(dataBlock) == 0 {
 			err = ocsd.ErrInvalidParamVal
 		} else {
-			err, numBytesProcessed = d.processTraceData(index, dataBlock, state)
+			numBytesProcessed, err = d.processTraceData(index, dataBlock, state)
 		}
 	default:
 		err = ocsd.ErrInvalidParamVal
@@ -299,21 +299,21 @@ func (d *FrameDeformatter) TraceDataReset(index ocsd.TrcIndex) error {
 	return err
 }
 
-func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byte, state *datapathState) (outErr error, numBytesProcessed uint32) {
+func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byte, state *datapathState) (numBytesProcessed uint32, outErr error) {
 	if d.alignment == 0 {
-		return d.processTraceDataError(fmt.Errorf("%w: Deformatter not configured", ocsd.ErrFail), ocsd.RespFatalSysErr, state), 0
+		return 0, d.processTraceDataError(fmt.Errorf("%w: Deformatter not configured", ocsd.ErrFail), ocsd.RespFatalSysErr, state)
 	}
 
 	if len(d.pendingData) > 0 {
 		expected := d.pendingIndex + ocsd.TrcIndex(len(d.pendingData))
 		if expected != index {
 			err := fmt.Errorf("%w: Not continuous trace data", ocsd.ErrDfrmtrNotconttrace)
-			return d.processTraceDataError(err, ocsd.RespFatalInvalidData, state), 0
+			return 0, d.processTraceDataError(err, ocsd.RespFatalInvalidData, state)
 		}
 	} else if d.firstData {
 		if d.trcCurrIdx != index {
 			err := fmt.Errorf("%w: Not continuous trace data", ocsd.ErrDfrmtrNotconttrace)
-			return d.processTraceDataError(err, ocsd.RespFatalInvalidData, state), 0
+			return 0, d.processTraceDataError(err, ocsd.RespFatalInvalidData, state)
 		}
 	}
 	if len(d.pendingData) == 0 {
@@ -329,14 +329,14 @@ func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byt
 			d.firstData = true
 		}
 		numBytesProcessed = uint32(len(dataBlock))
-		return state.err, numBytesProcessed
+		return numBytesProcessed, state.err
 	}
 
 	alignedBlock := d.pendingData[:processSize]
 	alignedIndex := d.pendingIndex
 
 	var alignedProcessed uint32
-	outErr, alignedProcessed = d.processTraceDataAligned(alignedIndex, alignedBlock, state)
+	alignedProcessed, outErr = d.processTraceDataAligned(alignedIndex, alignedBlock, state)
 
 	if alignedProcessed > 0 {
 		d.pendingData = d.pendingData[int(alignedProcessed):]
@@ -353,12 +353,12 @@ func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byt
 
 	numBytesProcessed = uint32(len(dataBlock))
 	if state.err != nil {
-		return state.err, numBytesProcessed
+		return numBytesProcessed, state.err
 	}
-	return outErr, numBytesProcessed
+	return numBytesProcessed, outErr
 }
 
-func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBlock []byte, state *datapathState) (outErr error, numBytesProcessed uint32) {
+func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBlock []byte, state *datapathState) (numBytesProcessed uint32, outErr error) {
 	d.trcCurrIdx = index
 
 	// record incoming block
@@ -367,7 +367,7 @@ func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBloc
 	dataBlockSize := uint32(len(dataBlock))
 
 	if dataBlockSize%d.alignment != 0 {
-		return d.processTraceDataError(fmt.Errorf("%w: Input block incorrect size, must be %d byte multiple", ocsd.ErrInvalidParamVal, d.alignment), ocsd.RespFatalInvalidData, state), 0
+		return 0, d.processTraceDataError(fmt.Errorf("%w: Input block incorrect size, must be %d byte multiple", ocsd.ErrInvalidParamVal, d.alignment), ocsd.RespFatalInvalidData, state)
 	}
 
 	if d.checkForSync(dataBlockSize) {
@@ -376,7 +376,7 @@ func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBloc
 			var dcdErr error
 			bProcessing, dcdErr = d.extractFrame(dataBlockSize, state)
 			if dcdErr != nil {
-				return d.processTraceDataError(dcdErr, ocsd.RespFatalInvalidData, state), 0
+				return 0, d.processTraceDataError(dcdErr, ocsd.RespFatalInvalidData, state)
 			}
 			if bProcessing {
 				bProcessing = d.unpackFrame()
@@ -389,9 +389,9 @@ func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBloc
 
 	numBytesProcessed = d.inBlockProcessed
 	if state.err != nil {
-		return state.err, numBytesProcessed
+		return numBytesProcessed, state.err
 	}
-	return outErr, numBytesProcessed
+	return numBytesProcessed, outErr
 }
 
 func (d *FrameDeformatter) processTraceDataError(errObj error, resp ocsd.DatapathResp, state *datapathState) error {

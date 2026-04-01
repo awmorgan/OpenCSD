@@ -50,9 +50,8 @@ func TestAddrReturnStack(t *testing.T) {
 		t.Errorf("Expected 5 entries, got %d", s.Count)
 	}
 
-	var isa ocsd.ISA
-	addr := s.Pop(&isa)
-	if addr != 0x110 || isa != ocsd.ISAArm || s.Count != 4 {
+	addr, isa, ok := s.Pop()
+	if !ok || addr != 0x110 || isa != ocsd.ISAArm || s.Count != 4 {
 		t.Errorf("Pop failed, got 0x%X", addr)
 	}
 
@@ -62,9 +61,9 @@ func TestAddrReturnStack(t *testing.T) {
 	}
 
 	// Test underflow
-	s.Pop(&isa)
-	if !s.Overflow {
-		t.Errorf("Underflow/Overflow tracking failed")
+	addr, isa, ok = s.Pop()
+	if ok || addr != ocsd.VAddr(ocsd.VAMask) || isa != 0 {
+		t.Errorf("Underflow handling failed")
 	}
 
 	s.Flush()
@@ -78,8 +77,8 @@ func TestAddrReturnStack(t *testing.T) {
 
 	// Because of ring buffer logic, the oldest 4 should be overwritten.
 	// The newest is 0x1000 + 19*4 = 0x104C
-	addr = s.Pop(&isa)
-	if addr != 0x104C {
+	addr, isa, ok = s.Pop()
+	if !ok || addr != 0x104C || isa != ocsd.ISAArm {
 		t.Errorf("Expected 0x104C after wrap, got 0x%X", addr)
 	}
 }

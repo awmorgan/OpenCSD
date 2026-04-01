@@ -1105,15 +1105,13 @@ func (d *PktDecode) updateContext(p0elem *p0Elem, elem *ocsd.TraceElement) {
 func (d *PktDecode) returnStackPop() error {
 	err := error(nil)
 	if d.returnStack.PopPending {
-		isa := new(ocsd.ISA)
-		popAddr := d.returnStack.Pop(isa)
-		overflow := d.returnStack.Overflow
-		if overflow {
+		popAddr, isa, ok := d.returnStack.Pop()
+		if !ok {
 			err = ocsd.ErrRetStackOverflow
 			err = d.handlePacketSeqErr(err, ocsd.BadTrcIndex)
 		} else {
 			d.instrInfo.InstrAddr = popAddr
-			d.instrInfo.ISA = *isa
+			d.instrInfo.ISA = isa
 			d.NeedAddr = false
 		}
 	}
