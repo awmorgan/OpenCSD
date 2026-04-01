@@ -471,7 +471,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	if err != nil {
 		resp = ocsd.RespFatalInvalidData
 	} else {
-		resp = d.outElem.SendElements()
+		resp = ocsd.DataRespFromErr(d.outElem.SendElements())
 	}
 	return resp
 }
@@ -486,7 +486,7 @@ func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 	if d.currState == resolveElem {
 		return d.resolveElements()
 	}
-	return d.outElem.SendElements()
+	return ocsd.DataRespFromErr(d.outElem.SendElements())
 }
 
 func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
@@ -521,7 +521,7 @@ func (d *PktDecode) handleNoSync() (ocsd.DatapathResp, bool) {
 		err = d.outElem.AddElemType(d.IndexCurrPkt, ocsd.GenElemNoSync)
 		if err == nil {
 			d.outElem.CurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
-			resp := d.outElem.SendElements()
+			resp := ocsd.DataRespFromErr(d.outElem.SendElements())
 			d.currState = waitSync
 			return resp, false // continue to waitSync
 		}
@@ -583,7 +583,7 @@ func (d *PktDecode) resolveElements() ocsd.DatapathResp {
 
 	for !complete {
 		if d.outElem.NumElemToSend() > 0 {
-			resp = d.outElem.SendElements()
+			resp = ocsd.DataRespFromErr(d.outElem.SendElements())
 		} else if d.isElemForRes() {
 			err := error(nil)
 			if d.elemRes.P0Commit != 0 {
@@ -1985,7 +1985,7 @@ func (d *PktDecode) emitNoSyncAtUnsyncIdx() ocsd.DatapathResp {
 		return ocsd.RespFatalSysErr
 	}
 	d.outElem.CurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
-	return d.outElem.SendElements()
+	return ocsd.DataRespFromErr(d.outElem.SendElements())
 }
 
 // ========================

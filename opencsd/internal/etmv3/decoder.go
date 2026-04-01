@@ -278,7 +278,7 @@ func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 	}
 
 	d.currState = sendPkts
-	resp = d.outputElemList.SendElements()
+	resp = ocsd.DataRespFromErr(d.outputElemList.SendElements())
 	if ocsd.DataRespIsCont(resp) {
 		d.currState = d.nextDecodeState()
 	}
@@ -303,7 +303,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	d.outputElemList.CommitAllPendElem()
 
 	d.currState = sendPkts
-	resp = d.outputElemList.SendElements()
+	resp = ocsd.DataRespFromErr(d.outputElemList.SendElements())
 	if ocsd.DataRespIsCont(resp) {
 		d.currState = decodePkts
 	}
@@ -376,7 +376,7 @@ func (d *PktDecode) handleDecodePkts() (decoderState, ocsd.DatapathResp, bool) {
 }
 
 func (d *PktDecode) handleSendPkts() (decoderState, ocsd.DatapathResp, bool) {
-	resp := d.outputElemList.SendElements()
+	resp := ocsd.DataRespFromErr(d.outputElemList.SendElements())
 	if ocsd.DataRespIsCont(resp) {
 		return d.nextDecodeState(), resp, true
 	}
@@ -457,7 +457,7 @@ func (d *PktDecode) sendUnsyncPacket() ocsd.DatapathResp {
 
 	elem.SetType(ocsd.GenElemNoSync)
 	elem.Payload.UnsyncEOTInfo = ocsd.UnsyncInfo(d.unsyncInfo)
-	return d.outputElemList.SendElements()
+	return ocsd.DataRespFromErr(d.outputElemList.SendElements())
 }
 
 func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {

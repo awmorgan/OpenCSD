@@ -1,7 +1,6 @@
 package common
 
 import (
-	"errors"
 	"sync"
 
 	"opencsd/internal/ocsd"
@@ -141,32 +140,28 @@ func (l *GenElemList) ElemToSend() bool {
 
 // SendElements dispatches committed (non-pending) elements to the registered
 // receiver, removing each from the slice after dispatch.
-func (l *GenElemList) SendElements() ocsd.DatapathResp {
+func (l *GenElemList) SendElements() error {
 	if l.sendIf == nil {
-		return ocsd.RespFatalNotInit
+		return ocsd.ErrNotInit
 	}
 	out := l.sendIf
 	if out == nil {
-		return ocsd.RespFatalNotInit
+		return ocsd.ErrNotInit
 	}
-	resp := ocsd.RespCont
-	for l.ElemToSend() && ocsd.DataRespIsCont(resp) {
+	var outErr error
+	for l.ElemToSend() && ocsd.IsDataContErr(outErr) {
 		slot := l.elems[0]
 		err := out.TraceElemIn(slot.pktIndex, l.csID, slot.elem)
-		if ocsd.IsDataContErr(err) {
-			resp = ocsd.RespCont
-		} else if ocsd.IsDataWaitErr(err) {
-			resp = ocsd.RespWait
-		} else if errors.Is(err, ocsd.ErrNotInit) {
-			resp = ocsd.RespFatalNotInit
+		if ocsd.IsDataWaitErr(err) {
+			outErr = ocsd.ErrWait
 		} else {
-			resp = ocsd.RespFatalInvalidData
+			outErr = err
 		}
 		l.elems[0].elem = nil // nil-zero before reslice to release GC root
 		l.elems = l.elems[1:]
 		putPoolElem(slot.elem)
 	}
-	return resp
+	return outErr
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -293,26 +288,22 @@ func (s *GenElemStack) NumElemToSend() int {
 }
 
 // SendElements dispatches all queued elements to the registered receiver.
-func (s *GenElemStack) SendElements() ocsd.DatapathResp {
+func (s *GenElemStack) SendElements() error {
 	if s.sendIf == nil {
-		return ocsd.RespFatalNotInit
+		return ocsd.ErrNotInit
 	}
 	out := s.sendIf
 	if out == nil {
-		return ocsd.RespFatalNotInit
+		return ocsd.ErrNotInit
 	}
-	resp := ocsd.RespCont
-	for s.elemToSend > 0 && ocsd.DataRespIsCont(resp) {
+	var outErr error
+	for s.elemToSend > 0 && ocsd.IsDataContErr(outErr) {
 		slot := s.elems[s.sendElemIdx]
 		err := out.TraceElemIn(slot.pktIndex, s.csID, slot.elem)
-		if ocsd.IsDataContErr(err) {
-			resp = ocsd.RespCont
-		} else if ocsd.IsDataWaitErr(err) {
-			resp = ocsd.RespWait
-		} else if errors.Is(err, ocsd.ErrNotInit) {
-			resp = ocsd.RespFatalNotInit
+		if ocsd.IsDataWaitErr(err) {
+			outErr = ocsd.ErrWait
 		} else {
-			resp = ocsd.RespFatalInvalidData
+			outErr = err
 		}
 		s.elemToSend--
 		s.sendElemIdx++
@@ -320,5 +311,5 @@ func (s *GenElemStack) SendElements() ocsd.DatapathResp {
 	if s.elemToSend == 0 {
 		s.resetIndexes()
 	}
-	return resp
+	return outErr
 }
