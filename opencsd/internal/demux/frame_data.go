@@ -51,7 +51,7 @@ func (d *FrameDeformatter) outputUnsyncedBytes(numBytes uint32) {
 	// Not implemented in C++ lib
 }
 
-func (d *FrameDeformatter) checkForResetFSyncPatterns(dataBlockSize uint32) (fSyncBytes uint32, err error) {
+func (d *FrameDeformatter) checkForResetFSyncPatterns(dataBlockSize uint32, state *datapathState) (fSyncBytes uint32, err error) {
 	const FSYNC_PATTERN uint32 = 0x7FFFFFFF
 	checkForFsync := true
 	numFsyncs := 0
@@ -69,7 +69,7 @@ func (d *FrameDeformatter) checkForResetFSyncPatterns(dataBlockSize uint32) (fSy
 
 	if numFsyncs > 0 {
 		if numFsyncs%4 == 0 {
-			d.executeNoneDataOpAllIDs(ocsd.OpReset, d.trcCurrIdx)
+			d.executeNoneDataOpAllIDs(ocsd.OpReset, d.trcCurrIdx, state)
 			d.currSrcID = ocsd.BadCSSrcID
 			d.exFrmNBytes = 0
 			d.trcCurrIdxSof = ocsd.BadTrcIndex
@@ -81,7 +81,7 @@ func (d *FrameDeformatter) checkForResetFSyncPatterns(dataBlockSize uint32) (fSy
 	return fSyncBytes, err
 }
 
-func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) (bool, error) {
+func (d *FrameDeformatter) extractFrame(dataBlockSize uint32, state *datapathState) (bool, error) {
 	const FSYNC_PATTERN uint32 = 0x7FFFFFFF
 	const HSYNC_PATTERN uint16 = 0x7FFF
 	const FSYNC_START uint16 = 0xFFFF
@@ -96,7 +96,7 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) (bool, error) {
 
 	if d.cfgFlags&ocsd.DfrmtrFrameMemAlign != 0 {
 		if d.cfgFlags&ocsd.DfrmtrResetOn4xFsync != 0 {
-			fSyncBytes, err = d.checkForResetFSyncPatterns(dataBlockSize)
+			fSyncBytes, err = d.checkForResetFSyncPatterns(dataBlockSize, state)
 
 			if fSyncBytes > 0 && (d.outPackedRaw || d.outUnpackedRaw) {
 				d.outputRawMonBytes(ocsd.OpData, d.trcCurrIdx, ocsd.FrmFsync, d.inBlockBase[d.inBlockProcessed:d.inBlockProcessed+fSyncBytes], 0)
@@ -265,7 +265,7 @@ func (d *FrameDeformatter) unpackFrame() bool {
 	return true
 }
 
-func (d *FrameDeformatter) outputFrame() bool {
+func (d *FrameDeformatter) outputFrame(state *datapathState) bool {
 	contProcessing := true
 
 	for d.outProcessed < (d.outDataIdx+1) && contProcessing {
@@ -284,13 +284,9 @@ func (d *FrameDeformatter) outputFrame() bool {
 					d.outData[d.outProcessed].index+ocsd.TrcIndex(d.outData[d.outProcessed].used),
 					d.outData[d.outProcessed].data[d.outData[d.outProcessed].used:d.outData[d.outProcessed].valid])
 
-				d.collateDataPathResp(resp)
-				if err != nil {
-					d.collateDataPathResp(ocsd.RespFatalInvalidData)
-					d.lastErr = err
-				}
+				collateDataPathResp(state, resp, err)
 
-				if !d.dataPathCont() {
+				if !ocsd.DataRespIsCont(state.highestResp) {
 					contProcessing = false
 					d.outData[d.outProcessed].used += bytesUsed
 					if d.outData[d.outProcessed].used == d.outData[d.outProcessed].valid {
