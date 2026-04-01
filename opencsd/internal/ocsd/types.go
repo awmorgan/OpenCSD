@@ -150,6 +150,46 @@ func IsDataWaitErr(err error) bool { return errors.Is(err, ErrWait) }
 // Nil is treated as continue, and ErrCont is available as a transitional sentinel.
 func IsDataContErr(err error) bool { return err == nil || errors.Is(err, ErrCont) }
 
+// DataRespFromErr maps transitional datapath sentinel errors to DatapathResp.
+func DataRespFromErr(err error) DatapathResp {
+	if IsDataContErr(err) {
+		return RespCont
+	}
+	if IsDataWaitErr(err) {
+		return RespWait
+	}
+	if errors.Is(err, ErrNotInit) {
+		return RespFatalNotInit
+	}
+	if errors.Is(err, ErrInvalidParamVal) || errors.Is(err, ErrInvalidParamType) {
+		return RespFatalInvalidParam
+	}
+	return RespFatalInvalidData
+}
+
+// DataErrFromResp maps legacy DatapathResp values to transitional error flow control.
+func DataErrFromResp(resp DatapathResp, err error) error {
+	if err != nil {
+		return err
+	}
+	if DataRespIsCont(resp) {
+		return nil
+	}
+	if DataRespIsWait(resp) {
+		return ErrWait
+	}
+	switch resp {
+	case RespFatalNotInit:
+		return ErrNotInit
+	case RespFatalInvalidParam, RespFatalInvalidOp:
+		return ErrInvalidParamVal
+	case RespFatalSysErr:
+		return ErrFail
+	default:
+		return ErrDataDecodeFatal
+	}
+}
+
 // Trace Decode component types
 
 type RawframeElem uint32

@@ -94,7 +94,7 @@ func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
 	d.outputElemList.SetSendIf(out)
 }
 
-func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) (ocsd.DatapathResp, error) {
+func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) error {
 	resp := ocsd.RespCont
 	var packetErr error
 	if d.codeFollower != nil {
@@ -121,7 +121,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 		packetErr = ocsd.ErrInvalidParamVal
 		resp = ocsd.RespFatalInvalidOp
 	}
-	return resp, packetErr
+	return ocsd.DataErrFromResp(resp, packetErr)
 }
 
 func (d *PktDecode) configureDecoder() {

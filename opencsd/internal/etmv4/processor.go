@@ -249,7 +249,7 @@ func (p *Processor) onEOT() ocsd.DatapathResp {
 	}
 
 	if p.pktOut != nil && !ocsd.DataRespIsFatal(resp) {
-		resp, _ = p.pktOut.PacketDataIn(ocsd.OpEOT, 0, nil)
+		resp = ocsd.DataRespFromErr(p.pktOut.PacketDataIn(ocsd.OpEOT, 0, nil))
 	}
 
 	return resp
@@ -262,7 +262,7 @@ func (p *Processor) onReset() ocsd.DatapathResp {
 
 	resp := ocsd.RespCont
 	if p.pktOut != nil {
-		resp, _ = p.pktOut.PacketDataIn(ocsd.OpReset, 0, nil)
+		resp = ocsd.DataRespFromErr(p.pktOut.PacketDataIn(ocsd.OpReset, 0, nil))
 	}
 	if !ocsd.DataRespIsFatal(resp) {
 		p.resetProcessorState()
@@ -277,7 +277,7 @@ func (p *Processor) onFlush() ocsd.DatapathResp {
 
 	resp := ocsd.RespCont
 	if p.pktOut != nil {
-		resp, _ = p.pktOut.PacketDataIn(ocsd.OpFlush, 0, nil)
+		resp = ocsd.DataRespFromErr(p.pktOut.PacketDataIn(ocsd.OpFlush, 0, nil))
 	}
 	return resp
 }
@@ -377,7 +377,7 @@ func (p *Processor) outputPacket() ocsd.DatapathResp {
 		return ocsd.RespCont
 	}
 	pkt := p.currPacket
-	resp, _ := p.pktOut.PacketDataIn(ocsd.OpData, p.packetIndex, &pkt) //nolint:gosec
+	resp := ocsd.DataRespFromErr(p.pktOut.PacketDataIn(ocsd.OpData, p.packetIndex, &pkt)) //nolint:gosec
 	return resp
 }
 
@@ -393,7 +393,7 @@ func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
 	if !p.sentNotsyncPacket {
 		if p.pktOut != nil {
 			pkt := p.currPacket
-			resp, _ = p.pktOut.PacketDataIn(ocsd.OpData, p.packetIndex, &pkt)
+			resp = ocsd.DataRespFromErr(p.pktOut.PacketDataIn(ocsd.OpData, p.packetIndex, &pkt))
 		}
 		p.sentNotsyncPacket = true
 	}

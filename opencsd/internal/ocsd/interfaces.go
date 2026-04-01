@@ -42,7 +42,7 @@ type GenElemProcessor interface {
 
 // PacketProcessor provides input for discrete protocol packets.
 type PacketProcessor[P any] interface {
-	PacketDataIn(op DatapathOp, indexSOP TrcIndex, pkt *P) (DatapathResp, error)
+	PacketDataIn(op DatapathOp, indexSOP TrcIndex, pkt *P) error
 }
 
 // PacketMonitor provides packet monitor functionality off the decode path.

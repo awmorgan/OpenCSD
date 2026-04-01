@@ -69,7 +69,7 @@ func TestProcessBranchAddrContextWithoutException(t *testing.T) {
 	pkt.Context.CurrNS = true
 	pkt.Context.CurrHyp = true
 
-	resp, _ := dec.PacketDataIn(ocsd.OpData, 2, pkt)
+	resp := ocsd.DataRespFromErr(dec.PacketDataIn(ocsd.OpData, 2, pkt))
 	if ocsd.DataRespIsFatal(resp) {
 		t.Fatalf("unexpected fatal response: %v", resp)
 	}
@@ -113,7 +113,7 @@ func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 	pkt.ResetState()
 	pkt.Type = PktTrigger
 
-	resp, _ := dec.PacketDataIn(ocsd.OpData, 4, pkt)
+	resp := ocsd.DataRespFromErr(dec.PacketDataIn(ocsd.OpData, 4, pkt))
 	if ocsd.DataRespIsFatal(resp) {
 		t.Fatalf("unexpected fatal response: %v", resp)
 	}
@@ -157,7 +157,7 @@ func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 	pkt.ExceptionCancel = true
 	pkt.Exception.Present = true
 
-	resp, _ := dec.PacketDataIn(ocsd.OpData, 6, pkt)
+	resp := ocsd.DataRespFromErr(dec.PacketDataIn(ocsd.OpData, 6, pkt))
 	if ocsd.DataRespIsFatal(resp) {
 		t.Fatalf("unexpected fatal response: %v", resp)
 	}
@@ -191,7 +191,7 @@ func TestProcessPHdrUsesPacketISA(t *testing.T) {
 	phdr.Atom.Num = 1
 	phdr.Atom.EnBits = 0x1
 
-	resp, _ := dec.PacketDataIn(ocsd.OpData, 2, phdr)
+	resp := ocsd.DataRespFromErr(dec.PacketDataIn(ocsd.OpData, 2, phdr))
 	if ocsd.DataRespIsFatal(resp) {
 		t.Fatalf("unexpected fatal response: %v", resp)
 	}
@@ -199,7 +199,7 @@ func TestProcessPHdrUsesPacketISA(t *testing.T) {
 	trigger := &Packet{}
 	trigger.ResetState()
 	trigger.Type = PktTrigger
-	resp, _ = dec.PacketDataIn(ocsd.OpData, 3, trigger)
+	resp = ocsd.DataRespFromErr(dec.PacketDataIn(ocsd.OpData, 3, trigger))
 	if ocsd.DataRespIsFatal(resp) {
 		t.Fatalf("unexpected fatal response: %v", resp)
 	}

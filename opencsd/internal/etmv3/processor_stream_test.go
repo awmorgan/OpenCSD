@@ -247,6 +247,6 @@ func TestProcStreamMalformedHeaders(t *testing.T) {
 
 type noopPktSink struct{}
 
-func (n *noopPktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) (ocsd.DatapathResp, error) {
-	return ocsd.RespCont, nil
+func (n *noopPktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) error {
+	return nil
 }

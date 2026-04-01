@@ -27,7 +27,7 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	pkt2.Type = PktPHdr
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	resp, _ := dec.PacketDataIn(ocsd.OpData, 1, pkt2)
+	resp := ocsd.DataRespFromErr(dec.PacketDataIn(ocsd.OpData, 1, pkt2))
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Atom E failed: %v", resp)
 	}
