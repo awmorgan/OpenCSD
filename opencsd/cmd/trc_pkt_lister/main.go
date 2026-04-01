@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"opencsd/internal/common"
 	"opencsd/internal/dcdtree"
 	"opencsd/internal/etmv3"
 	"opencsd/internal/etmv4"
@@ -246,14 +245,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 		}
 	}
 	memIf := &memAccAdapter{mapper: mapper}
-	tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
-		if elem == nil || elem.DecoderHandle == nil {
-			return
-		}
-		if owner, ok := elem.DecoderHandle.(interface{ SetMemAccess(common.TargetMemAccess) }); ok {
-			owner.SetMemAccess(memIf)
-		}
-	})
+	tree.SetMemAccessI(memIf)
 	mapped, err := mapMemoryRanges(mapper, opts.ssDir, reader)
 	if err != nil {
 		return err

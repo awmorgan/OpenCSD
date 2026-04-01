@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"opencsd/internal/common"
 	"opencsd/internal/demux"
 
 	"opencsd/internal/memacc"
@@ -36,6 +37,7 @@ type DecodeTree struct {
 
 	decoderRoot ocsd.TrcDataProcessor
 	genElemOut  ocsd.GenElemProcessor
+	memAccess   common.TargetMemAccess
 }
 
 // NewDecodeTree creates a new Trace Decode Tree using the supplied decoder registry.
@@ -160,6 +162,9 @@ func (dt *DecodeTree) attachElementDependencies(elem *DecodeTreeElement) {
 	if dt.genElemOut != nil {
 		dt.wireTraceElemOut(elem, dt.genElemOut)
 	}
+	if dt.memAccess != nil {
+		dt.wireMemAccess(elem, dt.memAccess)
+	}
 }
 
 func (dt *DecodeTree) wireTraceElemOut(elem *DecodeTreeElement, outI ocsd.GenElemProcessor) {
@@ -168,6 +173,15 @@ func (dt *DecodeTree) wireTraceElemOut(elem *DecodeTreeElement, outI ocsd.GenEle
 	}
 	if owner, ok := elem.DecoderHandle.(traceElemWiringOwner); ok {
 		owner.SetTraceElemOut(outI)
+	}
+}
+
+func (dt *DecodeTree) wireMemAccess(elem *DecodeTreeElement, memI common.TargetMemAccess) {
+	if elem == nil || memI == nil {
+		return
+	}
+	if owner, ok := elem.DecoderHandle.(memAccessWiringOwner); ok {
+		owner.SetMemAccess(memI)
 	}
 }
 
@@ -189,6 +203,14 @@ func (dt *DecodeTree) SetGenTraceElemOutI(outI ocsd.GenElemProcessor) {
 	dt.genElemOut = outI
 	for _, elem := range dt.decodeElements {
 		dt.wireTraceElemOut(elem, outI)
+	}
+}
+
+// SetMemAccessI attaches a memory access interface to all registered decoders.
+func (dt *DecodeTree) SetMemAccessI(memI common.TargetMemAccess) {
+	dt.memAccess = memI
+	for _, elem := range dt.decodeElements {
+		dt.wireMemAccess(elem, memI)
 	}
 }
 

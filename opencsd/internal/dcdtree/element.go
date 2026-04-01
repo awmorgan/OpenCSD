@@ -1,6 +1,7 @@
 package dcdtree
 
 import (
+	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -8,6 +9,12 @@ import (
 // Decoder types that support late sink binding should implement this interface directly.
 type traceElemWiringOwner interface {
 	SetTraceElemOut(ocsd.GenElemProcessor)
+}
+
+// memAccessWiringOwner defines the explicit late-binding contract for memory access wiring.
+// Decoder types that support late memory interface binding should implement this interface directly.
+type memAccessWiringOwner interface {
+	SetMemAccess(common.TargetMemAccess)
 }
 
 // DecodeTreeElement represents a registered decoder instance within the trace decode tree.
