@@ -2,40 +2,7 @@ To answer your direct question: **No, using "base classes" like `ProcBase` and `
 
 Here is a step-by-step incremental refactoring plan to rid your codebase of these C++-isms and make it idiomatic Go, moving from easy wins to deeper architectural changes.
 
-
-### Step 3: Break Down the Monolithic Base Classes (Composition)
-`DecoderBase` and `ProcBase` are "God objects." They know about Logging, Error Verbosity, Operational Flags, Memory Access, and Instruction Decoding. In Go, you should separate these concerns into smaller, injected dependencies.
-
-**The Go Way:**
-1. **Logging:** Instead of baking `LogError` and `LogMessage` into a base class, pass the `ocsd.Logger` directly to the structs that need it, or create a small `type Logger struct` that can be embedded.
-2. **Flags/State:** Extract `OpFlags` and `SupportedOpFlags` into a dedicated `type OpMode struct` that can be embedded.
-3. **Interfaces:** Instead of requiring a base struct, define small interfaces for what these components *do*. 
-```go
-// Define small interfaces
-type OpModeManager interface {
-    ComponentOpMode() uint32
-    SupportedOpModes() uint32
-}
-
-type TraceElementOutputter interface {
-    OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp
-}
-```
-
-### Step 4: Refactor C++-Style State Machines
-In `etmv3/decoder.go`, functions like `ProcessPacket()` use a very C++-style `while(!pktDone)` loop wrapped around a massive `switch(currState)` block, mutating shared state variables.
-```go
-// Current C++-style approach
-for !pktDone {
-    switch d.currState {
-        case noSync:
-            resp = d.sendUnsyncPacket()
-            d.currState = waitAsync
-// ...
-```
-**The Go Way:** 1. **Return early:** Break the switch cases into distinct handler functions that return the next state and the response. 
-2. **Minimize mutable state:** Instead of mutating `d.currState` heavily inside deep switch statements, transition states by returning them: `nextState, resp := d.handleNoSync()`.
-
+### Step 4: 
 ### Step 5: Clean Up Error Handling
 The codebase mixes standard Go errors (`error`) with a custom C++ style `ocsd.DatapathResp` enum. 
 Furthermore, components call `d.Base.LogError(...)` internally instead of letting the caller handle it.

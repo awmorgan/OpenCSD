@@ -425,69 +425,80 @@ func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
-	resp := ocsd.RespCont
-	var err error
 	d.syncAA64OpcodeCheckMode()
 
-	pkt := d.CurrPacketIn
-	pktDone := false
-
-	for !pktDone {
+	var resp ocsd.DatapathResp
+	for {
+		var done bool
 		switch d.currState {
 		case noSync:
-			err = d.outElem.ResetElemStack()
-			if err == nil {
-				err = d.outElem.AddElemType(d.IndexCurrPkt, ocsd.GenElemNoSync)
-				if err == nil {
-					d.outElem.CurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
-					resp = d.outElem.SendElements()
-					d.currState = waitSync
-				}
-			}
-			if err != nil {
-				resp = ocsd.RespFatalSysErr
-			}
-
+			resp, done = d.handleNoSync()
 		case waitSync:
-			if pkt.Type == PktAsync {
-				d.currState = waitISync
-			}
-			pktDone = true
-
+			resp, done = d.handleWaitSync()
 		case waitISync:
-			d.needCtxt = true
-			d.needAddr = true
-			if pkt.Type == PktTraceInfo {
-				d.doTraceInfoPacket()
-				d.currState = decodePkts
-				d.returnStack.Flush()
-			} else if d.config.MajVersion() >= 0x5 && pkt.Type == PktEvent {
-				err = d.decodePacket()
-				if err != nil {
-					resp = ocsd.RespFatalInvalidData
-				}
-			}
-			pktDone = true
-
+			resp, done = d.handleWaitISync()
 		case decodePkts:
-			err = d.decodePacket()
-			if err != nil {
-				// We don't have operational flags like componentOpMode in Go yet, so just fail on bad data
-				resp = ocsd.RespFatalInvalidData
-				pktDone = true
-			} else if d.currState != resolveElem {
-				pktDone = true
-			}
-
+			resp, done = d.handleDecodePkts()
 		case resolveElem:
-			resp = d.resolveElements()
-			if d.currState == decodePkts || resp != ocsd.RespCont {
-				pktDone = true
-			}
+			resp, done = d.handleResolveElem()
+		default:
+			return ocsd.RespCont
+		}
+		if done {
+			return resp
 		}
 	}
+}
 
-	return resp
+func (d *PktDecode) handleNoSync() (ocsd.DatapathResp, bool) {
+	err := d.outElem.ResetElemStack()
+	if err == nil {
+		err = d.outElem.AddElemType(d.IndexCurrPkt, ocsd.GenElemNoSync)
+		if err == nil {
+			d.outElem.CurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
+			resp := d.outElem.SendElements()
+			d.currState = waitSync
+			return resp, false // continue to waitSync
+		}
+	}
+	return ocsd.RespFatalSysErr, true
+}
+
+func (d *PktDecode) handleWaitSync() (ocsd.DatapathResp, bool) {
+	if d.CurrPacketIn.Type == PktAsync {
+		d.currState = waitISync
+	}
+	return ocsd.RespCont, true
+}
+
+func (d *PktDecode) handleWaitISync() (ocsd.DatapathResp, bool) {
+	pkt := d.CurrPacketIn
+	d.needCtxt = true
+	d.needAddr = true
+	if pkt.Type == PktTraceInfo {
+		d.doTraceInfoPacket()
+		d.currState = decodePkts
+		d.returnStack.Flush()
+	} else if d.config.MajVersion() >= 0x5 && pkt.Type == PktEvent {
+		if err := d.decodePacket(); err != nil {
+			return ocsd.RespFatalInvalidData, true
+		}
+	}
+	return ocsd.RespCont, true
+}
+
+func (d *PktDecode) handleDecodePkts() (ocsd.DatapathResp, bool) {
+	if err := d.decodePacket(); err != nil {
+		return ocsd.RespFatalInvalidData, true
+	}
+	// decodePacket may set d.currState = resolveElem; if so, continue the loop
+	return ocsd.RespCont, d.currState != resolveElem
+}
+
+func (d *PktDecode) handleResolveElem() (ocsd.DatapathResp, bool) {
+	resp := d.resolveElements()
+	// resolveElements sets d.currState = decodePkts when complete
+	return resp, d.currState == decodePkts || resp != ocsd.RespCont
 }
 
 func (d *PktDecode) clearElemRes() {
@@ -601,9 +612,9 @@ func (d *PktDecode) decodePacket() error {
 		d.pushP0ElemExcept(pkt.Type, d.IndexCurrPkt, pkt.ExceptionInfo.AddrInterp == 0x2, pkt.ExceptionInfo.ExceptionType)
 		d.elemPendingAddr = true
 	case PktExceptRtn:
-		bV7MProfile := (d.config.ArchVer == ocsd.ArchV7) && (d.config.CoreProf == ocsd.ProfileCortexM)
-		d.pushP0ElemParam(p0ExcepRet, bV7MProfile, pkt.Type, d.IndexCurrPkt, nil)
-		if bV7MProfile {
+		v7MProfile := (d.config.ArchVer == ocsd.ArchV7) && (d.config.CoreProf == ocsd.ProfileCortexM)
+		d.pushP0ElemParam(p0ExcepRet, v7MProfile, pkt.Type, d.IndexCurrPkt, nil)
+		if v7MProfile {
 			d.currSpecDepth++
 		}
 
@@ -722,17 +733,17 @@ func (d *PktDecode) decodePacket() error {
 
 	// timestamp
 	case PktTimestamp:
-		bTSwithCC := d.config.EnabledCCI()
+		tsWithCC := d.config.EnabledCCI()
 		ts := pkt.Timestamp
 		params := []uint32{
 			uint32(ts & 0xFFFFFFFF),
 			uint32((ts >> 32) & 0xFFFFFFFF),
 		}
-		if bTSwithCC {
+		if tsWithCC {
 			params = append(params, pkt.CycleCount)
 		}
 		p0Type := p0TS
-		if bTSwithCC {
+		if tsWithCC {
 			p0Type = p0TSCC
 		}
 		d.pushP0ElemParam(p0Type, false, pkt.Type, d.IndexCurrPkt, params)

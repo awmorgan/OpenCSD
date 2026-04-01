@@ -272,45 +272,51 @@ func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
-	resp := ocsd.RespCont
-
-	pktDone := false
-
-	for !pktDone {
+	var resp ocsd.DatapathResp
+	for {
+		var next decodeState
+		var done bool
 		switch d.currState {
 		case decodeNoSync:
-			d.outputElem.SetType(ocsd.GenElemNoSync)
-			d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncInfo(d.unsyncInfo))
-			resp = d.OutputTraceElement(d.csID, &d.outputElem)
-			if d.CurrPacketIn.Type == PktASync {
-				d.currState = decodeWaitISync
-			} else {
-				d.currState = decodeWaitSync
-			}
-			pktDone = true
-
+			next, resp, done = d.handleNoSync()
 		case decodeWaitSync:
-			if d.CurrPacketIn.Type == PktASync {
-				d.currState = decodeWaitISync
-			}
-			pktDone = true
-
+			next, resp, done = d.handleWaitSync()
 		case decodeWaitISync:
-			if d.CurrPacketIn.Type == PktISync {
-				d.currState = decodePkts
-			} else {
-				pktDone = true
-			}
-
+			next, resp, done = d.handleWaitISync()
 		case decodePkts:
-			resp = d.decodePacket()
-			pktDone = true
-
+			next, resp, done = decodePkts, d.decodePacket(), true
 		default:
-			pktDone = true
+			return ocsd.RespCont
+		}
+		d.currState = next
+		if done {
+			return resp
 		}
 	}
-	return resp
+}
+
+func (d *PktDecode) handleNoSync() (decodeState, ocsd.DatapathResp, bool) {
+	d.outputElem.SetType(ocsd.GenElemNoSync)
+	d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncInfo(d.unsyncInfo))
+	resp := d.OutputTraceElement(d.csID, &d.outputElem)
+	if d.CurrPacketIn.Type == PktASync {
+		return decodeWaitISync, resp, true
+	}
+	return decodeWaitSync, resp, true
+}
+
+func (d *PktDecode) handleWaitSync() (decodeState, ocsd.DatapathResp, bool) {
+	if d.CurrPacketIn.Type == PktASync {
+		return decodeWaitISync, ocsd.RespCont, true
+	}
+	return decodeWaitSync, ocsd.RespCont, true
+}
+
+func (d *PktDecode) handleWaitISync() (decodeState, ocsd.DatapathResp, bool) {
+	if d.CurrPacketIn.Type == PktISync {
+		return decodePkts, ocsd.RespCont, false // continue to decodePkts
+	}
+	return decodeWaitISync, ocsd.RespCont, true
 }
 
 func (d *PktDecode) contProcess() ocsd.DatapathResp {

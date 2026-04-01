@@ -252,56 +252,84 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
-	resp := ocsd.RespCont
-	pktDone := false
-
 	if d.Config == nil {
 		return ocsd.RespFatalNotInit
 	}
 
-	for !pktDone {
+	var resp ocsd.DatapathResp
+	for {
+		var next decoderState
+		var done bool
 		switch d.currState {
 		case noSync:
-			resp = d.sendUnsyncPacket()
-			d.currState = waitAsync
+			next, resp, done = d.handleNoSync()
 		case waitAsync:
-			packetIn := d.CurrPacketIn
-			if packetIn.Type == PktASync {
-				d.currState = waitISync
-			}
-			pktDone = true
+			next, resp, done = d.handleWaitAsync()
 		case waitISync:
-			d.waitISync = true
-			packetIn := d.CurrPacketIn
-			if packetIn.Type == PktISync || packetIn.Type == PktISyncCycle {
-				resp = d.processISync(packetIn.Type == PktISyncCycle, true)
-				d.currState = sendPkts
-				d.waitISync = false
-			} else if d.preISyncValid(packetIn.Type) {
-				resp, pktDone = d.decodePacket()
-			} else {
-				pktDone = true
-			}
+			next, resp, done = d.handleWaitISync()
 		case decodePkts:
-			resp, pktDone = d.decodePacket()
+			next, resp, done = d.handleDecodePkts()
 		case sendPkts:
-			resp = d.outputElemList.SendElements()
-			if ocsd.DataRespIsCont(resp) {
-				if d.waitISync {
-					d.currState = waitISync
-				} else {
-					d.currState = decodePkts
-				}
-			}
-			pktDone = true
+			next, resp, done = d.handleSendPkts()
 		default:
-			pktDone = true
 			d.LogError(ocsd.ErrSevError, fmt.Errorf("unknown decoder state"))
 			d.resetDecoder()
-			resp = ocsd.RespFatalSysErr
+			return ocsd.RespFatalSysErr
+		}
+		d.currState = next
+		if done {
+			return resp
 		}
 	}
-	return resp
+}
+
+func (d *PktDecode) handleNoSync() (decoderState, ocsd.DatapathResp, bool) {
+	resp := d.sendUnsyncPacket()
+	return waitAsync, resp, false // continue to waitAsync
+}
+
+func (d *PktDecode) handleWaitAsync() (decoderState, ocsd.DatapathResp, bool) {
+	if d.CurrPacketIn.Type == PktASync {
+		return waitISync, ocsd.RespCont, true
+	}
+	return waitAsync, ocsd.RespCont, true
+}
+
+func (d *PktDecode) handleWaitISync() (decoderState, ocsd.DatapathResp, bool) {
+	d.waitISync = true
+	packetIn := d.CurrPacketIn
+	if packetIn.Type == PktISync || packetIn.Type == PktISyncCycle {
+		resp := d.processISync(packetIn.Type == PktISyncCycle, true)
+		d.waitISync = false
+		return d.nextSendOrDecodeState(), resp, false
+	}
+	if d.preISyncValid(packetIn.Type) {
+		next, resp, done := d.handleDecodePkts()
+		return next, resp, done
+	}
+	return waitISync, ocsd.RespCont, true
+}
+
+func (d *PktDecode) handleDecodePkts() (decoderState, ocsd.DatapathResp, bool) {
+	resp, done := d.decodePacket()
+	next := d.nextSendOrDecodeState()
+	return next, resp, done
+}
+
+func (d *PktDecode) handleSendPkts() (decoderState, ocsd.DatapathResp, bool) {
+	resp := d.outputElemList.SendElements()
+	if ocsd.DataRespIsCont(resp) {
+		return d.nextDecodeState(), resp, true
+	}
+	return sendPkts, resp, true
+}
+
+// nextSendOrDecodeState returns sendPkts if there are elements to send, otherwise the next decode state.
+func (d *PktDecode) nextSendOrDecodeState() decoderState {
+	if d.outputElemList.ElemToSend() {
+		return sendPkts
+	}
+	return d.nextDecodeState()
 }
 
 func (d *PktDecode) getNextOpElem() (*ocsd.TraceElement, error) {
@@ -375,9 +403,9 @@ func (d *PktDecode) sendUnsyncPacket() ocsd.DatapathResp {
 	return d.outputElemList.SendElements()
 }
 
-func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, pktDone bool) {
+func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 	resp = ocsd.RespCont
-	pktDone = false
+	done = false
 
 	packetIn := d.CurrPacketIn
 
@@ -480,12 +508,10 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, pktDone bool) {
 	}
 
 	if d.outputElemList.ElemToSend() {
-		d.currState = sendPkts
-	} else {
-		d.currState = d.nextDecodeState()
+		// caller (handleDecodePkts) will compute next state via nextSendOrDecodeState
 	}
-	pktDone = !d.outputElemList.ElemToSend()
-	return resp, pktDone
+	done = !d.outputElemList.ElemToSend()
+	return resp, done
 }
 
 func (d *PktDecode) setNeedAddr(needAddr bool) {
@@ -566,9 +592,7 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 	}
 
 	if d.outputElemList.ElemToSend() {
-		d.currState = sendPkts
-	} else {
-		d.currState = decodePkts
+		// caller will compute next state via nextSendOrDecodeState
 	}
 
 	return ocsd.RespCont
@@ -691,9 +715,7 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 	}
 
 	if d.outputElemList.ElemToSend() {
-		d.currState = sendPkts
-	} else {
-		d.currState = decodePkts
+		// caller will compute next state via nextSendOrDecodeState
 	}
 
 	return ocsd.RespCont
@@ -843,9 +865,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 	}
 
 	if d.outputElemList.ElemToSend() {
-		d.currState = sendPkts
-	} else {
-		d.currState = decodePkts
+		// caller will compute next state via nextSendOrDecodeState
 	}
 
 	return ocsd.RespCont

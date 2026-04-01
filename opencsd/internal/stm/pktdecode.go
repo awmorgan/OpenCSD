@@ -114,28 +114,46 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 }
 
 func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
-	resp := ocsd.RespCont
-	bPktDone := false
-
 	d.decodePass1 = true
 
-	for !bPktDone {
+	var resp ocsd.DatapathResp
+	for {
+		var next decoderState
+		var done bool
 		switch d.currState {
 		case dcdNoSync:
-			d.outputElem.SetType(ocsd.GenElemNoSync)
-			d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncInfo(d.unsyncInfo))
-			resp = d.OutputTraceElement(d.csID, &d.outputElem)
-			d.currState = dcdWaitSync
+			next, resp, done = d.handleNoSync()
 		case dcdWaitSync:
-			if d.CurrPacketIn.Type == PktAsync {
-				d.currState = dcdDecodePkts
-			}
-			bPktDone = true
+			next, resp, done = d.handleWaitSync()
 		case dcdDecodePkts:
-			resp, bPktDone = d.decodePacket()
+			next, resp, done = d.handleDecodePkts()
+		default:
+			return ocsd.RespCont
+		}
+		d.currState = next
+		if done {
+			return resp
 		}
 	}
-	return resp
+}
+
+func (d *PktDecode) handleNoSync() (decoderState, ocsd.DatapathResp, bool) {
+	d.outputElem.SetType(ocsd.GenElemNoSync)
+	d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncInfo(d.unsyncInfo))
+	resp := d.OutputTraceElement(d.csID, &d.outputElem)
+	return dcdWaitSync, resp, false // continue to waitSync
+}
+
+func (d *PktDecode) handleWaitSync() (decoderState, ocsd.DatapathResp, bool) {
+	if d.CurrPacketIn.Type == PktAsync {
+		return dcdDecodePkts, ocsd.RespCont, true
+	}
+	return dcdWaitSync, ocsd.RespCont, true
+}
+
+func (d *PktDecode) handleDecodePkts() (decoderState, ocsd.DatapathResp, bool) {
+	resp, done := d.decodePacket()
+	return dcdDecodePkts, resp, done
 }
 
 func (d *PktDecode) OnEOT() ocsd.DatapathResp {
@@ -182,10 +200,10 @@ func (d *PktDecode) resetPayloadBuffer() {
 	d.payloadBuffer = make([]byte, d.numPktCorrelation*8)
 }
 
-func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, bPktDone bool) {
+func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 	resp = ocsd.RespCont
-	bSendPacket := false
-	bPktDone = true
+	sendPacket := false
+	done = true
 	d.outputElem.SetType(ocsd.GenElemSWTrace)
 	d.clearSWTPerPcktInfo()
 
@@ -203,24 +221,24 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, bPktDone bool) {
 		// no action required
 	case PktNull:
 		if d.CurrPacketIn.IsTSPkt() {
-			bSendPacket = true
+			sendPacket = true
 		}
 	case PktFreq:
 		d.swtPacketInfo.SetFrequency(true)
-		bSendPacket = d.updatePayload()
+		sendPacket = d.updatePayload()
 	case PktTrig:
 		d.swtPacketInfo.SetTriggerEvent(true)
-		bSendPacket = d.updatePayload()
+		sendPacket = d.updatePayload()
 	case PktGErr:
 		d.swtPacketInfo.MasterID = uint16(d.CurrPacketIn.Master)
 		d.swtPacketInfo.ChannelID = uint16(d.CurrPacketIn.Channel)
 		d.swtPacketInfo.SetGlobalErr(true)
 		d.swtPacketInfo.SetIDValid(false)
-		bSendPacket = d.updatePayload()
+		sendPacket = d.updatePayload()
 	case PktMErr:
 		d.swtPacketInfo.ChannelID = uint16(d.CurrPacketIn.Channel)
 		d.swtPacketInfo.SetMasterErr(true)
-		bSendPacket = d.updatePayload()
+		sendPacket = d.updatePayload()
 	case PktM8:
 		d.swtPacketInfo.MasterID = uint16(d.CurrPacketIn.Master)
 		d.swtPacketInfo.ChannelID = uint16(d.CurrPacketIn.Channel)
@@ -229,12 +247,12 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, bPktDone bool) {
 		d.swtPacketInfo.ChannelID = uint16(d.CurrPacketIn.Channel)
 	case PktFlag:
 		d.swtPacketInfo.SetMarkerPacket(true)
-		bSendPacket = true
+		sendPacket = true
 	case PktD4, PktD8, PktD16, PktD32, PktD64:
-		bSendPacket = d.updatePayload()
+		sendPacket = d.updatePayload()
 	}
 
-	if bSendPacket {
+	if sendPacket {
 		if d.CurrPacketIn.IsTSPkt() {
 			d.outputElem.SetTS(d.CurrPacketIn.Timestamp, true)
 			d.swtPacketInfo.SetHasTimestamp(true)
@@ -243,7 +261,7 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, bPktDone bool) {
 		resp = d.OutputTraceElement(d.csID, &d.outputElem)
 	}
 
-	return resp, bPktDone
+	return resp, done
 }
 
 func (d *PktDecode) clearSWTPerPcktInfo() {
