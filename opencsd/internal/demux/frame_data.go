@@ -86,9 +86,10 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32, state *datapathSta
 	const HSYNC_PATTERN uint16 = 0x7FFF
 	const FSYNC_START uint16 = 0xFFFF
 
-	var err error
-	var fSyncBytes, hSyncBytes, exBytes uint32
 	bufLeft := dataBlockSize - d.inBlockProcessed
+	fSyncBytes := uint32(0)
+	exBytes := uint32(0)
+	totalProcessed := uint32(0)
 
 	if bufLeft == 0 {
 		return false, nil
@@ -96,7 +97,7 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32, state *datapathSta
 
 	if d.cfgFlags&ocsd.DfrmtrFrameMemAlign != 0 {
 		if d.cfgFlags&ocsd.DfrmtrResetOn4xFsync != 0 {
-			fSyncBytes, err = d.checkForResetFSyncPatterns(dataBlockSize, state)
+			fSyncBytes, err := d.checkForResetFSyncPatterns(dataBlockSize, state)
 
 			if fSyncBytes > 0 && (d.outPackedRaw || d.outUnpackedRaw) {
 				d.outputRawMonBytes(ocsd.OpData, d.trcCurrIdx, ocsd.FrmFsync, d.inBlockBase[d.inBlockProcessed:d.inBlockProcessed+fSyncBytes], 0)
@@ -116,7 +117,9 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32, state *datapathSta
 			d.trcCurrIdxSof = d.trcCurrIdx + ocsd.TrcIndex(fSyncBytes)
 			exBytes = ocsd.DfrmtrFrameSize
 		}
+		totalProcessed = exBytes + fSyncBytes
 	} else {
+		hSyncBytes := uint32(0)
 		hasFSyncs := (d.cfgFlags & ocsd.DfrmtrHasFsyncs) != 0
 		hasHSyncs := (d.cfgFlags & ocsd.DfrmtrHasHsyncs) != 0
 
@@ -181,9 +184,9 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32, state *datapathSta
 		if bufLeft == 1 {
 			return false, fmt.Errorf("%w: Odd trailing byte in frame stream at index %d", ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx)
 		}
-	}
 
-	totalProcessed := exBytes + fSyncBytes + hSyncBytes
+		totalProcessed = exBytes + fSyncBytes + hSyncBytes
+	}
 
 	if (d.exFrmNBytes == ocsd.DfrmtrFrameSize || bufLeft == 0) && d.outPackedRaw {
 		d.outputRawMonBytes(ocsd.OpData, d.trcCurrIdx, ocsd.FrmPacked, d.inBlockBase[d.inBlockProcessed:d.inBlockProcessed+totalProcessed], 0)
