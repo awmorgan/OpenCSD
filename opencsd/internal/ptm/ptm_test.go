@@ -551,7 +551,7 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
+	dec.TraceElemOut = out
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -606,7 +606,7 @@ func TestDecoderWPUpdate(t *testing.T) {
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
+	dec.TraceElemOut = out
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -639,7 +639,7 @@ func TestDecoderBranchWithAtomRange(t *testing.T) {
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
+	dec.TraceElemOut = out
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -687,7 +687,7 @@ func TestDecoderMemNacc(t *testing.T) {
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
+	dec.TraceElemOut = out
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -730,7 +730,7 @@ func TestDecoderMemNaccSecure(t *testing.T) {
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
+	dec.TraceElemOut = out
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -763,7 +763,7 @@ func TestDecoderIndirectBranch(t *testing.T) {
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
+	dec.TraceElemOut = out
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -794,7 +794,7 @@ func TestDecoderLinkBranch(t *testing.T) {
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
+	dec.TraceElemOut = out
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -819,7 +819,7 @@ func TestDecoderContProcess(t *testing.T) {
 	config := NewConfig()
 	dec := mustNewPktDecode(t, config)
 	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
+	dec.TraceElemOut = out
 
 	// Exercise onFlush when not in cont state
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
@@ -1103,7 +1103,7 @@ func newTestDec(hitAfter int) (*PktDecode, *testTrcElemIn) {
 	dec.MemAccess = &mockMemAcc{hitAfter: hitAfter}
 	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
+	dec.TraceElemOut = out
 	return dec, out
 }
 
@@ -1171,7 +1171,7 @@ func TestDecoderAtomRange_NoWPFound(t *testing.T) {
 	dec.MemAccess = &mockMemAcc{failAfter: 2, hitAfter: -1} // fail after 2 reads, never branch
 	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
+	dec.TraceElemOut = out
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	syncDec(dec, 0x2000)
@@ -1253,7 +1253,7 @@ func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	dec.MemAccess = &mockMemAcc{failAfter: 1, hitAfter: -1}
 	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
+	dec.TraceElemOut = out
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -1414,7 +1414,7 @@ func TestDecoderIndirectBranch_ActiveRetStack(t *testing.T) {
 	dec.MemAccess = &mockMemAcc{hitAfter: 0, isIndirect: true, isLink: true}
 	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
+	dec.TraceElemOut = out
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	syncDec(dec, 0x1000)

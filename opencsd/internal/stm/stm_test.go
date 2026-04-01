@@ -58,7 +58,7 @@ func TestSTMEndToEndDecode(t *testing.T) {
 	proc.SetComponentOpMode(ocsd.OpflgPktprocUnsyncOnBadPkts)
 
 	outReceiver := &testTrcElemIn{}
-	dec.SetTraceElemOut(outReceiver)
+	dec.TraceElemOut = outReceiver
 
 	sb := &StmStreamBuilder{}
 

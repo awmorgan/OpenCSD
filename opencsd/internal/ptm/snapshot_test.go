@@ -178,7 +178,7 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			return nil, fmt.Errorf("create PTM pipeline for %s failed: %v", srcDevName, err)
 		}
 
-		if err := tree.AddWiredDecoder(traceID, ocsd.BuiltinDcdPTM, ocsd.ProtocolPTM, proc, dec, dec.SetTraceElemOut); err != nil {
+		if err := tree.AddWiredDecoder(traceID, ocsd.BuiltinDcdPTM, ocsd.ProtocolPTM, proc, dec, func(out ocsd.GenElemProcessor) { dec.TraceElemOut = out }); err != nil {
 			return nil, fmt.Errorf("attach PTM decoder for %s failed: %v", srcDevName, err)
 		}
 		ptmDecoders++
