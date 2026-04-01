@@ -179,12 +179,6 @@ func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
 	d.outElem.SetSendIf(out)
 }
 
-// SetMemAccess satisfies dcdtree's memAccSetterOwner interface.
-func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.MemAccess = mem }
-
-// SetInstrDecode satisfies dcdtree's instrDecodeSetterOwner interface.
-func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.InstrDecode = dec }
-
 // OutputTraceElement sends an element using IndexCurrPkt.
 func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error {
 	if d.TraceElemOut == nil {
@@ -2101,8 +2095,8 @@ func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, out ocsd.GenElemPro
 		return nil, err
 	}
 	decoder.SetTraceElemOut(out)
-	decoder.SetMemAccess(mem)
-	decoder.SetInstrDecode(instr)
+	decoder.MemAccess = mem
+	decoder.InstrDecode = instr
 	return decoder, nil
 }
 

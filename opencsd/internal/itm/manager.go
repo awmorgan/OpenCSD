@@ -23,9 +23,9 @@ func NewPipeline(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.
 	}
 
 	// Inject dependencies unconditionally (they may be nil).
-	dec.SetTraceElemOut(out)
-	dec.SetMemAccess(mem)
-	dec.SetInstrDecode(instr)
+	dec.TraceElemOut = out
+	dec.MemAccess = mem
+	dec.InstrDecode = instr
 
 	// Wire processor output to decoder input.
 	proc.SetPktOut(dec)

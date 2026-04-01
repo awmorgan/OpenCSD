@@ -548,8 +548,8 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	dec := mustNewPktDecode(t, config)
 
 	mem := &mockMemAcc{}
-	dec.SetMemAccess(mem)
-	dec.SetInstrDecode(idec.NewDecoder())
+	dec.MemAccess = mem
+	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
 
@@ -603,8 +603,8 @@ func TestDecoderWPUpdate(t *testing.T) {
 	dec := mustNewPktDecode(t, config)
 
 	mem := &mockMemAcc{}
-	dec.SetMemAccess(mem)
-	dec.SetInstrDecode(idec.NewDecoder())
+	dec.MemAccess = mem
+	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
 
@@ -636,8 +636,8 @@ func TestDecoderBranchWithAtomRange(t *testing.T) {
 	dec := mustNewPktDecode(t, config)
 
 	mem := &mockMemAcc{}
-	dec.SetMemAccess(mem)
-	dec.SetInstrDecode(idec.NewDecoder())
+	dec.MemAccess = mem
+	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
 
@@ -684,8 +684,8 @@ func TestDecoderMemNacc(t *testing.T) {
 	dec := mustNewPktDecode(t, config)
 
 	mem := &mockMemAcc{failAfter: 1, hitAfter: -1} // fail on 2nd read, never branch
-	dec.SetMemAccess(mem)
-	dec.SetInstrDecode(idec.NewDecoder())
+	dec.MemAccess = mem
+	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
 
@@ -727,8 +727,8 @@ func TestDecoderMemNaccSecure(t *testing.T) {
 	dec := mustNewPktDecode(t, config)
 
 	mem := &mockMemAcc{failAfter: 1, hitAfter: -1}
-	dec.SetMemAccess(mem)
-	dec.SetInstrDecode(idec.NewDecoder())
+	dec.MemAccess = mem
+	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
 
@@ -760,8 +760,8 @@ func TestDecoderIndirectBranch(t *testing.T) {
 	dec := mustNewPktDecode(t, config)
 
 	mem := &mockMemAcc{hitAfter: 0, isIndirect: true}
-	dec.SetMemAccess(mem)
-	dec.SetInstrDecode(idec.NewDecoder())
+	dec.MemAccess = mem
+	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
 
@@ -791,8 +791,8 @@ func TestDecoderLinkBranch(t *testing.T) {
 	dec := mustNewPktDecode(t, config)
 
 	mem := &mockMemAcc{hitAfter: 0, isLink: true}
-	dec.SetMemAccess(mem)
-	dec.SetInstrDecode(idec.NewDecoder())
+	dec.MemAccess = mem
+	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
 
@@ -1100,8 +1100,8 @@ func newTestDec(hitAfter int) (*PktDecode, *testTrcElemIn) {
 	if err != nil {
 		panic(err)
 	}
-	dec.SetMemAccess(&mockMemAcc{hitAfter: hitAfter})
-	dec.SetInstrDecode(idec.NewDecoder())
+	dec.MemAccess = &mockMemAcc{hitAfter: hitAfter}
+	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
 	return dec, out
@@ -1168,8 +1168,8 @@ func TestDecoderAtomMultiStep(t *testing.T) {
 func TestDecoderAtomRange_NoWPFound(t *testing.T) {
 	config := NewConfig()
 	dec := mustNewPktDecode(t, config)
-	dec.SetMemAccess(&mockMemAcc{failAfter: 2, hitAfter: -1}) // fail after 2 reads, never branch
-	dec.SetInstrDecode(idec.NewDecoder())
+	dec.MemAccess = &mockMemAcc{failAfter: 2, hitAfter: -1} // fail after 2 reads, never branch
+	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
 
@@ -1250,8 +1250,8 @@ func TestDecoderProcessAtom_MultiAtomLoop(t *testing.T) {
 func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	config := NewConfig()
 	dec := mustNewPktDecode(t, config)
-	dec.SetMemAccess(&mockMemAcc{failAfter: 1, hitAfter: -1})
-	dec.SetInstrDecode(idec.NewDecoder())
+	dec.MemAccess = &mockMemAcc{failAfter: 1, hitAfter: -1}
+	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
 
@@ -1411,8 +1411,8 @@ func TestDecoderIndirectBranch_ActiveRetStack(t *testing.T) {
 	config.RegCCER = ccerRestackImpl
 	config.RegCtrl = ctrlRetStackEna
 	dec := mustNewPktDecode(t, config)
-	dec.SetMemAccess(&mockMemAcc{hitAfter: 0, isIndirect: true, isLink: true})
-	dec.SetInstrDecode(idec.NewDecoder())
+	dec.MemAccess = &mockMemAcc{hitAfter: 0, isIndirect: true, isLink: true}
+	dec.InstrDecode = idec.NewDecoder()
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
 

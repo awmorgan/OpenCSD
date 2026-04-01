@@ -22,8 +22,8 @@ func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, out ocsd.GenElemPro
 		return nil, err
 	}
 	decoder.SetTraceElemOut(out)
-	decoder.SetMemAccess(mem)
-	decoder.SetInstrDecode(instr)
+	decoder.MemAccess = mem
+	decoder.InstrDecode = instr
 	return decoder, nil
 }
 
