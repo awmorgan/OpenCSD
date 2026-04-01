@@ -1,6 +1,7 @@
 package etmv4
 
 import (
+	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -67,6 +68,7 @@ type tableEntry struct {
 // Processor parses byte streams for ETMv4 packets.
 // Ported from TrcPktProcEtmV4I.
 type Processor struct {
+	common.OpMode
 	config Config
 
 	// output interface

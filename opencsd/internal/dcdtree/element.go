@@ -1,12 +1,13 @@
 package dcdtree
 
 import (
+	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
 // DecoderHandle is the typed decoder registration handle stored by the decode tree.
 // Concrete values may be packet processors or packet decoders, depending on pipeline mode.
-type DecoderHandle interface{}
+type DecoderHandle = common.OpModeManager
 
 // pipelineWiringOwner defines the explicit late-binding contract used by decode tree
 // when dependencies must be wired after decoder construction.

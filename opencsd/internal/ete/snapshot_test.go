@@ -627,9 +627,6 @@ func applyOpModeFlags(tree *dcdtree.DecodeTree, flags uint32) {
 			return
 		}
 		apply(elem.DecoderHandle)
-		if elem.DataIn != elem.DecoderHandle {
-			apply(elem.DataIn)
-		}
 	})
 }
 

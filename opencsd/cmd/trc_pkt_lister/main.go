@@ -497,8 +497,8 @@ func applyAdditionalFlags(tree *dcdtree.DecodeTree, flags uint32) error {
 	}
 
 	apply := func(component any) error {
-		opComp, ok := component.(common.OpModeManager)
-		if !ok || opComp == nil {
+		opComp := component.(common.OpModeManager)
+		if opComp == nil {
 			return nil
 		}
 		supported := opComp.SupportedOpModes()
@@ -519,12 +519,6 @@ func applyAdditionalFlags(tree *dcdtree.DecodeTree, flags uint32) error {
 		}
 		if err := apply(elem.DecoderHandle); err != nil {
 			applyErr = err
-			return
-		}
-		if elem.DataIn != elem.DecoderHandle {
-			if err := apply(elem.DataIn); err != nil {
-				applyErr = err
-			}
 		}
 	})
 
