@@ -84,8 +84,8 @@ func (cf *CodeFollower) DecodeSingleOpCode() error {
 	// Read memory location for opcode
 	readBytes, pData, err := cf.MemAccess.ReadTargetMemory(cf.InstrInfo.InstrAddr, cf.TraceID, cf.MemSpace, bytesReq)
 
-	// Treat both ErrNoAccessor and too-short reads as memory unavailable
-	if errors.Is(err, memacc.ErrNoAccessor) || (err == nil && readBytes < 4) {
+	// Treat no-access and incomplete opcode reads as memory unavailable.
+	if errors.Is(err, memacc.ErrNoAccessor) || (err == nil && (readBytes != bytesReq || len(pData) < int(bytesReq))) {
 		// Memory unavailable
 		cf.HasNaccErr = true
 		cf.NoAccessAddr = cf.InstrInfo.InstrAddr
@@ -98,19 +98,10 @@ func (cf *CodeFollower) DecodeSingleOpCode() error {
 		return err
 	}
 
-	if readBytes == 4 && len(pData) >= 4 {
-		cf.InstrInfo.Opcode = binary.LittleEndian.Uint32(pData[:4])
+	cf.InstrInfo.Opcode = binary.LittleEndian.Uint32(pData[:4])
 
-		err = cf.IdDecode.DecodeInstruction(&cf.InstrInfo)
-		return err
-	}
-
-	// Defensive: should not reach here given the check above, but handle it
-	cf.HasNaccErr = true
-	cf.NoAccessAddr = cf.InstrInfo.InstrAddr
-	cf.HasNext = false
-	cf.NextAddr = cf.InstrInfo.InstrAddr
-	return ocsd.ErrMemNacc
+	err = cf.IdDecode.DecodeInstruction(&cf.InstrInfo)
+	return err
 }
 
 func (cf *CodeFollower) resetFollowerState() bool {
