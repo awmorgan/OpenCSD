@@ -9,33 +9,35 @@ import (
 func TestAddrReturnStack(t *testing.T) {
 	s := NewAddrReturnStack()
 
-	if s.Active() {
+	if s.Active {
 		t.Errorf("Should default to inactive")
 	}
 
 	// Push while inactive shouldn't do anything
 	s.Push(0x1000, ocsd.ISAThumb2)
-	if s.count != 0 {
+	if s.Count != 0 {
 		t.Errorf("Push while inactive modified stack")
 	}
 
-	s.SetActive(true)
+	s.Active = true
 
-	s.SetPopPending(true)
-	if !s.PopPending() {
+	if s.Active {
+		s.PopPending = true
+	}
+	if !s.PopPending {
 		t.Errorf("SetPopPending failed")
 	}
-	s.SetPopPending(false)
+	s.PopPending = false
 
-	s.SetTInfoWaitAddr(true)
-	if !s.TInfoWaitAddr() {
+	s.TInfoWaitAddr = true
+	if !s.TInfoWaitAddr {
 		t.Errorf("SetTInfoWaitAddr failed")
 	}
 	s.Push(0x2000, ocsd.ISAArm) // shouldn't push because tInfoWaitAddr
-	if s.count != 0 {
+	if s.Count != 0 {
 		t.Errorf("Push while tInfoWaitAddr modified stack")
 	}
-	s.SetTInfoWaitAddr(false)
+	s.TInfoWaitAddr = false
 
 	// Push 5 items
 	s.Push(0x100, ocsd.ISAArm)
@@ -44,24 +46,24 @@ func TestAddrReturnStack(t *testing.T) {
 	s.Push(0x10C, ocsd.ISAArm)
 	s.Push(0x110, ocsd.ISAArm)
 
-	if s.count != 5 {
-		t.Errorf("Expected 5 entries, got %d", s.count)
+	if s.Count != 5 {
+		t.Errorf("Expected 5 entries, got %d", s.Count)
 	}
 
 	var isa ocsd.ISA
 	addr := s.Pop(&isa)
-	if addr != 0x110 || isa != ocsd.ISAArm || s.count != 4 {
+	if addr != 0x110 || isa != ocsd.ISAArm || s.Count != 4 {
 		t.Errorf("Pop failed, got 0x%X", addr)
 	}
 
 	s.Flush()
-	if s.count != 0 {
+	if s.Count != 0 {
 		t.Errorf("Flush failed")
 	}
 
 	// Test underflow
 	s.Pop(&isa)
-	if !s.Overflow() {
+	if !s.Overflow {
 		t.Errorf("Underflow/Overflow tracking failed")
 	}
 
@@ -70,8 +72,8 @@ func TestAddrReturnStack(t *testing.T) {
 	for i := range 20 {
 		s.Push(ocsd.VAddr(0x1000+i*4), ocsd.ISAArm)
 	}
-	if s.count != 16 {
-		t.Errorf("Expected max 16 entries, got %d", s.count)
+	if s.Count != 16 {
+		t.Errorf("Expected max 16 entries, got %d", s.Count)
 	}
 
 	// Because of ring buffer logic, the oldest 4 should be overwritten.

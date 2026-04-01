@@ -94,10 +94,10 @@ func TestProcBase(t *testing.T) {
 	}
 
 	b.StatsInit()
-	b.StatsAddTotalCount(100)
-	b.StatsAddUnsyncCount(5)
-	b.StatsAddBadSeqCount(2)
-	b.StatsAddBadHdrCount(1)
+	b.Stats.ChannelTotal += 100
+	b.Stats.ChannelUnsynced += 5
+	b.Stats.BadSequenceErrs += 2
+	b.Stats.BadHeaderErrs += 1
 
 	stats, errCode := b.StatsBlock()
 	if errCode != nil {

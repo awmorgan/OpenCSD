@@ -151,7 +151,7 @@ func TestProcessBranchAddr_NoException_SetsAddr(t *testing.T) {
 	if dec.iAddr != 0x4000 {
 		t.Errorf("expected iAddr=0x4000, got 0x%X", dec.iAddr)
 	}
-	if dec.needAddr {
+	if dec.NeedAddr {
 		t.Error("needAddr should be false after branch addr received")
 	}
 }
@@ -339,8 +339,8 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
 	if len(out.elements) == n0 {
-		t.Logf("InstrType from follower: %v", dec.codeFollower.InstrInfo().Type)
-		t.Logf("InstrOpcode from follower: %x", dec.codeFollower.InstrInfo().Opcode)
+		t.Logf("InstrType from follower: %v", dec.codeFollower.InstrInfo.Type)
+		t.Logf("InstrOpcode from follower: %x", dec.codeFollower.InstrInfo.Opcode)
 		t.Error("expected InstrRange element from E-atom processing")
 	}
 	for _, e := range out.elements[n0:] {
@@ -435,9 +435,9 @@ func TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpData, 3, trigPkt)
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
-	if !dec.needAddr {
-		t.Logf("InstrType from follower: %v", dec.codeFollower.InstrInfo().Type)
-		t.Logf("InstrOpcode from follower: %x", dec.codeFollower.InstrInfo().Opcode)
+	if !dec.NeedAddr {
+		t.Logf("InstrType from follower: %v", dec.codeFollower.InstrInfo.Type)
+		t.Logf("InstrOpcode from follower: %x", dec.codeFollower.InstrInfo.Opcode)
 		t.Error("expected needAddr=true after IndirectBr E-atom")
 	}
 	_ = out
@@ -540,8 +540,8 @@ func TestProcessPHdr_NeedAddr_EmitsAddrUnknown(t *testing.T) {
 	dec, out := buildDecInDecodePkts(config)
 
 	// First: set needAddr=true directly to skip the complex atom-following
-	dec.needAddr = true
-	dec.sentUnknown = false
+	dec.NeedAddr = true
+	dec.SentUnknown = false
 
 	n0 := len(out.elements)
 

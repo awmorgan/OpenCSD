@@ -43,10 +43,12 @@ func TestCodeFollower(t *testing.T) {
 
 	cf = NewCodeFollowerWithInterfaces(mockMem, realID)
 
-	cf.SetArchProfile(ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA})
-	cf.SetISA(ocsd.ISAAArch64)
-	cf.SetTraceID(0x12)
-	cf.SetMemSpace(ocsd.MemSpaceAny)
+	cf.Arch = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA}
+	cf.InstrInfo.PeType = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA}
+	cf.Isa = ocsd.ISAAArch64
+	cf.InstrInfo.ISA = ocsd.ISAAArch64
+	cf.TraceID = 0x12
+	cf.MemSpace = ocsd.MemSpaceAny
 
 	res, err := cf.FollowSingleAtom(0x1000, ocsd.AtomE)
 	if err != nil || !res.HasNext {
@@ -72,7 +74,8 @@ func TestCodeFollower(t *testing.T) {
 	}
 
 	// Test Thumb 32-bit decode requirement
-	cf.SetISA(ocsd.ISAThumb2)
+	cf.Isa = ocsd.ISAThumb2
+	cf.InstrInfo.ISA = ocsd.ISAThumb2
 	mockMem.dataToReturn = []byte{0x00, 0xF0, 0x01, 0x02} // Provide full 4 bytes so DecodeSingleOpCode succeeds
 	_, err = cf.FollowSingleAtom(0x1008, ocsd.AtomN)
 	if err != nil {
@@ -89,12 +92,12 @@ func TestCodeFollower(t *testing.T) {
 	if res.NaccAddr != 0x2000 {
 		t.Errorf("Expected nacc addr 0x2000, got 0x%X", res.NaccAddr)
 	}
-	if cf.MemSpace() != ocsd.MemSpaceAny {
+	if cf.MemSpace != ocsd.MemSpaceAny {
 		t.Errorf("Expected memory space to be preserved")
 	}
 
 	cf.SetDSBDMBasWP()
-	if cf.InstrInfo().DsbDmbWaypoints != 1 {
+	if cf.InstrInfo.DsbDmbWaypoints != 1 {
 		t.Errorf("Expected DSB/DMB waypoint mode to be enabled")
 	}
 }

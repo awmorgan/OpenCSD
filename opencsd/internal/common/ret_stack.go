@@ -19,13 +19,13 @@ const retStackCap = 16
 // A separate overflow flag tracks the case where Pop is called on an empty
 // stack, reproducing the C++ behaviour that drove numEntries negative.
 type AddrReturnStack struct {
-	active        bool
-	popPending    bool
-	tInfoWaitAddr bool
-	overflow      bool
-	stack         [retStackCap]RetStackElement
-	head          int // points to oldest element
-	count         int // number of valid elements
+	Active        bool
+	PopPending    bool
+	TInfoWaitAddr bool
+	Overflow      bool
+	Stack         [retStackCap]RetStackElement
+	Head          int // points to oldest element
+	Count         int // number of valid elements
 }
 
 // NewAddrReturnStack returns a new initialised AddrReturnStack.
@@ -35,26 +35,18 @@ func NewAddrReturnStack() *AddrReturnStack {
 	return s
 }
 
-func (s *AddrReturnStack) SetActive(active bool) {
-	s.active = active
-}
-
-func (s *AddrReturnStack) Active() bool {
-	return s.active
-}
-
 // Push pushes addr/isa onto the top of the stack. When the stack is already
 // at capacity the oldest (bottom) entry is overwritten.
 func (s *AddrReturnStack) Push(addr ocsd.VAddr, isa ocsd.ISA) {
-	if s.active && !s.tInfoWaitAddr {
-		if s.count == retStackCap {
-			s.head = (s.head + 1) % retStackCap
-			s.count--
+	if s.Active && !s.TInfoWaitAddr {
+		if s.Count == retStackCap {
+			s.Head = (s.Head + 1) % retStackCap
+			s.Count--
 		}
-		tail := (s.head + s.count) % retStackCap
-		s.stack[tail] = RetStackElement{RetAddr: addr, RetISA: isa}
-		s.count++
-		s.popPending = false
+		tail := (s.Head + s.Count) % retStackCap
+		s.Stack[tail] = RetStackElement{RetAddr: addr, RetISA: isa}
+		s.Count++
+		s.PopPending = false
 	}
 }
 
@@ -63,55 +55,30 @@ func (s *AddrReturnStack) Push(addr ocsd.VAddr, isa ocsd.ISA) {
 // behaviour where numEntries went negative).
 func (s *AddrReturnStack) Pop(isa *ocsd.ISA) ocsd.VAddr {
 	var addr ocsd.VAddr = ocsd.VAddr(ocsd.VAMask)
-	if s.active {
-		if s.count > 0 {
-			top := (s.head + s.count - 1) % retStackCap
-			elem := s.stack[top]
+	if s.Active {
+		if s.Count > 0 {
+			top := (s.Head + s.Count - 1) % retStackCap
+			elem := s.Stack[top]
 			addr = elem.RetAddr
 			*isa = elem.RetISA
-			s.stack[top] = RetStackElement{} // zero before decrement
-			s.count--
-			s.overflow = false
+			s.Stack[top] = RetStackElement{} // zero before decrement
+			s.Count--
+			s.Overflow = false
 		} else {
 			// Match C++ behaviour: an empty pop signals underflow.
-			s.overflow = true
+			s.Overflow = true
 		}
-		s.popPending = false
+		s.PopPending = false
 	}
 	return addr
 }
 
 // Flush clears the stack and resets the overflow flag.
 func (s *AddrReturnStack) Flush() {
-	s.head = 0
-	s.count = 0
-	s.overflow = false
-	s.popPending = false
+	s.Head = 0
+	s.Count = 0
+	s.Overflow = false
+	s.PopPending = false
 }
 
 // Overflow returns true when the last Pop call was against an empty stack.
-func (s *AddrReturnStack) Overflow() bool {
-	return s.overflow
-}
-
-func (s *AddrReturnStack) SetPopPending(pending bool) {
-	if s.active {
-		s.popPending = pending
-		return
-	}
-	if !pending {
-		s.popPending = false
-	}
-}
-
-func (s *AddrReturnStack) PopPending() bool {
-	return s.popPending
-}
-
-func (s *AddrReturnStack) SetTInfoWaitAddr(wait bool) {
-	s.tInfoWaitAddr = wait
-}
-
-func (s *AddrReturnStack) TInfoWaitAddr() bool {
-	return s.tInfoWaitAddr
-}

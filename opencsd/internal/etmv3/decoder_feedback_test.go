@@ -92,8 +92,8 @@ func TestProcessBranchAddrContextWithoutException(t *testing.T) {
 	if out.elements[0].Context.ExceptionLevel != ocsd.EL2 {
 		t.Fatalf("expected EL2 context, got %v", out.elements[0].Context.ExceptionLevel)
 	}
-	if dec.codeFollower.InstrInfo().ISA != ocsd.ISAThumb2 {
-		t.Fatalf("expected code follower ISA to track branch ISA, got %v", dec.codeFollower.InstrInfo().ISA)
+	if dec.codeFollower.InstrInfo.ISA != ocsd.ISAThumb2 {
+		t.Fatalf("expected code follower ISA to track branch ISA, got %v", dec.codeFollower.InstrInfo.ISA)
 	}
 }
 
@@ -180,7 +180,8 @@ func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 func TestProcessPHdrUsesPacketISA(t *testing.T) {
 	dec, out := buildDecInDecodePkts(&Config{})
 	out.elements = nil
-	dec.codeFollower.SetISA(ocsd.ISAArm)
+	dec.codeFollower.Isa = ocsd.ISAArm
+	dec.codeFollower.InstrInfo.ISA = ocsd.ISAArm
 
 	phdr := &Packet{}
 	phdr.ResetState()

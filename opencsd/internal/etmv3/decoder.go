@@ -37,8 +37,8 @@ type PktDecode struct {
 	codeFollower *common.CodeFollower
 
 	iAddr       uint64
-	needAddr    bool
-	sentUnknown bool
+	NeedAddr    bool
+	SentUnknown bool
 	waitISync   bool
 
 	peContext      *ocsd.PEContext
@@ -134,8 +134,8 @@ func (d *PktDecode) configureDecoder() {
 
 func (d *PktDecode) resetDecoder() {
 	d.currState = noSync
-	d.needAddr = true
-	d.sentUnknown = false
+	d.NeedAddr = true
+	d.SentUnknown = false
 	d.waitISync = false
 	d.pendingNacc = false
 	d.pendingNaccIdx = 0
@@ -168,8 +168,9 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 		Profile: d.Config.CoreProf,
 	}
 
-	d.codeFollower.SetArchProfile(archProfile)
-	d.codeFollower.SetTraceID(d.csID)
+	d.codeFollower.Arch = archProfile
+	d.codeFollower.InstrInfo.PeType = archProfile
+	d.codeFollower.TraceID = d.csID
 	d.outputElemList.SetCSID(d.csID)
 
 	return nil
@@ -487,11 +488,6 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 	return resp, done
 }
 
-func (d *PktDecode) setNeedAddr(needAddr bool) {
-	d.needAddr = needAddr
-	d.sentUnknown = false
-}
-
 func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp {
 	packetIn := d.CurrPacketIn
 	ctxtUpdate := packetIn.Context.UpdatedC || packetIn.Context.UpdatedV || packetIn.Context.Updated
@@ -546,7 +542,8 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 		elem.SetType(ocsd.GenElemPeContext)
 		elem.Context = *d.peContext
 		elem.ISA = packetIn.CurrISA
-		d.codeFollower.SetISA(packetIn.CurrISA)
+		d.codeFollower.Isa = packetIn.CurrISA
+		d.codeFollower.InstrInfo.ISA = packetIn.CurrISA
 
 		if packetIn.ISyncInfo.HasCycleCount {
 			elem.SetCycleCount(packetIn.CycleCount)
@@ -559,7 +556,8 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 		} else {
 			d.iAddr = packetIn.Addr
 		}
-		d.setNeedAddr(false)
+		d.NeedAddr = false
+		d.SentUnknown = false
 	}
 
 	if d.outputElemList.ElemToSend() {
@@ -623,8 +621,10 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 	}
 
 	d.iAddr = packetIn.Addr
-	d.setNeedAddr(false)
-	d.codeFollower.SetISA(packetIn.CurrISA)
+	d.NeedAddr = false
+	d.SentUnknown = false
+	d.codeFollower.Isa = packetIn.CurrISA
+	d.codeFollower.InstrInfo.ISA = packetIn.CurrISA
 
 	if packetIn.Context.UpdatedC || packetIn.Context.UpdatedV || packetIn.Context.Updated {
 		if packetIn.Context.UpdatedC && (!d.peContext.CtxtIDValid() || d.peContext.ContextID != packetIn.Context.CtxtID) {
@@ -721,18 +721,18 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 	var elem *ocsd.TraceElement
 	var err error
 
-	d.codeFollower.SetMemSpace(memSpace)
+	d.codeFollower.MemSpace = memSpace
 
 	for {
-		if d.needAddr {
-			if !d.sentUnknown || d.Config.CycleAcc() {
+		if d.NeedAddr {
+			if !d.SentUnknown || d.Config.CycleAcc() {
 				elem, err := d.getNextOpElem()
 				if err != nil {
 					d.unsyncInfo = ocsd.UnsyncBadPacket
 					d.resetDecoder()
 					return ocsd.RespFatalSysErr
 				}
-				if d.sentUnknown || atomsNum == 0 {
+				if d.SentUnknown || atomsNum == 0 {
 					elem.SetType(ocsd.GenElemCycleCount)
 				} else {
 					elem.SetType(ocsd.GenElemAddrUnknown)
@@ -740,7 +740,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 				if d.Config.CycleAcc() {
 					elem.SetCycleCount(d.remainCC(packetIn, atomsNum, isCCPacket))
 				}
-				d.sentUnknown = true
+				d.SentUnknown = true
 			}
 			atomsNum = 0 // clear all
 		} else {
@@ -751,7 +751,8 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 				}
 
 				// Follow instructions for this atom
-				d.codeFollower.SetISA(isa)
+				d.codeFollower.Isa = isa
+				d.codeFollower.InstrInfo.ISA = isa
 				followRes, errCF := d.codeFollower.FollowSingleAtom(ocsd.VAddr(d.iAddr), val)
 				if errCF != nil && !errors.Is(errCF, ocsd.ErrMemNacc) {
 					return ocsd.RespFatalSysErr
@@ -783,7 +784,8 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					isa = instrInfo.NextISA
 
 					if !followRes.HasNext {
-						d.setNeedAddr(true)
+						d.NeedAddr = true
+						d.SentUnknown = false
 					}
 				}
 
@@ -798,7 +800,8 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 							elem.Payload.ExceptionNum = uint32(memSpace)
 						}
 					}
-					d.setNeedAddr(true)
+					d.NeedAddr = true
+					d.SentUnknown = false
 				}
 			} else if d.Config.CycleAcc() {
 				// CC only packet (atomsNum == 0)

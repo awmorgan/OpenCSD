@@ -132,7 +132,7 @@ type PktDecode struct {
 	// Address and Context State
 	lastIS           uint8
 	needCtxt         bool
-	needAddr         bool
+	NeedAddr         bool
 	extPendExcepAddr bool
 	elemPendingAddr  bool
 	isSecure         bool
@@ -242,7 +242,7 @@ func (d *PktDecode) configureDecoder() {
 	}
 	d.currSpecDepth = 0
 	d.needCtxt = true
-	d.needAddr = true
+	d.NeedAddr = true
 	d.extPendExcepAddr = false
 	d.elemPendingAddr = false
 	d.prevOverflow = false
@@ -280,7 +280,7 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 
 	// Match C++ decoder behavior: enable the return stack only when configured.
 	if d.config.EnabledRetStack() {
-		d.returnStack.SetActive(true)
+		d.returnStack.Active = true
 	}
 
 	// Match C++ static instruction decode configuration.
@@ -461,7 +461,7 @@ func (d *PktDecode) handleWaitSync() (ocsd.DatapathResp, bool) {
 func (d *PktDecode) handleWaitISync() (ocsd.DatapathResp, bool) {
 	pkt := d.CurrPacketIn
 	d.needCtxt = true
-	d.needAddr = true
+	d.NeedAddr = true
 	if pkt.Type == PktTraceInfo {
 		d.doTraceInfoPacket()
 		d.currState = decodePkts
@@ -810,13 +810,13 @@ func (d *PktDecode) commitElements() error {
 				}
 
 			case p0Addr:
-				d.returnStack.SetPopPending(false)
-				if d.returnStack.TInfoWaitAddr() {
+				d.returnStack.PopPending = false
+				if d.returnStack.TInfoWaitAddr {
 					// equivalent to is_t_info_wait_addr / clear_t_info_wait_addr
-					d.returnStack.SetTInfoWaitAddr(false)
+					d.returnStack.TInfoWaitAddr = false
 				}
 				d.setInstrInfoInAddrISA(elem.addrVal, elem.addrIS)
-				d.needAddr = false
+				d.NeedAddr = false
 
 			case p0Ctxt:
 				if elem.context.Updated {
@@ -842,7 +842,7 @@ func (d *PktDecode) commitElements() error {
 						break
 					}
 
-					if !d.needCtxt && !d.needAddr {
+					if !d.needCtxt && !d.NeedAddr {
 						if err = d.processAtom(atom, elem); err != nil {
 							break
 						}
@@ -903,7 +903,7 @@ func (d *PktDecode) commitElements() error {
 				d.elemRes.P0Commit--
 
 			case p0TInfo:
-				d.returnStack.SetTInfoWaitAddr(true) // tinfo_wait_addr
+				d.returnStack.TInfoWaitAddr = true // tinfo_wait_addr
 				d.returnStack.Flush()
 			}
 			if popElem {
@@ -1026,17 +1026,17 @@ func (d *PktDecode) updateContext(p0elem *p0Elem, elem *ocsd.TraceElement) {
 
 func (d *PktDecode) returnStackPop() error {
 	err := error(nil)
-	if d.returnStack.PopPending() {
+	if d.returnStack.PopPending {
 		isa := new(ocsd.ISA)
 		popAddr := d.returnStack.Pop(isa)
-		overflow := d.returnStack.Overflow()
+		overflow := d.returnStack.Overflow
 		if overflow {
 			err = ocsd.ErrRetStackOverflow
 			err = d.handlePacketSeqErr(err, ocsd.BadTrcIndex, "Trace Return Stack Overflow.")
 		} else {
 			d.instrInfo.InstrAddr = popAddr
 			d.instrInfo.ISA = *isa
-			d.needAddr = false
+			d.NeedAddr = false
 		}
 	}
 	return err
@@ -1224,7 +1224,7 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, elem *p0Elem) error {
 	err = d.traceInstrToWP(&addrRange, &WPRes, false, 0)
 	if err != nil {
 		if err == ocsd.ErrUnsupportedISA {
-			d.needAddr = true
+			d.NeedAddr = true
 			d.needCtxt = true
 			return nil
 		}
@@ -1244,11 +1244,13 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, elem *p0Elem) error {
 			}
 		case ocsd.InstrBrIndirect:
 			if atom == ocsd.AtomE {
-				d.needAddr = true
+				d.NeedAddr = true
 				if d.instrInfo.IsLink != 0 {
 					d.returnStack.Push(nextAddr, d.instrInfo.ISA)
 				}
-				d.returnStack.SetPopPending(true)
+				if d.returnStack.Active {
+					d.returnStack.PopPending = true
+				}
 				if d.config.MajVersion() >= 0x5 && d.instrInfo.Subtype == ocsd.SInstrV8Eret {
 					ETE_ERET = true // simulate ETE ERET
 				}
@@ -1277,7 +1279,7 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, elem *p0Elem) error {
 			}
 		}
 	} else {
-		d.needAddr = true
+		d.NeedAddr = true
 		d.nextRangeCheckClear()
 
 		if addrRange.stAddr != addrRange.enAddr {
@@ -1340,7 +1342,7 @@ func (d *PktDecode) processException(elem *p0Elem) error {
 			} else {
 				d.instrInfo.ISA = ocsd.ISAThumb2
 			}
-			d.needAddr = false
+			d.NeedAddr = false
 		}
 	}
 
@@ -1369,7 +1371,7 @@ func (d *PktDecode) processException(elem *p0Elem) error {
 			err = d.traceInstrToWP(&addrRange, &WPRes, true, excepRetAddr)
 			if err != nil {
 				if err == ocsd.ErrUnsupportedISA {
-					d.needAddr = true
+					d.NeedAddr = true
 					d.needCtxt = true
 				} else {
 				}
@@ -1380,7 +1382,7 @@ func (d *PktDecode) processException(elem *p0Elem) error {
 				d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true)
 				rangeOut = true
 			} else {
-				d.needAddr = true
+				d.NeedAddr = true
 				if addrRange.stAddr != addrRange.enAddr {
 					d.setElemTraceRange(d.outElem.CurrElem(), addrRange, true)
 					rangeOut = true
@@ -1467,8 +1469,8 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 
 	outRange.numInstr = 1
 
-	if d.needAddr || currAddr > srcAddr {
-		d.needAddr = false
+	if d.NeedAddr || currAddr > srcAddr {
+		d.NeedAddr = false
 		outRange.stAddr = srcAddr
 	} else {
 		outRange.stAddr = currAddr
@@ -1546,11 +1548,13 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 		d.instrInfo.InstrAddr = d.instrInfo.BranchAddr
 
 	case ocsd.InstrBrIndirect:
-		d.needAddr = true
+		d.NeedAddr = true
 		if d.instrInfo.IsLink != 0 {
 			d.returnStack.Push(d.instrInfo.InstrAddr, d.instrInfo.ISA)
 		}
-		d.returnStack.SetPopPending(true)
+		if d.returnStack.Active {
+			d.returnStack.PopPending = true
+		}
 	}
 	d.instrInfo.ISA = d.instrInfo.NextISA
 
@@ -1675,7 +1679,7 @@ func (d *PktDecode) processQElement(elem *p0Elem) error {
 	}
 
 	d.setInstrInfoInAddrISA(qAddr, qIs)
-	d.needAddr = false
+	d.NeedAddr = false
 
 	return err
 }
@@ -1800,7 +1804,7 @@ func (d *PktDecode) discardElements() error {
 
 	// unsync so need context & address
 	d.needCtxt = true
-	d.needAddr = true
+	d.NeedAddr = true
 	d.elemPendingAddr = false
 	return err
 }
@@ -1852,7 +1856,7 @@ func (d *PktDecode) resetDecoderState() {
 	}
 	d.currSpecDepth = 0
 	d.needCtxt = true
-	d.needAddr = true
+	d.NeedAddr = true
 	d.extPendExcepAddr = false
 	d.elemPendingAddr = false
 	d.prevOverflow = false
@@ -1876,7 +1880,7 @@ func (d *PktDecode) resetDecoderState() {
 
 	d.returnStack = *common.NewAddrReturnStack()
 	if d.config != nil && d.config.EnabledRetStack() {
-		d.returnStack.SetActive(true)
+		d.returnStack.Active = true
 	}
 }
 

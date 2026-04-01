@@ -10,21 +10,21 @@ import (
 // CodeFollower follows the execution path by decoding instructions.
 // It interfaces with memory access and instruction decode.
 type CodeFollower struct {
-	instrInfo    ocsd.InstrInfo
-	memAccess    TargetMemAccess
-	idDecode     InstrDecode
-	startAddr    ocsd.VAddr
-	endAddr      ocsd.VAddr
-	nextAddr     ocsd.VAddr
-	noAccessAddr ocsd.VAddr
-	memSpace     ocsd.MemSpaceAcc
-	traceID      uint8
-	arch         ocsd.ArchProfile
-	isa          ocsd.ISA
-	hasNext      bool
-	hasNaccErr   bool
-	instructs    uint32
-	valid        bool
+	InstrInfo    ocsd.InstrInfo
+	MemAccess    TargetMemAccess
+	IdDecode     InstrDecode
+	StartAddr    ocsd.VAddr
+	EndAddr      ocsd.VAddr
+	NextAddr     ocsd.VAddr
+	NoAccessAddr ocsd.VAddr
+	MemSpace     ocsd.MemSpaceAcc
+	TraceID      uint8
+	Arch         ocsd.ArchProfile
+	Isa          ocsd.ISA
+	HasNext      bool
+	HasNaccErr   bool
+	Instructs    uint32
+	Valid        bool
 }
 
 // FollowResult contains the decoded single-atom follow outcome.
@@ -46,14 +46,14 @@ func (r FollowResult) HasRange() bool {
 // NewCodeFollower creates a new CodeFollower.
 func NewCodeFollower() *CodeFollower {
 	cf := &CodeFollower{
-		startAddr:    ocsd.VAddr(ocsd.VAMask),
-		endAddr:      ocsd.VAddr(ocsd.VAMask),
-		nextAddr:     ocsd.VAddr(ocsd.VAMask),
-		noAccessAddr: ocsd.VAddr(ocsd.VAMask),
-		hasNext:      false,
-		hasNaccErr:   false,
-		instructs:    0,
-		valid:        false,
+		StartAddr:    ocsd.VAddr(ocsd.VAMask),
+		EndAddr:      ocsd.VAddr(ocsd.VAMask),
+		NextAddr:     ocsd.VAddr(ocsd.VAMask),
+		NoAccessAddr: ocsd.VAddr(ocsd.VAMask),
+		HasNext:      false,
+		HasNaccErr:   false,
+		Instructs:    0,
+		Valid:        false,
 	}
 	return cf
 }
@@ -61,74 +61,20 @@ func NewCodeFollower() *CodeFollower {
 // NewCodeFollowerWithInterfaces creates a CodeFollower and attaches decoder interfaces.
 func NewCodeFollowerWithInterfaces(memAccess TargetMemAccess, idDecode InstrDecode) *CodeFollower {
 	cf := NewCodeFollower()
-	cf.memAccess = memAccess
-	cf.idDecode = idDecode
+	cf.MemAccess = memAccess
+	cf.IdDecode = idDecode
 	// valid is computed lazily in FollowSingleAtom.
 	return cf
 }
 
 // SetInterfaces updates the active memory and instruction decode interfaces.
 func (cf *CodeFollower) SetInterfaces(memAccess TargetMemAccess, idDecode InstrDecode) {
-	cf.memAccess = memAccess
-	cf.idDecode = idDecode
-}
-
-func (cf *CodeFollower) SetArchProfile(arch ocsd.ArchProfile) {
-	cf.arch = arch
-	cf.instrInfo.PeType = arch
-}
-
-func (cf *CodeFollower) SetMemSpace(memSpace ocsd.MemSpaceAcc) {
-	cf.memSpace = memSpace
-}
-
-func (cf *CodeFollower) SetTraceID(traceID uint8) {
-	cf.traceID = traceID
-}
-
-func (cf *CodeFollower) SetISA(isa ocsd.ISA) {
-	cf.isa = isa
-	cf.instrInfo.ISA = isa
+	cf.MemAccess = memAccess
+	cf.IdDecode = idDecode
 }
 
 func (cf *CodeFollower) SetDSBDMBasWP() {
-	cf.instrInfo.DsbDmbWaypoints = 1
-}
-
-func (cf *CodeFollower) InstrType() ocsd.InstrType {
-	return cf.instrInfo.Type
-}
-
-func (cf *CodeFollower) InstrSubType() ocsd.InstrSubtype {
-	return cf.instrInfo.Subtype
-}
-
-func (cf *CodeFollower) IsCondInstr() bool {
-	return cf.instrInfo.IsConditional == 1
-}
-
-func (cf *CodeFollower) IsLink() bool {
-	return cf.instrInfo.IsLink == 1
-}
-
-func (cf *CodeFollower) ISAChanged() bool {
-	return cf.instrInfo.ISA != cf.instrInfo.NextISA
-}
-
-func (cf *CodeFollower) NextISA() ocsd.ISA {
-	return cf.instrInfo.NextISA
-}
-
-func (cf *CodeFollower) InstrSize() uint8 {
-	return cf.instrInfo.InstrSize
-}
-
-func (cf *CodeFollower) InstrInfo() *ocsd.InstrInfo {
-	return &cf.instrInfo
-}
-
-func (cf *CodeFollower) MemSpace() ocsd.MemSpaceAcc {
-	return cf.memSpace
+	cf.InstrInfo.DsbDmbWaypoints = 1
 }
 
 // DecodeSingleOpCode decodes a single opcode at instrInfo.InstrAddr.
@@ -136,15 +82,15 @@ func (cf *CodeFollower) DecodeSingleOpCode() error {
 	const bytesReq uint32 = 4
 
 	// Read memory location for opcode
-	readBytes, pData, err := cf.memAccess.ReadTargetMemory(cf.instrInfo.InstrAddr, cf.traceID, cf.memSpace, bytesReq)
+	readBytes, pData, err := cf.MemAccess.ReadTargetMemory(cf.InstrInfo.InstrAddr, cf.TraceID, cf.MemSpace, bytesReq)
 
 	// Treat both ErrNoAccessor and too-short reads as memory unavailable
 	if errors.Is(err, memacc.ErrNoAccessor) || (err == nil && readBytes < 4) {
 		// Memory unavailable
-		cf.hasNaccErr = true
-		cf.noAccessAddr = cf.instrInfo.InstrAddr
-		cf.hasNext = false
-		cf.nextAddr = cf.instrInfo.InstrAddr
+		cf.HasNaccErr = true
+		cf.NoAccessAddr = cf.InstrInfo.InstrAddr
+		cf.HasNext = false
+		cf.NextAddr = cf.InstrInfo.InstrAddr
 		return ocsd.ErrMemNacc
 	}
 
@@ -153,30 +99,30 @@ func (cf *CodeFollower) DecodeSingleOpCode() error {
 	}
 
 	if readBytes == 4 && len(pData) >= 4 {
-		cf.instrInfo.Opcode = binary.LittleEndian.Uint32(pData[:4])
+		cf.InstrInfo.Opcode = binary.LittleEndian.Uint32(pData[:4])
 
-		err = cf.idDecode.DecodeInstruction(&cf.instrInfo)
+		err = cf.IdDecode.DecodeInstruction(&cf.InstrInfo)
 		return err
 	}
 
 	// Defensive: should not reach here given the check above, but handle it
-	cf.hasNaccErr = true
-	cf.noAccessAddr = cf.instrInfo.InstrAddr
-	cf.hasNext = false
-	cf.nextAddr = cf.instrInfo.InstrAddr
+	cf.HasNaccErr = true
+	cf.NoAccessAddr = cf.InstrInfo.InstrAddr
+	cf.HasNext = false
+	cf.NextAddr = cf.InstrInfo.InstrAddr
 	return ocsd.ErrMemNacc
 }
 
 func (cf *CodeFollower) resetFollowerState() bool {
-	cf.hasNext = false
-	cf.hasNaccErr = false
-	cf.instructs = 0
-	cf.endAddr = cf.startAddr
-	cf.nextAddr = cf.startAddr
-	cf.noAccessAddr = cf.startAddr
+	cf.HasNext = false
+	cf.HasNaccErr = false
+	cf.Instructs = 0
+	cf.EndAddr = cf.StartAddr
+	cf.NextAddr = cf.StartAddr
+	cf.NoAccessAddr = cf.StartAddr
 
-	cf.valid = cf.memAccess != nil && cf.idDecode != nil
-	return cf.valid
+	cf.Valid = cf.MemAccess != nil && cf.IdDecode != nil
+	return cf.Valid
 }
 
 // followSingleAtomInternal decodes an instruction at a single location and calculates the next address.
@@ -185,38 +131,38 @@ func (cf *CodeFollower) followSingleAtomInternal(addrStart ocsd.VAddr, atom ocsd
 		return ocsd.ErrNotInit
 	}
 
-	cf.endAddr = addrStart
-	cf.startAddr = addrStart
-	cf.instrInfo.InstrAddr = addrStart
+	cf.EndAddr = addrStart
+	cf.StartAddr = addrStart
+	cf.InstrInfo.InstrAddr = addrStart
 	err := cf.DecodeSingleOpCode()
 
 	if err != nil {
 		if errors.Is(err, ocsd.ErrMemNacc) {
-			cf.hasNaccErr = true
-			cf.noAccessAddr = cf.instrInfo.InstrAddr
-			cf.nextAddr = cf.instrInfo.InstrAddr
-			cf.hasNext = false
+			cf.HasNaccErr = true
+			cf.NoAccessAddr = cf.InstrInfo.InstrAddr
+			cf.NextAddr = cf.InstrInfo.InstrAddr
+			cf.HasNext = false
 		}
 		return err
 	}
 
 	// Set end range - always after the instruction executed
-	cf.endAddr = cf.instrInfo.InstrAddr + ocsd.VAddr(cf.instrInfo.InstrSize)
-	cf.instructs = 1
+	cf.EndAddr = cf.InstrInfo.InstrAddr + ocsd.VAddr(cf.InstrInfo.InstrSize)
+	cf.Instructs = 1
 
 	// Assume next addr is the instruction after
-	cf.nextAddr = cf.endAddr
-	cf.hasNext = true
+	cf.NextAddr = cf.EndAddr
+	cf.HasNext = true
 
 	// Case when next address is different depending on branch and atom
-	switch cf.instrInfo.Type {
+	switch cf.InstrInfo.Type {
 	case ocsd.InstrBr:
 		if atom == ocsd.AtomE { // Executed the direct branch
-			cf.nextAddr = cf.instrInfo.BranchAddr
+			cf.NextAddr = cf.InstrInfo.BranchAddr
 		}
 	case ocsd.InstrBrIndirect:
 		if atom == ocsd.AtomE { // Executed indirect branch
-			cf.hasNext = false
+			cf.HasNext = false
 		}
 	}
 
@@ -227,13 +173,13 @@ func (cf *CodeFollower) followSingleAtomInternal(addrStart ocsd.VAddr, atom ocsd
 func (cf *CodeFollower) FollowSingleAtom(addrStart ocsd.VAddr, atom ocsd.AtmVal) (FollowResult, error) {
 	err := cf.followSingleAtomInternal(addrStart, atom)
 	return FollowResult{
-		HasNext:   cf.hasNext,
-		HasNacc:   cf.hasNaccErr,
-		NaccAddr:  cf.noAccessAddr,
-		NumInstr:  cf.instructs,
-		RangeSt:   cf.startAddr,
-		RangeEn:   cf.endAddr,
-		NextAddr:  cf.nextAddr,
-		InstrInfo: cf.instrInfo,
+		HasNext:   cf.HasNext,
+		HasNacc:   cf.HasNaccErr,
+		NaccAddr:  cf.NoAccessAddr,
+		NumInstr:  cf.Instructs,
+		RangeSt:   cf.StartAddr,
+		RangeEn:   cf.EndAddr,
+		NextAddr:  cf.NextAddr,
+		InstrInfo: cf.InstrInfo,
 	}, err
 }

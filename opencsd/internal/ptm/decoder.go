@@ -196,7 +196,7 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 	d.csID = d.Config.TraceID()
 
 	if d.Config.HasRetStack() {
-		d.returnStack.SetActive(d.Config.EnaRetStack())
+		d.returnStack.Active = d.Config.EnaRetStack()
 	}
 
 	d.instrInfo.PeType.Profile = d.Config.CoreProf
@@ -575,12 +575,12 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 		case ocsd.InstrBrIndirect:
 			if A == ocsd.AtomE {
 				d.currPeState.valid = false
-				if d.returnStack.Active() && d.CurrPacketIn.Type == PktAtom && (d.instrInfo.Subtype == ocsd.SInstrV8Ret || d.instrInfo.Subtype == ocsd.SInstrV7ImpliedRet) {
+				if d.returnStack.Active && d.CurrPacketIn.Type == PktAtom && (d.instrInfo.Subtype == ocsd.SInstrV8Ret || d.instrInfo.Subtype == ocsd.SInstrV7ImpliedRet) {
 					var nextIsa ocsd.ISA
 					d.instrInfo.InstrAddr = d.returnStack.Pop(&nextIsa)
 					d.instrInfo.NextISA = nextIsa
 
-					if d.returnStack.Overflow() {
+					if d.returnStack.Overflow {
 						return ocsd.RespFatalInvalidData
 					} else {
 						d.currPeState.valid = true
