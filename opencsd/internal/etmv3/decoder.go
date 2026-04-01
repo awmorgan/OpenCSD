@@ -752,7 +752,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 
 				// Follow instructions for this atom
 				d.codeFollower.SetISA(isa)
-				followRes, errCF := d.codeFollower.FollowSingleAtomResult(ocsd.VAddr(d.iAddr), val)
+				followRes, errCF := d.codeFollower.FollowSingleAtom(ocsd.VAddr(d.iAddr), val)
 				if errCF != nil && !errors.Is(errCF, ocsd.ErrMemNacc) {
 					return ocsd.RespFatalSysErr
 				}

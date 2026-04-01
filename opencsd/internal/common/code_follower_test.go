@@ -36,7 +36,7 @@ func TestCodeFollower(t *testing.T) {
 	cf := NewCodeFollower()
 
 	// Test without valid
-	_, err := cf.FollowSingleAtomResult(0x1000, ocsd.AtomN)
+	_, err := cf.FollowSingleAtom(0x1000, ocsd.AtomN)
 	if !errors.Is(err, ocsd.ErrNotInit) {
 		t.Errorf("Expected NotInit error")
 	}
@@ -48,7 +48,7 @@ func TestCodeFollower(t *testing.T) {
 	cf.SetTraceID(0x12)
 	cf.SetMemSpace(ocsd.MemSpaceAny)
 
-	res, err := cf.FollowSingleAtomResult(0x1000, ocsd.AtomE)
+	res, err := cf.FollowSingleAtom(0x1000, ocsd.AtomE)
 	if err != nil || !res.HasNext {
 		t.Errorf("FollowSingleAtom failed")
 	}
@@ -66,7 +66,7 @@ func TestCodeFollower(t *testing.T) {
 
 	// Test branch
 	mockMem.dataToReturn = []byte{0xFF, 0x03, 0x00, 0x14} // A64 B 0x2000 from 0x1004 (offset 0xFFC)
-	res, err = cf.FollowSingleAtomResult(0x1004, ocsd.AtomE)
+	res, err = cf.FollowSingleAtom(0x1004, ocsd.AtomE)
 	if err != nil || res.NextAddr != 0x2000 {
 		t.Errorf("Branch target not followed")
 	}
@@ -74,7 +74,7 @@ func TestCodeFollower(t *testing.T) {
 	// Test Thumb 32-bit decode requirement
 	cf.SetISA(ocsd.ISAThumb2)
 	mockMem.dataToReturn = []byte{0x00, 0xF0, 0x01, 0x02} // Provide full 4 bytes so DecodeSingleOpCode succeeds
-	_, err = cf.FollowSingleAtomResult(0x1008, ocsd.AtomN)
+	_, err = cf.FollowSingleAtom(0x1008, ocsd.AtomN)
 	if err != nil {
 		t.Errorf("Thumb 32-bit fetch failed")
 	}
@@ -82,7 +82,7 @@ func TestCodeFollower(t *testing.T) {
 	// Test MemNacc
 	mockMem.errToReturn = ocsd.ErrMemNacc
 	mockMem.dataToReturn = nil
-	res, err = cf.FollowSingleAtomResult(0x2000, ocsd.AtomN)
+	res, err = cf.FollowSingleAtom(0x2000, ocsd.AtomN)
 	if !errors.Is(err, ocsd.ErrMemNacc) || !res.HasNacc {
 		t.Errorf("MemNacc error not tracked properly")
 	}

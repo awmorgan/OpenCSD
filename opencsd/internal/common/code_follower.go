@@ -95,30 +95,6 @@ func (cf *CodeFollower) SetDSBDMBasWP() {
 	cf.instrInfo.DsbDmbWaypoints = 1
 }
 
-func (cf *CodeFollower) HasNext() bool {
-	return cf.hasNext
-}
-
-func (cf *CodeFollower) HasRange() bool {
-	return cf.startAddr < cf.endAddr
-}
-
-func (cf *CodeFollower) HasNaccError() bool {
-	return cf.hasNaccErr
-}
-
-func (cf *CodeFollower) ClearNaccError() {
-	cf.hasNaccErr = false
-}
-
-func (cf *CodeFollower) NextAddr() ocsd.VAddr {
-	return cf.nextAddr
-}
-
-func (cf *CodeFollower) NumInstructs() uint32 {
-	return cf.instructs
-}
-
 func (cf *CodeFollower) InstrType() ocsd.InstrType {
 	return cf.instrInfo.Type
 }
@@ -149,18 +125,6 @@ func (cf *CodeFollower) InstrSize() uint8 {
 
 func (cf *CodeFollower) InstrInfo() *ocsd.InstrInfo {
 	return &cf.instrInfo
-}
-
-func (cf *CodeFollower) RangeSt() ocsd.VAddr {
-	return cf.startAddr
-}
-
-func (cf *CodeFollower) RangeEn() ocsd.VAddr {
-	return cf.endAddr
-}
-
-func (cf *CodeFollower) NaccAddr() ocsd.VAddr {
-	return cf.noAccessAddr
 }
 
 func (cf *CodeFollower) MemSpace() ocsd.MemSpaceAcc {
@@ -215,8 +179,8 @@ func (cf *CodeFollower) resetFollowerState() bool {
 	return cf.valid
 }
 
-// FollowSingleAtom decodes an instruction at a single location and calculates the next address.
-func (cf *CodeFollower) FollowSingleAtom(addrStart ocsd.VAddr, atom ocsd.AtmVal) error {
+// followSingleAtomInternal decodes an instruction at a single location and calculates the next address.
+func (cf *CodeFollower) followSingleAtomInternal(addrStart ocsd.VAddr, atom ocsd.AtmVal) error {
 	if !cf.resetFollowerState() {
 		return ocsd.ErrNotInit
 	}
@@ -259,9 +223,9 @@ func (cf *CodeFollower) FollowSingleAtom(addrStart ocsd.VAddr, atom ocsd.AtmVal)
 	return nil
 }
 
-// FollowSingleAtomResult decodes an instruction and returns the result snapshot by value.
-func (cf *CodeFollower) FollowSingleAtomResult(addrStart ocsd.VAddr, atom ocsd.AtmVal) (FollowResult, error) {
-	err := cf.FollowSingleAtom(addrStart, atom)
+// FollowSingleAtom decodes an instruction and returns the result snapshot by value.
+func (cf *CodeFollower) FollowSingleAtom(addrStart ocsd.VAddr, atom ocsd.AtmVal) (FollowResult, error) {
+	err := cf.followSingleAtomInternal(addrStart, atom)
 	return FollowResult{
 		HasNext:   cf.hasNext,
 		HasNacc:   cf.hasNaccErr,
