@@ -126,39 +126,33 @@ func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.MemAccess = mem
 func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.InstrDecode = dec }
 
 // OutputTraceElement sends an element using IndexCurrPkt.
-func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
-	if d.TraceElemOut != nil {
-		err := d.TraceElemOut.TraceElemIn(d.IndexCurrPkt, traceID, elem)
-		if ocsd.IsDataContErr(err) {
-			return ocsd.RespCont, nil
-		}
-		if ocsd.IsDataWaitErr(err) {
-			return ocsd.RespWait, nil
-		}
-		if errors.Is(err, ocsd.ErrNotInit) {
-			return ocsd.RespFatalNotInit, err
-		}
-		return ocsd.RespFatalInvalidData, err
+func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error {
+	if d.TraceElemOut == nil {
+		return ocsd.ErrNotInit
 	}
-	return ocsd.RespFatalNotInit, ocsd.ErrNotInit
+	err := d.TraceElemOut.TraceElemIn(d.IndexCurrPkt, traceID, elem)
+	if ocsd.IsDataContErr(err) {
+		return nil
+	}
+	if ocsd.IsDataWaitErr(err) {
+		return ocsd.ErrWait
+	}
+	return err
 }
 
 // OutputTraceElementIdx sends an element at an explicit index.
-func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
-	if d.TraceElemOut != nil {
-		err := d.TraceElemOut.TraceElemIn(idx, traceID, elem)
-		if ocsd.IsDataContErr(err) {
-			return ocsd.RespCont, nil
-		}
-		if ocsd.IsDataWaitErr(err) {
-			return ocsd.RespWait, nil
-		}
-		if errors.Is(err, ocsd.ErrNotInit) {
-			return ocsd.RespFatalNotInit, err
-		}
-		return ocsd.RespFatalInvalidData, err
+func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
+	if d.TraceElemOut == nil {
+		return ocsd.ErrNotInit
 	}
-	return ocsd.RespFatalNotInit, ocsd.ErrNotInit
+	err := d.TraceElemOut.TraceElemIn(idx, traceID, elem)
+	if ocsd.IsDataContErr(err) {
+		return nil
+	}
+	if ocsd.IsDataWaitErr(err) {
+		return ocsd.ErrWait
+	}
+	return err
 }
 
 // AccessMemory reads target memory.
@@ -324,7 +318,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 
 	d.outputElem.SetType(ocsd.GenElemEOTrace)
 	d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncEOT)
-	resp, _ = d.OutputTraceElement(d.csID, &d.outputElem)
+	resp = ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
 	return resp
 }
 
@@ -365,7 +359,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 func (d *PktDecode) handleNoSync() (decodeState, ocsd.DatapathResp, bool) {
 	d.outputElem.SetType(ocsd.GenElemNoSync)
 	d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncInfo(d.unsyncInfo))
-	resp, _ := d.OutputTraceElement(d.csID, &d.outputElem)
+	resp := ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
 	if d.CurrPacketIn.Type == PktASync {
 		return decodeWaitISync, resp, true
 	}
@@ -418,7 +412,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 		d.currState = decodeWaitSync
 		d.needIsync = true
 		d.outputElem.SetType(ocsd.GenElemNoSync)
-		resp, _ = d.OutputTraceElement(d.csID, &d.outputElem)
+		resp = ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
 	case PktASync, PktIgnore:
 		// ignore
 	case PktISync:
@@ -428,7 +422,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 	case PktTrigger:
 		d.outputElem.SetType(ocsd.GenElemEvent)
 		d.outputElem.SetEvent(ocsd.EventTrigger, 0)
-		resp, _ = d.OutputTraceElement(d.csID, &d.outputElem)
+		resp = ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
 	case PktWPointUpdate:
 		resp = d.processWPUpdate()
 	case PktContextID:
@@ -441,7 +435,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 			d.peContext.SetCtxtIDValid(true)
 			d.outputElem.SetType(ocsd.GenElemPeContext)
 			d.outputElem.SetContext(d.peContext)
-			resp, _ = d.OutputTraceElement(d.csID, &d.outputElem)
+			resp = ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
 		}
 	case PktVMID:
 		update := true
@@ -453,7 +447,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 			d.peContext.SetVMIDValid(true)
 			d.outputElem.SetType(ocsd.GenElemPeContext)
 			d.outputElem.SetContext(d.peContext)
-			resp, _ = d.OutputTraceElement(d.csID, &d.outputElem)
+			resp = ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
 		}
 	case PktAtom:
 		if d.currPeState.valid {
@@ -468,10 +462,10 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 		if pkt.CCValid {
 			d.outputElem.SetCycleCount(pkt.CycleCount)
 		}
-		resp, _ = d.OutputTraceElement(d.csID, &d.outputElem)
+		resp = ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
 	case PktExceptionRet:
 		d.outputElem.SetType(ocsd.GenElemExceptionRet)
-		resp, _ = d.OutputTraceElement(d.csID, &d.outputElem)
+		resp = ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
 	}
 	return resp
 }
@@ -516,7 +510,7 @@ func (d *PktDecode) processIsync() ocsd.DatapathResp {
 			if pkt.CCValid {
 				d.outputElem.SetCycleCount(pkt.CycleCount)
 			}
-			resp, _ = d.OutputTraceElement(d.csID, &d.outputElem)
+			resp = ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
 		} else {
 			d.iSyncPeCtxt = false
 		}
@@ -528,7 +522,7 @@ func (d *PktDecode) processIsync() ocsd.DatapathResp {
 		d.outputElem.SetType(ocsd.GenElemPeContext)
 		d.outputElem.SetContext(d.peContext)
 		d.outputElem.SetISA(d.currPeState.isa)
-		resp, _ = d.OutputTraceElement(d.csID, &d.outputElem)
+		resp = ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
 		d.iSyncPeCtxt = false
 	}
 
@@ -556,7 +550,7 @@ func (d *PktDecode) processBranch() ocsd.DatapathResp {
 			if pkt.CCValid {
 				d.outputElem.SetCycleCount(pkt.CycleCount)
 			}
-			resp, _ = d.OutputTraceElement(d.csID, &d.outputElem)
+			resp = ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
 		} else {
 			if d.currPeState.valid {
 				resp = d.processAtomRange(ocsd.AtomE, traceWaypoint, 0)
@@ -621,7 +615,7 @@ func (d *PktDecode) checkPendingNacc(resp *ocsd.DatapathResp) {
 		} else {
 			d.outputElem.SetExceptionNum(uint32(ocsd.MemSpaceN))
 		}
-		*resp, _ = d.OutputTraceElementIdx(d.IndexCurrPkt, d.csID, &d.outputElem)
+		*resp = ocsd.DataRespFromErr(d.OutputTraceElementIdx(d.IndexCurrPkt, d.csID, &d.outputElem))
 		d.memNaccPending = false
 	}
 }
@@ -683,7 +677,7 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, traceWPOp waypointTraceOp, n
 			d.outputElem.SetCycleCount(d.CurrPacketIn.CycleCount)
 		}
 		d.outputElem.LastInstrCond = d.instrInfo.IsConditional != 0
-		resp, _ = d.OutputTraceElementIdx(d.IndexCurrPkt, d.csID, &d.outputElem)
+		resp = ocsd.DataRespFromErr(d.OutputTraceElementIdx(d.IndexCurrPkt, d.csID, &d.outputElem))
 
 		d.currPeState.instrAddr = d.instrInfo.InstrAddr
 		d.currPeState.isa = d.instrInfo.NextISA
@@ -693,7 +687,7 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, traceWPOp waypointTraceOp, n
 			d.outputElem.SetLastInstrInfo(true, d.instrInfo.Type, d.instrInfo.Subtype, d.instrInfo.InstrSize)
 			d.outputElem.SetISA(d.currPeState.isa)
 			d.outputElem.LastInstrCond = d.instrInfo.IsConditional != 0
-			resp, _ = d.OutputTraceElementIdx(d.IndexCurrPkt, d.csID, &d.outputElem)
+			resp = ocsd.DataRespFromErr(d.OutputTraceElementIdx(d.IndexCurrPkt, d.csID, &d.outputElem))
 		}
 	}
 	return resp

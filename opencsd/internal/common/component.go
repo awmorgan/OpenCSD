@@ -31,8 +31,8 @@ type OpModeManager interface {
 
 // TraceElementOutputter provides methods to send trace elements downstream.
 type TraceElementOutputter interface {
-	OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error)
-	OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error)
+	OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error
+	OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error
 }
 
 // OpMode is an embeddable component that manages operational mode flags.

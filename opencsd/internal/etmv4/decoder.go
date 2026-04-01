@@ -186,39 +186,33 @@ func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.MemAccess = mem
 func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.InstrDecode = dec }
 
 // OutputTraceElement sends an element using IndexCurrPkt.
-func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
-	if d.TraceElemOut != nil {
-		err := d.TraceElemOut.TraceElemIn(d.IndexCurrPkt, traceID, elem)
-		if ocsd.IsDataContErr(err) {
-			return ocsd.RespCont, nil
-		}
-		if ocsd.IsDataWaitErr(err) {
-			return ocsd.RespWait, nil
-		}
-		if errors.Is(err, ocsd.ErrNotInit) {
-			return ocsd.RespFatalNotInit, err
-		}
-		return ocsd.RespFatalInvalidData, err
+func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error {
+	if d.TraceElemOut == nil {
+		return ocsd.ErrNotInit
 	}
-	return ocsd.RespFatalNotInit, ocsd.ErrNotInit
+	err := d.TraceElemOut.TraceElemIn(d.IndexCurrPkt, traceID, elem)
+	if ocsd.IsDataContErr(err) {
+		return nil
+	}
+	if ocsd.IsDataWaitErr(err) {
+		return ocsd.ErrWait
+	}
+	return err
 }
 
 // OutputTraceElementIdx sends an element at an explicit index.
-func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
-	if d.TraceElemOut != nil {
-		err := d.TraceElemOut.TraceElemIn(idx, traceID, elem)
-		if ocsd.IsDataContErr(err) {
-			return ocsd.RespCont, nil
-		}
-		if ocsd.IsDataWaitErr(err) {
-			return ocsd.RespWait, nil
-		}
-		if errors.Is(err, ocsd.ErrNotInit) {
-			return ocsd.RespFatalNotInit, err
-		}
-		return ocsd.RespFatalInvalidData, err
+func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
+	if d.TraceElemOut == nil {
+		return ocsd.ErrNotInit
 	}
-	return ocsd.RespFatalNotInit, ocsd.ErrNotInit
+	err := d.TraceElemOut.TraceElemIn(idx, traceID, elem)
+	if ocsd.IsDataContErr(err) {
+		return nil
+	}
+	if ocsd.IsDataWaitErr(err) {
+		return ocsd.ErrWait
+	}
+	return err
 }
 
 // AccessMemory reads target memory.
