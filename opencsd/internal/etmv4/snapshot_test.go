@@ -340,7 +340,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		cfg.CoreProf = ocsd.ProfileCortexA
 
 		var proc ocsd.TrcDataProcessor
-		var dec any
+		var dec *etmv4.PktDecode
 		var err error
 
 		// Conditionally instantiate either the processor alone, or the full pipeline
@@ -355,8 +355,12 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 			return nil, fmt.Errorf("create ETMv4 pipeline for %s failed: %v", srcDevName, err)
 		}
 
-		// Inject into the DecodeTree
-		err = tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec)
+		// Inject into the DecodeTree.
+		if dec == nil {
+			err = tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec, nil)
+		} else {
+			err = tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec, dec)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("create ETMv4 decoder for %s failed: %v", srcDevName, err)
 		}

@@ -18,18 +18,20 @@ type DecodeTreeElement struct {
 	DecoderTypeName string                // Registered name of the decoder
 	DataIn          ocsd.TrcDataProcessor // Interface for feeding trace data
 	DecoderHandle   any                   // Pointer to the decoder processor (PktDecode)
+	PipelineWiring  pipelineWiringOwner   // Explicit late-bound dependency wiring owner
 	Protocol        ocsd.TraceProtocol    // Protocol type
 	Created         bool                  // True if decode tree created this element
 }
 
 // NewDecodeTreeElement creates a new DecodeTreeElement record.
-func NewDecodeTreeElement(name string, dcdHandle any, dataIn ocsd.TrcDataProcessor, created bool) *DecodeTreeElement {
+func NewDecodeTreeElement(name string, dcdHandle any, wiring pipelineWiringOwner, dataIn ocsd.TrcDataProcessor, created bool) *DecodeTreeElement {
 	protocol := ocsd.ProtocolUnknown
 
 	return &DecodeTreeElement{
 		DecoderTypeName: name,
 		DataIn:          dataIn,
 		DecoderHandle:   dcdHandle,
+		PipelineWiring:  wiring,
 		Protocol:        protocol,
 		Created:         created,
 	}

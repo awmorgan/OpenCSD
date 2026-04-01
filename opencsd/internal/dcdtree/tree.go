@@ -134,7 +134,7 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 }
 
 // AddDecoder registers an already-instantiated decoder into the tree.
-func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessor, handle any) error {
+func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessor, handle any, wiring pipelineWiringOwner) error {
 	if dt.treeType == ocsd.TrcSrcSingle {
 		routeID = 0
 	}
@@ -147,7 +147,7 @@ func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.Trace
 	}
 
 	// No decoder manager is needed for direct injection.
-	elem := NewDecodeTreeElement(name, handle, pktIn, true)
+	elem := NewDecodeTreeElement(name, handle, wiring, pktIn, true)
 	elem.Protocol = protocol
 
 	dt.decodeElements[routeID] = elem
@@ -175,8 +175,8 @@ func (dt *DecodeTree) wireTraceElemOut(elem *DecodeTreeElement, outI ocsd.GenEle
 	if elem == nil || outI == nil {
 		return
 	}
-	if owner, ok := elem.DecoderHandle.(pipelineWiringOwner); ok {
-		owner.SetTraceElemOut(outI)
+	if elem.PipelineWiring != nil {
+		elem.PipelineWiring.SetTraceElemOut(outI)
 	}
 }
 
@@ -184,8 +184,8 @@ func (dt *DecodeTree) wireMemAccess(elem *DecodeTreeElement, memI common.TargetM
 	if elem == nil || memI == nil {
 		return
 	}
-	if owner, ok := elem.DecoderHandle.(pipelineWiringOwner); ok {
-		owner.SetMemAccess(memI)
+	if elem.PipelineWiring != nil {
+		elem.PipelineWiring.SetMemAccess(memI)
 	}
 }
 
@@ -193,8 +193,8 @@ func (dt *DecodeTree) wireInstrDecode(elem *DecodeTreeElement, instr common.Inst
 	if elem == nil || instr == nil {
 		return
 	}
-	if owner, ok := elem.DecoderHandle.(pipelineWiringOwner); ok {
-		owner.SetInstrDecode(instr)
+	if elem.PipelineWiring != nil {
+		elem.PipelineWiring.SetInstrDecode(instr)
 	}
 }
 

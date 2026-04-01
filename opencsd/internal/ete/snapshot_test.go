@@ -226,7 +226,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 			return nil, fmt.Errorf("create ETE pipeline for %s failed: %v", srcDevName, err)
 		}
 
-		if err := tree.AddDecoder(traceID, ocsd.BuiltinDcdETE, ocsd.ProtocolETE, proc, dec); err != nil {
+		if err := tree.AddDecoder(traceID, ocsd.BuiltinDcdETE, ocsd.ProtocolETE, proc, dec, dec); err != nil {
 			if errors.Is(err, ocsd.ErrAttachTooMany) {
 				continue
 			}
