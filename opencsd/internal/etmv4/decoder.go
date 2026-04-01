@@ -115,12 +115,12 @@ type elemRes struct {
 
 // PktDecode decodes ETMv4 trace packets into generic trace elements.
 type PktDecode struct {
-	Name          string
+	Name string
 	common.OpMode
-	TraceElemOut  ocsd.GenElemProcessor
-	MemAccess     common.TargetMemAccess
-	InstrDecode   common.InstrDecode
-	IndexCurrPkt  ocsd.TrcIndex
+	TraceElemOut ocsd.GenElemProcessor
+	MemAccess    common.TargetMemAccess
+	InstrDecode  common.InstrDecode
+	IndexCurrPkt ocsd.TrcIndex
 
 	Config       *Config
 	CurrPacketIn *TracePacket
@@ -189,9 +189,15 @@ func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.InstrDecode = dec
 func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
 	if d.TraceElemOut != nil {
 		err := d.TraceElemOut.TraceElemIn(d.IndexCurrPkt, traceID, elem)
-		if ocsd.IsDataContErr(err) { return ocsd.RespCont, nil }
-		if ocsd.IsDataWaitErr(err) { return ocsd.RespWait, nil }
-		if errors.Is(err, ocsd.ErrNotInit) { return ocsd.RespFatalNotInit, err }
+		if ocsd.IsDataContErr(err) {
+			return ocsd.RespCont, nil
+		}
+		if ocsd.IsDataWaitErr(err) {
+			return ocsd.RespWait, nil
+		}
+		if errors.Is(err, ocsd.ErrNotInit) {
+			return ocsd.RespFatalNotInit, err
+		}
 		return ocsd.RespFatalInvalidData, err
 	}
 	return ocsd.RespFatalNotInit, ocsd.ErrNotInit
@@ -201,9 +207,15 @@ func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) (
 func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
 	if d.TraceElemOut != nil {
 		err := d.TraceElemOut.TraceElemIn(idx, traceID, elem)
-		if ocsd.IsDataContErr(err) { return ocsd.RespCont, nil }
-		if ocsd.IsDataWaitErr(err) { return ocsd.RespWait, nil }
-		if errors.Is(err, ocsd.ErrNotInit) { return ocsd.RespFatalNotInit, err }
+		if ocsd.IsDataContErr(err) {
+			return ocsd.RespCont, nil
+		}
+		if ocsd.IsDataWaitErr(err) {
+			return ocsd.RespWait, nil
+		}
+		if errors.Is(err, ocsd.ErrNotInit) {
+			return ocsd.RespFatalNotInit, err
+		}
 		return ocsd.RespFatalInvalidData, err
 	}
 	return ocsd.RespFatalNotInit, ocsd.ErrNotInit

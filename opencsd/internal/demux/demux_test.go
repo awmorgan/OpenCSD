@@ -133,13 +133,16 @@ func (m *mockDataSink) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32,
 	return m.TraceDataIn(ocsd.OpData, index, dataBlock)
 }
 func (m *mockDataSink) TraceDataEOT() error {
-	_, err := m.TraceDataIn(ocsd.OpEOT, 0, nil); return err
+	_, err := m.TraceDataIn(ocsd.OpEOT, 0, nil)
+	return err
 }
 func (m *mockDataSink) TraceDataFlush() error {
-	_, err := m.TraceDataIn(ocsd.OpFlush, 0, nil); return err
+	_, err := m.TraceDataIn(ocsd.OpFlush, 0, nil)
+	return err
 }
 func (m *mockDataSink) TraceDataReset(index ocsd.TrcIndex) error {
-	_, err := m.TraceDataIn(ocsd.OpReset, index, nil); return err
+	_, err := m.TraceDataIn(ocsd.OpReset, index, nil)
+	return err
 }
 
 // Ensure mockDataSink implements TrcDataProcessorExplicit
@@ -161,13 +164,16 @@ func (m *mockDataSinkWait) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uin
 	return m.TraceDataIn(ocsd.OpData, index, dataBlock)
 }
 func (m *mockDataSinkWait) TraceDataEOT() error {
-	_, err := m.TraceDataIn(ocsd.OpEOT, 0, nil); return err
+	_, err := m.TraceDataIn(ocsd.OpEOT, 0, nil)
+	return err
 }
 func (m *mockDataSinkWait) TraceDataFlush() error {
-	_, err := m.TraceDataIn(ocsd.OpFlush, 0, nil); return err
+	_, err := m.TraceDataIn(ocsd.OpFlush, 0, nil)
+	return err
 }
 func (m *mockDataSinkWait) TraceDataReset(index ocsd.TrcIndex) error {
-	_, err := m.TraceDataIn(ocsd.OpReset, index, nil); return err
+	_, err := m.TraceDataIn(ocsd.OpReset, index, nil)
+	return err
 }
 
 // Ensure mockDataSinkWait implements TrcDataProcessorExplicit
@@ -200,13 +206,16 @@ func (m *mockDataSinkWaitOnce) TraceData(index ocsd.TrcIndex, dataBlock []byte) 
 	return m.TraceDataIn(ocsd.OpData, index, dataBlock)
 }
 func (m *mockDataSinkWaitOnce) TraceDataEOT() error {
-	_, err := m.TraceDataIn(ocsd.OpEOT, 0, nil); return err
+	_, err := m.TraceDataIn(ocsd.OpEOT, 0, nil)
+	return err
 }
 func (m *mockDataSinkWaitOnce) TraceDataFlush() error {
-	_, err := m.TraceDataIn(ocsd.OpFlush, 0, nil); return err
+	_, err := m.TraceDataIn(ocsd.OpFlush, 0, nil)
+	return err
 }
 func (m *mockDataSinkWaitOnce) TraceDataReset(index ocsd.TrcIndex) error {
-	_, err := m.TraceDataIn(ocsd.OpReset, index, nil); return err
+	_, err := m.TraceDataIn(ocsd.OpReset, index, nil)
+	return err
 }
 
 var _ ocsd.TrcDataProcessorExplicit = (*mockDataSinkWaitOnce)(nil)

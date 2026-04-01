@@ -33,7 +33,7 @@ func (c *capturePktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex
 func (c *capturePktSink) TracePacketData(indexSOP ocsd.TrcIndex, pkt *Packet) error {
 	return c.PacketDataIn(ocsd.OpData, indexSOP, pkt)
 }
-func (c *capturePktSink) TracePacketEOT() error { return c.PacketDataIn(ocsd.OpEOT, 0, nil) }
+func (c *capturePktSink) TracePacketEOT() error   { return c.PacketDataIn(ocsd.OpEOT, 0, nil) }
 func (c *capturePktSink) TracePacketFlush() error { return c.PacketDataIn(ocsd.OpFlush, 0, nil) }
 func (c *capturePktSink) TracePacketReset(indexSOP ocsd.TrcIndex) error {
 	return c.PacketDataIn(ocsd.OpReset, indexSOP, nil)

@@ -19,12 +19,12 @@ const (
 
 // PktDecode converts incoming STM packets to generic output packets.
 type PktDecode struct {
-	Name         string
+	Name string
 	common.OpMode
-	TraceElemOut  ocsd.GenElemProcessor
-	MemAccess     common.TargetMemAccess
-	InstrDecode   common.InstrDecode
-	IndexCurrPkt  ocsd.TrcIndex
+	TraceElemOut ocsd.GenElemProcessor
+	MemAccess    common.TargetMemAccess
+	InstrDecode  common.InstrDecode
+	IndexCurrPkt ocsd.TrcIndex
 	Config       *Config
 	CurrPacketIn *Packet
 

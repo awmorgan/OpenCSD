@@ -65,10 +65,10 @@ const (
 
 // PktProc converts the byte stream into basic STM trace packets.
 type PktProc struct {
-	Name       string
+	Name string
 	common.OpMode
-	Stats     ocsd.DecodeStats
-	statsInit bool
+	Stats      ocsd.DecodeStats
+	statsInit  bool
 	Config     *Config
 	PktOutI    ocsd.PacketProcessorExplicit[Packet]
 	PktRawMonI ocsd.PacketMonitor[Packet]
