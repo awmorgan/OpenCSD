@@ -50,7 +50,10 @@ const (
 )
 
 type PktProc struct {
-	common.ProcBase[Packet]
+	Name       string
+	common.OpMode
+	Stats     ocsd.DecodeStats
+	statsInit bool
 	Config     *Config
 	PktOutI    ocsd.PacketProcessorExplicit[Packet]
 	PktRawMonI ocsd.PacketMonitor[Packet]
@@ -102,9 +105,7 @@ func NewPktProc(cfg *Config) *PktProc {
 		instIDNum = int(cfg.TraceID())
 	}
 	p := &PktProc{
-		ProcBase: common.ProcBase[Packet]{
-			Name: fmt.Sprintf("PKTP_PTM_%d", instIDNum),
-		},
+		Name: fmt.Sprintf("PKTP_PTM_%d", instIDNum),
 	}
 	p.ResetStats()
 	p.resetProcessorState()
@@ -123,6 +124,45 @@ func (p *PktProc) PktOut() ocsd.PacketProcessorExplicit[Packet] { return p.PktOu
 
 // SetPktRawMonitor attaches a raw packet monitor.
 func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor[Packet]) { p.PktRawMonI = mon }
+
+// HasRawMon reports whether a raw packet monitor is attached.
+func (p *PktProc) HasRawMon() bool { return p.PktRawMonI != nil }
+
+// StatsBlock returns the decode statistics, or ErrNotInit if not initialized.
+func (p *PktProc) StatsBlock() (*ocsd.DecodeStats, error) {
+	if !p.statsInit {
+		return &p.Stats, ocsd.ErrNotInit
+	}
+	return &p.Stats, nil
+}
+
+// StatsInit marks the statistics block as initialized.
+func (p *PktProc) StatsInit() { p.statsInit = true }
+
+// ResetStats zeroes all decode statistics fields.
+func (p *PktProc) ResetStats() {
+	p.Stats.Version = ocsd.VerNum
+	p.Stats.Revision = ocsd.StatsRevision
+	p.Stats.ChannelTotal = 0
+	p.Stats.ChannelUnsynced = 0
+	p.Stats.BadHeaderErrs = 0
+	p.Stats.BadSequenceErrs = 0
+	p.Stats.Demux.FrameBytes = 0
+	p.Stats.Demux.NoIDBytes = 0
+	p.Stats.Demux.ValidIDBytes = 0
+}
+
+// StatsAddTotalCount adds to the total channel bytes counter.
+func (p *PktProc) StatsAddTotalCount(count uint64) { p.Stats.ChannelTotal += count }
+
+// StatsAddUnsyncCount adds to the unsynced channel bytes counter.
+func (p *PktProc) StatsAddUnsyncCount(count uint64) { p.Stats.ChannelUnsynced += count }
+
+// StatsAddBadSeqCount adds to the bad-sequence-error counter.
+func (p *PktProc) StatsAddBadSeqCount(count uint32) { p.Stats.BadSequenceErrs += count }
+
+// StatsAddBadHdrCount adds to the bad-header-error counter.
+func (p *PktProc) StatsAddBadHdrCount(count uint32) { p.Stats.BadHeaderErrs += count }
 
 func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) ocsd.DatapathResp {
 	if p.PktOutI != nil {

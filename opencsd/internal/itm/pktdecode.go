@@ -2,6 +2,7 @@ package itm
 
 import (
 	"fmt"
+	"errors"
 
 	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
@@ -17,7 +18,12 @@ const (
 
 // PktDecode decodes ITM packets into generic ITM-SW trace packets.
 type PktDecode struct {
-	common.DecoderBase
+	Name         string
+	common.OpMode
+	TraceElemOut  ocsd.GenElemProcessor
+	MemAccess     common.TargetMemAccess
+	InstrDecode   common.InstrDecode
+	IndexCurrPkt  ocsd.TrcIndex
 	Config       *Config
 	CurrPacketIn *Packet
 
@@ -44,9 +50,7 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 
 	instID := int(cfg.TraceID())
 	d := &PktDecode{
-		DecoderBase: common.DecoderBase{
-			Name: fmt.Sprintf("DCD_ITM_%d", instID),
-		},
+		Name: fmt.Sprintf("DCD_ITM_%d", instID),
 	}
 	d.configureDecoder()
 	if err := d.SetProtocolConfig(cfg); err != nil {
@@ -63,6 +67,55 @@ func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.MemAccess = mem
 
 // SetInstrDecode satisfies dcdtree's instrDecodeSetterOwner interface.
 func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.InstrDecode = dec }
+
+// OutputTraceElement sends an element using IndexCurrPkt.
+func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
+	if d.TraceElemOut != nil {
+		err := d.TraceElemOut.TraceElemIn(d.IndexCurrPkt, traceID, elem)
+		if ocsd.IsDataContErr(err) { return ocsd.RespCont, nil }
+		if ocsd.IsDataWaitErr(err) { return ocsd.RespWait, nil }
+		if errors.Is(err, ocsd.ErrNotInit) { return ocsd.RespFatalNotInit, err }
+		return ocsd.RespFatalInvalidData, err
+	}
+	return ocsd.RespFatalNotInit, ocsd.ErrNotInit
+}
+
+// OutputTraceElementIdx sends an element at an explicit index.
+func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
+	if d.TraceElemOut != nil {
+		err := d.TraceElemOut.TraceElemIn(idx, traceID, elem)
+		if ocsd.IsDataContErr(err) { return ocsd.RespCont, nil }
+		if ocsd.IsDataWaitErr(err) { return ocsd.RespWait, nil }
+		if errors.Is(err, ocsd.ErrNotInit) { return ocsd.RespFatalNotInit, err }
+		return ocsd.RespFatalInvalidData, err
+	}
+	return ocsd.RespFatalNotInit, ocsd.ErrNotInit
+}
+
+// AccessMemory reads target memory.
+func (d *PktDecode) AccessMemory(address ocsd.VAddr, traceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
+	if d.MemAccess != nil {
+		return d.MemAccess.ReadTargetMemory(address, traceID, memSpace, reqBytes)
+	}
+	return 0, nil, ocsd.ErrDcdInterfaceUnused
+}
+
+// InstrDecodeCall calls the attached instruction decoder.
+func (d *PktDecode) InstrDecodeCall(instrInfo *ocsd.InstrInfo) error {
+	if d.InstrDecode != nil {
+		return d.InstrDecode.DecodeInstruction(instrInfo)
+	}
+	return ocsd.ErrDcdInterfaceUnused
+}
+
+// InvalidateMemAccCache invalidates the memory access cache.
+func (d *PktDecode) InvalidateMemAccCache(traceID uint8) error {
+	if d.MemAccess != nil {
+		d.MemAccess.InvalidateMemAccCache(traceID)
+		return nil
+	}
+	return ocsd.ErrDcdInterfaceUnused
+}
 
 // SetProtocolConfig sets the ITM hardware configuration.
 func (d *PktDecode) SetProtocolConfig(cfg *Config) error {
