@@ -48,41 +48,41 @@ const (
 
 // TraceMode returns the effective trace mode based on the control register
 func (c *Config) TraceMode() TraceMode {
-	if c.IsInstrTrace() {
-		if c.IsDataAddrTrace() && c.IsDataValTrace() {
+	if c.InstrTrace() {
+		if c.DataAddrTrace() && c.DataValTrace() {
 			return TMIDataValAddr
 		}
-		if c.IsDataAddrTrace() {
+		if c.DataAddrTrace() {
 			return TMIDataAddr
 		}
-		if c.IsDataValTrace() {
+		if c.DataValTrace() {
 			return TMIDataVal
 		}
 		return TMInstrOnly
 	}
-	if c.IsDataAddrTrace() && c.IsDataValTrace() {
+	if c.DataAddrTrace() && c.DataValTrace() {
 		return TMDataOnlyValAddr
 	}
-	if c.IsDataAddrTrace() {
+	if c.DataAddrTrace() {
 		return TMDataOnlyAddr
 	}
 	return TMDataOnlyVal
 }
 
-func (c *Config) IsInstrTrace() bool    { return (c.RegCtrl & ctrlDataOnly) == 0 }
-func (c *Config) IsDataValTrace() bool  { return (c.RegCtrl & ctrlDataVal) != 0 }
-func (c *Config) IsDataAddrTrace() bool { return (c.RegCtrl & ctrlDataAddr) != 0 }
-func (c *Config) IsDataTrace() bool     { return (c.RegCtrl & (ctrlDataAddr | ctrlDataVal)) != 0 }
+func (c *Config) InstrTrace() bool    { return (c.RegCtrl & ctrlDataOnly) == 0 }
+func (c *Config) DataValTrace() bool  { return (c.RegCtrl & ctrlDataVal) != 0 }
+func (c *Config) DataAddrTrace() bool { return (c.RegCtrl & ctrlDataAddr) != 0 }
+func (c *Config) DataTrace() bool     { return (c.RegCtrl & (ctrlDataAddr | ctrlDataVal)) != 0 }
 
-func (c *Config) IsCycleAcc() bool { return (c.RegCtrl & ctrlCycleAcc) != 0 }
+func (c *Config) CycleAcc() bool { return (c.RegCtrl & ctrlCycleAcc) != 0 }
 
 func (c *Config) MinorRev() int { return int((c.RegIDR & 0xF0) >> 4) }
 
-func (c *Config) IsV7MArch() bool {
+func (c *Config) V7MArch() bool {
 	return c.ArchVer == ocsd.ArchV7 && c.CoreProf == ocsd.ProfileCortexM
 }
 
-func (c *Config) IsAltBranch() bool {
+func (c *Config) AltBranch() bool {
 	return (c.RegIDR&idrAltBranch) != 0 && c.MinorRev() >= 4
 }
 
@@ -99,11 +99,11 @@ func (c *Config) CtxtIDBytes() int {
 	}
 }
 
-func (c *Config) HasVirtExt() bool  { return (c.RegCCER & ccerVirtExt) != 0 }
-func (c *Config) IsVMIDTrace() bool { return (c.RegCtrl & ctrlVmidEna) != 0 }
+func (c *Config) HasVirtExt() bool { return (c.RegCCER & ccerVirtExt) != 0 }
+func (c *Config) VMIDTrace() bool  { return (c.RegCtrl & ctrlVmidEna) != 0 }
 
-func (c *Config) HasTS() bool       { return (c.RegCCER & ccerHasTs) != 0 }
-func (c *Config) IsTSEnabled() bool { return (c.RegCtrl & ctrlTsEna) != 0 }
+func (c *Config) HasTS() bool    { return (c.RegCCER & ccerHasTs) != 0 }
+func (c *Config) TSEnabled() bool { return (c.RegCtrl & ctrlTsEna) != 0 }
 func (c *Config) TSPkt64() bool     { return (c.RegCCER & ccerTs64Bit) != 0 }
 
 func (c *Config) TraceID() uint8 { return uint8(c.RegTrcID & 0x7F) }

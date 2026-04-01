@@ -307,7 +307,7 @@ func (p *PktProc) processHeaderByte(by uint8) {
 		}
 	} else if (by & 0x81) == 0x80 {
 		p.currPacket.Type = PktPHdr
-		if p.currPacket.UpdateAtomFromPHdr(by, p.Config.IsCycleAcc()) {
+		if p.currPacket.UpdateAtomFromPHdr(by, p.Config.CycleAcc()) {
 			p.processState = sendPkt
 		} else {
 			p.throwPacketHeaderErr("Invalid P-Header.")
@@ -327,7 +327,7 @@ func (p *PktProc) processHeaderByte(by uint8) {
 		}
 	} else if (by & 0x03) == 0x00 {
 		if (by & 0x93) == 0x00 {
-			if !p.Config.IsDataValTrace() {
+			if !p.Config.DataValTrace() {
 				p.currPacket.ErrType = PktBadTraceMode
 				p.throwPacketHeaderErr("Invalid data trace header (out of order data) - not tracing data values.")
 			}
@@ -351,7 +351,7 @@ func (p *PktProc) processHeaderByte(by uint8) {
 			p.isyncGotCC = false
 			p.isyncGetLSiP = false
 		} else if by == 0x50 {
-			if !p.Config.IsDataValTrace() {
+			if !p.Config.DataValTrace() {
 				p.currPacket.ErrType = PktBadTraceMode
 				p.throwPacketHeaderErr("Invalid data trace header (store failed) - not tracing data values.")
 			}
@@ -359,11 +359,11 @@ func (p *PktProc) processHeaderByte(by uint8) {
 			p.processState = sendPkt
 		} else if (by & 0xD3) == 0x50 {
 			p.currPacket.Type = PktOOOAddrPlc
-			if !p.Config.IsDataTrace() {
+			if !p.Config.DataTrace() {
 				p.currPacket.ErrType = PktBadTraceMode
 				p.throwPacketHeaderErr("Invalid data trace header (out of order placeholder) - not tracing data.")
 			}
-			p.expectDataAddr = ((by & 0x20) == 0x20) && p.Config.IsDataAddrTrace()
+			p.expectDataAddr = ((by & 0x20) == 0x20) && p.Config.DataAddrTrace()
 			p.foundDataAddr = false
 			p.currPacket.Data.OooTag = (by >> 2) & 0x3
 			if !p.expectDataAddr {
@@ -377,12 +377,12 @@ func (p *PktProc) processHeaderByte(by uint8) {
 		}
 	} else if (by & 0xD3) == 0x02 {
 		size := (by & 0x0C) >> 2
-		if !p.Config.IsDataTrace() {
+		if !p.Config.DataTrace() {
 			p.currPacket.ErrType = PktBadTraceMode
 			p.throwPacketHeaderErr("Invalid data trace header (normal data) - not tracing data.")
 		}
 		p.currPacket.Type = PktNormData
-		p.expectDataAddr = ((by & 0x20) == 0x20) && p.Config.IsDataAddrTrace()
+		p.expectDataAddr = ((by & 0x20) == 0x20) && p.Config.DataAddrTrace()
 		p.foundDataAddr = false
 		p.bytesExpected = 1 + int(func() uint8 {
 			if size == 3 {
@@ -396,19 +396,19 @@ func (p *PktProc) processHeaderByte(by uint8) {
 			p.processState = sendPkt
 		}
 	} else if by == 0x62 {
-		if !p.Config.IsDataTrace() {
+		if !p.Config.DataTrace() {
 			p.currPacket.ErrType = PktBadTraceMode
 			p.throwPacketHeaderErr("Invalid data trace header (data suppressed) - not tracing data.")
 		}
 		p.currPacket.Type = PktDataSuppressed
 		p.processState = sendPkt
 	} else if (by & 0xEF) == 0x6A {
-		if !p.Config.IsDataTrace() {
+		if !p.Config.DataTrace() {
 			p.currPacket.ErrType = PktBadTraceMode
 			p.throwPacketHeaderErr("Invalid data trace header (value not traced) - not tracing data.")
 		}
 		p.currPacket.Type = PktValNotTraced
-		p.expectDataAddr = ((by & 0x20) == 0x20) && p.Config.IsDataAddrTrace()
+		p.expectDataAddr = ((by & 0x20) == 0x20) && p.Config.DataAddrTrace()
 		p.foundDataAddr = false
 		if !p.expectDataAddr {
 			p.processState = sendPkt
@@ -442,7 +442,7 @@ func (p *PktProc) processPayloadByte(by uint8) {
 	switch p.currPacket.Type {
 	case PktBranchAddress:
 		bTopBitSet = (by & 0x80) == 0x80
-		if p.Config.IsAltBranch() {
+		if p.Config.AltBranch() {
 			if !bTopBitSet {
 				if !p.branchNeedsEx {
 					if (by & 0xC0) == 0x40 {
@@ -514,7 +514,7 @@ func (p *PktProc) processPayloadByte(by uint8) {
 		if p.bytesExpected == 0 {
 			cycCountBytes := len(p.currPacketData) - 2
 			ctxtIDBytes := p.Config.CtxtIDBytes()
-			if p.Config.IsInstrTrace() {
+			if p.Config.InstrTrace() {
 				p.bytesExpected = cycCountBytes + 6 + ctxtIDBytes
 			} else {
 				p.bytesExpected = 2 + ctxtIDBytes
@@ -691,7 +691,7 @@ func (p *PktProc) extractBrAddrPkt() (value uint64, nBitsOut int) {
 			bitcount += 6
 			addrbyte >>= 1
 		} else {
-			if p.Config.IsAltBranch() && !CBit {
+			if p.Config.AltBranch() && !CBit {
 				if (addrbyte & 0x40) == 0x40 {
 					p.extractExceptionData()
 				}
@@ -853,7 +853,7 @@ func (p *PktProc) extractExceptionData() {
 		if (dataByte & 0x40) != 0 {
 			byte2 = true
 		} else {
-			if p.Config.IsV7MArch() {
+			if p.Config.V7MArch() {
 				exceptionNum |= uint16(dataByte&0x1F) << 4
 			}
 			p.currPacket.Context.CurrHyp = (dataByte & 0x20) != 0
@@ -875,7 +875,7 @@ func (p *PktProc) extractExceptionData() {
 	}
 
 	excepType := ocsd.ExcpReserved
-	if p.Config.IsV7MArch() {
+	if p.Config.V7MArch() {
 		exceptionNum &= 0x1FF
 		if int(exceptionNum) < len(exceptionTypesCM) {
 			excepType = exceptionTypesCM[exceptionNum]
@@ -1010,7 +1010,7 @@ func (p *PktProc) onISyncPacket() {
 	p.currPacket.Context.Updated = true
 
 	// 4. Extract address and determine ISA
-	if p.Config.IsInstrTrace() {
+	if p.Config.InstrTrace() {
 		for i := range 4 {
 			if !p.checkPktLimits() {
 				return

@@ -362,7 +362,7 @@ func (d *PktDecode) emitPendingNacc() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) preISyncValid(pktType PktType) bool {
-	if pktType == PktTimestamp || (d.Config.IsCycleAcc() && (pktType == PktCycleCount || pktType == PktPHdr)) {
+	if pktType == PktTimestamp || (d.Config.CycleAcc() && (pktType == PktCycleCount || pktType == PktPHdr)) {
 		return true
 	}
 	return false
@@ -712,7 +712,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 	atomsNum := packetIn.Atom.Num
 	enBits := packetIn.Atom.EnBits
 
-	isCCPacket := d.Config.IsCycleAcc()
+	isCCPacket := d.Config.CycleAcc()
 
 	memSpace := ocsd.MemSpaceN
 	if d.peContext.SecurityLevel == ocsd.SecSecure {
@@ -725,7 +725,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 
 	for {
 		if d.needAddr {
-			if !d.sentUnknown || d.Config.IsCycleAcc() {
+			if !d.sentUnknown || d.Config.CycleAcc() {
 				elem, err := d.getNextOpElem()
 				if err != nil {
 					d.unsyncInfo = common.UnsyncBadPacket
@@ -737,7 +737,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 				} else {
 					elem.SetType(ocsd.GenElemAddrUnknown)
 				}
-				if d.Config.IsCycleAcc() {
+				if d.Config.CycleAcc() {
 					elem.SetCycleCount(d.remainCC(packetIn, atomsNum, isCCPacket))
 				}
 				d.sentUnknown = true
@@ -775,7 +775,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					elem.LastInstrCond = instrInfo.IsConditional != 0
 					elem.ISA = isa
 
-					if d.Config.IsCycleAcc() {
+					if d.Config.CycleAcc() {
 						elem.SetCycleCount(d.atomCC(packetIn, atomsNum, isCCPacket))
 					}
 
@@ -800,7 +800,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 					}
 					d.setNeedAddr(true)
 				}
-			} else if d.Config.IsCycleAcc() {
+			} else if d.Config.CycleAcc() {
 				// CC only packet (atomsNum == 0)
 				elem, err := d.getNextOpElem()
 				if err != nil {

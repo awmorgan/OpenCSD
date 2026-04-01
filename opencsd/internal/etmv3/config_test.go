@@ -17,33 +17,33 @@ func TestConfig(t *testing.T) {
 		CoreProf: ocsd.ProfileCortexM,
 	}
 
-	if !c.IsInstrTrace() {
-		t.Error("expected IsInstrTrace")
+	if !c.InstrTrace() {
+		t.Error("expected InstrTrace")
 	}
-	if c.IsDataValTrace() {
-		t.Error("unexpected IsDataValTrace")
+	if c.DataValTrace() {
+		t.Error("unexpected DataValTrace")
 	}
-	if c.IsDataAddrTrace() {
-		t.Error("unexpected IsDataAddrTrace")
+	if c.DataAddrTrace() {
+		t.Error("unexpected DataAddrTrace")
 	}
-	if c.IsDataTrace() {
-		t.Error("unexpected IsDataTrace")
+	if c.DataTrace() {
+		t.Error("unexpected DataTrace")
 	}
 	if c.TraceMode() != TMInstrOnly {
 		t.Error("expected TMInstrOnly")
 	}
 
-	if !c.IsCycleAcc() {
-		t.Error("expected IsCycleAcc")
+	if !c.CycleAcc() {
+		t.Error("expected CycleAcc")
 	}
 	if c.MinorRev() != 1 {
 		t.Error("expected Minor rev 1")
 	}
-	if !c.IsV7MArch() {
+	if !c.V7MArch() {
 		t.Error("expected V7M")
 	}
-	if c.IsAltBranch() {
-		t.Error("unexpected IsAltBranch")
+	if c.AltBranch() {
+		t.Error("unexpected AltBranch")
 	}
 	if c.CtxtIDBytes() != 2 {
 		t.Error("expected CtxtIDBytes=2")
@@ -51,14 +51,14 @@ func TestConfig(t *testing.T) {
 	if !c.HasVirtExt() {
 		t.Error("expected HasVirtExt")
 	}
-	if !c.IsVMIDTrace() {
-		t.Error("expected IsVMIDTrace")
+	if !c.VMIDTrace() {
+		t.Error("expected VMIDTrace")
 	}
 	if !c.HasTS() {
 		t.Error("expected HasTS")
 	}
-	if !c.IsTSEnabled() {
-		t.Error("expected IsTSEnabled")
+	if !c.TSEnabled() {
+		t.Error("expected TSEnabled")
 	}
 	if !c.TSPkt64() {
 		t.Error("expected TSPkt64")
@@ -117,9 +117,9 @@ func TestConfig(t *testing.T) {
 		t.Error("expected 0")
 	}
 
-	// IsAltBranch
+	// AltBranch
 	c.RegIDR = idrAltBranch | (4 << 4)
-	if !c.IsAltBranch() {
-		t.Error("expected IsAltBranch")
+	if !c.AltBranch() {
+		t.Error("expected AltBranch")
 	}
 }
