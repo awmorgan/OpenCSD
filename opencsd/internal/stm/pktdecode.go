@@ -2,6 +2,7 @@ package stm
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"opencsd/internal/common"
@@ -16,7 +17,6 @@ const (
 	dcdDecodePkts
 )
 
-// PktDecode converts incoming STM packets to generic output packets.
 type PktDecode struct {
 	Name string
 	common.OpMode
@@ -265,17 +265,30 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 	d.outputElem.SetType(ocsd.GenElemSWTrace)
 	d.clearSWTPerPcktInfo()
 
+	if d.CurrPacketIn.Err != nil {
+		switch {
+		case errors.Is(d.CurrPacketIn.Err, errIncompleteEOT):
+			return resp, done
+		case errors.Is(d.CurrPacketIn.Err, ocsd.ErrBadPacketSeq), errors.Is(d.CurrPacketIn.Err, ocsd.ErrInvalidPcktHdr):
+			resp = ocsd.RespFatalInvalidData
+			d.unsyncInfo = ocsd.UnsyncBadPacket
+			d.resetDecoder()
+			return resp, done
+		default:
+			resp = ocsd.RespFatalInvalidData
+			d.unsyncInfo = ocsd.UnsyncBadPacket
+			d.resetDecoder()
+			return resp, done
+		}
+	}
+
 	switch d.CurrPacketIn.Type {
-	case PktBadSequence, PktReserved:
-		resp = ocsd.RespFatalInvalidData
-		d.unsyncInfo = ocsd.UnsyncBadPacket
-		fallthrough
 	case PktNotSync:
 		d.resetDecoder()
 	case PktVersion:
 		d.swtPacketInfo.MasterID = uint16(d.CurrPacketIn.Master)
 		d.swtPacketInfo.ChannelID = uint16(d.CurrPacketIn.Channel)
-	case PktAsync, PktIncompleteEOT:
+	case PktAsync:
 		// no action required
 	case PktNull:
 		if d.CurrPacketIn.IsTSPkt() {

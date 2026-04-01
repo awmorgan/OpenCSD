@@ -1,8 +1,11 @@
 package stm
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+
+	"opencsd/internal/ocsd"
 )
 
 // PktType represents STM protocol packet types.
@@ -14,7 +17,6 @@ const (
 	// markers for unknown packets / state
 	PktNotSync       PktType = iota // Not synchronised
 	PktIncompleteEOT                // Incomplete packet flushed at end of trace.
-	PktNoErrType                    // No error in error packet marker.
 
 	// markers for valid packets
 	PktAsync   // Alignment synchronisation packet
@@ -74,8 +76,10 @@ type Packet struct {
 		D64 uint64
 	}
 
-	ErrType PktType // Initial type of packet if type indicates bad sequence.
+	Err error
 }
+
+var errIncompleteEOT = errors.New("incomplete packet flushed at end of trace")
 
 // ResetStartState initializes packet state at start of decoder.
 func (p *Packet) ResetStartState() {
@@ -89,7 +93,7 @@ func (p *Packet) ResetStartState() {
 
 // ResetNextPacket initializes state for the next packet.
 func (p *Packet) ResetNextPacket() {
-	p.ErrType = PktNoErrType
+	p.Err = nil
 	p.PktTSBits = 0
 	p.PktHasMarker = 0
 	p.PktHasTS = 0
@@ -102,11 +106,6 @@ func (p *Packet) SetPacketType(typ PktType, bMarker bool) {
 	} else {
 		p.PktHasMarker = 0
 	}
-}
-
-func (p *Packet) UpdateErrType(errType PktType) {
-	p.ErrType = p.Type
-	p.Type = errType
 }
 
 func (p *Packet) SetMaster(master uint8) {
@@ -153,7 +152,7 @@ func (p *Packet) IsTSPkt() bool {
 }
 
 func (p *Packet) IsBadPacket() bool {
-	return p.Type >= PktBadSequence
+	return p.Err != nil
 }
 
 func (p *Packet) pktTypeName(pktType PktType) string {
@@ -164,8 +163,6 @@ func (p *Packet) pktTypeName(pktType PktType) string {
 		return "NOTSYNC"
 	case PktIncompleteEOT:
 		return "INCOMPLETE_EOT"
-	case PktNoErrType:
-		return "NO_ERR_TYPE"
 	case PktBadSequence:
 		return "BAD_SEQUENCE"
 	case PktAsync:
@@ -209,16 +206,15 @@ func (p *Packet) String() string {
 	var sb strings.Builder
 	var name, desc string
 	addMarkerTS := false
+	displayType := p.displayType()
 
-	switch p.Type {
+	switch displayType {
 	case PktReserved:
 		name, desc = "RESERVED", "Reserved Packet Header"
 	case PktNotSync:
 		name, desc = "NOTSYNC", "STM not synchronised"
 	case PktIncompleteEOT:
 		name, desc = "INCOMPLETE_EOT", "Incomplete packet flushed at end of trace"
-	case PktNoErrType:
-		name, desc = "NO_ERR_TYPE", "Error type not set"
 	case PktBadSequence:
 		name, desc = "BAD_SEQUENCE", "Invalid sequence in packet"
 	case PktAsync:
@@ -284,9 +280,9 @@ func (p *Packet) String() string {
 		}
 	}
 
-	switch p.Type {
+	switch displayType {
 	case PktIncompleteEOT, PktBadSequence:
-		fmt.Fprintf(&sb, "[%s]", p.pktTypeName(p.ErrType))
+		fmt.Fprintf(&sb, "[%s]", p.pktTypeName(p.Type))
 	case PktVersion:
 		fmt.Fprintf(&sb, "; Ver=%d", p.Payload.D8)
 	case PktFreq:
@@ -320,4 +316,20 @@ func (p *Packet) String() string {
 	}
 
 	return sb.String()
+}
+
+func (p *Packet) displayType() PktType {
+	if p.Err == nil {
+		return p.Type
+	}
+	if errors.Is(p.Err, ocsd.ErrInvalidPcktHdr) {
+		return PktReserved
+	}
+	if errors.Is(p.Err, errIncompleteEOT) {
+		return PktIncompleteEOT
+	}
+	if errors.Is(p.Err, ocsd.ErrBadPacketSeq) {
+		return PktBadSequence
+	}
+	return p.Type
 }

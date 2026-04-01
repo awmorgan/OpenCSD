@@ -263,11 +263,12 @@ func TestSTMPacketString(t *testing.T) {
 		t.Errorf("Unexpected formatting for D8: %s", str)
 	}
 
-	pkt.SetPacketType(PktBadSequence, false)
-	pkt.ErrType = PktD32
+	pkt.SetPacketType(PktD32, false)
+	pkt.Err = ocsd.ErrBadPacketSeq
 	if pkt.String() != "BAD_SEQUENCE:Invalid sequence in packet[D32]" {
 		t.Errorf("Unexpected formatting: %s", pkt.String())
 	}
+	pkt.Err = nil
 
 	pkt.SetPacketType(PktFreq, false)
 	pkt.Payload.D32 = 1000
@@ -334,7 +335,8 @@ func TestSTMFlushResetAndBadPacketClassification(t *testing.T) {
 
 	pkt := &Packet{}
 	pkt.ResetNextPacket()
-	pkt.SetPacketType(PktBadSequence, false)
+	pkt.SetPacketType(PktD8, false)
+	pkt.Err = ocsd.ErrBadPacketSeq
 	if !pkt.IsBadPacket() {
 		t.Errorf("Expected IsBadPacket to be true")
 	}

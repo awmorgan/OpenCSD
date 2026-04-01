@@ -45,8 +45,6 @@ func itmPacketTypeName(t itm.PktType) string {
 		return "ITM_NOTSYNC"
 	case itm.PktIncompleteEOT:
 		return "ITM_INCOMPLETE_EOT"
-	case itm.PktNoErrType:
-		return "ITM_NO_ERR_TYPE"
 	case itm.PktAsync:
 		return "ITM_ASYNC"
 	case itm.PktOverflow:

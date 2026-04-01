@@ -1,8 +1,11 @@
 package itm
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+
+	"opencsd/internal/ocsd"
 )
 
 // PktType represents the ITM packet type.
@@ -12,7 +15,6 @@ const (
 	/* markers for unknown packets  / state*/
 	PktNotSync       PktType = iota /**< Not synchronised */
 	PktIncompleteEOT                /**< Incomplete packet flushed at end of trace. */
-	PktNoErrType                    /**< No error in error packet marker. */
 
 	/* valid packet types */
 	PktAsync     /**< sync packet */
@@ -51,12 +53,14 @@ type Packet struct {
 		 - GTS1: clk wrap [1] / freq change [0] bits,
 		 - Ext: Src SW(0)/HW(1) [7], N size - N:0 value bit length [4:0],
 	*/
-	SrcID   uint8
-	Value   uint32  /**< packet data payload - interpretation depends on type */
-	ValSz   uint8   /**< size of value in bytes */
-	ValExt  uint8   /**< additional value bits to handle top of [63:26] timestamp packet (38 bits of ts) */
-	ErrType PktType /**< Initial type of packet if type indicates bad sequence. */
+	SrcID  uint8
+	Value  uint32 /**< packet data payload - interpretation depends on type */
+	ValSz  uint8  /**< size of value in bytes */
+	ValExt uint8  /**< additional value bits to handle top of [63:26] timestamp packet (38 bits of ts) */
+	Err    error
 }
+
+var errIncompleteEOT = errors.New("incomplete packet flushed at end of trace")
 
 // Reset initializes packet to a clean state.
 func (p *Packet) Reset() {
@@ -65,13 +69,7 @@ func (p *Packet) Reset() {
 	p.Value = 0
 	p.ValSz = 0
 	p.ValExt = 0
-	p.ErrType = PktNoErrType
-}
-
-// UpdateErrType updates the error type and sets the packet to the given error type.
-func (p *Packet) UpdateErrType(errType PktType) {
-	p.ErrType = p.Type // original type is the err type
-	p.Type = errType   // mark main type as an error
+	p.Err = nil
 }
 
 var valMasks = [...]uint32{0xFF, 0xFFFF, 0xFFFFFF, 0xFFFFFFFF}
@@ -99,17 +97,18 @@ func (p *Packet) ExtValue() uint64 {
 
 // IsBadPacket returns true if the packet type indicates a bad sequence or reserved protocol.
 func (p *Packet) IsBadPacket() bool {
-	return p.Type >= PktBadSequence
+	return p.Err != nil
 }
 
 // String provides a string representation of the packet, matching C++ trc_pkt_elem_itm formatting.
 func (p *Packet) String() string {
 	var sb strings.Builder
-	name, desc := p.typeNameAndDesc()
+	displayType := p.displayType()
+	name, desc := (&Packet{Type: displayType}).typeNameAndDesc()
 	sb.WriteString(name)
 	sb.WriteString(": ")
 
-	switch p.Type {
+	switch displayType {
 	case PktSWIT:
 		fmt.Fprintf(&sb, "{src id: 0x%02x}  ", p.SrcID)
 		p.writeHexVal(&sb)
@@ -125,7 +124,7 @@ func (p *Packet) String() string {
 	case PktExtension:
 		p.writeExtensionPacketBody(&sb)
 	case PktIncompleteEOT, PktBadSequence:
-		errName, _ := (&Packet{Type: p.ErrType}).typeNameAndDesc()
+		errName, _ := p.typeNameAndDesc()
 		fmt.Fprintf(&sb, "[Init type: %s] ", errName)
 	}
 
@@ -133,6 +132,22 @@ func (p *Packet) String() string {
 	sb.WriteString(desc)
 	sb.WriteString("'")
 	return sb.String()
+}
+
+func (p *Packet) displayType() PktType {
+	if p.Err == nil {
+		return p.Type
+	}
+	if errors.Is(p.Err, ocsd.ErrInvalidPcktHdr) {
+		return PktReserved
+	}
+	if errors.Is(p.Err, errIncompleteEOT) {
+		return PktIncompleteEOT
+	}
+	if errors.Is(p.Err, ocsd.ErrBadPacketSeq) {
+		return PktBadSequence
+	}
+	return p.Type
 }
 
 func (p *Packet) typeNameAndDesc() (string, string) {
