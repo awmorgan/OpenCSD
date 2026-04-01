@@ -295,7 +295,7 @@ func (d *FrameDeformatter) outputFrame(state *datapathState) bool {
 				resp := ocsd.DataRespFromErr(err)
 				collateDataPathResp(state, resp, err)
 
-				if !ocsd.DataRespIsCont(state.highestResp) {
+				if !ocsd.DataRespIsCont(state.highestResp()) {
 					contProcessing = false
 					d.outData[d.outProcessed].used += bytesUsed
 					if d.outData[d.outProcessed].used == d.outData[d.outProcessed].valid {
