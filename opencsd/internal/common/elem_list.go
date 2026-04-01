@@ -186,10 +186,6 @@ func NewGenElemStack() *GenElemStack {
 	}
 }
 
-func (s *GenElemStack) isReady() bool {
-	return s.sendIf != nil
-}
-
 func (s *GenElemStack) SetSendIf(sendIf func() ocsd.GenElemProcessor) {
 	s.sendIf = sendIf
 }
@@ -215,7 +211,7 @@ func (s *GenElemStack) CurrElem() *ocsd.TraceElement {
 // ResetElemStack resets the stack, preserving persistent context data from
 // the current element into position 0.
 func (s *GenElemStack) ResetElemStack() error {
-	if !s.isReady() {
+	if s.sendIf == nil {
 		return ocsd.ErrNotInit
 	}
 	s.resetIndexes()
@@ -292,7 +288,7 @@ func (s *GenElemStack) NumElemToSend() int {
 
 // SendElements dispatches all queued elements to the registered receiver.
 func (s *GenElemStack) SendElements() ocsd.DatapathResp {
-	if !s.isReady() {
+	if s.sendIf == nil {
 		return ocsd.RespFatalNotInit
 	}
 	out := s.sendIf()
