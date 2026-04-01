@@ -52,7 +52,7 @@ const (
 type PktProc struct {
 	common.ProcBase[Packet]
 	Config     *Config
-	PktOutI    ocsd.PacketProcessor[Packet]
+	PktOutI    ocsd.PacketProcessorExplicit[Packet]
 	PktRawMonI ocsd.PacketMonitor[Packet]
 
 	processState processState
@@ -116,10 +116,10 @@ func NewPktProc(cfg *Config) *PktProc {
 }
 
 // SetPktOut attaches the downstream packet decoder.
-func (p *PktProc) SetPktOut(out ocsd.PacketProcessor[Packet]) { p.PktOutI = out }
+func (p *PktProc) SetPktOut(out ocsd.PacketProcessorExplicit[Packet]) { p.PktOutI = out }
 
 // PktOut returns the downstream packet processor.
-func (p *PktProc) PktOut() ocsd.PacketProcessor[Packet] { return p.PktOutI }
+func (p *PktProc) PktOut() ocsd.PacketProcessorExplicit[Packet] { return p.PktOutI }
 
 // SetPktRawMonitor attaches a raw packet monitor.
 func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor[Packet]) { p.PktRawMonI = mon }
@@ -135,21 +135,18 @@ func (p *PktProc) callPktOut(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Pa
 	if p.PktOutI == nil {
 		return nil
 	}
-	if exp, ok := p.PktOutI.(ocsd.PacketProcessorExplicit[Packet]); ok {
-		switch op {
-		case ocsd.OpData:
-			return exp.TracePacketData(indexSOP, pkt)
-		case ocsd.OpEOT:
-			return exp.TracePacketEOT()
-		case ocsd.OpFlush:
-			return exp.TracePacketFlush()
-		case ocsd.OpReset:
-			return exp.TracePacketReset(indexSOP)
-		default:
-			return ocsd.ErrInvalidParamVal
-		}
+	switch op {
+	case ocsd.OpData:
+		return p.PktOutI.TracePacketData(indexSOP, pkt)
+	case ocsd.OpEOT:
+		return p.PktOutI.TracePacketEOT()
+	case ocsd.OpFlush:
+		return p.PktOutI.TracePacketFlush()
+	case ocsd.OpReset:
+		return p.PktOutI.TracePacketReset(indexSOP)
+	default:
+		return ocsd.ErrInvalidParamVal
 	}
-	return p.PktOutI.PacketDataIn(op, indexSOP, pkt)
 }
 
 func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, pData []byte) {

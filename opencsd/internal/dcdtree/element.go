@@ -13,7 +13,7 @@ type pipelineWiringOwner interface {
 // DecodeTreeElement represents a registered decoder instance within the trace decode tree.
 type DecodeTreeElement struct {
 	DecoderTypeName string                // Registered name of the decoder
-	DataIn          ocsd.TrcDataProcessor // Interface for feeding trace data
+	DataIn          ocsd.TrcDataProcessorExplicit // Interface for feeding trace data
 	DecoderHandle   any                   // Pointer to the decoder processor (PktDecode)
 	PipelineWiring  pipelineWiringOwner   // Explicit late-bound dependency wiring owner
 	Protocol        ocsd.TraceProtocol    // Protocol type
@@ -21,7 +21,7 @@ type DecodeTreeElement struct {
 }
 
 // NewDecodeTreeElement creates a new DecodeTreeElement record.
-func NewDecodeTreeElement(name string, dcdHandle any, wiring pipelineWiringOwner, dataIn ocsd.TrcDataProcessor, created bool) *DecodeTreeElement {
+func NewDecodeTreeElement(name string, dcdHandle any, wiring pipelineWiringOwner, dataIn ocsd.TrcDataProcessorExplicit, created bool) *DecodeTreeElement {
 	protocol := ocsd.ProtocolUnknown
 
 	return &DecodeTreeElement{

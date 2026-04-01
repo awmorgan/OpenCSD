@@ -253,3 +253,8 @@ type noopPktSink struct{}
 func (n *noopPktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) error {
 	return nil
 }
+
+func (n *noopPktSink) TracePacketData(indexSOP ocsd.TrcIndex, pkt *Packet) error { return nil }
+func (n *noopPktSink) TracePacketEOT() error                                     { return nil }
+func (n *noopPktSink) TracePacketFlush() error                                   { return nil }
+func (n *noopPktSink) TracePacketReset(indexSOP ocsd.TrcIndex) error             { return nil }

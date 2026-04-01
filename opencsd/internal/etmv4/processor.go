@@ -70,7 +70,7 @@ type Processor struct {
 	config Config
 
 	// output interface
-	pktOut ocsd.PacketProcessor[TracePacket]
+	pktOut ocsd.PacketProcessorExplicit[TracePacket]
 
 	// raw packet monitor
 	PktRawMonI ocsd.PacketMonitor[TracePacket]
@@ -135,8 +135,8 @@ type Processor struct {
 	f1HasP2  bool
 }
 
-// Ensure the struct satisfies TrcDataProcessor
-var _ ocsd.TrcDataProcessor = (*Processor)(nil)
+// Ensure the struct satisfies TrcDataProcessorExplicit
+var _ ocsd.TrcDataProcessorExplicit = (*Processor)(nil)
 
 // NewProcessor creates and initializes a new ETMv4 packet Processor.
 func NewProcessor(config *Config) *Processor {
@@ -151,7 +151,7 @@ func NewProcessor(config *Config) *Processor {
 }
 
 // SetPktOut attaches the packet processor output sink.
-func (p *Processor) SetPktOut(cb ocsd.PacketProcessor[TracePacket]) {
+func (p *Processor) SetPktOut(cb ocsd.PacketProcessorExplicit[TracePacket]) {
 	p.pktOut = cb
 }
 
@@ -201,21 +201,18 @@ func (p *Processor) callPktOut(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *
 	if p.pktOut == nil {
 		return nil
 	}
-	if exp, ok := p.pktOut.(ocsd.PacketProcessorExplicit[TracePacket]); ok {
-		switch op {
-		case ocsd.OpData:
-			return exp.TracePacketData(indexSOP, pkt)
-		case ocsd.OpEOT:
-			return exp.TracePacketEOT()
-		case ocsd.OpFlush:
-			return exp.TracePacketFlush()
-		case ocsd.OpReset:
-			return exp.TracePacketReset(indexSOP)
-		default:
-			return ocsd.ErrInvalidParamVal
-		}
+	switch op {
+	case ocsd.OpData:
+		return p.pktOut.TracePacketData(indexSOP, pkt)
+	case ocsd.OpEOT:
+		return p.pktOut.TracePacketEOT()
+	case ocsd.OpFlush:
+		return p.pktOut.TracePacketFlush()
+	case ocsd.OpReset:
+		return p.pktOut.TracePacketReset(indexSOP)
+	default:
+		return ocsd.ErrInvalidParamVal
 	}
-	return p.pktOut.PacketDataIn(op, indexSOP, pkt)
 }
 
 // TraceData is the explicit data-path entrypoint used by split interfaces.

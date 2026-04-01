@@ -143,7 +143,7 @@ type ProcBase[P any] struct {
 	Name string
 	OpMode
 
-	PktOutI    ocsd.PacketProcessor[P]
+	PktOutI    ocsd.PacketProcessorExplicit[P]
 	PktRawMonI ocsd.PacketMonitor[P]
 
 	Stats     ocsd.DecodeStats

@@ -48,7 +48,7 @@ type FrameDeformatter struct {
 	rawChanEnable  [128]bool
 
 	// Datapath Attachments
-	idStreams     [128]ocsd.TrcDataProcessor
+	idStreams     [128]ocsd.TrcDataProcessorExplicit
 	rawTraceFrame ocsd.RawFrameProcessor
 
 	// state params
@@ -81,7 +81,7 @@ func NewFrameDeformatter() *FrameDeformatter {
 }
 
 // Attachments
-func (d *FrameDeformatter) SetIDStream(id uint8, stream ocsd.TrcDataProcessor) {
+func (d *FrameDeformatter) SetIDStream(id uint8, stream ocsd.TrcDataProcessorExplicit) {
 	if id < 128 {
 		d.idStreams[id] = stream
 	}
@@ -165,22 +165,22 @@ func (d *FrameDeformatter) outputRawMonBytes(op ocsd.DatapathOp, index ocsd.TrcI
 	}
 }
 
-func (d *FrameDeformatter) callIDStream(stream ocsd.TrcDataProcessor, op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, error) {
-	if exp, ok := stream.(ocsd.TrcDataProcessorExplicit); ok {
-		switch op {
-		case ocsd.OpData:
-			return exp.TraceData(index, data)
-		case ocsd.OpEOT:
-			return 0, exp.TraceDataEOT()
-		case ocsd.OpFlush:
-			return 0, exp.TraceDataFlush()
-		case ocsd.OpReset:
-			return 0, exp.TraceDataReset(index)
-		default:
-			return 0, ocsd.ErrInvalidParamVal
-		}
+func (d *FrameDeformatter) callIDStream(stream ocsd.TrcDataProcessorExplicit, op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, error) {
+	if stream == nil {
+		return 0, nil
 	}
-	return stream.TraceDataIn(op, index, data)
+	switch op {
+	case ocsd.OpData:
+		return stream.TraceData(index, data)
+	case ocsd.OpEOT:
+		return 0, stream.TraceDataEOT()
+	case ocsd.OpFlush:
+		return 0, stream.TraceDataFlush()
+	case ocsd.OpReset:
+		return 0, stream.TraceDataReset(index)
+	default:
+		return 0, ocsd.ErrInvalidParamVal
+	}
 }
 
 func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocsd.TrcIndex, state *datapathState) ocsd.DatapathResp {
@@ -270,6 +270,29 @@ func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, 
 	err = state.err
 
 	return numBytesProcessed, ocsd.DataErrFromResp(resp, err)
+}
+
+// TraceData is the explicit data entrypoint implementing TrcDataProcessorExplicit.
+func (d *FrameDeformatter) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+	return d.TraceDataIn(ocsd.OpData, index, dataBlock)
+}
+
+// TraceDataEOT forwards an EOT operation through the legacy multiplexer.
+func (d *FrameDeformatter) TraceDataEOT() error {
+	_, err := d.TraceDataIn(ocsd.OpEOT, 0, nil)
+	return err
+}
+
+// TraceDataFlush forwards a flush operation through the legacy multiplexer.
+func (d *FrameDeformatter) TraceDataFlush() error {
+	_, err := d.TraceDataIn(ocsd.OpFlush, 0, nil)
+	return err
+}
+
+// TraceDataReset forwards a reset operation through the legacy multiplexer.
+func (d *FrameDeformatter) TraceDataReset(index ocsd.TrcIndex) error {
+	_, err := d.TraceDataIn(ocsd.OpReset, index, nil)
+	return err
 }
 
 func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byte, state *datapathState) (resp ocsd.DatapathResp, numBytesProcessed uint32) {

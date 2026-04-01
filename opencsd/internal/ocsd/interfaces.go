@@ -26,19 +26,7 @@ type MemAccessor func(address VAddr, memSpace MemSpaceAcc, reqBytes uint32, buff
 // when the callback was registered.
 type MemAccessorWithID func(address VAddr, memSpace MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32
 
-// TrcDataProcessor is the generic interface for supplying raw trace data
-// to a component in the decode datapath.
-type TrcDataProcessor interface {
-	// TraceDataIn processes trace data.
-	// We use an idiomatic Go slice for the data block, returning
-	// number of bytes processed and an error carrying flow-control / failure state.
-	TraceDataIn(op DatapathOp, index TrcIndex, dataBlock []byte) (uint32, error)
-}
-
 // TrcDataProcessData is the explicit data-path method for trace data input.
-//
-// This sits alongside TrcDataProcessor during migration away from op-multiplexed
-// interfaces.
 type TrcDataProcessData interface {
 	TraceData(index TrcIndex, dataBlock []byte) (uint32, error)
 }
@@ -59,11 +47,6 @@ type TrcDataProcessorExplicit interface {
 // GenElemProcessor is the input interface for generic trace elements.
 type GenElemProcessor interface {
 	TraceElemIn(indexSOP TrcIndex, trcChanID uint8, elem *TraceElement) error
-}
-
-// PacketProcessor provides input for discrete protocol packets.
-type PacketProcessor[P any] interface {
-	PacketDataIn(op DatapathOp, indexSOP TrcIndex, pkt *P) error
 }
 
 // PacketProcessData is the explicit data-path packet method.
