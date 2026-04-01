@@ -10,8 +10,8 @@ import (
 
 type fakeDataIn struct{}
 
-func (f *fakeDataIn) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
-	return uint32(len(dataBlock)), ocsd.RespCont, nil
+func (f *fakeDataIn) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+	return uint32(len(dataBlock)), nil
 }
 
 type fakeGenElemOut struct{}
@@ -171,12 +171,9 @@ func TestDecodeTreeTraceDataInContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	processed, resp, err := tree.TraceDataInContext(ctx, ocsd.OpData, 0, []byte{0xAA})
+	processed, err := tree.TraceDataInContext(ctx, ocsd.OpData, 0, []byte{0xAA})
 	if processed != 0 {
 		t.Fatalf("expected zero processed bytes, got %d", processed)
-	}
-	if resp != ocsd.RespFatalSysErr {
-		t.Fatalf("expected RespFatalSysErr, got %v", resp)
 	}
 	if err == nil {
 		t.Fatal("expected context cancellation error")

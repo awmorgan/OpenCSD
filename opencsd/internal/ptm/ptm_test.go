@@ -294,7 +294,8 @@ func TestProcAllPacketTypes(t *testing.T) {
 		0x04, // CC byte
 	)
 
-	processed, resp, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+	processed, err := proc.TraceDataIn(ocsd.OpData, 0, data)
+	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Fatal resp=%v processed=%d", resp, processed)
 	}
@@ -340,7 +341,8 @@ func TestProcISyncWithContextAndBranch5ByteAddr(t *testing.T) {
 		0x04, // CC byte
 	)
 
-	processed, resp, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+	processed, err := proc.TraceDataIn(ocsd.OpData, 0, data)
+	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Fatal resp=%v processed=%d", resp, processed)
 	}
@@ -367,7 +369,8 @@ func TestProcISyncDebugExitAndCCMultiByte(t *testing.T) {
 		0x00, // CC byte4: bit7=0 -> done (or pktIndex==10 forces done)
 	)
 
-	processed, resp, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+	processed, err := proc.TraceDataIn(ocsd.OpData, 0, data)
+	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Fatal resp=%v processed=%d", resp, processed)
 	}
@@ -390,7 +393,8 @@ func TestProcTimestamp64Bit(t *testing.T) {
 		0x09, // byte 9: no continuation check, full 8 bits
 	)
 
-	processed, resp, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+	processed, err := proc.TraceDataIn(ocsd.OpData, 0, data)
+	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Fatal resp=%v processed=%d", resp, processed)
 	}
@@ -478,14 +482,16 @@ func TestProcWaitAsyncCarryOverRawTailByte(t *testing.T) {
 	proc.SetPktRawMonitor(rawCap)
 
 	// First block leaves waitASyncSOPkt=true with a carry-over 0x00.
-	if _, resp, _ := proc.TraceDataIn(ocsd.OpData, 4669, []byte{0x00}); ocsd.DataRespIsFatal(resp) {
+	if _, err := proc.TraceDataIn(ocsd.OpData, 4669, []byte{0x00}); ocsd.DataRespIsFatal(ocsd.DataRespFromErr(err)) {
+		resp := ocsd.DataRespFromErr(err)
 		t.Fatalf("unexpected fatal resp on carry-over setup: %v", resp)
 	}
 
 	// Second block is all non-zero and long enough to force an unsynced flush.
 	// This reproduces the carry-over NOT_ASYNC accounting edge case.
 	data := []byte{0xc0, 0x29, 0xf4, 0x0b, 0xe3, 0x18, 0x50, 0x01, 0xb8, 0xe0, 0x01, 0xef, 0xab, 0x0b, 0x20}
-	if _, resp, _ := proc.TraceDataIn(ocsd.OpData, 4670, data); ocsd.DataRespIsFatal(resp) {
+	if _, err := proc.TraceDataIn(ocsd.OpData, 4670, data); ocsd.DataRespIsFatal(ocsd.DataRespFromErr(err)) {
+		resp := ocsd.DataRespFromErr(err)
 		t.Fatalf("unexpected fatal resp on reproducer block: %v", resp)
 	}
 

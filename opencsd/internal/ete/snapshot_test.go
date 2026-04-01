@@ -299,7 +299,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 			return nil, err
 		}
 		if opts.multiSession && i+1 < len(buffers) {
-			if _, _, err2 := tree.TraceDataIn(ocsd.OpReset, 0, nil); err2 != nil {
+			if _, err2 := tree.TraceDataIn(ocsd.OpReset, 0, nil); err2 != nil {
 				return nil, fmt.Errorf("OpReset after buffer %s: %w", bufInfo.BufferName, err2)
 			}
 		}
@@ -532,7 +532,8 @@ func decodeETETraceBuffer(tree *dcdtree.DecodeTree, traceData []byte, srcIsFrame
 		pending := traceData
 		for len(pending) >= alignment {
 			sendLen := len(pending) - (len(pending) % alignment)
-			consumed, resp, _ := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
+			consumed, err := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
+			resp := ocsd.DataRespFromErr(err)
 			if ocsd.DataRespIsFatal(resp) {
 				return fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
 			}
@@ -545,7 +546,8 @@ func decodeETETraceBuffer(tree *dcdtree.DecodeTree, traceData []byte, srcIsFrame
 	} else {
 		remaining := traceData
 		for len(remaining) > 0 {
-			consumed, resp, _ := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
+			consumed, err := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
+			resp := ocsd.DataRespFromErr(err)
 			if ocsd.DataRespIsFatal(resp) {
 				return fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
 			}
@@ -556,7 +558,8 @@ func decodeETETraceBuffer(tree *dcdtree.DecodeTree, traceData []byte, srcIsFrame
 			remaining = remaining[consumed:]
 		}
 	}
-	_, resp, _ := tree.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(traceIndex), nil)
+	_, err := tree.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(traceIndex), nil)
+	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		return fmt.Errorf("fatal datapath response on EOT")
 	}

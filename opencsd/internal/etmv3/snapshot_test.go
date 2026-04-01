@@ -333,7 +333,8 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			if sendLen == 0 {
 				break // remaining bytes less than one frame
 			}
-			consumed, resp, _ := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
+			consumed, err := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
+			resp := ocsd.DataRespFromErr(err)
 			if ocsd.DataRespIsFatal(resp) {
 				return nil, fmt.Errorf("fatal datapath response %d at trace index %d", resp, traceIndex)
 			}
@@ -346,7 +347,8 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	} else {
 		remaining := traceData
 		for len(remaining) > 0 {
-			consumed, resp, _ := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
+			consumed, err := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
+			resp := ocsd.DataRespFromErr(err)
 			if ocsd.DataRespIsFatal(resp) {
 				return nil, fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
 			}
@@ -358,7 +360,8 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		}
 	}
 
-	_, resp, _ := tree.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(traceIndex), nil)
+	_, err = tree.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(traceIndex), nil)
+	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		return nil, fmt.Errorf("fatal datapath response on EOT")
 	}

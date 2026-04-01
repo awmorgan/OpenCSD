@@ -144,11 +144,13 @@ func TestSTMEndToEndDecode(t *testing.T) {
 	// We'll flush the existing to not mess up sequence
 	sb.Flush()
 
-	_, res1, err1 := proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	_, err1 := proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	res1 := ocsd.DataRespFromErr(err1)
 	if !ocsd.DataRespIsCont(res1) || err1 != nil {
 		t.Logf("TraceDataIn Data returned %v, err %v", res1, err1)
 	}
-	_, res2, err2 := proc.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(len(sb.data)), nil)
+	_, err2 := proc.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(len(sb.data)), nil)
+	res2 := ocsd.DataRespFromErr(err2)
 	if !ocsd.DataRespIsCont(res2) || err2 != nil {
 		t.Logf("TraceDataIn EOT returned %v, err %v", res2, err2)
 	}
@@ -170,7 +172,8 @@ func TestSTMErrorCases(t *testing.T) {
 	}
 	sb.AddNibble(0x1) // invalid ASYNC sync char
 	sb.Flush()
-	_, resp, _ := proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	_, err := proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected non-fatal response for invalid ASYNC by default")
 	}
@@ -186,7 +189,8 @@ func TestSTMErrorCases(t *testing.T) {
 	sb.AddNibble(0x0)
 	sb.AddNibbles(0xF, 0x1) // Reserved 0xF1 opcode
 	sb.Flush()
-	_, resp, _ = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	_, err = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	resp = ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected non-fatal response for reserved opcode by default")
 	}
@@ -194,7 +198,8 @@ func TestSTMErrorCases(t *testing.T) {
 	// Try with bad packet handling component mode
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)
 	proc.SetComponentOpMode(ocsd.OpflgPktprocErrBadPkts)
-	_, resp, _ = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	_, err = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	resp = ocsd.DataRespFromErr(err)
 	// Should be fatal if ErrBadPkts mode is set
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected fatal response for reserved opcode when bad packet throwing is enabled. Mode=%x, Resp=%v", proc.ComponentOpMode(), resp)
@@ -222,7 +227,8 @@ func TestSTMErrorCases(t *testing.T) {
 	sb.AddNibbles(0xF, 0x0, 0x1, 0xF)
 	sb.Flush()
 
-	_, resp, _ = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	_, err = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	resp = ocsd.DataRespFromErr(err)
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected fatal response for invalid TS size. Mode=%x, Resp=%v", proc.ComponentOpMode(), resp)
 	}
@@ -236,7 +242,8 @@ func TestSTMErrorCases(t *testing.T) {
 	sb.AddNibble(0x0)
 	sb.AddNibbles(0xF, 0x0, 0x1) // Reserved F01
 	sb.Flush()
-	_, resp, _ = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	_, err = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
+	resp = ocsd.DataRespFromErr(err)
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected fatal response for reserved F0n opcode")
 	}
@@ -305,11 +312,13 @@ func TestSTMFlushResetAndBadPacketClassification(t *testing.T) {
 		t.Fatalf("NewConfiguredPktDecode failed: %v", err)
 	}
 
-	_, resp, _ := proc.TraceDataIn(ocsd.OpFlush, 0, nil)
+	_, err = proc.TraceDataIn(ocsd.OpFlush, 0, nil)
+	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected non-fatal response on proc flush, got %v", resp)
 	}
-	_, resp, _ = proc.TraceDataIn(ocsd.OpReset, 0, nil)
+	_, err = proc.TraceDataIn(ocsd.OpReset, 0, nil)
+	resp = ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected non-fatal response on proc reset, got %v", resp)
 	}

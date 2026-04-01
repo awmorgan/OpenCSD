@@ -31,8 +31,8 @@ type MemAccessorWithID func(address VAddr, memSpace MemSpaceAcc, trcID uint8, re
 type TrcDataProcessor interface {
 	// TraceDataIn processes trace data.
 	// We use an idiomatic Go slice for the data block, returning
-	// number of bytes processed, datapath flow-control response, and a root-cause error.
-	TraceDataIn(op DatapathOp, index TrcIndex, dataBlock []byte) (uint32, DatapathResp, error)
+	// number of bytes processed and an error carrying flow-control / failure state.
+	TraceDataIn(op DatapathOp, index TrcIndex, dataBlock []byte) (uint32, error)
 }
 
 // GenElemProcessor is the input interface for generic trace elements.

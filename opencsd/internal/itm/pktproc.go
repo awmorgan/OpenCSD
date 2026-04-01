@@ -105,7 +105,7 @@ func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pkt
 	return p.outputDecodedPacket(indexSOP, pkt)
 }
 
-func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
+func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	resp := ocsd.RespCont
 	var processed uint32 = 0
 	var err error
@@ -157,7 +157,10 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 		err = fmt.Errorf("%w: packet processor: unknown datapath operation", ocsd.ErrInvalidParamVal)
 		resp = ocsd.RespFatalInvalidOp
 	}
-	return processed, resp, err
+	if !ocsd.DataRespIsFatal(resp) {
+		return processed, ocsd.DataErrFromResp(resp, nil)
+	}
+	return processed, ocsd.DataErrFromResp(resp, err)
 }
 
 func (p *PktProc) SetProtocolConfig(config *Config) error {

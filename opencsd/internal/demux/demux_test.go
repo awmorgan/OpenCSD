@@ -125,8 +125,8 @@ func makeBufBadData() []byte {
 
 type mockDataSink struct{}
 
-func (m *mockDataSink) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
-	return uint32(len(dataBlock)), ocsd.RespCont, nil
+func (m *mockDataSink) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+	return uint32(len(dataBlock)), nil
 }
 
 // Ensure mockDataSink implements TrcDataProcessor
@@ -134,14 +134,14 @@ var _ ocsd.TrcDataProcessor = (*mockDataSink)(nil)
 
 type mockDataSinkWait struct{}
 
-func (m *mockDataSinkWait) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
+func (m *mockDataSinkWait) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if op != ocsd.OpData {
-		return 0, ocsd.RespCont, nil
+		return 0, nil
 	}
 	if len(dataBlock) > 2 {
-		return 2, ocsd.RespWait, nil
+		return 2, ocsd.ErrWait
 	}
-	return uint32(len(dataBlock)), ocsd.RespWait, nil
+	return uint32(len(dataBlock)), ocsd.ErrWait
 }
 
 // Ensure mockDataSinkWait implements TrcDataProcessor
@@ -152,9 +152,9 @@ type mockDataSinkWaitOnce struct {
 	total  uint32
 }
 
-func (m *mockDataSinkWaitOnce) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
+func (m *mockDataSinkWaitOnce) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if op != ocsd.OpData {
-		return 0, ocsd.RespCont, nil
+		return 0, nil
 	}
 	if !m.waited {
 		m.waited = true
@@ -163,11 +163,11 @@ func (m *mockDataSinkWaitOnce) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcInd
 			used = uint32(len(dataBlock))
 		}
 		m.total += used
-		return used, ocsd.RespWait, nil
+		return used, ocsd.ErrWait
 	}
 	used := uint32(len(dataBlock))
 	m.total += used
-	return used, ocsd.RespCont, nil
+	return used, nil
 }
 
 var _ ocsd.TrcDataProcessor = (*mockDataSinkWaitOnce)(nil)
@@ -213,7 +213,8 @@ func (m *mockRawSink) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, f
 }
 
 func resetDecoder(df *FrameDeformatter, t *testing.T) {
-	_, resp, _ := df.TraceDataIn(ocsd.OpReset, 0, nil)
+	_, err := df.TraceDataIn(ocsd.OpReset, 0, nil)
+	resp := ocsd.DataRespFromErr(err)
 	if resp != ocsd.RespCont {
 		t.Errorf("Datapath error response on reset: %v", resp)
 	}
@@ -249,7 +250,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	// 1
 	resetDecoder(df, t)
 	buf := makeBufMemAlign()
-	processed, _, _ := df.TraceDataIn(ocsd.OpData, 0, buf)
+	processed, _ := df.TraceDataIn(ocsd.OpData, 0, buf)
 	if processed != uint32(len(buf)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf), processed)
 	}
@@ -257,7 +258,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	// 2
 	resetDecoder(df, t)
 	buf2 := makeBufMemAlign8Id()
-	processed, _, _ = df.TraceDataIn(ocsd.OpData, 0, buf2)
+	processed, _ = df.TraceDataIn(ocsd.OpData, 0, buf2)
 	if processed != uint32(len(buf2)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf2), processed)
 	}
@@ -266,7 +267,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	df.Configure(baseCfg | ocsd.DfrmtrResetOn4xFsync)
 	resetDecoder(df, t)
 	buf3 := makeBufMemAlignStRst()
-	processed, _, _ = df.TraceDataIn(ocsd.OpData, 0, buf3)
+	processed, _ = df.TraceDataIn(ocsd.OpData, 0, buf3)
 	if processed != uint32(len(buf3)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf3), processed)
 	}
@@ -274,7 +275,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	// 4
 	resetDecoder(df, t)
 	buf4 := makeBufMemAlignMidRst()
-	processed, _, _ = df.TraceDataIn(ocsd.OpData, 0, buf4)
+	processed, _ = df.TraceDataIn(ocsd.OpData, 0, buf4)
 	if processed != uint32(len(buf4)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf4), processed)
 	}
@@ -282,7 +283,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	// 5
 	resetDecoder(df, t)
 	buf5 := makeBufMemAlignEnRst()
-	processed, _, _ = df.TraceDataIn(ocsd.OpData, 0, buf5)
+	processed, _ = df.TraceDataIn(ocsd.OpData, 0, buf5)
 	if processed != uint32(len(buf5)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf5), processed)
 	}
@@ -450,7 +451,8 @@ func TestMemAlignAcceptsUnalignedChunks(t *testing.T) {
 
 	for _, chunkLen := range chunks {
 		end := start + chunkLen
-		processed, resp, _ := df.TraceDataIn(ocsd.OpData, idx, buf[start:end])
+		processed, err := df.TraceDataIn(ocsd.OpData, idx, buf[start:end])
+		resp := ocsd.DataRespFromErr(err)
 		if processed != uint32(chunkLen) {
 			t.Fatalf("expected to consume full chunk (%d), got %d", chunkLen, processed)
 		}
@@ -477,15 +479,15 @@ func TestRunHSyncFSyncTest(t *testing.T) {
 	// 1
 	resetDecoder(df, t)
 	buf1 := makeBufHsyncFsync()
-	processed, _, _ := df.TraceDataIn(ocsd.OpData, 0, buf1)
+	processed, _ := df.TraceDataIn(ocsd.OpData, 0, buf1)
 	if processed != uint32(len(buf1)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf1), processed)
 	}
 
 	// 2 split
 	resetDecoder(df, t)
-	processed1, _, _ := df.TraceDataIn(ocsd.OpData, 0, buf1[:2])
-	processed2, _, _ := df.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(processed1), buf1[processed1:])
+	processed1, _ := df.TraceDataIn(ocsd.OpData, 0, buf1[:2])
+	processed2, _ := df.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(processed1), buf1[processed1:])
 	if processed1+processed2 != uint32(len(buf1)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf1), processed1+processed2)
 	}
@@ -493,7 +495,8 @@ func TestRunHSyncFSyncTest(t *testing.T) {
 	// 3 bad input
 	resetDecoder(df, t)
 	bufBad := makeBufBadData()
-	_, resp, inErr := df.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(len(buf1)), bufBad)
+	_, inErr := df.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(len(buf1)), bufBad)
+	resp := ocsd.DataRespFromErr(inErr)
 	if resp != ocsd.RespFatalInvalidData || !errors.Is(inErr, ocsd.ErrDfrmtrBadFhsync) {
 		t.Errorf("Expected RespFatalInvalidData and ErrDfrmtrBadFhsync, got resp=%v err=%v", resp, inErr)
 	}
@@ -508,7 +511,8 @@ func TestRunDemuxBadDataTest(t *testing.T) {
 
 	resetDecoder(df, t)
 	bufBad := makeBufBadData()
-	_, resp, inErr := df.TraceDataIn(ocsd.OpData, 0, bufBad)
+	_, inErr := df.TraceDataIn(ocsd.OpData, 0, bufBad)
+	resp := ocsd.DataRespFromErr(inErr)
 	if resp != ocsd.RespFatalInvalidData || !errors.Is(inErr, ocsd.ErrDfrmtrBadFhsync) {
 		t.Errorf("Expected RespFatalInvalidData and ErrDfrmtrBadFhsync, got resp=%v err=%v", resp, inErr)
 	}
@@ -524,8 +528,9 @@ func TestDemuxWaitResumeWithFlush(t *testing.T) {
 	df.SetIDStream(0x10, sink)
 
 	buf := makeBufMemAlign()
-	processed, resp, err := df.TraceDataIn(ocsd.OpData, 0, buf)
-	if err != nil {
+	processed, err := df.TraceDataIn(ocsd.OpData, 0, buf)
+	resp := ocsd.DataRespFromErr(err)
+	if err != nil && !ocsd.IsDataWaitErr(err) {
 		t.Fatalf("TraceDataIn OpData returned error: %v", err)
 	}
 	if processed != uint32(len(buf)) {
@@ -539,7 +544,8 @@ func TestDemuxWaitResumeWithFlush(t *testing.T) {
 	}
 
 	beforeFlushTotal := sink.total
-	_, flushResp, flushErr := df.TraceDataIn(ocsd.OpFlush, 0, nil)
+	_, flushErr := df.TraceDataIn(ocsd.OpFlush, 0, nil)
+	flushResp := ocsd.DataRespFromErr(flushErr)
 	if flushErr != nil {
 		t.Fatalf("TraceDataIn OpFlush returned error: %v", flushErr)
 	}

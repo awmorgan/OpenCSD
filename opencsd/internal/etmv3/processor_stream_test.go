@@ -31,7 +31,7 @@ func TestProcStreamComplete(t *testing.T) {
 			0x76, // Exception Return
 			0x66, // Reserved
 		}
-		processed, _, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+		processed, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
 		if processed == 0 {
 			t.Fatalf("expected control/context stream to consume input bytes")
 		}
@@ -54,7 +54,7 @@ func TestProcStreamComplete(t *testing.T) {
 		data = append(data, 0x0A, 0x11, 0x22) // normal size2
 		data = append(data, 0x22)             // normal size0 expect addr
 		data = append(data, 0x80, 0x00)       // addr bytes
-		processed, _, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+		processed, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
 		if processed == 0 {
 			t.Fatalf("expected data/address stream to consume input bytes")
 		}
@@ -66,11 +66,11 @@ func TestProcStreamComplete(t *testing.T) {
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
 			0x01, 0x40, 0x00, // Branch with exception data
 		}
-		processed, _, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+		processed, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
 		if processed == 0 {
 			t.Fatalf("expected exception stream to consume input bytes")
 		}
-		processed, _, _ = proc.TraceDataIn(ocsd.OpFlush, 0, nil)
+		processed, _ = proc.TraceDataIn(ocsd.OpFlush, 0, nil)
 		if processed != 0 {
 			t.Fatalf("expected flush to report zero consumed bytes, got %d", processed)
 		}
@@ -92,7 +92,7 @@ func TestProcStreamBadTraceMode(t *testing.T) {
 		0x66, // Reserved
 	}
 
-	processed, _, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+	processed, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
 	if processed == 0 {
 		t.Fatalf("expected processor to consume bytes in bad-trace-mode stream")
 	}
@@ -137,7 +137,8 @@ func TestProcStreamPartPacket(t *testing.T) {
 	proc.SetPktOut(&noopPktSink{})
 
 	// ASYNC
-	_, resp, _ := proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
+	_, err := proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
+	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Fatalf("unexpected fatal response for sync sequence: %v", resp)
 	}
@@ -146,11 +147,13 @@ func TestProcStreamPartPacket(t *testing.T) {
 	part1 := []byte{0x08, 0x01, 0x22}
 	part2 := []byte{0x33, 0x44, 0x00, 0xaa, 0xbb}
 
-	_, resp, _ = proc.TraceDataIn(ocsd.OpData, 0, part1)
+	_, err = proc.TraceDataIn(ocsd.OpData, 0, part1)
+	resp = ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Fatalf("unexpected fatal response for first part packet: %v", resp)
 	}
-	_, resp, _ = proc.TraceDataIn(ocsd.OpData, 0, part2)
+	_, err = proc.TraceDataIn(ocsd.OpData, 0, part2)
+	resp = ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Fatalf("unexpected fatal response for second part packet: %v", resp)
 	}

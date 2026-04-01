@@ -67,53 +67,51 @@ func (dt *DecodeTree) Destroy() {
 }
 
 // TraceDataIn handles incoming raw byte trace streams into the tree.
-func (dt *DecodeTree) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, ocsd.DatapathResp, error) {
+func (dt *DecodeTree) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, error) {
 	return dt.TraceDataInContext(context.Background(), op, index, data)
 }
 
 // TraceDataInContext handles incoming raw byte trace streams into the tree with cancellation support.
-func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, ocsd.DatapathResp, error) {
+func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, error) {
 	if ctx != nil {
 		select {
 		case <-ctx.Done():
-			return 0, ocsd.RespFatalSysErr, ctx.Err()
+			return 0, ctx.Err()
 		default:
 		}
 	}
 
 	const processChunk = 64 * 1024
-	processWithContext := func(proc ocsd.TrcDataProcessor) (uint32, ocsd.DatapathResp, error) {
+	processWithContext := func(proc ocsd.TrcDataProcessor) (uint32, error) {
 		if proc == nil {
-			return 0, ocsd.RespFatalNotInit, nil
+			return 0, ocsd.ErrNotInit
 		}
 		if ctx == nil || op != ocsd.OpData || len(data) <= processChunk {
 			return proc.TraceDataIn(op, index, data)
 		}
 
 		var total uint32
-		resp := ocsd.RespCont
 		for offset := 0; offset < len(data); {
 			select {
 			case <-ctx.Done():
-				return total, ocsd.RespFatalSysErr, ctx.Err()
+				return total, ctx.Err()
 			default:
 			}
 
 			end := min(offset+processChunk, len(data))
 
 			chunkIdx := index + ocsd.TrcIndex(offset)
-			amt, chunkResp, err := proc.TraceDataIn(op, chunkIdx, data[offset:end])
+			amt, err := proc.TraceDataIn(op, chunkIdx, data[offset:end])
 			total += amt
-			resp = chunkResp
-			if err != nil || !ocsd.DataRespIsCont(chunkResp) {
-				return total, chunkResp, err
+			if !ocsd.DataRespIsCont(ocsd.DataRespFromErr(err)) {
+				return total, err
 			}
 			if amt == 0 {
 				break
 			}
 			offset += int(amt)
 		}
-		return total, resp, nil
+		return total, nil
 	}
 
 	if dt.decoderRoot != nil {
@@ -127,7 +125,7 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 			return processWithContext(elem.DataIn)
 		}
 	}
-	return 0, ocsd.RespFatalNotInit, nil
+	return 0, ocsd.ErrNotInit
 }
 
 // AddDecoder registers an already-instantiated decoder into the tree for routing only.

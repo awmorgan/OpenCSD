@@ -464,7 +464,8 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 			payload := remaining[:payloadLen]
 
 			for len(payload) > 0 {
-				consumed, resp, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), payload)
+				consumed, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), payload)
+				resp := ocsd.DataRespFromErr(ocsdErr)
 				if ocsd.DataRespIsFatal(resp) {
 					return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v", resp, traceIndex, ocsdErr)
 				}
@@ -487,7 +488,8 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 			if sendLen > maxChunk {
 				sendLen = maxChunk - (maxChunk % frameAlignment)
 			}
-			consumed, resp, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
+			consumed, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
+			resp := ocsd.DataRespFromErr(ocsdErr)
 			if ocsd.DataRespIsFatal(resp) {
 				return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v", resp, traceIndex, ocsdErr)
 			}
@@ -500,7 +502,8 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 	} else {
 		remaining := traceData
 		for len(remaining) > 0 {
-			consumed, resp, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
+			consumed, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
+			resp := ocsd.DataRespFromErr(ocsdErr)
 			if ocsd.DataRespIsFatal(resp) {
 				return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v", resp, traceIndex, ocsdErr)
 			}
@@ -512,7 +515,8 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		}
 	}
 
-	_, resp, _ := tree.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(traceIndex), nil)
+	_, err = tree.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(traceIndex), nil)
+	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		return nil, fmt.Errorf("fatal datapath response on EOT")
 	}

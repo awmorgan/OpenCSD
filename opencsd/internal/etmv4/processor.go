@@ -160,18 +160,22 @@ func (p *Processor) SetPktRawMonitor(mon ocsd.PacketMonitor[TracePacket]) {
 }
 
 // TraceDataIn implements ocsd.TrcDataProcessor.
-func (p *Processor) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
+func (p *Processor) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	switch op {
 	case ocsd.OpData:
-		return p.processData(index, dataBlock)
+		consumed, resp, err := p.processData(index, dataBlock)
+		if !ocsd.DataRespIsFatal(resp) {
+			return consumed, ocsd.DataErrFromResp(resp, nil)
+		}
+		return consumed, ocsd.DataErrFromResp(resp, err)
 	case ocsd.OpEOT:
-		return 0, p.onEOT(), nil
+		return 0, ocsd.DataErrFromResp(p.onEOT(), nil)
 	case ocsd.OpReset:
-		return 0, p.onReset(), nil
+		return 0, ocsd.DataErrFromResp(p.onReset(), nil)
 	case ocsd.OpFlush:
-		return 0, p.onFlush(), nil
+		return 0, ocsd.DataErrFromResp(p.onFlush(), nil)
 	}
-	return 0, ocsd.RespCont, nil
+	return 0, nil
 }
 
 func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
