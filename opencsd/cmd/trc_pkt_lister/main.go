@@ -86,10 +86,9 @@ func (g *filteredGenElemPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID u
 	return g.printer.TraceElemIn(indexSOP, trcChanID, elem)
 }
 
-type genericRawPrinter[T any] struct {
-	writer   io.Writer
-	id       uint8
-	formatFn func(T) string
+type genericRawPrinter[T fmt.Stringer] struct {
+	writer io.Writer
+	id     uint8
 }
 
 func (p *genericRawPrinter[T]) SetMute(bool) {}
@@ -100,8 +99,12 @@ func (p *genericRawPrinter[T]) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocs
 		return
 	}
 
-	formattedPkt := p.formatFn(pkt)
-	if op != ocsd.OpData || formattedPkt == "" || len(rawData) == 0 {
+	if op != ocsd.OpData || len(rawData) == 0 {
+		return
+	}
+
+	formattedPkt := pkt.String()
+	if formattedPkt == "" {
 		return
 	}
 
@@ -562,57 +565,32 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 		switch proc := elem.DataIn.(type) {
 		case *ptm.PktProc:
 			proc.SetPktRawMonitor(&genericRawPrinter[*ptm.Packet]{
-				writer: out, id: csID,
-				formatFn: func(pkt *ptm.Packet) string {
-					if pkt == nil {
-						return ""
-					}
-					return pkt.String()
-				},
+				writer: out,
+				id:     csID,
 			})
 			ok = true
 		case *etmv3.PktProc:
 			proc.SetPktRawMonitor(&genericRawPrinter[*etmv3.Packet]{
-				writer: out, id: csID,
-				formatFn: func(pkt *etmv3.Packet) string {
-					if pkt == nil {
-						return ""
-					}
-					return pkt.String()
-				},
+				writer: out,
+				id:     csID,
 			})
 			ok = true
 		case *etmv4.Processor:
 			proc.SetPktRawMonitor(&genericRawPrinter[*etmv4.TracePacket]{
-				writer: out, id: csID,
-				formatFn: func(pkt *etmv4.TracePacket) string {
-					if pkt == nil {
-						return ""
-					}
-					return pkt.HeaderString() // Unique string formatter
-				},
+				writer: out,
+				id:     csID,
 			})
 			ok = true
 		case *itm.PktProc:
 			proc.SetPktRawMonitor(&genericRawPrinter[*itm.Packet]{
-				writer: out, id: csID,
-				formatFn: func(pkt *itm.Packet) string {
-					if pkt == nil {
-						return ""
-					}
-					return pkt.String()
-				},
+				writer: out,
+				id:     csID,
 			})
 			ok = true
 		case *stm.PktProc:
 			proc.SetPktRawMonitor(&genericRawPrinter[*stm.Packet]{
-				writer: out, id: csID,
-				formatFn: func(pkt *stm.Packet) string {
-					if pkt == nil {
-						return ""
-					}
-					return pkt.String()
-				},
+				writer: out,
+				id:     csID,
 			})
 			ok = true
 		}
