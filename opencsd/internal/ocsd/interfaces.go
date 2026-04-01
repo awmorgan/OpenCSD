@@ -1,12 +1,5 @@
 package ocsd
 
-// Logger defines the contract for emitting trace warnings and errors.
-// Implementations can apply severity filtering and routing as needed.
-type Logger interface {
-	LogMessage(severity ErrSeverity, msg string)
-	LogError(severity ErrSeverity, err error)
-}
-
 // MemAccessor is the callback function definition for callback function memory accessor type.
 //
 // When using callback memory accessor, the decoder will call this function to obtain the

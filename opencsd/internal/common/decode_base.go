@@ -37,35 +37,6 @@ type TraceElementOutputter interface {
 	OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp
 }
 
-// BaseLogger is an embeddable component that provides logging functionality.
-// Embed this in a struct to add LogError, LogMessage, and IsLoggingErrorLevel methods.
-type BaseLogger struct {
-	Logger       ocsd.Logger
-	ErrVerbosity ocsd.ErrSeverity
-}
-
-// LogError logs an error if the logger is set and the severity threshold is met.
-func (l *BaseLogger) LogError(sev ocsd.ErrSeverity, err error) {
-	if err == nil {
-		return
-	}
-	if l.Logger != nil && l.IsLoggingErrorLevel(sev) {
-		l.Logger.LogError(sev, err)
-	}
-}
-
-// LogMessage logs a message at the given severity level.
-func (l *BaseLogger) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
-	if filterLevel <= l.ErrVerbosity && l.Logger != nil {
-		l.Logger.LogMessage(filterLevel, msg)
-	}
-}
-
-// IsLoggingErrorLevel reports whether errors at the given severity should be logged.
-func (l *BaseLogger) IsLoggingErrorLevel(level ocsd.ErrSeverity) bool {
-	return level <= l.ErrVerbosity
-}
-
 // OpMode is an embeddable component that manages operational mode flags.
 // Embed this in a struct to add SetComponentOpMode, ComponentOpMode,
 // SupportedOpModes, and ConfigureSupportedOpModes methods.
