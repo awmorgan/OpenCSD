@@ -2,6 +2,7 @@ package stm
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"opencsd/internal/ocsd"
@@ -388,7 +389,7 @@ func isErrorCode(err error, code error) bool {
 
 type dummyMon struct{}
 
-func (d *dummyMon) RawPacketDataMon(op ocsd.DatapathOp, index ocsd.TrcIndex, pkt *Packet, data []byte) {
+func (d *dummyMon) RawPacketDataMon(op ocsd.DatapathOp, index ocsd.TrcIndex, pkt fmt.Stringer, data []byte) {
 }
 
 func TestWaitForSync_WrapAround(t *testing.T) {

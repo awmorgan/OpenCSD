@@ -71,7 +71,7 @@ type PktProc struct {
 	statsInit  bool
 	Config     *Config
 	PktOutI    ocsd.PacketProcessorExplicit[Packet]
-	PktRawMonI ocsd.PacketMonitor[Packet]
+	PktRawMonI ocsd.PacketMonitor
 
 	procState processState
 
@@ -138,7 +138,7 @@ func NewPktProc(cfg *Config) *PktProc {
 func (p *PktProc) SetPktOut(out ocsd.PacketProcessorExplicit[Packet]) { p.PktOutI = out }
 
 // SetPktRawMonitor attaches a raw packet monitor.
-func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor[Packet]) { p.PktRawMonI = mon }
+func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor) { p.PktRawMonI = mon }
 
 // HasRawMon reports whether a raw packet monitor is attached.
 func (p *PktProc) HasRawMon() bool { return p.PktRawMonI != nil }

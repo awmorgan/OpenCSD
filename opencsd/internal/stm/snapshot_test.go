@@ -22,7 +22,7 @@ type stmRawPacketPrinter struct {
 	traceID uint8
 }
 
-func (p *stmRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *stm.Packet, rawData []byte) {
+func (p *stmRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
 	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
 		return
 	}

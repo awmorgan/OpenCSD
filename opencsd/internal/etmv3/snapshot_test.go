@@ -40,8 +40,12 @@ type etmv3RawPacketPrinter struct {
 	traceID uint8
 }
 
-func (p *etmv3RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *etmv3.Packet, rawData []byte) {
+func (p *etmv3RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
 	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
+		return
+	}
+	etmPkt, ok := pkt.(*etmv3.Packet)
+	if !ok {
 		return
 	}
 
@@ -51,7 +55,7 @@ func (p *etmv3RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP oc
 		sb.WriteString(fmt.Sprintf("0x%02x ", b))
 	}
 	sb.WriteString("];\t")
-	sb.WriteString(etmv3PacketTypeName(pkt.Type))
+	sb.WriteString(etmv3PacketTypeName(etmPkt.Type))
 	sb.WriteString(" : description")
 	sb.WriteString("\n")
 	_, _ = io.WriteString(p.writer, sb.String())

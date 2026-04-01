@@ -2,6 +2,7 @@ package ptm
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -22,7 +23,7 @@ type rawPktCapture struct {
 	packets [][]byte
 }
 
-func (r *rawPktCapture) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet, rawData []byte) {
+func (r *rawPktCapture) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
 	if op != ocsd.OpData || len(rawData) == 0 {
 		return
 	}

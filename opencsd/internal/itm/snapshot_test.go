@@ -22,8 +22,12 @@ type itmRawPacketPrinter struct {
 	traceID uint8
 }
 
-func (p *itmRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *itm.Packet, rawData []byte) {
+func (p *itmRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
 	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
+		return
+	}
+	itmPkt, ok := pkt.(*itm.Packet)
+	if !ok {
 		return
 	}
 
@@ -33,7 +37,7 @@ func (p *itmRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd
 		sb.WriteString(fmt.Sprintf("0x%02x ", b))
 	}
 	sb.WriteString("];\t")
-	sb.WriteString(itmPacketTypeName(pkt.Type))
+	sb.WriteString(itmPacketTypeName(itmPkt.Type))
 	sb.WriteString(" : description")
 	sb.WriteString("\n")
 	_, _ = io.WriteString(p.writer, sb.String())

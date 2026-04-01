@@ -1,5 +1,7 @@
 package ocsd
 
+import "fmt"
+
 // MemAccessor is the callback function definition for callback function memory accessor type.
 //
 // When using callback memory accessor, the decoder will call this function to obtain the
@@ -68,8 +70,8 @@ type PacketProcessorExplicit[P any] interface {
 }
 
 // PacketMonitor provides packet monitor functionality off the decode path.
-type PacketMonitor[P any] interface {
-	RawPacketDataMon(op DatapathOp, indexSOP TrcIndex, pkt *P, rawData []byte)
+type PacketMonitor interface {
+	RawPacketDataMon(op DatapathOp, indexSOP TrcIndex, pkt fmt.Stringer, rawData []byte)
 }
 
 // RawFrameProcessor is the input interface for raw frame bytes.

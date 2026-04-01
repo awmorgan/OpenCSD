@@ -81,14 +81,14 @@ func (g *filteredGenElemPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID u
 	return g.printer.TraceElemIn(indexSOP, trcChanID, elem)
 }
 
-type genericRawPrinter[T fmt.Stringer] struct {
+type genericRawPrinter struct {
 	writer io.Writer
 	id     uint8
 }
 
-func (p *genericRawPrinter[T]) SetMute(bool) {}
+func (p *genericRawPrinter) SetMute(bool) {}
 
-func (p *genericRawPrinter[T]) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt T, rawData []byte) {
+func (p *genericRawPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
 	if op == ocsd.OpEOT {
 		fmt.Fprintf(p.writer, "ID:%x\tEND OF TRACE DATA\n", p.id)
 		return
@@ -554,31 +554,31 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 
 		switch proc := elem.DataIn.(type) {
 		case *ptm.PktProc:
-			proc.SetPktRawMonitor(&genericRawPrinter[*ptm.Packet]{
+			proc.SetPktRawMonitor(&genericRawPrinter{
 				writer: out,
 				id:     csID,
 			})
 			ok = true
 		case *etmv3.PktProc:
-			proc.SetPktRawMonitor(&genericRawPrinter[*etmv3.Packet]{
+			proc.SetPktRawMonitor(&genericRawPrinter{
 				writer: out,
 				id:     csID,
 			})
 			ok = true
 		case *etmv4.Processor:
-			proc.SetPktRawMonitor(&genericRawPrinter[*etmv4.TracePacket]{
+			proc.SetPktRawMonitor(&genericRawPrinter{
 				writer: out,
 				id:     csID,
 			})
 			ok = true
 		case *itm.PktProc:
-			proc.SetPktRawMonitor(&genericRawPrinter[*itm.Packet]{
+			proc.SetPktRawMonitor(&genericRawPrinter{
 				writer: out,
 				id:     csID,
 			})
 			ok = true
 		case *stm.PktProc:
-			proc.SetPktRawMonitor(&genericRawPrinter[*stm.Packet]{
+			proc.SetPktRawMonitor(&genericRawPrinter{
 				writer: out,
 				id:     csID,
 			})

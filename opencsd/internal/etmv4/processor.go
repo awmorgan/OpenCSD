@@ -78,7 +78,7 @@ type Processor struct {
 	pktOut ocsd.PacketProcessorExplicit[TracePacket]
 
 	// raw packet monitor
-	PktRawMonI ocsd.PacketMonitor[TracePacket]
+	PktRawMonI ocsd.PacketMonitor
 
 	processState ProcessState
 
@@ -160,7 +160,7 @@ func (p *Processor) SetPktOut(cb ocsd.PacketProcessorExplicit[TracePacket]) {
 	p.pktOut = cb
 }
 
-func (p *Processor) SetPktRawMonitor(mon ocsd.PacketMonitor[TracePacket]) {
+func (p *Processor) SetPktRawMonitor(mon ocsd.PacketMonitor) {
 	p.PktRawMonI = mon
 }
 

@@ -32,11 +32,15 @@ type eteRawPacketPrinter struct {
 	traceID uint8
 }
 
-func (p *eteRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket, rawData []byte) {
+func (p *eteRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
 	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
 		return
 	}
-	_, _ = io.WriteString(p.writer, fmt.Sprintf("Idx:%d; ID:%x;\t%s : description\n", indexSOP, p.traceID, pkt.EffectiveType().String()))
+	etmPkt, ok := pkt.(*etmv4.TracePacket)
+	if !ok {
+		return
+	}
+	_, _ = io.WriteString(p.writer, fmt.Sprintf("Idx:%d; ID:%x;\t%s : description\n", indexSOP, p.traceID, etmPkt.EffectiveType().String()))
 }
 
 func (m *mapperAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {

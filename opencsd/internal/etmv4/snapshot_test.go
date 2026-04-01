@@ -68,8 +68,12 @@ func makeMemRegionAccessCB(cbCtx *memRegionCallbackCtx) ocsd.MemAccessor {
 	}
 }
 
-func (p *etmv4RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket, rawData []byte) {
+func (p *etmv4RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
 	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
+		return
+	}
+	etmPkt, ok := pkt.(*etmv4.TracePacket)
+	if !ok {
 		return
 	}
 
@@ -79,7 +83,7 @@ func (p *etmv4RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP oc
 		fmt.Fprintf(&sb, "0x%02x ", b)
 	}
 	sb.WriteString("];\t")
-	sb.WriteString(pkt.EffectiveType().String())
+	sb.WriteString(etmPkt.EffectiveType().String())
 	sb.WriteString(" : description\n")
 	_, _ = io.WriteString(p.writer, sb.String())
 }
