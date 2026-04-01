@@ -29,7 +29,6 @@ type etmv4RawPacketPrinter struct {
 	traceID uint8
 }
 
-
 type etmv4DecodeOptions struct {
 	suppressRawPackets bool
 	extraOpFlags       uint32
