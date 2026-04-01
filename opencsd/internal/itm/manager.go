@@ -17,12 +17,8 @@ func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, error) {
 
 // NewConfiguredPktDecode creates an ITM packet decoder with a typed config.
 func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("%w: ITM config cannot be nil", ocsd.ErrInvalidParamVal)
-	}
 	_ = instID
-	dec := NewPktDecode(cfg)
-	return dec, nil
+	return NewPktDecode(cfg)
 }
 
 // NewConfiguredPipeline creates and wires a typed ITM processor/decoder pair.

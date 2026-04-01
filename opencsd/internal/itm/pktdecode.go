@@ -37,21 +37,22 @@ type PktDecode struct {
 }
 
 // NewPktDecode creates a new ITM packet decoder.
-func NewPktDecode(cfg *Config) *PktDecode {
-	instID := 0
-	if cfg != nil {
-		instID = int(cfg.TraceID())
+func NewPktDecode(cfg *Config) (*PktDecode, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("%w: ITM config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
+
+	instID := int(cfg.TraceID())
 	d := &PktDecode{
 		DecoderBase: common.DecoderBase{
 			Name: fmt.Sprintf("DCD_ITM_%d", instID),
 		},
 	}
 	d.configureDecoder()
-	if cfg != nil {
-		_ = d.SetProtocolConfig(cfg)
+	if err := d.SetProtocolConfig(cfg); err != nil {
+		return nil, err
 	}
-	return d
+	return d, nil
 }
 
 // SetTraceElemOut satisfies dcdtree's traceElemSetterOwner interface.

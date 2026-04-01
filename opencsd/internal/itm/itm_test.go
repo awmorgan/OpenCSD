@@ -327,10 +327,9 @@ func TestITMErrorCases(t *testing.T) {
 	proc.IsBadPacket()
 
 	// Decoder missing config test
-	dec := NewPktDecode(nil)
-	dec.SetProtocolConfig(nil)
-	dec.OnFlush()
-	dec.OnReset()
+	if dec, err := NewPktDecode(nil); dec != nil || !errors.Is(err, ocsd.ErrInvalidParamVal) {
+		t.Fatalf("expected invalid-param error for nil config, got dec=%v err=%v", dec, err)
+	}
 }
 
 func TestITMPacketStringVariants(t *testing.T) {
