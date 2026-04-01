@@ -51,7 +51,7 @@ type GenElemList struct {
 	elems   []elemSlot
 	numPend int
 	csID    uint8
-	sendIf  func() ocsd.GenElemProcessor
+	sendIf  ocsd.GenElemProcessor
 }
 
 // NewGenElemList creates a new, empty GenElemList.
@@ -61,7 +61,7 @@ func NewGenElemList() *GenElemList {
 	}
 }
 
-func (l *GenElemList) SetSendIf(sendIf func() ocsd.GenElemProcessor) {
+func (l *GenElemList) SetSendIf(sendIf ocsd.GenElemProcessor) {
 	l.sendIf = sendIf
 }
 
@@ -144,7 +144,7 @@ func (l *GenElemList) SendElements() ocsd.DatapathResp {
 	if l.sendIf == nil {
 		return ocsd.RespFatalNotInit
 	}
-	out := l.sendIf()
+	out := l.sendIf
 	if out == nil {
 		return ocsd.RespFatalNotInit
 	}
@@ -176,7 +176,7 @@ type GenElemStack struct {
 	elemToSend  int
 	sendElemIdx int
 	csID        uint8
-	sendIf      func() ocsd.GenElemProcessor
+	sendIf      ocsd.GenElemProcessor
 }
 
 // NewGenElemStack creates a new, empty GenElemStack.
@@ -186,7 +186,7 @@ func NewGenElemStack() *GenElemStack {
 	}
 }
 
-func (s *GenElemStack) SetSendIf(sendIf func() ocsd.GenElemProcessor) {
+func (s *GenElemStack) SetSendIf(sendIf ocsd.GenElemProcessor) {
 	s.sendIf = sendIf
 }
 
@@ -291,7 +291,7 @@ func (s *GenElemStack) SendElements() ocsd.DatapathResp {
 	if s.sendIf == nil {
 		return ocsd.RespFatalNotInit
 	}
-	out := s.sendIf()
+	out := s.sendIf
 	if out == nil {
 		return ocsd.RespFatalNotInit
 	}

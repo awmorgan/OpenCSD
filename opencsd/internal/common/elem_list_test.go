@@ -19,7 +19,7 @@ func TestGenElemList(t *testing.T) {
 	list := NewGenElemList()
 	dummy := &dummySendIf{}
 
-	list.SetSendIf(func() ocsd.GenElemProcessor { return dummy })
+	list.SetSendIf(dummy)
 	list.SetCSID(10)
 
 	// Test array growth and insertion
@@ -71,7 +71,7 @@ func TestGenElemListPendLastPartialWindow(t *testing.T) {
 	list := NewGenElemList()
 	dummy := &dummySendIf{}
 
-	list.SetSendIf(func() ocsd.GenElemProcessor { return dummy })
+	list.SetSendIf(dummy)
 	list.SetCSID(12)
 
 	for i := range 3 {
@@ -108,7 +108,7 @@ func TestGenElemStack(t *testing.T) {
 	stack := NewGenElemStack()
 	dummy := &dummySendIf{}
 
-	stack.SetSendIf(func() ocsd.GenElemProcessor { return dummy })
+	stack.SetSendIf(dummy)
 	stack.SetCSID(11)
 
 	// Add elems to grow array

@@ -169,7 +169,10 @@ type PktDecode struct {
 }
 
 // SetTraceElemOut satisfies dcdtree's traceElemSetterOwner interface.
-func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) { d.TraceElemOut = out }
+func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
+	d.TraceElemOut = out
+	d.outElem.SetSendIf(out)
+}
 
 // SetMemAccess satisfies dcdtree's memAccSetterOwner interface.
 func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.MemAccess = mem }
@@ -252,7 +255,7 @@ func (d *PktDecode) configureDecoder() {
 	d.p0Stack = nil
 	d.poppedElems = nil
 	d.outElem = *common.NewGenElemStack()
-	d.outElem.SetSendIf(d.traceElemOutIf)
+	d.outElem.SetSendIf(d.TraceElemOut)
 	if d.config != nil {
 		d.outElem.SetCSID(d.config.TraceID())
 	}
@@ -262,9 +265,6 @@ func (d *PktDecode) configureDecoder() {
 	d.eteFirstTSMarker = false
 	d.nextRangeCheckClear()
 }
-
-// traceElemOutIf returns the downstream GenElemProcessor (used as a func reference for outElem).
-func (d *PktDecode) traceElemOutIf() ocsd.GenElemProcessor { return d.TraceElemOut }
 
 func (d *PktDecode) SetProtocolConfig(config *Config) error {
 	d.Config = config
@@ -276,7 +276,7 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 	d.maxSpecDepth = int(d.config.MaxSpecDepth())
 	d.configureDecoder()
 	d.outElem.SetCSID(d.config.TraceID())
-	d.outElem.SetSendIf(d.traceElemOutIf)
+	d.outElem.SetSendIf(d.TraceElemOut)
 
 	// Match C++ decoder behavior: enable the return stack only when configured.
 	if d.config.EnabledRetStack() {
@@ -1875,7 +1875,7 @@ func (d *PktDecode) resetDecoderState() {
 		if d.config != nil {
 			d.outElem.SetCSID(d.config.TraceID())
 		}
-		d.outElem.SetSendIf(d.traceElemOutIf)
+		d.outElem.SetSendIf(d.TraceElemOut)
 	}
 
 	d.returnStack = *common.NewAddrReturnStack()

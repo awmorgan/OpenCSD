@@ -89,10 +89,10 @@ func (d *PktDecode) SetInstrDecode(decoder common.InstrDecode) {
 }
 
 // SetTraceElemOut satisfies dcdtree's traceElemSetterOwner interface.
-func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) { d.TraceElemOut = out }
-
-// traceElemOutIf returns the downstream GenElemProcessor (used as a func reference for outputElemList).
-func (d *PktDecode) traceElemOutIf() ocsd.GenElemProcessor { return d.TraceElemOut }
+func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
+	d.TraceElemOut = out
+	d.outputElemList.SetSendIf(out)
+}
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) (ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
@@ -129,7 +129,7 @@ func (d *PktDecode) configureDecoder() {
 	d.resetDecoder()
 	d.unsyncInfo = ocsd.UnsyncInitDecoder
 
-	d.outputElemList.SetSendIf(d.traceElemOutIf)
+	d.outputElemList.SetSendIf(d.TraceElemOut)
 }
 
 func (d *PktDecode) resetDecoder() {
