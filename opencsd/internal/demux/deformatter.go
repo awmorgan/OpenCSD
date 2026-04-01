@@ -51,6 +51,7 @@ type FrameDeformatter struct {
 	outDataIdx   uint32
 	outProcessed uint32
 	highestResp  ocsd.DatapathResp
+	lastErr      error
 
 	pendingData  []byte
 	pendingIndex ocsd.TrcIndex
@@ -95,9 +96,7 @@ func (d *FrameDeformatter) Configure(flags uint32) error {
 	}
 
 	if err != nil {
-		if d.errorLogger != nil {
-			d.errorLogger.LogError(ocsd.HandleGenErr, fmt.Errorf("%w: Invalid Config Flags", ocsd.ErrInvalidParamVal))
-		}
+		d.lastErr = fmt.Errorf("%w: invalid config flags", ocsd.ErrInvalidParamVal)
 	} else {
 		// alignment is the multiple of bytes the buffer size must be.
 		d.cfgFlags = flags
@@ -152,6 +151,7 @@ func (d *FrameDeformatter) rawChanEnabled(id uint8) bool {
 
 func (d *FrameDeformatter) resetCollateDataPathResp() {
 	d.highestResp = ocsd.RespCont
+	d.lastErr = nil
 }
 
 func (d *FrameDeformatter) collateDataPathResp(resp ocsd.DatapathResp) {
@@ -177,9 +177,7 @@ func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocs
 			d.collateDataPathResp(resp)
 			if err != nil {
 				d.collateDataPathResp(ocsd.RespFatalInvalidData)
-				if d.errorLogger != nil {
-					d.errorLogger.LogError(ocsd.HandleGenErr, err)
-				}
+				d.lastErr = err
 			}
 		}
 	}
@@ -247,6 +245,7 @@ func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, 
 	default:
 		// Unsupported operations
 	}
+	err = d.lastErr
 
 	return numBytesProcessed, resp, err
 }
@@ -344,8 +343,8 @@ func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBloc
 
 func (d *FrameDeformatter) processTraceDataError(errObj error, resp ocsd.DatapathResp) ocsd.DatapathResp {
 	d.collateDataPathResp(resp)
-	if errObj != nil && d.errorLogger != nil {
-		d.errorLogger.LogError(ocsd.HandleGenErr, errObj)
+	if errObj != nil {
+		d.lastErr = errObj
 	}
 	return d.highestResp
 }
