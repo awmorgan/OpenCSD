@@ -30,6 +30,7 @@ type PktDecode struct {
 	common.DecoderBase
 	Config       *Config
 	CurrPacketIn *Packet
+	lastErr      error
 
 	currState  decoderState
 	unsyncInfo common.UnsyncInfo
@@ -107,19 +108,20 @@ func (d *PktDecode) SetNeedsInstructionDecode(needs bool) { d.UsesIDecode = need
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) ocsd.DatapathResp {
 	resp := ocsd.RespCont
+	d.lastErr = nil
 	if d.codeFollower != nil {
 		d.codeFollower.SetInterfaces(d.MemAccess, d.InstrDecode)
 	}
 
 	if reason := d.DecodeNotReadyReason(); reason != "" {
-		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason))
+		d.lastErr = fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason)
 		return ocsd.RespFatalNotInit
 	}
 
 	switch op {
 	case ocsd.OpData:
 		if pktIn == nil {
-			d.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
+			d.lastErr = ocsd.ErrInvalidParamVal
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			d.CurrPacketIn = pktIn
@@ -133,7 +135,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 	case ocsd.OpReset:
 		resp = d.OnReset()
 	default:
-		d.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
+		d.lastErr = ocsd.ErrInvalidParamVal
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return resp
@@ -177,7 +179,7 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 
 	if d.Config.TraceMode() != TMInstrOnly {
 		err := ocsd.ErrHWCfgUnsupp
-		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: ETMv3 trace decoder : data trace decode not yet supported", err))
+		d.lastErr = fmt.Errorf("%w: ETMv3 trace decoder: data trace decode not yet supported", err)
 		return err
 	}
 
@@ -234,7 +236,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 
 	elem, err := d.getNextOpElem()
 	if err != nil {
-		d.LogError(ocsd.ErrSevError, err)
+		d.lastErr = err
 		d.resetDecoder()
 		return ocsd.RespFatalSysErr
 	}
@@ -272,7 +274,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 		case sendPkts:
 			next, resp, done = d.handleSendPkts()
 		default:
-			d.LogError(ocsd.ErrSevError, fmt.Errorf("unknown decoder state"))
+			d.lastErr = fmt.Errorf("unknown decoder state")
 			d.resetDecoder()
 			return ocsd.RespFatalSysErr
 		}
