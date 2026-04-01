@@ -124,6 +124,26 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 	return ocsd.DataErrFromResp(resp, packetErr)
 }
 
+// TracePacketData is the explicit packet data entrypoint used by split interfaces.
+func (d *PktDecode) TracePacketData(indexSOP ocsd.TrcIndex, pktIn *Packet) error {
+	return d.PacketDataIn(ocsd.OpData, indexSOP, pktIn)
+}
+
+// TracePacketEOT forwards an EOT control operation through the legacy multiplexer.
+func (d *PktDecode) TracePacketEOT() error {
+	return d.PacketDataIn(ocsd.OpEOT, 0, nil)
+}
+
+// TracePacketFlush forwards a flush control operation through the legacy multiplexer.
+func (d *PktDecode) TracePacketFlush() error {
+	return d.PacketDataIn(ocsd.OpFlush, 0, nil)
+}
+
+// TracePacketReset forwards a reset control operation through the legacy multiplexer.
+func (d *PktDecode) TracePacketReset(indexSOP ocsd.TrcIndex) error {
+	return d.PacketDataIn(ocsd.OpReset, indexSOP, nil)
+}
+
 func (d *PktDecode) configureDecoder() {
 	d.csID = 0
 	d.resetDecoder()
