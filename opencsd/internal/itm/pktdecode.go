@@ -20,6 +20,7 @@ type PktDecode struct {
 	common.DecoderBase
 	Config       *Config
 	CurrPacketIn *Packet
+	lastErr      error
 
 	currState decoderState
 
@@ -82,15 +83,16 @@ func (d *PktDecode) SetProtocolConfig(cfg *Config) error {
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) ocsd.DatapathResp {
 	resp := ocsd.RespCont
+	d.lastErr = nil
 	if reason := d.DecodeNotReadyReason(); reason != "" {
-		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason))
+		d.lastErr = fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason)
 		return ocsd.RespFatalNotInit
 	}
 
 	switch op {
 	case ocsd.OpData:
 		if pktIn == nil {
-			d.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
+			d.lastErr = ocsd.ErrInvalidParamVal
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			d.CurrPacketIn = pktIn
@@ -104,7 +106,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 	case ocsd.OpReset:
 		resp = d.OnReset()
 	default:
-		d.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
+		d.lastErr = ocsd.ErrInvalidParamVal
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return resp
