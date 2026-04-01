@@ -258,3 +258,18 @@ func (cf *CodeFollower) FollowSingleAtom(addrStart ocsd.VAddr, atom ocsd.AtmVal)
 
 	return nil
 }
+
+// FollowSingleAtomResult decodes an instruction and returns the result snapshot by value.
+func (cf *CodeFollower) FollowSingleAtomResult(addrStart ocsd.VAddr, atom ocsd.AtmVal) (FollowResult, error) {
+	err := cf.FollowSingleAtom(addrStart, atom)
+	return FollowResult{
+		HasNext:   cf.hasNext,
+		HasNacc:   cf.hasNaccErr,
+		NaccAddr:  cf.noAccessAddr,
+		NumInstr:  cf.instructs,
+		RangeSt:   cf.startAddr,
+		RangeEn:   cf.endAddr,
+		NextAddr:  cf.nextAddr,
+		InstrInfo: cf.instrInfo,
+	}, err
+}
