@@ -67,7 +67,6 @@ type FrameDeformatter struct {
 	inBlockProcessed uint32
 
 	outData      []outDataEntry
-	outDataIdx   uint32
 	outProcessed uint32
 
 	pendingData  []byte

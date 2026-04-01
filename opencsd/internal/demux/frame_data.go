@@ -205,15 +205,16 @@ func (d *FrameDeformatter) unpackFrame() bool {
 	newSrcID := ocsd.BadCSSrcID
 	prevIDandIDChange := false
 
-	d.outDataIdx = 0
+	d.outData = d.outData[:1]
 	d.outProcessed = 0
 
-	d.outData[d.outDataIdx].id = d.currSrcID
-	d.outData[d.outDataIdx].valid = 0
-	d.outData[d.outDataIdx].index = d.trcCurrIdxSof
-	d.outData[d.outDataIdx].used = 0
+	d.outData[0].id = d.currSrcID
+	d.outData[0].valid = 0
+	d.outData[0].index = d.trcCurrIdxSof
+	d.outData[0].used = 0
 
 	for i := 0; i < 14; i += 2 {
+		curr := len(d.outData) - 1
 		prevIDandIDChange = false
 
 		if d.exFrmData[i]&0x1 != 0 {
@@ -222,33 +223,35 @@ func (d *FrameDeformatter) unpackFrame() bool {
 				prevIDandIDChange = (frameFlagBit & d.exFrmData[15]) != 0
 
 				if prevIDandIDChange {
-					d.outData[d.outDataIdx].data[d.outData[d.outDataIdx].valid] = d.exFrmData[i+1]
-					d.outData[d.outDataIdx].valid++
+					d.outData[curr].data[d.outData[curr].valid] = d.exFrmData[i+1]
+					d.outData[curr].valid++
 				}
 
 				d.currSrcID = newSrcID
 
-				if d.outData[d.outDataIdx].valid > 0 {
-					d.outDataIdx++
-					d.outData[d.outDataIdx].valid = 0
-					d.outData[d.outDataIdx].used = 0
-					d.outData[d.outDataIdx].index = d.trcCurrIdxSof + ocsd.TrcIndex(i)
+				if d.outData[curr].valid > 0 {
+					d.outData = append(d.outData, outDataEntry{
+						valid: 0,
+						used:  0,
+						index: d.trcCurrIdxSof + ocsd.TrcIndex(i),
+					})
+					curr = len(d.outData) - 1
 				}
 
-				d.outData[d.outDataIdx].id = d.currSrcID
+				d.outData[curr].id = d.currSrcID
 			}
 		} else {
 			b := d.exFrmData[i]
 			if (frameFlagBit & d.exFrmData[15]) != 0 {
 				b |= 0x1
 			}
-			d.outData[d.outDataIdx].data[d.outData[d.outDataIdx].valid] = b
-			d.outData[d.outDataIdx].valid++
+			d.outData[curr].data[d.outData[curr].valid] = b
+			d.outData[curr].valid++
 		}
 
 		if !prevIDandIDChange {
-			d.outData[d.outDataIdx].data[d.outData[d.outDataIdx].valid] = d.exFrmData[i+1]
-			d.outData[d.outDataIdx].valid++
+			d.outData[curr].data[d.outData[curr].valid] = d.exFrmData[i+1]
+			d.outData[curr].valid++
 		}
 
 		frameFlagBit <<= 1
@@ -261,8 +264,9 @@ func (d *FrameDeformatter) unpackFrame() bool {
 		if (frameFlagBit & d.exFrmData[15]) != 0 {
 			b |= 0x1
 		}
-		d.outData[d.outDataIdx].data[d.outData[d.outDataIdx].valid] = b
-		d.outData[d.outDataIdx].valid++
+		curr := len(d.outData) - 1
+		d.outData[curr].data[d.outData[curr].valid] = b
+		d.outData[curr].valid++
 	}
 	d.exFrmNBytes = 0
 
@@ -272,7 +276,7 @@ func (d *FrameDeformatter) unpackFrame() bool {
 func (d *FrameDeformatter) outputFrame(state *datapathState) bool {
 	contProcessing := true
 
-	for d.outProcessed < (d.outDataIdx+1) && contProcessing {
+	for d.outProcessed < uint32(len(d.outData)) && contProcessing {
 		id := d.outData[d.outProcessed].id
 		if id != ocsd.BadCSSrcID {
 			pDataIn := d.idStreams[id]
