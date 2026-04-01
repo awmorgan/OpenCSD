@@ -119,7 +119,6 @@ type PktDecode struct {
 
 	Config       *Config
 	CurrPacketIn *TracePacket
-	lastErr      error
 
 	currState decodeState
 	config    *Config
@@ -201,17 +200,17 @@ func NewPktDecode(cfg *Config) *PktDecode {
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *TracePacket) (ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
-	d.lastErr = nil
+	var packetErr error
 
 	if reason := d.DecodeNotReadyReason(); reason != "" {
-		d.lastErr = fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason)
-		return ocsd.RespFatalNotInit, d.lastErr
+		packetErr = fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason)
+		return ocsd.RespFatalNotInit, packetErr
 	}
 
 	switch op {
 	case ocsd.OpData:
 		if pktIn == nil {
-			d.lastErr = ocsd.ErrInvalidParamVal
+			packetErr = ocsd.ErrInvalidParamVal
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			d.CurrPacketIn = pktIn
@@ -225,10 +224,10 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 	case ocsd.OpReset:
 		resp = d.OnReset()
 	default:
-		d.lastErr = ocsd.ErrInvalidParamVal
+		packetErr = ocsd.ErrInvalidParamVal
 		resp = ocsd.RespFatalInvalidOp
 	}
-	return resp, d.lastErr
+	return resp, packetErr
 }
 
 func (d *PktDecode) accessMemory(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
@@ -402,7 +401,6 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	err := d.commitElemOnEOT()
 	if err != nil {
 		resp = ocsd.RespFatalInvalidData
-		d.lastErr = fmt.Errorf("%w: error flushing element stack at end of trace data", err)
 	} else {
 		resp = d.outElem.SendElements()
 	}
@@ -1237,7 +1235,6 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, elem *p0Elem) error {
 		if err == ocsd.ErrUnsupportedISA {
 			d.needAddr = true
 			d.needCtxt = true
-			d.lastErr = fmt.Errorf("%w: unsupported instruction set processing atom packet", err)
 			return nil
 		}
 		return d.handlePacketSeqErr(err, elem.rootIndex, "Error processing atom packet")
@@ -1383,9 +1380,7 @@ func (d *PktDecode) processException(elem *p0Elem) error {
 				if err == ocsd.ErrUnsupportedISA {
 					d.needAddr = true
 					d.needCtxt = true
-					d.lastErr = fmt.Errorf("%w: unsupported instruction set processing exception packet", err)
 				} else {
-					d.lastErr = fmt.Errorf("%w: error processing exception packet", err)
 				}
 				return err
 			}
@@ -1460,7 +1455,6 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 			d.outElem.CurrElem().Payload.ExceptionNum = uint32(d.getCurrMemSpace())
 			return err
 		}
-		d.lastErr = fmt.Errorf("%w: mem access error processing source address packet", errMem)
 		return errMem
 	}
 
@@ -1476,7 +1470,6 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 	d.instrInfo.InstrAddr = srcAddr
 	err = d.InstrDecodeCall(&d.instrInfo)
 	if err != nil {
-		d.lastErr = fmt.Errorf("%w: instruction decode error processing source address packet", err)
 		return err
 	}
 	d.instrInfo.InstrAddr += ocsd.VAddr(d.instrInfo.InstrSize)
@@ -1593,7 +1586,6 @@ func (d *PktDecode) processQElement(elem *p0Elem) error {
 		}
 
 		if idx >= len(d.p0Stack) || d.p0Stack[idx].p0Type != p0Addr {
-			d.lastErr = fmt.Errorf("%w: address missing in Q packet", ocsd.ErrBadPacketSeq)
 			return ocsd.ErrBadPacketSeq
 		}
 		pAddressElem = d.p0Stack[idx]
@@ -1840,7 +1832,6 @@ func (d *PktDecode) doTraceInfoPacket() {
 }
 
 func (d *PktDecode) handlePacketSeqErr(err error, idx ocsd.TrcIndex, reason string) error {
-	d.lastErr = fmt.Errorf("%w: %s", err, reason)
 	d.resetDecoderState()
 	d.currState = noSync
 	d.unsyncEOTInfo = ocsd.UnsyncBadPacket
@@ -1849,7 +1840,6 @@ func (d *PktDecode) handlePacketSeqErr(err error, idx ocsd.TrcIndex, reason stri
 }
 
 func (d *PktDecode) handleBadPacket(idx ocsd.TrcIndex, reason string) {
-	d.lastErr = fmt.Errorf("%w: %s", ocsd.ErrBadDecodePkt, reason)
 	d.resetDecoderState()
 	d.currState = noSync
 	d.unsyncEOTInfo = ocsd.UnsyncBadPacket
@@ -1857,7 +1847,6 @@ func (d *PktDecode) handleBadPacket(idx ocsd.TrcIndex, reason string) {
 }
 
 func (d *PktDecode) handleBadImageError(reason string) error {
-	d.lastErr = fmt.Errorf("%w: %s", ocsd.ErrBadDecodeImage, reason)
 	d.resetDecoderState()
 	d.currState = noSync
 	d.unsyncEOTInfo = ocsd.UnsyncBadImage
