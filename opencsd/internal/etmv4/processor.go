@@ -161,19 +161,38 @@ func (p *Processor) SetPktRawMonitor(mon ocsd.PacketMonitor[TracePacket]) {
 
 // TraceDataIn implements ocsd.TrcDataProcessor.
 func (p *Processor) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+	mapRespErr := func(consumed uint32, resp ocsd.DatapathResp, err error) (uint32, error) {
+		if ocsd.DataRespIsCont(resp) {
+			return consumed, nil
+		}
+		if ocsd.DataRespIsWait(resp) {
+			return consumed, ocsd.ErrWait
+		}
+		if err != nil {
+			return consumed, err
+		}
+		switch resp {
+		case ocsd.RespFatalNotInit:
+			return consumed, ocsd.ErrNotInit
+		case ocsd.RespFatalInvalidParam, ocsd.RespFatalInvalidOp:
+			return consumed, ocsd.ErrInvalidParamVal
+		case ocsd.RespFatalSysErr:
+			return consumed, ocsd.ErrFail
+		default:
+			return consumed, ocsd.ErrDataDecodeFatal
+		}
+	}
+
 	switch op {
 	case ocsd.OpData:
 		consumed, resp, err := p.processData(index, dataBlock)
-		if !ocsd.DataRespIsFatal(resp) {
-			return consumed, ocsd.DataErrFromResp(resp, nil)
-		}
-		return consumed, ocsd.DataErrFromResp(resp, err)
+		return mapRespErr(consumed, resp, err)
 	case ocsd.OpEOT:
-		return 0, ocsd.DataErrFromResp(p.onEOT(), nil)
+		return mapRespErr(0, p.onEOT(), nil)
 	case ocsd.OpReset:
-		return 0, ocsd.DataErrFromResp(p.onReset(), nil)
+		return mapRespErr(0, p.onReset(), nil)
 	case ocsd.OpFlush:
-		return 0, ocsd.DataErrFromResp(p.onFlush(), nil)
+		return mapRespErr(0, p.onFlush(), nil)
 	}
 	return 0, nil
 }

@@ -149,10 +149,25 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 		err = fmt.Errorf("%w: packet processor: unknown datapath operation", ocsd.ErrInvalidParamVal)
 		resp = ocsd.RespFatalInvalidOp
 	}
-	if !ocsd.DataRespIsFatal(resp) {
-		return processed, ocsd.DataErrFromResp(resp, nil)
+	if ocsd.DataRespIsCont(resp) {
+		return processed, nil
 	}
-	return processed, ocsd.DataErrFromResp(resp, err)
+	if ocsd.DataRespIsWait(resp) {
+		return processed, ocsd.ErrWait
+	}
+	if err != nil {
+		return processed, err
+	}
+	switch resp {
+	case ocsd.RespFatalNotInit:
+		return processed, ocsd.ErrNotInit
+	case ocsd.RespFatalInvalidParam, ocsd.RespFatalInvalidOp:
+		return processed, ocsd.ErrInvalidParamVal
+	case ocsd.RespFatalSysErr:
+		return processed, ocsd.ErrFail
+	default:
+		return processed, ocsd.ErrDataDecodeFatal
+	}
 }
 
 func (p *PktProc) resetProcessorState() {
