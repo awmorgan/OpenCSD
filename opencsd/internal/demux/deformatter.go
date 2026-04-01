@@ -66,7 +66,7 @@ type FrameDeformatter struct {
 	inBlockBase      []byte // The block being processed (input block)
 	inBlockProcessed uint32
 
-	outData      [16]outDataEntry
+	outData      []outDataEntry
 	outDataIdx   uint32
 	outProcessed uint32
 
@@ -212,6 +212,11 @@ func (d *FrameDeformatter) resetStateParams() {
 
 	d.pendingData = nil
 	d.pendingIndex = ocsd.BadTrcIndex
+	if cap(d.outData) < 16 {
+		d.outData = make([]outDataEntry, 16)
+	} else {
+		d.outData = d.outData[:16]
+	}
 }
 
 // TraceDataIn implementation
