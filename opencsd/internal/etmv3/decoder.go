@@ -53,7 +53,7 @@ type PktDecode struct {
 }
 
 // NewPktDecode creates a new ETMv3 trace decoder.
-func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
+func NewPktDecode(cfg *Config, _ ocsd.Logger) *PktDecode {
 	instID := 0
 	if cfg != nil {
 		instID = int(cfg.TraceID())
@@ -62,10 +62,6 @@ func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 	d := &PktDecode{
 		DecoderBase: common.DecoderBase{
 			Name: fmt.Sprintf("DCD_ETMV3_%d", instID),
-			BaseLogger: common.BaseLogger{
-				Logger:       logger,
-				ErrVerbosity: ocsd.ErrSevNone,
-			},
 			UsesMemAccess: true,
 			UsesIDecode:   true,
 		},

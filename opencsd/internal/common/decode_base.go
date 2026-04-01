@@ -90,11 +90,10 @@ func (m *OpMode) SupportedOpModes() uint32 { return m.SupportedOpFlags }
 func (m *OpMode) ConfigureSupportedOpModes(flags uint32) { m.SupportedOpFlags = flags }
 
 // DecoderBase holds the shared state for a packet decoder.
-// It composes BaseLogger for logging and OpMode for operational flag management.
+// It composes OpMode for operational flag management.
 // Concrete decoders embed this struct and call its methods via promotion.
 type DecoderBase struct {
 	Name string
-	BaseLogger
 	OpMode
 
 	TraceElemOut ocsd.GenElemProcessor

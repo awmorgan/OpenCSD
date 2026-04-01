@@ -96,7 +96,7 @@ type PktDecode struct {
 	outputElem  ocsd.TraceElement
 }
 
-func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
+func NewPktDecode(cfg *Config, _ ocsd.Logger) *PktDecode {
 	instIDNum := 0
 	if cfg != nil {
 		instIDNum = int(cfg.TraceID())
@@ -104,10 +104,6 @@ func NewPktDecode(cfg *Config, logger ocsd.Logger) *PktDecode {
 	d := &PktDecode{
 		DecoderBase: common.DecoderBase{
 			Name: fmt.Sprintf("DCD_PTM_%d", instIDNum),
-			BaseLogger: common.BaseLogger{
-				Logger:       logger,
-				ErrVerbosity: ocsd.ErrSevNone,
-			},
 			UsesMemAccess: true,
 			UsesIDecode:   true,
 		},

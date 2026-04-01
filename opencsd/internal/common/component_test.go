@@ -29,13 +29,6 @@ func (m *mockErrorLog) LogMessage(filterLevel ocsd.ErrSeverity, msg string) {
 func TestComponentRuntimeViaDecoderBase(t *testing.T) {
 	b := &DecoderBase{
 		Name: "TestComp",
-		BaseLogger: BaseLogger{
-			ErrVerbosity: ocsd.ErrSevNone,
-		},
-	}
-
-	if b.ErrVerbosity != ocsd.ErrSevNone {
-		t.Errorf("expected default error log level ErrSevNone, got %v", b.ErrVerbosity)
 	}
 	if b.Name != "TestComp" {
 		t.Errorf("expected name TestComp, got %s", b.Name)
@@ -58,24 +51,26 @@ func TestComponentRuntimeViaDecoderBase(t *testing.T) {
 		t.Errorf("expected unsupported flags to be masked out, got 0x%x", b.ComponentOpMode())
 	}
 
-	logger := &mockErrorLog{}
-	b.Logger = logger
-	b.ErrVerbosity = ocsd.ErrSevInfo
+	l := &BaseLogger{ErrVerbosity: ocsd.ErrSevNone}
 
-	b.LogMessage(ocsd.ErrSevWarn, "A warning")
+	logger := &mockErrorLog{}
+	l.Logger = logger
+	l.ErrVerbosity = ocsd.ErrSevInfo
+
+	l.LogMessage(ocsd.ErrSevWarn, "A warning")
 	if logger.lastMsg != "A warning" || logger.lastMsgSev != ocsd.ErrSevWarn {
 		t.Errorf("log message was not passed to logger correctly")
 	}
 
 	// Should not log if severity is too high
-	b.ErrVerbosity = ocsd.ErrSevNone
-	b.LogMessage(ocsd.ErrSevError, "Should not log")
+	l.ErrVerbosity = ocsd.ErrSevNone
+	l.LogMessage(ocsd.ErrSevError, "Should not log")
 	if logger.lastMsg == "Should not log" {
 		t.Errorf("expected message to be filtered out")
 	}
 
-	b.ErrVerbosity = ocsd.ErrSevError
-	b.LogError(ocsd.ErrSevError, ocsd.ErrInvalidID)
+	l.ErrVerbosity = ocsd.ErrSevError
+	l.LogError(ocsd.ErrSevError, ocsd.ErrInvalidID)
 	if logger.lastErrSev != ocsd.ErrSevError {
 		t.Errorf("log error failed to pass severity")
 	}
