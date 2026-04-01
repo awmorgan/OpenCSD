@@ -493,9 +493,9 @@ func TestRunHSyncFSyncTest(t *testing.T) {
 	// 3 bad input
 	resetDecoder(df, t)
 	bufBad := makeBufBadData()
-	_, resp, _ := df.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(len(buf1)), bufBad)
-	if resp != ocsd.RespFatalInvalidData || !errors.Is(errLog.lastErr, ocsd.ErrDfrmtrBadFhsync) {
-		t.Errorf("Expected RespFatalInvalidData and ErrDfrmtrBadFhsync, got resp=%v err=%v", resp, errLog.lastErr)
+	_, resp, inErr := df.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(len(buf1)), bufBad)
+	if resp != ocsd.RespFatalInvalidData || !errors.Is(inErr, ocsd.ErrDfrmtrBadFhsync) {
+		t.Errorf("Expected RespFatalInvalidData and ErrDfrmtrBadFhsync, got resp=%v err=%v", resp, inErr)
 	}
 }
 
@@ -509,8 +509,8 @@ func TestRunDemuxBadDataTest(t *testing.T) {
 
 	resetDecoder(df, t)
 	bufBad := makeBufBadData()
-	_, resp, _ := df.TraceDataIn(ocsd.OpData, 0, bufBad)
-	if resp != ocsd.RespFatalInvalidData || !errors.Is(errLog.lastErr, ocsd.ErrDfrmtrBadFhsync) {
-		t.Errorf("Expected RespFatalInvalidData and ErrDfrmtrBadFhsync, got resp=%v err=%v", resp, errLog.lastErr)
+	_, resp, inErr := df.TraceDataIn(ocsd.OpData, 0, bufBad)
+	if resp != ocsd.RespFatalInvalidData || !errors.Is(inErr, ocsd.ErrDfrmtrBadFhsync) {
+		t.Errorf("Expected RespFatalInvalidData and ErrDfrmtrBadFhsync, got resp=%v err=%v", resp, inErr)
 	}
 }

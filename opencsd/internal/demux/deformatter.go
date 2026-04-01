@@ -177,9 +177,6 @@ func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocs
 			d.collateDataPathResp(resp)
 			if err != nil {
 				d.collateDataPathResp(ocsd.RespFatalInvalidData)
-				if d.errorLogger != nil {
-					d.errorLogger.LogError(ocsd.HandleGenErr, err)
-				}
 				d.lastErr = err
 			}
 		}
@@ -248,7 +245,7 @@ func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, 
 	default:
 		// Unsupported operations
 	}
-	err = nil
+	err = d.lastErr
 
 	return numBytesProcessed, resp, err
 }
@@ -347,9 +344,6 @@ func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBloc
 func (d *FrameDeformatter) processTraceDataError(errObj error, resp ocsd.DatapathResp) ocsd.DatapathResp {
 	d.collateDataPathResp(resp)
 	if errObj != nil {
-		if d.errorLogger != nil {
-			d.errorLogger.LogError(ocsd.HandleGenErr, errObj)
-		}
 		d.lastErr = errObj
 	}
 	return d.highestResp

@@ -287,9 +287,6 @@ func (d *FrameDeformatter) outputFrame() bool {
 				d.collateDataPathResp(resp)
 				if err != nil {
 					d.collateDataPathResp(ocsd.RespFatalInvalidData)
-					if d.errorLogger != nil {
-						d.errorLogger.LogError(ocsd.HandleGenErr, err)
-					}
 					d.lastErr = err
 				}
 

@@ -348,7 +348,9 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 			dataPathResp = resp
 			if dpErr != nil {
 				dataPathErr = dpErr
-				return
+				if !ocsd.DataRespIsFatal(dataPathResp) {
+					return
+				}
 			}
 
 			if used > 0 {
@@ -440,12 +442,12 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 		pushPending()
 	}
 
-	if dataPathErr != nil {
-		return fmt.Errorf("trace packet lister: data path processing error: %w", dataPathErr)
-	}
-
 	if ocsd.DataRespIsFatal(dataPathResp) {
 		return fatalDataPathError(dataPathResp, traceIndex, len(pending))
+	}
+
+	if dataPathErr != nil {
+		return fmt.Errorf("trace packet lister: data path processing error: %w", dataPathErr)
 	}
 
 	if isFramed && len(pending) > 0 {
