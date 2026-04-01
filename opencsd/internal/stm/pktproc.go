@@ -70,7 +70,7 @@ type PktProc struct {
 	Stats      ocsd.DecodeStats
 	statsInit  bool
 	Config     *Config
-	PktOutI    ocsd.PacketProcessorExplicit[Packet]
+	pktOut     ocsd.PacketProcessorExplicit[Packet]
 	PktRawMonI ocsd.PacketMonitor
 
 	procState processState
@@ -81,10 +81,10 @@ type PktProc struct {
 
 	currDecode decodeAction
 
-	currPacket  Packet
-	bNeedsTS    bool
-	bIsMarker   bool
-	bStreamSync bool
+	currPacket Packet
+	bNeedsTS   bool
+	bIsMarker  bool
+	streamSync bool
 
 	numNibbles     uint8
 	nibble         uint8
@@ -135,7 +135,7 @@ func NewPktProc(cfg *Config) *PktProc {
 }
 
 // SetPktOut attaches the downstream packet decoder.
-func (p *PktProc) SetPktOut(out ocsd.PacketProcessorExplicit[Packet]) { p.PktOutI = out }
+func (p *PktProc) SetPktOut(out ocsd.PacketProcessorExplicit[Packet]) { p.pktOut = out }
 
 // SetPktRawMonitor attaches a raw packet monitor.
 func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor) { p.PktRawMonI = mon }
@@ -180,25 +180,25 @@ func (p *PktProc) StatsAddBadSeqCount(count uint32) { p.Stats.BadSequenceErrs +=
 func (p *PktProc) StatsAddBadHdrCount(count uint32) { p.Stats.BadHeaderErrs += count }
 
 func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) ocsd.DatapathResp {
-	if p.PktOutI != nil {
+	if p.pktOut != nil {
 		return ocsd.DataRespFromErr(p.callPktOut(ocsd.OpData, indexSOP, pkt))
 	}
 	return ocsd.RespCont
 }
 
 func (p *PktProc) callPktOut(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) error {
-	if p.PktOutI == nil {
+	if p.pktOut == nil {
 		return nil
 	}
 	switch op {
 	case ocsd.OpData:
-		return p.PktOutI.TracePacketData(indexSOP, pkt)
+		return p.pktOut.TracePacketData(indexSOP, pkt)
 	case ocsd.OpEOT:
-		return p.PktOutI.TracePacketEOT()
+		return p.pktOut.TracePacketEOT()
 	case ocsd.OpFlush:
-		return p.PktOutI.TracePacketFlush()
+		return p.pktOut.TracePacketFlush()
 	case ocsd.OpReset:
-		return p.PktOutI.TracePacketReset(indexSOP)
+		return p.pktOut.TracePacketReset(indexSOP)
 	default:
 		return ocsd.ErrInvalidParamVal
 	}
@@ -232,7 +232,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 		}
 	case ocsd.OpEOT:
 		resp = p.OnEOT()
-		if p.PktOutI != nil && !ocsd.DataRespIsFatal(resp) {
+		if p.pktOut != nil && !ocsd.DataRespIsFatal(resp) {
 			err = p.callPktOut(ocsd.OpEOT, 0, nil)
 			resp = ocsd.DataRespFromErr(err)
 			if ocsd.IsDataWaitErr(err) {
@@ -244,7 +244,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 		}
 	case ocsd.OpFlush:
 		resp = p.OnFlush()
-		if ocsd.DataRespIsCont(resp) && p.PktOutI != nil {
+		if ocsd.DataRespIsCont(resp) && p.pktOut != nil {
 			err = p.callPktOut(ocsd.OpFlush, 0, nil)
 			resp = ocsd.DataRespFromErr(err)
 			if ocsd.IsDataWaitErr(err) {
@@ -252,7 +252,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			}
 		}
 	case ocsd.OpReset:
-		if p.PktOutI != nil {
+		if p.pktOut != nil {
 			err = p.callPktOut(ocsd.OpReset, index, nil)
 			resp = ocsd.DataRespFromErr(err)
 			if ocsd.IsDataWaitErr(err) {
@@ -418,7 +418,7 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 	if p.nibble2ndValid {
 		p.savePacketByte(p.nibble2nd << 4)
 	}
-	if p.bStreamSync {
+	if p.streamSync {
 		p.procState = procHdrState
 	} else {
 		p.procState = procWaitSync
@@ -587,7 +587,7 @@ func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {
 		}
 	} else {
 		p.currPacket.SetPacketType(PktAsync, false)
-		p.bStreamSync = true
+		p.streamSync = true
 		p.clearSyncCount()
 		p.packetIndex = p.syncIndex
 		if p.PktRawMonI != nil {
@@ -989,7 +989,7 @@ func (p *PktProc) PktASync() error {
 		if bCont {
 			if p.isSync {
 				bCont = false
-				p.bStreamSync = true
+				p.streamSync = true
 				p.currPacket.SetPacketType(PktAsync, false)
 				p.clearSyncCount()
 				p.sendPacket()
@@ -1224,7 +1224,7 @@ func (p *PktProc) sendPacket() {
 
 func (p *PktProc) setProcUnsynced() {
 	p.procState = procWaitSync
-	p.bStreamSync = false
+	p.streamSync = false
 }
 
 func (p *PktProc) savePacketByte(val uint8) {

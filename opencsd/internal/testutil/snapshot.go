@@ -178,16 +178,9 @@ func parseHexOrDecErr(s string) (uint64, error) {
 	if s == "" {
 		return 0, nil
 	}
-	if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
-		v, err := strconv.ParseUint(s[2:], 16, 64)
-		if err != nil {
-			return 0, fmt.Errorf("failed to parse hex string %q: %w", s, err)
-		}
-		return v, nil
-	}
-	v, err := strconv.ParseUint(s, 10, 64)
+	v, err := strconv.ParseUint(s, 0, 64)
 	if err != nil {
-		return 0, fmt.Errorf("failed to parse dec string %q: %w", s, err)
+		return 0, fmt.Errorf("failed to parse integer string %q: %w", s, err)
 	}
 	return v, nil
 }

@@ -39,39 +39,39 @@ type elemSlot struct {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GenElemList
+// ElemList
 // ─────────────────────────────────────────────────────────────────────────────
 
-// GenElemList implements OcsdGenElemList.
+// ElemList implements OcsdGenElemList.
 //
 // All elements live in a single flat slice (elems). numPend is a tail-boundary:
 // the last numPend elements are held pending (not yet committed for sending).
 // The committed window is elems[0 : len(elems)-numPend].
-type GenElemList struct {
+type ElemList struct {
 	elems   []elemSlot
 	numPend int
 	csID    uint8
 	sendIf  ocsd.GenElemProcessor
 }
 
-// NewGenElemList creates a new, empty GenElemList.
-func NewGenElemList() *GenElemList {
-	return &GenElemList{
+// NewElemList creates a new, empty ElemList.
+func NewElemList() *ElemList {
+	return &ElemList{
 		elems: make([]elemSlot, 0, 16),
 	}
 }
 
-func (l *GenElemList) SetSendIf(sendIf ocsd.GenElemProcessor) {
+func (l *ElemList) SetSendIf(sendIf ocsd.GenElemProcessor) {
 	l.sendIf = sendIf
 }
 
-func (l *GenElemList) SetCSID(csID uint8) {
+func (l *ElemList) SetCSID(csID uint8) {
 	l.csID = csID
 }
 
 // Reset discards all elements, returning their TraceElement pointers to the
 // pool.
-func (l *GenElemList) Reset() {
+func (l *ElemList) Reset() {
 	for i := range l.elems {
 		putPoolElem(l.elems[i].elem)
 		l.elems[i].elem = nil // prevent GC-root leak in backing array
@@ -82,19 +82,19 @@ func (l *GenElemList) Reset() {
 
 // NextElem leases an element from the pool, appends it to the slice, and
 // returns a pointer for the caller to populate.
-func (l *GenElemList) NextElem(trcPktIdx ocsd.TrcIndex) *ocsd.TraceElement {
+func (l *ElemList) NextElem(trcPktIdx ocsd.TrcIndex) *ocsd.TraceElement {
 	e := getPoolElem()
 	l.elems = append(l.elems, elemSlot{elem: e, pktIndex: trcPktIdx})
 	return e
 }
 
 // NumElem returns the total number of elements (committed + pending).
-func (l *GenElemList) NumElem() int {
+func (l *ElemList) NumElem() int {
 	return len(l.elems)
 }
 
 // ElemType returns the element type at logical index entryN.
-func (l *GenElemList) ElemType(entryN int) ocsd.GenElemType {
+func (l *ElemList) ElemType(entryN int) ocsd.GenElemType {
 	if entryN >= 0 && entryN < len(l.elems) {
 		return l.elems[entryN].elem.ElemType
 	}
@@ -103,19 +103,19 @@ func (l *GenElemList) ElemType(entryN int) ocsd.GenElemType {
 
 // PendLastNElem marks the last n elements as pending. It simply sets the
 // numPend boundary; no elements are moved.
-func (l *GenElemList) PendLastNElem(n int) {
+func (l *ElemList) PendLastNElem(n int) {
 	if n > 0 && n <= len(l.elems) {
 		l.numPend = n
 	}
 }
 
 // CommitAllPendElem commits all pending elements for sending.
-func (l *GenElemList) CommitAllPendElem() {
+func (l *ElemList) CommitAllPendElem() {
 	l.numPend = 0
 }
 
 // CancelPendElem discards the pending tail, returning elements to the pool.
-func (l *GenElemList) CancelPendElem() {
+func (l *ElemList) CancelPendElem() {
 	if l.numPend == 0 {
 		return
 	}
@@ -129,18 +129,18 @@ func (l *GenElemList) CancelPendElem() {
 }
 
 // NumPendElem returns the number of pending elements.
-func (l *GenElemList) NumPendElem() int {
+func (l *ElemList) NumPendElem() int {
 	return l.numPend
 }
 
 // ElemToSend returns true when there is at least one committed element.
-func (l *GenElemList) ElemToSend() bool {
+func (l *ElemList) ElemToSend() bool {
 	return len(l.elems)-l.numPend > 0
 }
 
 // SendElements dispatches committed (non-pending) elements to the registered
 // receiver, removing each from the slice after dispatch.
-func (l *GenElemList) SendElements() error {
+func (l *ElemList) SendElements() error {
 	if l.sendIf == nil {
 		return ocsd.ErrNotInit
 	}
@@ -165,14 +165,14 @@ func (l *GenElemList) SendElements() error {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GenElemStack
+// ElemStack
 // ─────────────────────────────────────────────────────────────────────────────
 
-// GenElemStack implements OcsdGenElemStack.
+// ElemStack implements OcsdGenElemStack.
 //
 // Elements accumulate forward in a flat slice. The send cursor (sendElemIdx)
 // tracks how far through the slice has already been dispatched.
-type GenElemStack struct {
+type ElemStack struct {
 	elems       []elemSlot
 	elemToSend  int
 	sendElemIdx int
@@ -180,23 +180,23 @@ type GenElemStack struct {
 	sendIf      ocsd.GenElemProcessor
 }
 
-// NewGenElemStack creates a new, empty GenElemStack.
-func NewGenElemStack() *GenElemStack {
-	return &GenElemStack{
+// NewElemStack creates a new, empty ElemStack.
+func NewElemStack() *ElemStack {
+	return &ElemStack{
 		elems: make([]elemSlot, 0, 4),
 	}
 }
 
-func (s *GenElemStack) SetSendIf(sendIf ocsd.GenElemProcessor) {
+func (s *ElemStack) SetSendIf(sendIf ocsd.GenElemProcessor) {
 	s.sendIf = sendIf
 }
 
-func (s *GenElemStack) SetCSID(csID uint8) {
+func (s *ElemStack) SetCSID(csID uint8) {
 	s.csID = csID
 }
 
 // currElemIdx returns the index of the last-added element.
-func (s *GenElemStack) currElemIdx() int {
+func (s *ElemStack) currElemIdx() int {
 	n := len(s.elems)
 	if n == 0 {
 		return 0
@@ -205,13 +205,13 @@ func (s *GenElemStack) currElemIdx() int {
 }
 
 // CurrElem returns a pointer to the most recently added element.
-func (s *GenElemStack) CurrElem() *ocsd.TraceElement {
+func (s *ElemStack) CurrElem() *ocsd.TraceElement {
 	return s.elems[s.currElemIdx()].elem
 }
 
 // ResetElemStack resets the stack, preserving persistent context data from
 // the current element into position 0.
-func (s *GenElemStack) ResetElemStack() error {
+func (s *ElemStack) ResetElemStack() error {
 	if s.sendIf == nil {
 		return ocsd.ErrNotInit
 	}
@@ -219,7 +219,7 @@ func (s *GenElemStack) ResetElemStack() error {
 	return nil
 }
 
-func (s *GenElemStack) resetIndexes() {
+func (s *ElemStack) resetIndexes() {
 	if len(s.elems) == 0 {
 		// Nothing to preserve; allocate a fresh base element.
 		e := getPoolElem()
@@ -249,7 +249,7 @@ func (s *GenElemStack) resetIndexes() {
 
 // AddElem appends a new element slot. If there are already elements pending
 // send it copies persistent data forward, matching the original semantics.
-func (s *GenElemStack) AddElem(trcPktIdx ocsd.TrcIndex) error {
+func (s *ElemStack) AddElem(trcPktIdx ocsd.TrcIndex) error {
 	if s.elemToSend > 0 {
 		// Copy persistent data from the current top to the new element.
 		e := getPoolElem()
@@ -269,12 +269,12 @@ func (s *GenElemStack) AddElem(trcPktIdx ocsd.TrcIndex) error {
 }
 
 // SetCurrElemIdx updates the packet index of the current (last) element.
-func (s *GenElemStack) SetCurrElemIdx(trcPktIdx ocsd.TrcIndex) {
+func (s *ElemStack) SetCurrElemIdx(trcPktIdx ocsd.TrcIndex) {
 	s.elems[s.currElemIdx()].pktIndex = trcPktIdx
 }
 
 // AddElemType appends a new element and immediately sets its type.
-func (s *GenElemStack) AddElemType(trcPktIdx ocsd.TrcIndex, elemType ocsd.GenElemType) error {
+func (s *ElemStack) AddElemType(trcPktIdx ocsd.TrcIndex, elemType ocsd.GenElemType) error {
 	err := s.AddElem(trcPktIdx)
 	if err == nil {
 		s.CurrElem().SetType(elemType)
@@ -283,12 +283,12 @@ func (s *GenElemStack) AddElemType(trcPktIdx ocsd.TrcIndex, elemType ocsd.GenEle
 }
 
 // NumElemToSend returns the number of elements pending dispatch.
-func (s *GenElemStack) NumElemToSend() int {
+func (s *ElemStack) NumElemToSend() int {
 	return s.elemToSend
 }
 
 // SendElements dispatches all queued elements to the registered receiver.
-func (s *GenElemStack) SendElements() error {
+func (s *ElemStack) SendElements() error {
 	if s.sendIf == nil {
 		return ocsd.ErrNotInit
 	}

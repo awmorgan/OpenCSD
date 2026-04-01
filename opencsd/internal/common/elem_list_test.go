@@ -16,7 +16,7 @@ func (d *dummySendIf) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem 
 }
 
 func TestGenElemList(t *testing.T) {
-	list := NewGenElemList()
+	list := NewElemList()
 	dummy := &dummySendIf{}
 
 	list.SetSendIf(dummy)
@@ -68,7 +68,7 @@ func TestGenElemList(t *testing.T) {
 }
 
 func TestGenElemListPendLastPartialWindow(t *testing.T) {
-	list := NewGenElemList()
+	list := NewElemList()
 	dummy := &dummySendIf{}
 
 	list.SetSendIf(dummy)
@@ -105,7 +105,7 @@ func TestGenElemListPendLastPartialWindow(t *testing.T) {
 }
 
 func TestGenElemStack(t *testing.T) {
-	stack := NewGenElemStack()
+	stack := NewElemStack()
 	dummy := &dummySendIf{}
 
 	stack.SetSendIf(dummy)

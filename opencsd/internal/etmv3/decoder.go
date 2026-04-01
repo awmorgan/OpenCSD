@@ -47,7 +47,7 @@ type PktDecode struct {
 	waitISync   bool
 
 	peContext      *ocsd.PEContext
-	outputElemList *common.GenElemList
+	outputElemList *common.ElemList
 	pendingNacc    bool
 	pendingNaccIdx ocsd.TrcIndex
 	pendingNaccAdr uint64
@@ -79,7 +79,7 @@ func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDec
 		MemAccess:      mem,
 		InstrDecode:    instr,
 		peContext:      &ocsd.PEContext{},
-		outputElemList: common.NewGenElemList(),
+		outputElemList: common.NewElemList(),
 		codeFollower:   codeFollower,
 	}
 	d.configureDecoder()

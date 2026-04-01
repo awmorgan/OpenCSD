@@ -55,7 +55,7 @@ type PktProc struct {
 	Stats      ocsd.DecodeStats
 	statsInit  bool
 	Config     *Config
-	PktOutI    ocsd.PacketProcessorExplicit[Packet]
+	pktOut     ocsd.PacketProcessorExplicit[Packet]
 	PktRawMonI ocsd.PacketMonitor
 
 	processState processState
@@ -66,7 +66,7 @@ type PktProc struct {
 
 	chanIDCopy uint8
 
-	pDataIn         []uint8
+	dataIn          []uint8
 	dataInLen       uint32
 	dataInProcessed uint32
 	blockIdx        ocsd.TrcIndex
@@ -117,10 +117,10 @@ func NewPktProc(cfg *Config) *PktProc {
 }
 
 // SetPktOut attaches the downstream packet decoder.
-func (p *PktProc) SetPktOut(out ocsd.PacketProcessorExplicit[Packet]) { p.PktOutI = out }
+func (p *PktProc) SetPktOut(out ocsd.PacketProcessorExplicit[Packet]) { p.pktOut = out }
 
 // PktOut returns the downstream packet processor.
-func (p *PktProc) PktOut() ocsd.PacketProcessorExplicit[Packet] { return p.PktOutI }
+func (p *PktProc) PktOut() ocsd.PacketProcessorExplicit[Packet] { return p.pktOut }
 
 // SetPktRawMonitor attaches a raw packet monitor.
 func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor) { p.PktRawMonI = mon }
@@ -165,25 +165,25 @@ func (p *PktProc) StatsAddBadSeqCount(count uint32) { p.Stats.BadSequenceErrs +=
 func (p *PktProc) StatsAddBadHdrCount(count uint32) { p.Stats.BadHeaderErrs += count }
 
 func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) ocsd.DatapathResp {
-	if p.PktOutI != nil {
+	if p.pktOut != nil {
 		return ocsd.DataRespFromErr(p.callPktOut(ocsd.OpData, indexSOP, pkt))
 	}
 	return ocsd.RespCont
 }
 
 func (p *PktProc) callPktOut(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) error {
-	if p.PktOutI == nil {
+	if p.pktOut == nil {
 		return nil
 	}
 	switch op {
 	case ocsd.OpData:
-		return p.PktOutI.TracePacketData(indexSOP, pkt)
+		return p.pktOut.TracePacketData(indexSOP, pkt)
 	case ocsd.OpEOT:
-		return p.PktOutI.TracePacketEOT()
+		return p.pktOut.TracePacketEOT()
 	case ocsd.OpFlush:
-		return p.PktOutI.TracePacketFlush()
+		return p.pktOut.TracePacketFlush()
 	case ocsd.OpReset:
-		return p.PktOutI.TracePacketReset(indexSOP)
+		return p.pktOut.TracePacketReset(indexSOP)
 	default:
 		return ocsd.ErrInvalidParamVal
 	}
@@ -217,7 +217,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 		}
 	case ocsd.OpEOT:
 		resp = p.OnEOT()
-		if p.PktOutI != nil && !ocsd.DataRespIsFatal(resp) {
+		if p.pktOut != nil && !ocsd.DataRespIsFatal(resp) {
 			err = p.callPktOut(ocsd.OpEOT, 0, nil)
 			resp = ocsd.DataRespFromErr(err)
 			if ocsd.IsDataWaitErr(err) {
@@ -229,7 +229,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 		}
 	case ocsd.OpFlush:
 		resp = p.OnFlush()
-		if ocsd.DataRespIsCont(resp) && p.PktOutI != nil {
+		if ocsd.DataRespIsCont(resp) && p.pktOut != nil {
 			err = p.callPktOut(ocsd.OpFlush, 0, nil)
 			resp = ocsd.DataRespFromErr(err)
 			if ocsd.IsDataWaitErr(err) {
@@ -237,7 +237,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			}
 		}
 	case ocsd.OpReset:
-		if p.PktOutI != nil {
+		if p.pktOut != nil {
 			err = p.callPktOut(ocsd.OpReset, index, nil)
 			resp = ocsd.DataRespFromErr(err)
 			if ocsd.IsDataWaitErr(err) {
@@ -331,7 +331,7 @@ func (p *PktProc) resetProcessorState() {
 
 func (p *PktProc) readByteVal() (uint8, bool) {
 	if p.dataInProcessed < p.dataInLen {
-		currByte := p.pDataIn[p.dataInProcessed]
+		currByte := p.dataIn[p.dataInProcessed]
 		p.dataInProcessed++
 		p.currPacketData = append(p.currPacketData, currByte)
 		return currByte, true
@@ -358,7 +358,7 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, o
 		return 0, ocsd.RespFatalNotInit, nil
 	}
 
-	p.pDataIn = dataBlock
+	p.dataIn = dataBlock
 	p.dataInLen = uint32(len(dataBlock))
 	p.blockIdx = index
 
@@ -521,7 +521,7 @@ func (p *PktProc) waitASync() ocsd.DatapathResp {
 				doScan = false
 			}
 		} else {
-			if p.pDataIn[p.dataInProcessed] == 0x00 {
+			if p.dataIn[p.dataInProcessed] == 0x00 {
 				p.dataInProcessed++
 				p.waitASyncSOPkt = true
 				p.currPacketData = append(p.currPacketData, 0)
@@ -547,7 +547,7 @@ func (p *PktProc) waitASync() ocsd.DatapathResp {
 					p.outputRawPacketToMonitor(p.currPktIndex, &p.currPacket, spareZeros[:pktBytesOnEntry])
 					p.currPktIndex += ocsd.TrcIndex(pktBytesOnEntry)
 				}
-				rawData := p.pDataIn
+				rawData := p.dataIn
 				rawEnd := unsyncScanBlockStart + unsyncedBytes
 				if rawEnd <= len(rawData) {
 					p.outputRawPacketToMonitor(p.currPktIndex, &p.currPacket, rawData[unsyncScanBlockStart:rawEnd])
@@ -558,7 +558,7 @@ func (p *PktProc) waitASync() ocsd.DatapathResp {
 					base := rawData[unsyncScanBlockStart:]
 					missing := rawEnd - len(rawData)
 					if missing > 0 {
-						fill := byte(len(p.pDataIn))
+						fill := byte(len(p.dataIn))
 						tmp := make([]byte, len(base)+missing)
 						copy(tmp, base)
 						for i := len(base); i < len(tmp); i++ {

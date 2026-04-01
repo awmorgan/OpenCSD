@@ -132,7 +132,7 @@ type PktDecode struct {
 	p0Stack     []*p0Elem
 	poppedElems []*p0Elem // kept to avoid excessive allocations
 	elemRes     elemRes
-	outElem     common.GenElemStack
+	outElem     common.ElemStack
 
 	// Address and Context State
 	lastIS           uint8
@@ -326,7 +326,7 @@ func (d *PktDecode) configureDecoder() {
 	d.clearElemRes()
 	d.p0Stack = nil
 	d.poppedElems = nil
-	d.outElem = *common.NewGenElemStack()
+	d.outElem = *common.NewElemStack()
 	d.outElem.SetSendIf(d.TraceElemOut)
 	if d.config != nil {
 		d.outElem.SetCSID(d.config.TraceID())
@@ -1951,7 +1951,7 @@ func (d *PktDecode) resetDecoderState() {
 	d.nextRangeCheckClear()
 
 	if d.outElem.ResetElemStack() != nil {
-		d.outElem = *common.NewGenElemStack()
+		d.outElem = *common.NewElemStack()
 		if d.config != nil {
 			d.outElem.SetCSID(d.config.TraceID())
 		}

@@ -624,7 +624,7 @@ func TestWaitSync_13Zeros_Transition(t *testing.T) {
 	// Reset to force waitSync:
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)
 
-	// Now in waitSync, bStartOfSync=false, bStreamSync=false.
+	// Now in waitSync, bStartOfSync=false, streamSync=false.
 	// First 0x00: len=0 → len==0 so bStartOfSync=true, currPacketData=[0x00]
 	// Then 12 more 0x00: len grows to 13 → triggers setBytesPartPkt(8, waitSync, PktNotSync)
 	data := make([]byte, 13)

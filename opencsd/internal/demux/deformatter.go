@@ -40,10 +40,10 @@ type FrameDeformatter struct {
 	useForceSync   bool
 	outPackedRaw   bool
 	outUnpackedRaw bool
-	rawChanEnable  [128]bool
+	rawChanEnable  []bool
 
 	// Datapath Attachments
-	idStreams     [128]ocsd.TrcDataProcessorExplicit
+	idStreams     []ocsd.TrcDataProcessorExplicit
 	rawTraceFrame ocsd.RawFrameProcessor
 
 	// state params
@@ -52,9 +52,9 @@ type FrameDeformatter struct {
 	firstData   bool
 	currSrcID   uint8
 
-	exFrmNBytes    uint32
-	bFsyncStartEob bool
-	trcCurrIdxSof  ocsd.TrcIndex
+	exFrmBytes    uint32
+	fsyncStartEOB bool
+	trcCurrIdxSof ocsd.TrcIndex
 
 	exFrmData []byte
 
@@ -69,7 +69,10 @@ type FrameDeformatter struct {
 }
 
 func NewFrameDeformatter() *FrameDeformatter {
-	d := &FrameDeformatter{}
+	d := &FrameDeformatter{
+		rawChanEnable: make([]bool, 128),
+		idStreams:     make([]ocsd.TrcDataProcessorExplicit, 128),
+	}
 	d.resetStateParams()
 	d.SetRawChanFilterAll(true)
 	return d
@@ -219,8 +222,8 @@ func (d *FrameDeformatter) resetStateParams() {
 	d.currSrcID = ocsd.BadCSSrcID
 
 	// current frame processing
-	d.exFrmNBytes = 0
-	d.bFsyncStartEob = false
+	d.exFrmBytes = 0
+	d.fsyncStartEOB = false
 	d.trcCurrIdxSof = ocsd.BadTrcIndex
 	if cap(d.exFrmData) < int(ocsd.DfrmtrFrameSize) {
 		d.exFrmData = make([]byte, ocsd.DfrmtrFrameSize)
