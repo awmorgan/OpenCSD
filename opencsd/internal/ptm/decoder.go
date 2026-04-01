@@ -121,12 +121,6 @@ func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.MemAccess = mem
 // SetInstrDecode satisfies dcdtree's instrDecodeSetterOwner interface.
 func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.InstrDecode = dec }
 
-// SetNeedsMemAccess is retained as a no-op while decoder dependency setup migrates.
-func (d *PktDecode) SetNeedsMemAccess(bool) {}
-
-// SetNeedsInstructionDecode is retained as a no-op while decoder dependency setup migrates.
-func (d *PktDecode) SetNeedsInstructionDecode(bool) {}
-
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) (ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
 	var err error

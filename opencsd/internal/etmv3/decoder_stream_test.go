@@ -142,8 +142,6 @@ func TestDecoderMemNacc(t *testing.T) {
 func TestDecoderContProcess(t *testing.T) {
 	config := &Config{}
 	dec, out := setupDecFast(config)
-	dec.SetNeedsMemAccess(false)
-	dec.SetNeedsInstructionDecode(false)
 
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)

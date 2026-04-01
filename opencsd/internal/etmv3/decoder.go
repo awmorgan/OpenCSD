@@ -93,12 +93,6 @@ func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) { d.TraceElemOut 
 // traceElemOutIf returns the downstream GenElemProcessor (used as a func reference for outputElemList).
 func (d *PktDecode) traceElemOutIf() ocsd.GenElemProcessor { return d.TraceElemOut }
 
-// SetNeedsMemAccess is retained as a no-op while decoder dependency setup migrates.
-func (d *PktDecode) SetNeedsMemAccess(bool) {}
-
-// SetNeedsInstructionDecode is retained as a no-op while decoder dependency setup migrates.
-func (d *PktDecode) SetNeedsInstructionDecode(bool) {}
-
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) (ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
 	var packetErr error

@@ -807,8 +807,6 @@ func TestDecoderContProcess(t *testing.T) {
 	config := NewConfig()
 	dec := NewPktDecode(nil)
 	dec.SetProtocolConfig(config)
-	dec.SetNeedsMemAccess(false)
-	dec.SetNeedsInstructionDecode(false)
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
 
