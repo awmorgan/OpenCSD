@@ -345,10 +345,7 @@ func (b *DecodeTreeBuilder) createETEDecoder(coreName string, devSrc *ParsedDevi
 	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
 	if b.packetProcOnly {
-		proc, err := ete.NewConfiguredProcessor(cfg)
-		if err != nil {
-			return fmt.Errorf("ETE NewConfiguredProcessor failed: %w", err)
-		}
+		proc := ete.NewProcessor(cfg)
 		return b.tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETE, ocsd.ProtocolETE, proc, proc)
 	}
 

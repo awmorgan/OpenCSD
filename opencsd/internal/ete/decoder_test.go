@@ -10,20 +10,17 @@ import (
 func TestCreatePktProcAndDecode(t *testing.T) {
 	cfg := NewConfig()
 
-	proc, err := NewConfiguredProcessor(cfg)
-	if err != nil {
-		t.Fatalf("NewConfiguredProcessor err=%v", err)
-	}
+	proc := NewProcessor(cfg)
 	if proc == nil {
-		t.Fatalf("NewConfiguredProcessor returned nil")
+		t.Fatalf("NewProcessor returned nil")
 	}
 
-	dec, err := NewConfiguredPktDecode(1, cfg)
+	dec, err := NewPktDecode(cfg)
 	if err != nil {
-		t.Fatalf("NewConfiguredPktDecode err=%v", err)
+		t.Fatalf("NewPktDecode err=%v", err)
 	}
 	if dec == nil {
-		t.Fatalf("NewConfiguredPktDecode returned nil")
+		t.Fatalf("NewPktDecode returned nil")
 	}
 }
 
@@ -36,10 +33,10 @@ func TestTypedPipelineConstructors(t *testing.T) {
 		t.Fatalf("NewConfiguredPipeline returned nil outputs")
 	}
 
-	if procOnly, err := NewConfiguredProcessor(nil); procOnly != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
-		t.Fatalf("expected nil-config processor constructor failure, got proc=%v err=%v", procOnly, err)
+	if procOnly := NewProcessor(nil); procOnly == nil {
+		t.Fatalf("expected default-config processor for nil config, got nil")
 	}
-	if decOnly, err := NewConfiguredPktDecode(0, nil); decOnly != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
+	if decOnly, err := NewPktDecode(nil); decOnly != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 		t.Fatalf("expected nil-config decoder constructor failure, got dec=%v err=%v", decOnly, err)
 	}
 	if procOnly, decOnly, err := NewConfiguredPipeline(0, nil); procOnly != nil || decOnly != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
