@@ -27,6 +27,22 @@ type CodeFollower struct {
 	valid        bool
 }
 
+// FollowResult contains the decoded single-atom follow outcome.
+type FollowResult struct {
+	HasNext   bool
+	HasNacc   bool
+	NaccAddr  ocsd.VAddr
+	NumInstr  uint32
+	RangeSt   ocsd.VAddr
+	RangeEn   ocsd.VAddr
+	NextAddr  ocsd.VAddr
+	InstrInfo ocsd.InstrInfo
+}
+
+func (r FollowResult) HasRange() bool {
+	return r.RangeSt < r.RangeEn
+}
+
 // NewCodeFollower creates a new CodeFollower.
 func NewCodeFollower() *CodeFollower {
 	cf := &CodeFollower{
