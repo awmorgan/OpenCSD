@@ -601,7 +601,7 @@ func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) {
 
 func (p *PktProc) PktReserved() error {
 	badOpcode := uint16(p.nibble)
-	p.currPacket.SetD16Payload(badOpcode)
+	p.currPacket.Payload.D16 = badOpcode
 	return p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
 }
 
@@ -641,7 +641,7 @@ func (p *PktProc) PktMERR() error {
 	p.ExtractVal8(3)
 	if p.numNibbles == 3 {
 		p.currPacket.SetChannel(0, false)
-		p.currPacket.SetD8Payload(p.val8)
+		p.currPacket.Payload.D8 = p.val8
 		p.sendPacket()
 	}
 	return nil
@@ -685,7 +685,7 @@ func (p *PktProc) PktD8() error {
 	}
 	p.ExtractVal8(p.numDataNibbles)
 	if p.numNibbles == p.numDataNibbles {
-		p.currPacket.SetD8Payload(p.val8)
+		p.currPacket.Payload.D8 = p.val8
 		if p.bNeedsTS {
 			p.currDecode = decodeExtractTS
 			return p.runDecodeAction()
@@ -703,7 +703,7 @@ func (p *PktProc) PktD16() error {
 	}
 	p.ExtractVal16(p.numDataNibbles)
 	if p.numNibbles == p.numDataNibbles {
-		p.currPacket.SetD16Payload(p.val16)
+		p.currPacket.Payload.D16 = p.val16
 		if p.bNeedsTS {
 			p.currDecode = decodeExtractTS
 			return p.runDecodeAction()
@@ -721,7 +721,7 @@ func (p *PktProc) PktD32() error {
 	}
 	p.ExtractVal32(p.numDataNibbles)
 	if p.numNibbles == p.numDataNibbles {
-		p.currPacket.SetD32Payload(p.val32)
+		p.currPacket.Payload.D32 = p.val32
 		if p.bNeedsTS {
 			p.currDecode = decodeExtractTS
 			return p.runDecodeAction()
@@ -739,7 +739,7 @@ func (p *PktProc) PktD64() error {
 	}
 	p.ExtractVal64(p.numDataNibbles)
 	if p.numNibbles == p.numDataNibbles {
-		p.currPacket.SetD64Payload(p.val64)
+		p.currPacket.Payload.D64 = p.val64
 		if p.bNeedsTS {
 			p.currDecode = decodeExtractTS
 			return p.runDecodeAction()
@@ -802,7 +802,7 @@ func (p *PktProc) PktFExt() error {
 
 func (p *PktProc) PktReservedFn() error {
 	badOpcode := uint16(0x00F) | (uint16(p.nibble) << 4)
-	p.currPacket.SetD16Payload(badOpcode)
+	p.currPacket.Payload.D16 = badOpcode
 	return p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
 }
 
@@ -820,7 +820,7 @@ func (p *PktProc) PktGERR() error {
 	}
 	p.ExtractVal8(4)
 	if p.numNibbles == 4 {
-		p.currPacket.SetD8Payload(p.val8)
+		p.currPacket.Payload.D8 = p.val8
 		p.currPacket.SetMaster(0)
 		p.sendPacket()
 	}
@@ -922,7 +922,7 @@ func (p *PktProc) PktFlag() error {
 
 func (p *PktProc) PktReservedF0n() error {
 	badOpcode := uint16(0x00F) | (uint16(p.nibble) << 8)
-	p.currPacket.SetD16Payload(badOpcode)
+	p.currPacket.Payload.D16 = badOpcode
 	return p.setReservedHdrError("STM: Unsupported or Reserved STPv2 Header")
 }
 
@@ -931,7 +931,7 @@ func (p *PktProc) PktVersion() error {
 		p.currPacket.SetPacketType(PktVersion, false)
 	}
 	if p.readNibble() {
-		p.currPacket.SetD8Payload(p.nibble)
+		p.currPacket.Payload.D8 = p.nibble
 		switch p.nibble {
 		case 3:
 			p.currPacket.OnVersionPkt(TSNatBinary)
@@ -951,7 +951,7 @@ func (p *PktProc) PktTrigger() error {
 	}
 	p.ExtractVal8(5)
 	if p.numNibbles == 5 {
-		p.currPacket.SetD8Payload(p.val8)
+		p.currPacket.Payload.D8 = p.val8
 		if p.bNeedsTS {
 			p.currDecode = decodeExtractTS
 			return p.runDecodeAction()
@@ -975,7 +975,7 @@ func (p *PktProc) PktFreq() error {
 	}
 	p.ExtractVal32(11)
 	if p.numNibbles == 11 {
-		p.currPacket.SetD32Payload(p.val32)
+		p.currPacket.Payload.D32 = p.val32
 		p.sendPacket()
 	}
 	return nil

@@ -257,7 +257,7 @@ func TestSTMPacketString(t *testing.T) {
 	}
 
 	pkt.SetPacketType(PktD8, false)
-	pkt.SetD8Payload(0xAB)
+	pkt.Payload.D8 = 0xAB
 	str := pkt.String()
 	if str != "D8:8 bit data; Data=0xab" {
 		t.Errorf("Unexpected formatting for D8: %s", str)
@@ -270,7 +270,7 @@ func TestSTMPacketString(t *testing.T) {
 	}
 
 	pkt.SetPacketType(PktFreq, false)
-	pkt.SetD32Payload(1000)
+	pkt.Payload.D32 = 1000
 	if pkt.String() != "FREQ:Frequency packet; Freq=1000Hz" {
 		t.Errorf("Unexpected formatting: %s", pkt.String())
 	}

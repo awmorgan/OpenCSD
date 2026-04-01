@@ -144,22 +144,6 @@ func (p *Packet) SetD4Payload(value uint8) {
 	p.Payload.D8 = value & 0xF
 }
 
-func (p *Packet) SetD8Payload(value uint8) {
-	p.Payload.D8 = value
-}
-
-func (p *Packet) SetD16Payload(value uint16) {
-	p.Payload.D16 = value
-}
-
-func (p *Packet) SetD32Payload(value uint32) {
-	p.Payload.D32 = value
-}
-
-func (p *Packet) SetD64Payload(value uint64) {
-	p.Payload.D64 = value
-}
-
 func (p *Packet) IsMarkerPkt() bool {
 	return p.PktHasMarker != 0
 }
