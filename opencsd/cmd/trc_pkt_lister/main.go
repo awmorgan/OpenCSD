@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"opencsd/internal/common"
 	"opencsd/internal/dcdtree"
 	"opencsd/internal/etmv3"
 	"opencsd/internal/etmv4"
@@ -56,12 +57,6 @@ type options struct {
 	logFile          bool
 	logFileName      string
 	help             bool
-}
-
-type opModeComponent interface {
-	SetComponentOpMode(opFlags uint32) error
-	ComponentOpMode() uint32
-	SupportedOpModes() uint32
 }
 
 type mappedRange struct {
@@ -502,7 +497,7 @@ func applyAdditionalFlags(tree *dcdtree.DecodeTree, flags uint32) error {
 	}
 
 	apply := func(component any) error {
-		opComp, ok := component.(opModeComponent)
+		opComp, ok := component.(common.OpModeManager)
 		if !ok || opComp == nil {
 			return nil
 		}
