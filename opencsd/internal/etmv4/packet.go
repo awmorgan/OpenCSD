@@ -729,6 +729,14 @@ func (p *TracePacket) HeaderString() string {
 	return sb.String()
 }
 
+// String returns the trace packet header representation.
+func (p *TracePacket) String() string {
+	if p == nil {
+		return ""
+	}
+	return p.HeaderString()
+}
+
 func (p *TracePacket) addrValStr(updateBits uint8) string {
 	width := 8
 	value := uint64(uint32(p.VAddr))
