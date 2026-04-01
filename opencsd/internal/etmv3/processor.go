@@ -296,7 +296,7 @@ func (p *PktProc) OnFlush() ocsd.DatapathResp {
 func (p *PktProc) OnEOT() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 	if len(p.currPacketData) != 0 {
-		p.currPacket.ErrType = PktIncompleteEOT
+		p.currPacket.Err = errIncompleteEOT
 		resp = p.outputPacket()
 		p.resetPacketState()
 	}
@@ -439,7 +439,7 @@ func (p *PktProc) processHeaderByte(by uint8) {
 	} else if (by & 0x03) == 0x00 {
 		if (by & 0x93) == 0x00 {
 			if !p.Config.DataValTrace() {
-				p.currPacket.ErrType = PktBadTraceMode
+				p.currPacket.Err = errBadTraceMode
 				p.throwPacketHeaderErr("Invalid data trace header (out of order data) - not tracing data values.")
 			}
 			p.currPacket.Type = PktOOOData
@@ -463,7 +463,7 @@ func (p *PktProc) processHeaderByte(by uint8) {
 			p.isyncGetLSiP = false
 		} else if by == 0x50 {
 			if !p.Config.DataValTrace() {
-				p.currPacket.ErrType = PktBadTraceMode
+				p.currPacket.Err = errBadTraceMode
 				p.throwPacketHeaderErr("Invalid data trace header (store failed) - not tracing data values.")
 			}
 			p.currPacket.Type = PktStoreFail
@@ -471,7 +471,7 @@ func (p *PktProc) processHeaderByte(by uint8) {
 		} else if (by & 0xD3) == 0x50 {
 			p.currPacket.Type = PktOOOAddrPlc
 			if !p.Config.DataTrace() {
-				p.currPacket.ErrType = PktBadTraceMode
+				p.currPacket.Err = errBadTraceMode
 				p.throwPacketHeaderErr("Invalid data trace header (out of order placeholder) - not tracing data.")
 			}
 			p.expectDataAddr = ((by & 0x20) == 0x20) && p.Config.DataAddrTrace()
@@ -483,13 +483,13 @@ func (p *PktProc) processHeaderByte(by uint8) {
 		} else if by == 0x3C {
 			p.currPacket.Type = PktVMID
 		} else {
-			p.currPacket.ErrType = PktReserved
+			p.currPacket.Err = errReservedHeader
 			p.throwPacketHeaderErr("Packet header reserved encoding")
 		}
 	} else if (by & 0xD3) == 0x02 {
 		size := (by & 0x0C) >> 2
 		if !p.Config.DataTrace() {
-			p.currPacket.ErrType = PktBadTraceMode
+			p.currPacket.Err = errBadTraceMode
 			p.throwPacketHeaderErr("Invalid data trace header (normal data) - not tracing data.")
 		}
 		p.currPacket.Type = PktNormData
@@ -508,14 +508,14 @@ func (p *PktProc) processHeaderByte(by uint8) {
 		}
 	} else if by == 0x62 {
 		if !p.Config.DataTrace() {
-			p.currPacket.ErrType = PktBadTraceMode
+			p.currPacket.Err = errBadTraceMode
 			p.throwPacketHeaderErr("Invalid data trace header (data suppressed) - not tracing data.")
 		}
 		p.currPacket.Type = PktDataSuppressed
 		p.processState = sendPkt
 	} else if (by & 0xEF) == 0x6A {
 		if !p.Config.DataTrace() {
-			p.currPacket.ErrType = PktBadTraceMode
+			p.currPacket.Err = errBadTraceMode
 			p.throwPacketHeaderErr("Invalid data trace header (value not traced) - not tracing data.")
 		}
 		p.currPacket.Type = PktValNotTraced
@@ -539,7 +539,7 @@ func (p *PktProc) processHeaderByte(by uint8) {
 	} else if (by & 0xFB) == 0x42 {
 		p.currPacket.Type = PktTimestamp
 	} else {
-		p.currPacket.ErrType = PktReserved
+		p.currPacket.Err = errReservedHeader
 		p.throwPacketHeaderErr("Packet header reserved encoding.")
 	}
 }
@@ -591,7 +591,7 @@ func (p *PktProc) processPayloadByte(by uint8) {
 	case PktASync:
 		if by == 0x00 {
 			if len(p.currPacketData) > 5 {
-				p.currPacket.ErrType = PktBadSequence
+				p.currPacket.Err = ocsd.ErrBadPacketSeq
 				p.setBytesPartPkt(1, procData, PktASync)
 				p.throwMalformedPacketErr("A-Sync ?: Extra 0x00 in sequence")
 			}
@@ -599,7 +599,7 @@ func (p *PktProc) processPayloadByte(by uint8) {
 			p.processState = sendPkt
 			p.bStreamSync = true
 		} else {
-			p.currPacket.ErrType = PktBadSequence
+			p.currPacket.Err = ocsd.ErrBadPacketSeq
 			p.bytesProcessed--
 			p.currPacketData = p.currPacketData[:len(p.currPacketData)-1]
 			p.throwMalformedPacketErr("A-Sync ? : Unexpected byte in sequence")

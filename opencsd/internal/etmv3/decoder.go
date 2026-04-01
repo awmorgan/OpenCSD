@@ -465,6 +465,16 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 	done = false
 
 	packetIn := d.CurrPacketIn
+	if packetIn.Err != nil {
+		switch packetIn.displayType() {
+		case PktIncompleteEOT:
+			return ocsd.RespCont, true
+		case PktBadSequence, PktBadTraceMode, PktReserved:
+			d.unsyncInfo = ocsd.UnsyncBadPacket
+			d.resetDecoder()
+			return ocsd.RespFatalInvalidData, true
+		}
+	}
 
 	if packetIn.Type != PktBranchAddress {
 		d.outputElemList.CommitAllPendElem()

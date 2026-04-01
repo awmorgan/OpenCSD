@@ -1,6 +1,7 @@
 package etmv3
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -164,14 +165,18 @@ type Packet struct {
 
 	AddrPktBits int //!< number of address bits updated by the current branch address packet
 
-	ErrType PktType //!< Basic packet type if primary type indicates error or incomplete
+	Err error
 }
+
+var errIncompleteEOT = errors.New("incomplete packet flushed at end of trace")
+var errBadTraceMode = errors.New("invalid packet type for this trace mode")
+var errReservedHeader = errors.New("packet header reserved encoding")
 
 func (p *Packet) Clear() {
 	// Clears dynamic packet elements for a new packet but retains persistent state
 	// like Timestamp, Addr, Context, and ISA.
 	p.Type = PktNoError
-	p.ErrType = PktNoError
+	p.Err = nil
 	p.PrevISA = p.CurrISA
 	p.Context.Updated = false
 	p.Context.UpdatedC = false
@@ -197,7 +202,7 @@ func (p *Packet) ResetState() {
 }
 
 func (p *Packet) IsBadPacket() bool {
-	return p.Type >= PktBadSequence
+	return p.Err != nil || p.Type >= PktBadSequence
 }
 
 func (p *Packet) UpdateAddress(partAddrVal uint64, updateBits int) {
@@ -548,14 +553,15 @@ func (p *Packet) writeExcepStr(sb *strings.Builder) {
 
 func (p *Packet) String() string {
 	var sb strings.Builder
-	name, desc := packetTypeNameDesc(p.Type)
+	displayType := p.displayType()
+	name, desc := packetTypeNameDesc(displayType)
 	sb.WriteString(name)
 	sb.WriteString(" : ")
 	sb.WriteString(desc)
 
-	switch p.Type {
+	switch displayType {
 	case PktBadSequence, PktBadTraceMode:
-		errName, _ := packetTypeNameDesc(p.ErrType)
+		errName, _ := packetTypeNameDesc(p.Type)
 		fmt.Fprintf(&sb, "[%s]", errName)
 	case PktBranchAddress:
 		sb.WriteString("; ")
@@ -576,6 +582,25 @@ func (p *Packet) String() string {
 		fmt.Fprintf(&sb, "; TS=0x%x (%d) ", p.Timestamp, p.Timestamp)
 	}
 	return sb.String()
+}
+
+func (p *Packet) displayType() PktType {
+	if p.Err == nil {
+		return p.Type
+	}
+	if errors.Is(p.Err, errIncompleteEOT) {
+		return PktIncompleteEOT
+	}
+	if errors.Is(p.Err, errBadTraceMode) {
+		return PktBadTraceMode
+	}
+	if errors.Is(p.Err, errReservedHeader) || errors.Is(p.Err, ocsd.ErrInvalidPcktHdr) {
+		return PktReserved
+	}
+	if errors.Is(p.Err, ocsd.ErrBadPacketSeq) {
+		return PktBadSequence
+	}
+	return p.Type
 }
 
 func (p *Packet) ISAStr() string {

@@ -320,7 +320,7 @@ func TestExtractDataAddress_5ByteBETrue(t *testing.T) {
 	if pkt == nil {
 		t.Logf("all packets received:")
 		for _, p := range sink.packets {
-			t.Logf("  type=%v errType=%v", p.Type, p.ErrType)
+			t.Logf("  type=%v err=%v", p.Type, p.Err)
 		}
 		t.Fatal("expected PktOOOAddrPlc packet")
 	}
@@ -461,7 +461,7 @@ func TestASync_ExtraZero(t *testing.T) {
 	// The bad ASync triggers PktBadSequence
 	found := false
 	for _, p := range sink.packets {
-		if p.ErrType == PktBadSequence || p.Type == PktBadSequence {
+		if p.Type == PktBadSequence || p.displayType() == PktBadSequence {
 			found = true
 			break
 		}
@@ -480,7 +480,7 @@ func TestASync_UnexpectedByte(t *testing.T) {
 	// Verify ASync or PktBadSequence was emitted (error path)
 	found := false
 	for _, p := range sink.packets {
-		if p.Type == PktASync || p.ErrType == PktBadSequence {
+		if p.Type == PktASync || p.displayType() == PktBadSequence {
 			found = true
 			break
 		}
