@@ -36,31 +36,6 @@ func (m *mapperAdapter) InvalidateMemAccCache(csTraceID uint8) {
 	m.mapper.InvalidateMemAccCache(csTraceID)
 }
 
-type snapshotErrorLogger struct {
-	reader *Reader
-}
-
-func (l *snapshotErrorLogger) LogError(_ ocsd.HandleErrLog, err error) {
-	if l.reader == nil || err == nil {
-		return
-	}
-	l.reader.logError(err.Error())
-}
-
-func (l *snapshotErrorLogger) LogMessage(_ ocsd.HandleErrLog, sev ocsd.ErrSeverity, msg string) {
-	if l.reader == nil {
-		return
-	}
-	if sev <= ocsd.ErrSevWarn {
-		l.reader.logError(msg)
-		return
-	}
-	l.reader.logInfo(msg)
-}
-
-func (l *snapshotErrorLogger) LastError() error          { return nil }
-func (l *snapshotErrorLogger) LastIDError(_ uint8) error { return nil }
-
 var dumpSpaceMap = map[string]ocsd.MemSpaceAcc{
 	"":           ocsd.MemSpaceAny,
 	"ANY":        ocsd.MemSpaceAny,
@@ -157,10 +132,6 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 		return nil, err
 	}
 	b.tree = newTree
-
-	if df := b.tree.FrameDeformatter(); df != nil {
-		df.SetErrorLogger(&snapshotErrorLogger{reader: b.reader})
-	}
 
 	// Create a memory accessor mapper in full-decoder mode only.
 	var mapper memacc.Mapper

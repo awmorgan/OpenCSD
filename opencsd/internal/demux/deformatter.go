@@ -2,7 +2,6 @@ package demux
 
 import (
 	"fmt"
-	"opencsd/internal/common"
 
 	"opencsd/internal/ocsd"
 )
@@ -30,7 +29,6 @@ type FrameDeformatter struct {
 	// Datapath Attachments
 	idStreams     [128]ocsd.TrcDataProcessor
 	rawTraceFrame ocsd.RawFrameProcessor
-	errorLogger   common.ErrorLogger
 
 	// state params
 	trcCurrIdx  ocsd.TrcIndex
@@ -73,10 +71,6 @@ func (d *FrameDeformatter) SetIDStream(id uint8, stream ocsd.TrcDataProcessor) {
 
 func (d *FrameDeformatter) SetRawTraceFrame(stream ocsd.RawFrameProcessor) {
 	d.rawTraceFrame = stream
-}
-
-func (d *FrameDeformatter) SetErrorLogger(logger common.ErrorLogger) {
-	d.errorLogger = logger
 }
 
 func (d *FrameDeformatter) Configure(flags uint32) error {

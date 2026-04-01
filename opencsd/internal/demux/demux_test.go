@@ -123,21 +123,6 @@ func makeBufBadData() []byte {
 	}
 }
 
-type TestLogger struct {
-	lastErr error
-}
-
-func (l *TestLogger) LogError(_ ocsd.HandleErrLog, err error) {
-	if err != nil {
-		l.lastErr = err
-	}
-}
-
-func (l *TestLogger) LogMessage(_ ocsd.HandleErrLog, _ ocsd.ErrSeverity, _ string) {}
-
-func (l *TestLogger) LastError() error          { return nil }
-func (l *TestLogger) LastIDError(_ uint8) error { return nil }
-
 type mockDataSink struct{}
 
 func (m *mockDataSink) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
@@ -214,8 +199,6 @@ func resetDecoder(df *FrameDeformatter, t *testing.T) {
 
 func TestDemuxInit(t *testing.T) {
 	df := NewFrameDeformatter()
-	errLog := &TestLogger{}
-	df.SetErrorLogger(errLog)
 
 	if err := df.Configure(0); !errors.Is(err, ocsd.ErrInvalidParamVal) {
 		t.Errorf("Expected OCSD_ERR_INVALID_PARAM_VAL for 0 flag config, got %v", err)
@@ -239,8 +222,6 @@ func TestRunMemAlignTest(t *testing.T) {
 	df.Configure(baseCfg)
 	sink := &mockRawSink{out: globalSinkOut}
 	df.SetRawTraceFrame(sink)
-	errLog := &TestLogger{}
-	df.SetErrorLogger(errLog)
 
 	// 1
 	resetDecoder(df, t)
@@ -287,8 +268,6 @@ func TestRunMemAlignTest(t *testing.T) {
 
 func TestDemuxEdgeCases(t *testing.T) {
 	df := NewFrameDeformatter()
-	errLog := &TestLogger{}
-	df.SetErrorLogger(errLog)
 	buf := makeBufMemAlign()
 
 	// 6 - Edge case coverage
@@ -337,8 +316,7 @@ func TestDemuxEdgeCases(t *testing.T) {
 	// Trigger generic system panic recovery
 	resetDecoder(df, t)
 	df.SetRawTraceFrame(nil) // Unset so raw trace is nil
-	// Configure without logger and trigger config combintation errors again
-	df.SetErrorLogger(nil)
+	// Configure and trigger configuration errors again
 	df.Configure(0x80 | ocsd.DfrmtrFrameMemAlign)
 
 	// OpEOT again but under different conditions
@@ -471,8 +449,6 @@ func TestRunHSyncFSyncTest(t *testing.T) {
 	df.Configure(cfg)
 	sink := &mockRawSink{out: globalSinkOut}
 	df.SetRawTraceFrame(sink)
-	errLog := &TestLogger{}
-	df.SetErrorLogger(errLog)
 
 	// 1
 	resetDecoder(df, t)
@@ -504,8 +480,6 @@ func TestRunDemuxBadDataTest(t *testing.T) {
 	df.Configure(baseCfg | ocsd.DfrmtrResetOn4xFsync)
 	sink := &mockRawSink{out: globalSinkOut}
 	df.SetRawTraceFrame(sink)
-	errLog := &TestLogger{}
-	df.SetErrorLogger(errLog)
 
 	resetDecoder(df, t)
 	bufBad := makeBufBadData()

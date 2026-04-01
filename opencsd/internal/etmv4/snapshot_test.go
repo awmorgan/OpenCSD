@@ -29,9 +29,6 @@ type etmv4RawPacketPrinter struct {
 	traceID uint8
 }
 
-type testErrLogger struct {
-	lastErr error
-}
 
 type etmv4DecodeOptions struct {
 	suppressRawPackets bool
@@ -70,15 +67,6 @@ func makeMemRegionAccessCB(cbCtx *memRegionCallbackCtx) ocsd.MemAccessor {
 		return readBytes
 	}
 }
-
-func (l *testErrLogger) LogError(_ ocsd.HandleErrLog, err error) {
-	l.lastErr = err
-}
-
-func (l *testErrLogger) LogMessage(_ ocsd.HandleErrLog, _ ocsd.ErrSeverity, _ string) {}
-
-func (l *testErrLogger) LastError() error          { return nil }
-func (l *testErrLogger) LastIDError(_ uint8) error { return nil }
 
 func (p *etmv4RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket, rawData []byte) {
 	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
@@ -292,11 +280,6 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		return nil, fmt.Errorf("nil decode tree")
 	}
 
-	errLog := &testErrLogger{}
-	if df := tree.FrameDeformatter(); df != nil {
-		df.SetErrorLogger(errLog)
-	}
-
 	etmv4Decoders := 0
 	for srcDevName := range sourceTree.SourceCoreAssoc {
 		dev := testutil.FindParsedDeviceByName(reader.ParsedDeviceList, srcDevName)
@@ -477,9 +460,6 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 			for len(payload) > 0 {
 				consumed, resp, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), payload)
 				if ocsd.DataRespIsFatal(resp) {
-					if errLog.lastErr != nil {
-						return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v (%s)", resp, traceIndex, ocsdErr, errLog.lastErr)
-					}
 					return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v", resp, traceIndex, ocsdErr)
 				}
 				if consumed == 0 {
@@ -503,9 +483,6 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 			}
 			consumed, resp, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
 			if ocsd.DataRespIsFatal(resp) {
-				if errLog.lastErr != nil {
-					return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v (%s)", resp, traceIndex, ocsdErr, errLog.lastErr)
-				}
 				return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v", resp, traceIndex, ocsdErr)
 			}
 			if consumed == 0 {
@@ -519,9 +496,6 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		for len(remaining) > 0 {
 			consumed, resp, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
 			if ocsd.DataRespIsFatal(resp) {
-				if errLog.lastErr != nil {
-					return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v (%s)", resp, traceIndex, ocsdErr, errLog.lastErr)
-				}
 				return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v", resp, traceIndex, ocsdErr)
 			}
 			if consumed == 0 {
