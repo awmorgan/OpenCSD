@@ -77,6 +77,7 @@ type PktDecode struct {
 	common.DecoderBase
 	Config       *Config
 	CurrPacketIn *Packet
+	lastErr      error
 
 	currState   decodeState
 	unsyncInfo  common.UnsyncInfo
@@ -135,16 +136,17 @@ func (d *PktDecode) SetNeedsInstructionDecode(needs bool) { d.UsesIDecode = need
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) ocsd.DatapathResp {
 	resp := ocsd.RespCont
+	d.lastErr = nil
 
 	if reason := d.DecodeNotReadyReason(); reason != "" {
-		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason))
+		d.lastErr = fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason)
 		return ocsd.RespFatalNotInit
 	}
 
 	switch op {
 	case ocsd.OpData:
 		if pktIn == nil {
-			d.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
+			d.lastErr = ocsd.ErrInvalidParamVal
 			resp = ocsd.RespFatalInvalidParam
 		} else {
 			d.CurrPacketIn = pktIn
@@ -158,7 +160,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 	case ocsd.OpReset:
 		resp = d.OnReset()
 	default:
-		d.LogError(ocsd.ErrSevError, ocsd.ErrInvalidParamVal)
+		d.lastErr = ocsd.ErrInvalidParamVal
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return resp
@@ -242,7 +244,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 			if d.currPeState.valid {
 				resp = d.processAtom()
 			} else {
-				d.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Dropped atom packet(s) at EOT while PE state is invalid", ocsd.ErrBadPacketSeq))
+				d.lastErr = fmt.Errorf("%w: dropped atom packet(s) at EOT while PE state is invalid", ocsd.ErrBadPacketSeq)
 				d.atoms.clearAll()
 				resp = ocsd.RespWarnCont
 			}
@@ -393,7 +395,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 			d.atoms.set(pkt.Atom, d.IndexCurrPkt)
 			resp = d.processAtom()
 		} else {
-			d.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Dropped atom packet while PE state is invalid; waiting for branch address or I-Sync", ocsd.ErrBadPacketSeq))
+			d.lastErr = fmt.Errorf("%w: dropped atom packet while PE state is invalid; waiting for branch address or I-Sync", ocsd.ErrBadPacketSeq)
 			resp = ocsd.RespWarnCont
 		}
 	case PktTimestamp:
@@ -574,10 +576,10 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 	if err != nil {
 		if errors.Is(err, ocsd.ErrUnsupportedISA) {
 			d.currPeState.valid = false
-			d.LogError(ocsd.ErrSevWarn, fmt.Errorf("%w: Warning: unsupported instruction set processing %s packet", err, pktMsg))
+			d.lastErr = fmt.Errorf("%w: unsupported instruction set processing %s packet", err, pktMsg)
 			return ocsd.RespWarnCont
 		}
-		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error processing %s packet", err, pktMsg))
+		d.lastErr = fmt.Errorf("%w: error processing %s packet", err, pktMsg)
 		return ocsd.RespFatalInvalidData
 	}
 
@@ -601,7 +603,7 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 					d.instrInfo.NextISA = nextIsa
 
 					if d.returnStack.Overflow() {
-						d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Return stack error processing %s packet", ocsd.ErrRetStackOverflow, pktMsg))
+						d.lastErr = fmt.Errorf("%w: return stack error processing %s packet", ocsd.ErrRetStackOverflow, pktMsg)
 						return ocsd.RespFatalInvalidData
 					} else {
 						d.currPeState.valid = true
