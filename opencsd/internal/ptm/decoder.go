@@ -95,21 +95,22 @@ type PktDecode struct {
 	outputElem  ocsd.TraceElement
 }
 
-func NewPktDecode(cfg *Config) *PktDecode {
-	instIDNum := 0
-	if cfg != nil {
-		instIDNum = int(cfg.TraceID())
+func NewPktDecode(cfg *Config) (*PktDecode, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("%w: PTM config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
+
+	instIDNum := int(cfg.TraceID())
 	d := &PktDecode{
 		DecoderBase: common.DecoderBase{
 			Name: fmt.Sprintf("DCD_PTM_%d", instIDNum),
 		},
 	}
 	d.configureDecoder()
-	if cfg != nil {
-		_ = d.SetProtocolConfig(cfg)
+	if err := d.SetProtocolConfig(cfg); err != nil {
+		return nil, err
 	}
-	return d
+	return d, nil
 }
 
 // SetTraceElemOut satisfies dcdtree's traceElemSetterOwner interface.
