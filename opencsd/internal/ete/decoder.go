@@ -7,9 +7,7 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-type PktDecode = etmv4.PktDecode
-
-func NewPktDecode(cfg *Config) (*PktDecode, error) {
+func NewPktDecode(cfg *Config) (*etmv4.PktDecode, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("%w: ETE config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
@@ -17,7 +15,7 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 }
 
 // NewConfiguredProcessor creates an ETE packet processor with a typed config.
-func NewConfiguredProcessor(cfg *Config) (*Processor, error) {
+func NewConfiguredProcessor(cfg *Config) (*etmv4.Processor, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("%w: ETE config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
@@ -25,13 +23,13 @@ func NewConfiguredProcessor(cfg *Config) (*Processor, error) {
 }
 
 // NewConfiguredPktDecode creates an ETE packet decoder with a typed config.
-func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
+func NewConfiguredPktDecode(instID int, cfg *Config) (*etmv4.PktDecode, error) {
 	_ = instID
 	return NewPktDecode(cfg)
 }
 
 // NewConfiguredPktDecodeWithDeps creates an ETE decoder and injects dependencies.
-func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
+func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*etmv4.PktDecode, error) {
 	decoder, err := NewConfiguredPktDecode(instID, cfg)
 	if err != nil {
 		return nil, err
@@ -43,7 +41,7 @@ func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, out ocsd.GenElemPro
 }
 
 // NewConfiguredPipeline creates and wires a typed ETE processor/decoder pair.
-func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, error) {
+func NewConfiguredPipeline(instID int, cfg *Config) (*etmv4.Processor, *etmv4.PktDecode, error) {
 	proc, err := NewConfiguredProcessor(cfg)
 	if err != nil {
 		return nil, nil, err
@@ -57,7 +55,7 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, err
 }
 
 // NewConfiguredPipelineWithDeps creates and wires an ETE processor/decoder pair with dependencies.
-func NewConfiguredPipelineWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*Processor, *PktDecode, error) {
+func NewConfiguredPipelineWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*etmv4.Processor, *etmv4.PktDecode, error) {
 	proc, err := NewConfiguredProcessor(cfg)
 	if err != nil {
 		return nil, nil, err

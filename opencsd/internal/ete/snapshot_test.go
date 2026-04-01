@@ -273,7 +273,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 	printer := printers.NewGenericElementPrinter(&out)
 	tree.SetGenTraceElemOutI(printer)
 	tree.ForEachElement(func(csID uint8, elem *dcdtree.DecodeTreeElement) {
-		proc, ok := elem.DataIn.(*ete.Processor)
+		proc, ok := elem.DataIn.(*etmv4.Processor)
 		if !ok || proc == nil {
 			return
 		}

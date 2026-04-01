@@ -2,9 +2,7 @@ package ete
 
 import "opencsd/internal/etmv4"
 
-type Processor = etmv4.Processor
-
-func NewProcessor(config *Config) *Processor {
+func NewProcessor(config *Config) *etmv4.Processor {
 	if config == nil {
 		cfg := NewConfig()
 		return etmv4.NewProcessor(cfg.ToETMv4Config())
