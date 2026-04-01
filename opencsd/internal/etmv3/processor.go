@@ -50,7 +50,7 @@ type PktProc struct {
 }
 
 // NewPktProc creates a new ETMv3 packet processor
-func NewPktProc(cfg *Config, _ ocsd.Logger) *PktProc {
+func NewPktProc(cfg *Config) *PktProc {
 	instID := 0
 	if cfg != nil {
 		instID = int(cfg.TraceID())

@@ -11,7 +11,7 @@ func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, error) {
 		return nil, fmt.Errorf("%w: ITM config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
 	_ = instID
-	proc := NewPktProc(cfg, nil)
+	proc := NewPktProc(cfg)
 	return proc, nil
 }
 
@@ -21,7 +21,7 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
 		return nil, fmt.Errorf("%w: ITM config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
 	_ = instID
-	dec := NewPktDecode(cfg, nil)
+	dec := NewPktDecode(cfg)
 	return dec, nil
 }
 

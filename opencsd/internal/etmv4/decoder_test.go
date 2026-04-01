@@ -41,7 +41,7 @@ func isErrorCode(err error, code error) bool {
 }
 
 func TestDecoderOnFlushResolvesPendingState(t *testing.T) {
-	d := NewPktDecode(nil, nil)
+	d := NewPktDecode(nil)
 	d.Config = &Config{}
 	if err := d.SetProtocolConfig(d.Config); err != nil {
 		t.Fatalf("OnProtocolConfig failed: %v", err)
@@ -58,7 +58,7 @@ func TestDecoderOnFlushResolvesPendingState(t *testing.T) {
 }
 
 func TestDecoderTSRequiresMarkerWhenConfigured(t *testing.T) {
-	d := NewPktDecode(nil, nil)
+	d := NewPktDecode(nil)
 	d.Config = &Config{
 		RegIdr0: 0x800000,
 		RegIdr1: 0x510, // full version 0x51
@@ -104,7 +104,7 @@ func TestDecoderTSRequiresMarkerWhenConfigured(t *testing.T) {
 }
 
 func TestDecoderDecodePacketFuncRetV8M(t *testing.T) {
-	d := NewPktDecode(nil, nil)
+	d := NewPktDecode(nil)
 	d.config = &Config{
 		ArchVer:    ocsd.ArchV8,
 		CoreProf:   ocsd.ProfileCortexM,

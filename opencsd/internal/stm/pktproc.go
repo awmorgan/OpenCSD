@@ -113,7 +113,7 @@ type PktProc struct {
 	syncIndex   ocsd.TrcIndex
 }
 
-func NewPktProc(cfg *Config, _ ocsd.Logger) *PktProc {
+func NewPktProc(cfg *Config) *PktProc {
 	instIDNum := 0
 	if cfg != nil {
 		instIDNum = int(cfg.TraceID())

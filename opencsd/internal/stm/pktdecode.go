@@ -41,14 +41,14 @@ type PktDecode struct {
 }
 
 // NewPktDecode creates a new STM packet decoder.
-func NewPktDecode(cfg *Config, _ ocsd.Logger) *PktDecode {
+func NewPktDecode(cfg *Config) *PktDecode {
 	instIDNum := 0
 	if cfg != nil {
 		instIDNum = int(cfg.TraceID())
 	}
 	d := &PktDecode{
 		DecoderBase: common.DecoderBase{
-			Name: fmt.Sprintf("DCD_STM_%d", instIDNum),
+			Name:          fmt.Sprintf("DCD_STM_%d", instIDNum),
 			UsesMemAccess: true,
 			UsesIDecode:   true,
 		},

@@ -178,14 +178,14 @@ func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.MemAccess = mem
 // SetInstrDecode satisfies dcdtree's instrDecodeSetterOwner interface.
 func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.InstrDecode = dec }
 
-func NewPktDecode(cfg *Config, _ ocsd.Logger) *PktDecode {
+func NewPktDecode(cfg *Config) *PktDecode {
 	instIDNum := 0
 	if cfg != nil {
 		instIDNum = int(cfg.TraceID())
 	}
 	d := &PktDecode{
 		DecoderBase: common.DecoderBase{
-			Name: fmt.Sprintf("DCD_ETMV4_%d", instIDNum),
+			Name:          fmt.Sprintf("DCD_ETMV4_%d", instIDNum),
 			UsesMemAccess: true,
 			UsesIDecode:   true,
 		},
@@ -2034,7 +2034,7 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
 		return nil, ocsd.ErrInvalidParamVal
 	}
 	_ = instID
-	decoder := NewPktDecode(cfg, nil)
+	decoder := NewPktDecode(cfg)
 	return decoder, nil
 }
 

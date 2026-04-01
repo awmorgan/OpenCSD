@@ -248,7 +248,7 @@ func TestITMTypedConstructors(t *testing.T) {
 
 func TestITMErrorCases(t *testing.T) {
 	cfg := &Config{}
-	proc := NewPktProc(nil, nil)
+	proc := NewPktProc(nil)
 	proc.SetProtocolConfig(cfg)
 
 	// reserved header error
@@ -327,7 +327,7 @@ func TestITMErrorCases(t *testing.T) {
 	proc.IsBadPacket()
 
 	// Decoder missing config test
-	dec := NewPktDecode(nil, nil)
+	dec := NewPktDecode(nil)
 	dec.SetProtocolConfig(nil)
 	dec.OnFlush()
 	dec.OnReset()

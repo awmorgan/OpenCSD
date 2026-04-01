@@ -526,7 +526,7 @@ func TestProcWPointExcepISASwap(t *testing.T) {
 func TestDecoderAtomProcessing(t *testing.T) {
 	config := NewConfig()
 	config.RegCCER = ccerRestackImpl | ccerDmsbWpt
-	dec := NewPktDecode(nil, nil)
+	dec := NewPktDecode(nil)
 	dec.SetProtocolConfig(config)
 
 	mem := &mockMemAcc{}
@@ -582,7 +582,7 @@ func TestDecoderAtomProcessing(t *testing.T) {
 
 func TestDecoderWPUpdate(t *testing.T) {
 	config := NewConfig()
-	dec := NewPktDecode(nil, nil)
+	dec := NewPktDecode(nil)
 	dec.SetProtocolConfig(config)
 
 	mem := &mockMemAcc{}
@@ -616,7 +616,7 @@ func TestDecoderWPUpdate(t *testing.T) {
 
 func TestDecoderBranchWithAtomRange(t *testing.T) {
 	config := NewConfig()
-	dec := NewPktDecode(nil, nil)
+	dec := NewPktDecode(nil)
 	dec.SetProtocolConfig(config)
 
 	mem := &mockMemAcc{}
@@ -665,7 +665,7 @@ func TestDecoderBranchWithAtomRange(t *testing.T) {
 
 func TestDecoderMemNacc(t *testing.T) {
 	config := NewConfig()
-	dec := NewPktDecode(nil, nil)
+	dec := NewPktDecode(nil)
 	dec.SetProtocolConfig(config)
 
 	mem := &mockMemAcc{failAfter: 1, hitAfter: -1} // fail on 2nd read, never branch
@@ -709,7 +709,7 @@ func TestDecoderMemNacc(t *testing.T) {
 
 func TestDecoderMemNaccSecure(t *testing.T) {
 	config := NewConfig()
-	dec := NewPktDecode(nil, nil)
+	dec := NewPktDecode(nil)
 	dec.SetProtocolConfig(config)
 
 	mem := &mockMemAcc{failAfter: 1, hitAfter: -1}
@@ -743,7 +743,7 @@ func TestDecoderIndirectBranch(t *testing.T) {
 	config := NewConfig()
 	config.RegCCER = ccerRestackImpl
 	config.RegCtrl = ctrlRetStackEna
-	dec := NewPktDecode(nil, nil)
+	dec := NewPktDecode(nil)
 	dec.SetProtocolConfig(config)
 
 	mem := &mockMemAcc{hitAfter: 0, isIndirect: true}
@@ -775,7 +775,7 @@ func TestDecoderLinkBranch(t *testing.T) {
 	config := NewConfig()
 	config.RegCCER = ccerRestackImpl
 	config.RegCtrl = ctrlRetStackEna
-	dec := NewPktDecode(nil, nil)
+	dec := NewPktDecode(nil)
 	dec.SetProtocolConfig(config)
 
 	mem := &mockMemAcc{hitAfter: 0, isLink: true}
@@ -805,7 +805,7 @@ func TestDecoderLinkBranch(t *testing.T) {
 
 func TestDecoderContProcess(t *testing.T) {
 	config := NewConfig()
-	dec := NewPktDecode(nil, nil)
+	dec := NewPktDecode(nil)
 	dec.SetProtocolConfig(config)
 	dec.SetNeedsMemAccess(false)
 	dec.SetNeedsInstructionDecode(false)
@@ -1087,7 +1087,7 @@ func syncDec(dec *PktDecode, addr ocsd.VAddr) {
 // newTestDec creates a PktDecode with mockMemAcc and real InstrDecode attached.
 func newTestDec(hitAfter int) (*PktDecode, *testTrcElemIn) {
 	config := NewConfig()
-	dec := NewPktDecode(nil, nil)
+	dec := NewPktDecode(nil)
 	dec.SetProtocolConfig(config)
 	dec.SetMemAccess(&mockMemAcc{hitAfter: hitAfter})
 	dec.SetInstrDecode(idec.NewDecoder())
@@ -1156,7 +1156,7 @@ func TestDecoderAtomMultiStep(t *testing.T) {
 // When StartAddr != EndAddr the partial range element is emitted from the else branch.
 func TestDecoderAtomRange_NoWPFound(t *testing.T) {
 	config := NewConfig()
-	dec := NewPktDecode(nil, nil)
+	dec := NewPktDecode(nil)
 	dec.SetProtocolConfig(config)
 	dec.SetMemAccess(&mockMemAcc{failAfter: 2, hitAfter: -1}) // fail after 2 reads, never branch
 	dec.SetInstrDecode(idec.NewDecoder())
@@ -1239,7 +1239,7 @@ func TestDecoderProcessAtom_MultiAtomLoop(t *testing.T) {
 // with MemSpaceEL1N when security level is non-secure (CurrNS=true).
 func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	config := NewConfig()
-	dec := NewPktDecode(nil, nil)
+	dec := NewPktDecode(nil)
 	dec.SetProtocolConfig(config)
 	dec.SetMemAccess(&mockMemAcc{failAfter: 1, hitAfter: -1})
 	dec.SetInstrDecode(idec.NewDecoder())
@@ -1401,7 +1401,7 @@ func TestDecoderIndirectBranch_ActiveRetStack(t *testing.T) {
 	config := NewConfig()
 	config.RegCCER = ccerRestackImpl
 	config.RegCtrl = ctrlRetStackEna
-	dec := NewPktDecode(nil, nil)
+	dec := NewPktDecode(nil)
 	dec.SetProtocolConfig(config)
 	dec.SetMemAccess(&mockMemAcc{hitAfter: 0, isIndirect: true, isLink: true})
 	dec.SetInstrDecode(idec.NewDecoder())

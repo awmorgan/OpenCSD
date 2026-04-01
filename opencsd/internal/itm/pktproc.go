@@ -57,7 +57,7 @@ type PktProc struct {
 }
 
 // NewPktProc creates a new ITM packet processor.
-func NewPktProc(cfg *Config, _ ocsd.Logger) *PktProc {
+func NewPktProc(cfg *Config) *PktProc {
 	instID := 0
 	if cfg != nil {
 		instID = int(cfg.TraceID())
@@ -142,7 +142,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			rawMon.RawPacketDataMon(ocsd.OpReset, index, nil, nil)
 		}
 	default:
-			err = fmt.Errorf("%w: packet processor: unknown datapath operation", ocsd.ErrInvalidParamVal)
+		err = fmt.Errorf("%w: packet processor: unknown datapath operation", ocsd.ErrInvalidParamVal)
 		resp = ocsd.RespFatalInvalidOp
 	}
 	return processed, resp, err
