@@ -129,12 +129,26 @@ const (
 	RespFatalSysErr       DatapathResp = 10
 )
 
+// Transitional flow-control sentinel errors used while migrating datapath
+// interfaces away from DatapathResp values.
+var (
+	ErrWait = errors.New("datapath flow-control wait")
+	ErrCont = errors.New("datapath flow-control continue")
+)
+
 func DataRespIsFatal(x DatapathResp) bool     { return x >= RespFatalNotInit }
 func DataRespIsWarn(x DatapathResp) bool      { return x == RespWarnCont || x == RespWarnWait }
 func DataRespIsErr(x DatapathResp) bool       { return x == RespErrCont || x == RespErrWait }
 func DataRespIsWarnOrErr(x DatapathResp) bool { return DataRespIsErr(x) || DataRespIsWarn(x) }
 func DataRespIsCont(x DatapathResp) bool      { return x < RespWait }
 func DataRespIsWait(x DatapathResp) bool      { return x >= RespWait && x < RespFatalNotInit }
+
+// IsDataWaitErr returns true when err is the flow-control wait sentinel.
+func IsDataWaitErr(err error) bool { return errors.Is(err, ErrWait) }
+
+// IsDataContErr returns true when err indicates continue semantics.
+// Nil is treated as continue, and ErrCont is available as a transitional sentinel.
+func IsDataContErr(err error) bool { return err == nil || errors.Is(err, ErrCont) }
 
 // Trace Decode component types
 
