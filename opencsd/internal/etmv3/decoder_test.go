@@ -12,7 +12,6 @@ package etmv3
 import (
 	"testing"
 
-	"opencsd/internal/common"
 	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
@@ -114,7 +113,7 @@ func TestSendUnsyncPacket_UnsyncInfoPreserved(t *testing.T) {
 		if e.ElemType == ocsd.GenElemNoSync {
 			found = true
 			// verify the UnsyncEOTInfo was set from initDecoder's UnsyncInitDecoder
-			if e.Payload.UnsyncEOTInfo != ocsd.UnsyncInfo(common.UnsyncInitDecoder) {
+			if e.Payload.UnsyncEOTInfo != ocsd.UnsyncInfo(ocsd.UnsyncInitDecoder) {
 				t.Errorf("expected UnsyncInitDecoder, got %v", e.Payload.UnsyncEOTInfo)
 			}
 			break

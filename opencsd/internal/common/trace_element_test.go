@@ -7,10 +7,10 @@ import (
 )
 
 func TestTraceElement_InitAndDefaults(t *testing.T) {
-	elem := NewTraceElement()
+	elem := ocsd.NewTraceElement()
 
-	if elem.ElemType != GenElemUnknown {
-		t.Errorf("Expected element type %v, got %v", GenElemUnknown, elem.ElemType)
+	if elem.ElemType != ocsd.GenElemUnknown {
+		t.Errorf("Expected element type %v, got %v", ocsd.GenElemUnknown, elem.ElemType)
 	}
 
 	if elem.StartAddr != ^ocsd.VAddr(0) || elem.EndAddr != ^ocsd.VAddr(0) {
@@ -21,14 +21,14 @@ func TestTraceElement_InitAndDefaults(t *testing.T) {
 		t.Errorf("Expected unknown ISA, got %v", elem.ISA)
 	}
 
-	elem2 := NewTraceElementWithType(GenElemTraceOn)
-	if elem2.ElemType != GenElemTraceOn {
+	elem2 := ocsd.NewTraceElementWithType(ocsd.GenElemTraceOn)
+	if elem2.ElemType != ocsd.GenElemTraceOn {
 		t.Errorf("Expected type GenElemTraceOn, got %v", elem2.ElemType)
 	}
 }
 
 func TestTraceElement_Setters(t *testing.T) {
-	elem := NewTraceElement()
+	elem := ocsd.NewTraceElement()
 
 	// Test cycle count
 	elem.SetCycleCount(42)
@@ -43,8 +43,8 @@ func TestTraceElement_Setters(t *testing.T) {
 	}
 
 	// Test Event
-	elem.SetEvent(EventNumbered, 5)
-	if elem.Payload.TraceEvent.EvType != EventNumbered || elem.Payload.TraceEvent.EvNumber != 5 {
+	elem.SetEvent(ocsd.EventNumbered, 5)
+	if elem.Payload.TraceEvent.EvType != ocsd.EventNumbered || elem.Payload.TraceEvent.EvNumber != 5 {
 		t.Errorf("SetEvent failed")
 	}
 
@@ -55,8 +55,8 @@ func TestTraceElement_Setters(t *testing.T) {
 	}
 
 	// Test Memory Trans
-	elem.SetTransactionType(MemTransCommit)
-	if elem.Payload.MemTrans != MemTransCommit {
+	elem.SetTransactionType(ocsd.MemTransCommit)
+	if elem.Payload.MemTrans != ocsd.MemTransCommit {
 		t.Errorf("SetTransactionType failed")
 	}
 
@@ -102,55 +102,55 @@ func TestTraceElement_Setters(t *testing.T) {
 		t.Errorf("SetExceptionNum failed")
 	}
 
-	elem.SetTraceOnReason(TraceOnOverflow)
-	if elem.Payload.TraceOnReason != TraceOnOverflow {
+	elem.SetTraceOnReason(ocsd.TraceOnOverflow)
+	if elem.Payload.TraceOnReason != ocsd.TraceOnOverflow {
 		t.Errorf("SetTraceOnReason failed")
 	}
 
-	elem.SetUnSyncEOTReason(UnsyncBadPacket)
-	if elem.Payload.UnsyncEOTInfo != UnsyncBadPacket {
+	elem.SetUnSyncEOTReason(ocsd.UnsyncBadPacket)
+	if elem.Payload.UnsyncEOTInfo != ocsd.UnsyncBadPacket {
 		t.Errorf("SetUnSyncEOTReason failed")
 	}
 
 	elem.SetSWTInfo(ocsd.SWTInfo{})
-	elem.SetITEInfo(TraceSWIte{EL: 1, Value: 123})
-	elem.SetSWTITMInfo(SWTItmInfo{PktType: TSGlobal})
-	elem.SetSyncMarker(TraceMarkerPayload{Type: ElemMarkerTS, Value: 1})
+	elem.SetITEInfo(ocsd.TraceSWIte{EL: 1, Value: 123})
+	elem.SetSWTITMInfo(ocsd.SWTItmInfo{PktType: ocsd.TSGlobal})
+	elem.SetSyncMarker(ocsd.TraceMarkerPayload{Type: ocsd.ElemMarkerTS, Value: 1})
 }
 
 func TestTraceElement_Strings(t *testing.T) {
 	tests := []struct {
 		name     string
-		setup    func(*TraceElement)
+		setup    func(*ocsd.TraceElement)
 		expected string
 	}{
 		{
 			name: "Unknown",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemUnknown)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemUnknown)
 			},
 			expected: "OCSD_GEN_TRC_ELEM_UNKNOWN()",
 		},
 		{
 			name: "NoSync",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemNoSync)
-				e.SetUnSyncEOTReason(UnsyncInitDecoder)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemNoSync)
+				e.SetUnSyncEOTReason(ocsd.UnsyncInitDecoder)
 			},
 			expected: "OCSD_GEN_TRC_ELEM_NO_SYNC( [init-decoder])",
 		},
 		{
 			name: "TraceOn",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemTraceOn)
-				e.SetTraceOnReason(TraceOnNormal)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemTraceOn)
+				e.SetTraceOnReason(ocsd.TraceOnNormal)
 			},
 			expected: "OCSD_GEN_TRC_ELEM_TRACE_ON( [begin or filter])",
 		},
 		{
 			name: "PeContext",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemPeContext)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemPeContext)
 				e.SetISA(ocsd.ISAArm)
 				var ctx ocsd.PEContext
 				ctx.ExceptionLevel = ocsd.EL2
@@ -167,8 +167,8 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "InstrRange",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemInstrRange)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemInstrRange)
 				e.SetAddrRange(0x8000, 0x8010, 4)
 				e.SetISA(ocsd.ISAThumb2)
 				e.SetLastInstrInfo(true, ocsd.InstrBr, ocsd.SInstrBrLink, 4)
@@ -179,16 +179,16 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "Nopath",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemIRangeNopath)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemIRangeNopath)
 				e.SetAddrRange(0x1000, 0x2000, 50)
 			},
 			expected: "OCSD_GEN_TRC_ELEM_I_RANGE_NOPATH(first 0x1000:[next 0x2000] num_i(50) )",
 		},
 		{
 			name: "Exception",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemException)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemException)
 				e.SetExceptionNum(0x11)
 				e.EndAddr = 0x4000
 				e.ExceptionRetAddr = true
@@ -198,56 +198,56 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "Timestamp",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemTimestamp)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemTimestamp)
 				e.SetTS(0x123456789ABC, false)
 			},
 			expected: "OCSD_GEN_TRC_ELEM_TIMESTAMP( [ TS=0x123456789abc]; )",
 		},
 		{
 			name: "Event",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemEvent)
-				e.SetEvent(EventNumbered, 42)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemEvent)
+				e.SetEvent(ocsd.EventNumbered, 42)
 			},
 			expected: "OCSD_GEN_TRC_ELEM_EVENT( Numbered:42; )",
 		},
 		{
 			name: "Event Trigger",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemEvent)
-				e.SetEvent(EventTrigger, 0)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemEvent)
+				e.SetEvent(ocsd.EventTrigger, 0)
 			},
 			expected: "OCSD_GEN_TRC_ELEM_EVENT( Trigger; )",
 		},
 		{
 			name: "MemTrans",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemMemTrans)
-				e.SetTransactionType(MemTransStart)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemMemTrans)
+				e.SetTransactionType(ocsd.MemTransStart)
 			},
 			expected: "OCSD_GEN_TRC_ELEM_MEMTRANS(Start)",
 		},
 		{
 			name: "Instrumentation",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemInstrumentation)
-				e.SetITEInfo(TraceSWIte{EL: 1, Value: 0xDEADBEEF})
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemInstrumentation)
+				e.SetITEInfo(ocsd.TraceSWIte{EL: 1, Value: 0xDEADBEEF})
 			},
 			expected: "OCSD_GEN_TRC_ELEM_INSTRUMENTATION(EL1; 0x00000000deadbeef)",
 		},
 		{
 			name: "SyncMarker",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemSyncMarker)
-				e.SetSyncMarker(TraceMarkerPayload{Type: ElemMarkerTS, Value: 0x1234})
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemSyncMarker)
+				e.SetSyncMarker(ocsd.TraceMarkerPayload{Type: ocsd.ElemMarkerTS, Value: 0x1234})
 			},
 			expected: "OCSD_GEN_TRC_ELEM_SYNC_MARKER( [Timestamp marker(0x00001234)])",
 		},
 		{
 			name: "AddrNacc",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemAddrNacc)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemAddrNacc)
 				e.StartAddr = 0x5555
 				e.SetExceptionNum(uint32(ocsd.MemSpaceEL2))
 			},
@@ -255,8 +255,8 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "AddrNacc Various",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemAddrNacc)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemAddrNacc)
 				e.StartAddr = 0x123
 				e.SetExceptionNum(uint32(ocsd.MemSpaceEL1S))
 			},
@@ -264,23 +264,23 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "CycleCount",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemCycleCount)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemCycleCount)
 				e.SetCycleCount(999)
 			},
 			expected: "OCSD_GEN_TRC_ELEM_CYCLE_COUNT( [CC=999]; )",
 		},
 		{
 			name: "Custom",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemCustom)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemCustom)
 			},
 			expected: "OCSD_GEN_TRC_ELEM_CUSTOM()",
 		},
 		{
 			name: "InstrRange No Exec",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemInstrRange)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemInstrRange)
 				e.SetAddrRange(0x100, 0x110, 4)
 				e.SetISA(ocsd.ISAArm)
 				e.SetLastInstrInfo(false, ocsd.InstrDsbDmb, ocsd.SInstrNone, 4)
@@ -289,8 +289,8 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "PeContext various",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemPeContext)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemPeContext)
 				e.SetISA(ocsd.ISAUnknown)
 				var ctx ocsd.PEContext
 				ctx.ExceptionLevel = ocsd.ELUnknown
@@ -303,23 +303,23 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "ExceptionRet",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemExceptionRet)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemExceptionRet)
 			},
 			expected: "OCSD_GEN_TRC_ELEM_EXCEPTION_RET()",
 		},
 		{
 			name: "PeContext bounds",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemPeContext)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemPeContext)
 				e.SetISA(ocsd.ISA(99)) // Invalid ISA goes to Unknown
 			},
 			expected: "OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=Unk) S; 32-bit; )",
 		},
 		{
 			name: "AddrNacc EL3",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemAddrNacc)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemAddrNacc)
 				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceEL3))
 			},
@@ -327,8 +327,8 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "AddrNacc EL2S",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemAddrNacc)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemAddrNacc)
 				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceEL2S))
 			},
@@ -336,8 +336,8 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "AddrNacc EL1R",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemAddrNacc)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemAddrNacc)
 				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceEL1R))
 			},
@@ -345,8 +345,8 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "AddrNacc EL2R",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemAddrNacc)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemAddrNacc)
 				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceEL2R))
 			},
@@ -354,8 +354,8 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "AddrNacc Root",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemAddrNacc)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemAddrNacc)
 				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceRoot))
 			},
@@ -363,8 +363,8 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "AddrNacc S N R Any None",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemAddrNacc)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemAddrNacc)
 				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceS))
 			},
@@ -372,8 +372,8 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "AddrNacc N",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemAddrNacc)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemAddrNacc)
 				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceN))
 			},
@@ -381,8 +381,8 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "AddrNacc R",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemAddrNacc)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemAddrNacc)
 				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceR))
 			},
@@ -390,8 +390,8 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "AddrNacc Any",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemAddrNacc)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemAddrNacc)
 				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceAny))
 			},
@@ -399,8 +399,8 @@ func TestTraceElement_Strings(t *testing.T) {
 		},
 		{
 			name: "AddrNacc None",
-			setup: func(e *TraceElement) {
-				e.SetType(GenElemAddrNacc)
+			setup: func(e *ocsd.TraceElement) {
+				e.SetType(ocsd.GenElemAddrNacc)
 				e.StartAddr = 0xAA
 				e.SetExceptionNum(uint32(ocsd.MemSpaceNone))
 			},
@@ -410,7 +410,7 @@ func TestTraceElement_Strings(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			elem := NewTraceElement()
+			elem := ocsd.NewTraceElement()
 			tc.setup(elem)
 			got := elem.String()
 			if got != tc.expected {
@@ -421,7 +421,7 @@ func TestTraceElement_Strings(t *testing.T) {
 }
 
 func TestTraceElement_SWTraceStrings(t *testing.T) {
-	e := NewTraceElementWithType(GenElemSWTrace)
+	e := ocsd.NewTraceElementWithType(ocsd.GenElemSWTrace)
 	var info ocsd.SWTInfo
 	info.MasterID = 0x1
 	info.ChannelID = 0x2
@@ -492,9 +492,9 @@ func TestTraceElement_SWTraceStrings(t *testing.T) {
 }
 
 func TestTraceElement_ITMTraceStrings(t *testing.T) {
-	e := NewTraceElementWithType(GenElemITMTrace)
-	itm := SWTItmInfo{
-		PktType:      SWITPayload,
+	e := ocsd.NewTraceElementWithType(ocsd.GenElemITMTrace)
+	itm := ocsd.SWTItmInfo{
+		PktType:      ocsd.SWITPayload,
 		PayloadSrcID: 0x8,
 		PayloadSize:  2,
 		Value:        0x1234,
@@ -506,7 +506,7 @@ func TestTraceElement_ITMTraceStrings(t *testing.T) {
 		t.Errorf("Expected %q, got %q", expected, got)
 	}
 
-	itm.PktType = TSGlobal
+	itm.PktType = ocsd.TSGlobal
 	e.SetTS(0xABCDEF, false)
 	e.SetSWTITMInfo(itm)
 	expected = "OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_TS_GLOBAL ( TS: 0x0000000000abcdef) )"
@@ -514,7 +514,7 @@ func TestTraceElement_ITMTraceStrings(t *testing.T) {
 		t.Errorf("Expected %q, got %q", expected, got)
 	}
 
-	itm.PktType = DWTPayload
+	itm.PktType = ocsd.DWTPayload
 	itm.Overflow = 1
 	e.SetSWTITMInfo(itm)
 	expected = "OCSD_GEN_TRC_ELEM_ITMTRACE(ITM_OVERFLOW; ITM_DWT (desc: 0x8; Data: 0x1234) )"
@@ -525,13 +525,13 @@ func TestTraceElement_ITMTraceStrings(t *testing.T) {
 	itm.Overflow = 0
 
 	tsTypes := []struct {
-		typ  SWTItmType
+		typ  ocsd.SWTItmType
 		name string
 	}{
-		{TSSync, "TS Sync"},
-		{TSDelay, "TS Delay"},
-		{TSPKTDelay, "Packet Delay"},
-		{TSPKTTSDelay, "TS and Packet Delay"},
+		{ocsd.TSSync, "TS Sync"},
+		{ocsd.TSDelay, "TS Delay"},
+		{ocsd.TSPKTDelay, "Packet Delay"},
+		{ocsd.TSPKTTSDelay, "TS and Packet Delay"},
 	}
 
 	for _, tt := range tsTypes {
@@ -547,14 +547,14 @@ func TestTraceElement_ITMTraceStrings(t *testing.T) {
 }
 
 func TestTraceElement_CopyPersistentInfo(t *testing.T) {
-	e1 := NewTraceElement()
+	e1 := ocsd.NewTraceElement()
 	e1.SetISA(ocsd.ISAAArch64)
 
 	var ctx ocsd.PEContext
 	ctx.SecurityLevel = ocsd.SecSecure
 	e1.SetContext(ctx)
 
-	e2 := NewTraceElement()
+	e2 := ocsd.NewTraceElement()
 	e2.CopyPersistentData(e1)
 
 	if e2.ISA != ocsd.ISAAArch64 || e2.Context.SecurityLevel != ocsd.SecSecure {
@@ -563,7 +563,7 @@ func TestTraceElement_CopyPersistentInfo(t *testing.T) {
 }
 
 func TestTraceElement_Flags(t *testing.T) {
-	e := NewTraceElement()
+	e := ocsd.NewTraceElement()
 	e.ExceptionRetAddrBrTgt = true
 	if !e.ExceptionRetAddrBrTgt {
 		t.Errorf("ExceptionRetAddrBrTgt failed")
@@ -573,8 +573,8 @@ func TestTraceElement_Flags(t *testing.T) {
 		t.Errorf("ExceptionMTailChain failed")
 	}
 
-	e.UpdateType(GenElemEvent)
-	if e.ElemType != GenElemEvent {
+	e.UpdateType(ocsd.GenElemEvent)
+	if e.ElemType != ocsd.GenElemEvent {
 		t.Errorf("UpdateType failed")
 	}
 }

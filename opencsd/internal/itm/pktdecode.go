@@ -31,7 +31,7 @@ type PktDecode struct {
 	prevOverflow  bool
 	gtsFreqChange bool
 
-	unsyncInfo common.UnsyncInfo
+	unsyncInfo ocsd.UnsyncInfo
 	csID       uint8
 	outputElem ocsd.TraceElement
 }
@@ -148,7 +148,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) OnReset() ocsd.DatapathResp {
-	d.unsyncInfo = common.UnsyncResetDecoder
+	d.unsyncInfo = ocsd.UnsyncResetDecoder
 	// d.resetDecoder() // C++ has it commented out
 	return ocsd.RespCont
 }
@@ -166,7 +166,7 @@ func (d *PktDecode) configureDecoder() {
 	d.csID = 0
 
 	// base decoder state - ITM does not use memory or instruction decode.
-	d.unsyncInfo = common.UnsyncInitDecoder
+	d.unsyncInfo = ocsd.UnsyncInitDecoder
 	d.resetDecoder()
 }
 
@@ -207,7 +207,7 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 	switch d.CurrPacketIn.Type {
 	case PktBadSequence, PktReserved:
 		resp = ocsd.RespFatalInvalidData
-		d.unsyncInfo = common.UnsyncBadPacket
+		d.unsyncInfo = ocsd.UnsyncBadPacket
 		fallthrough
 	case PktNotSync:
 		d.resetDecoder()

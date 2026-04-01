@@ -79,7 +79,7 @@ type PktDecode struct {
 	CurrPacketIn *Packet
 
 	currState   decodeState
-	unsyncInfo  common.UnsyncInfo
+	unsyncInfo  ocsd.UnsyncInfo
 	peContext   ocsd.PEContext
 	currPeState peAddrState
 	needIsync   bool
@@ -158,7 +158,7 @@ func (d *PktDecode) configureDecoder() {
 	d.instrInfo.PeType.Profile = ocsd.ProfileUnknown
 	d.instrInfo.PeType.Arch = ocsd.ArchUnknown
 	d.instrInfo.DsbDmbWaypoints = 0
-	d.unsyncInfo = common.UnsyncInitDecoder
+	d.unsyncInfo = ocsd.UnsyncInitDecoder
 	d.resetDecoder()
 }
 
@@ -245,7 +245,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) OnReset() ocsd.DatapathResp {
-	d.unsyncInfo = common.UnsyncResetDecoder
+	d.unsyncInfo = ocsd.UnsyncResetDecoder
 	d.resetDecoder()
 	return ocsd.RespCont
 }

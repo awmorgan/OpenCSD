@@ -23,7 +23,7 @@ type PktDecode struct {
 	CurrPacketIn *Packet
 
 	currState  decoderState
-	unsyncInfo common.UnsyncInfo
+	unsyncInfo ocsd.UnsyncInfo
 
 	swtPacketInfo ocsd.SWTInfo
 
@@ -154,7 +154,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 }
 
 func (d *PktDecode) OnReset() ocsd.DatapathResp {
-	d.unsyncInfo = common.UnsyncResetDecoder
+	d.unsyncInfo = ocsd.UnsyncResetDecoder
 	d.resetDecoder()
 	return ocsd.RespCont
 }
@@ -171,7 +171,7 @@ func (d *PktDecode) configureDecoder() {
 	d.numPktCorrelation = 1
 	d.csID = 0
 
-	d.unsyncInfo = common.UnsyncInitDecoder
+	d.unsyncInfo = ocsd.UnsyncInitDecoder
 	d.resetDecoder()
 }
 
@@ -199,7 +199,7 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 	switch d.CurrPacketIn.Type {
 	case PktBadSequence, PktReserved:
 		resp = ocsd.RespFatalInvalidData
-		d.unsyncInfo = common.UnsyncBadPacket
+		d.unsyncInfo = ocsd.UnsyncBadPacket
 		fallthrough
 	case PktNotSync:
 		d.resetDecoder()
