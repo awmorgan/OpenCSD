@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"opencsd/internal/common"
 	"opencsd/internal/demux"
-	"opencsd/internal/idec"
 
 	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
@@ -37,7 +35,6 @@ type DecodeTree struct {
 	createdMapper bool
 
 	decoderRoot ocsd.TrcDataProcessor
-	instrDecode common.InstrDecode
 	genElemOut  ocsd.GenElemProcessor
 }
 
@@ -47,7 +44,6 @@ func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) (*DecodeTr
 	dt := &DecodeTree{
 		treeType:       srcType,
 		decodeElements: make(map[uint8]*DecodeTreeElement),
-		instrDecode:    idec.NewDecoder(),
 	}
 
 	if srcType == ocsd.TrcSrcFrameFormatted {
@@ -166,11 +162,6 @@ func (dt *DecodeTree) attachElementDependencies(elem *DecodeTreeElement) {
 			elem.SetTraceElemOut(dt.genElemOut)
 		}
 	}
-	if dt.instrDecode != nil {
-		if elem.SetInstrDecode != nil {
-			elem.SetInstrDecode(dt.instrDecode)
-		}
-	}
 }
 
 // RemoveDecoder removes a decoder mapped to the given CSID.
@@ -192,16 +183,6 @@ func (dt *DecodeTree) SetGenTraceElemOutI(outI ocsd.GenElemProcessor) {
 	for _, elem := range dt.decodeElements {
 		if elem.SetTraceElemOut != nil {
 			elem.SetTraceElemOut(outI)
-		}
-	}
-}
-
-// SetInstrDecoder attaches the instruction decoder for code-following decoders in the tree.
-func (dt *DecodeTree) SetInstrDecoder(instrDec common.InstrDecode) {
-	dt.instrDecode = instrDec
-	for _, elem := range dt.decodeElements {
-		if elem.SetInstrDecode != nil {
-			elem.SetInstrDecode(instrDec)
 		}
 	}
 }

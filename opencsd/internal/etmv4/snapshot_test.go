@@ -13,6 +13,7 @@ import (
 
 	"opencsd/internal/dcdtree"
 	"opencsd/internal/etmv4"
+	"opencsd/internal/idec"
 	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
 	"opencsd/internal/printers"
@@ -279,6 +280,10 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		return nil, fmt.Errorf("nil decode tree")
 	}
 
+	mapper := memacc.NewGlobalMapper()
+	memIf := &mapperAdapter{mapper: mapper}
+	instr := idec.NewDecoder()
+
 	etmv4Decoders := 0
 	for srcDevName := range sourceTree.SourceCoreAssoc {
 		dev := testutil.FindParsedDeviceByName(reader.ParsedDeviceList, srcDevName)
@@ -343,7 +348,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 			proc, err = etmv4.NewConfiguredProcessor(cfg)
 			// 'dec' remains nil
 		} else {
-			proc, dec, err = etmv4.NewConfiguredPipeline(int(cfg.TraceID()), cfg)
+			proc, dec, err = etmv4.NewConfiguredPipelineWithDeps(int(cfg.TraceID()), cfg, nil, memIf, instr)
 		}
 
 		if err != nil {
@@ -387,19 +392,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		})
 	}
 
-	mapper := memacc.NewGlobalMapper()
-	memIf := &mapperAdapter{mapper: mapper}
 	callbackReads := 0
-
-	if !packetOnly {
-		tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
-			dec, ok := elem.DecoderHandle.(*etmv4.PktDecode)
-			if !ok || dec == nil {
-				return
-			}
-			dec.SetMemAccess(memIf)
-		})
-	}
 
 	for _, dev := range reader.ParsedDeviceList {
 		if !strings.EqualFold(dev.DeviceClass, "core") {

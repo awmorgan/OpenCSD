@@ -15,6 +15,7 @@ import (
 
 	"opencsd/internal/dcdtree"
 	"opencsd/internal/ete"
+	"opencsd/internal/idec"
 	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
 	"opencsd/internal/printers"
@@ -175,6 +176,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 
 	mapper := memacc.NewGlobalMapper()
 	memIf := &mapperAdapter{mapper: mapper}
+	instr := idec.NewDecoder()
 
 	eteDecoders := 0
 	seenTraceIDs := map[uint8]struct{}{}
@@ -219,7 +221,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 			continue
 		}
 
-		proc, dec, err := ete.NewConfiguredPipelineWithDeps(int(traceID), cfg, nil, memIf, nil)
+		proc, dec, err := ete.NewConfiguredPipelineWithDeps(int(traceID), cfg, nil, memIf, instr)
 		if err != nil {
 			return nil, fmt.Errorf("create ETE pipeline for %s failed: %v", srcDevName, err)
 		}

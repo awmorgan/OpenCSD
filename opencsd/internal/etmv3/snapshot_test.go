@@ -11,6 +11,7 @@ import (
 
 	"opencsd/internal/dcdtree"
 	"opencsd/internal/etmv3"
+	"opencsd/internal/idec"
 	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
 	"opencsd/internal/printers"
@@ -225,9 +226,10 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		return nil, fmt.Errorf("nil decode tree")
 	}
 
-	// Set up memory accessors.
+	// Set up memory and instruction decode dependencies.
 	mapper := memacc.NewGlobalMapper()
 	memIf := &mapperAdapter{mapper: mapper}
+	instr := idec.NewDecoder()
 
 	etmDecoders := 0
 	for srcDevName := range sourceTree.SourceCoreAssoc {
@@ -260,7 +262,7 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		}
 
 		traceID := cfg.TraceID()
-		proc, dec, err := etmv3.NewConfiguredPipelineWithDeps(int(traceID), cfg, nil, memIf, nil)
+		proc, dec, err := etmv3.NewConfiguredPipelineWithDeps(int(traceID), cfg, nil, memIf, instr)
 		if err != nil {
 			return nil, fmt.Errorf("create ETMv3 pipeline for %s failed: %v", srcDevName, err)
 		}
