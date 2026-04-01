@@ -38,6 +38,7 @@ type DecodeTree struct {
 	decoderRoot ocsd.TrcDataProcessor
 	genElemOut  ocsd.GenElemProcessor
 	memAccess   common.TargetMemAccess
+	instrDecode common.InstrDecode
 }
 
 // NewDecodeTree creates a new Trace Decode Tree using the supplied decoder registry.
@@ -165,13 +166,16 @@ func (dt *DecodeTree) attachElementDependencies(elem *DecodeTreeElement) {
 	if dt.memAccess != nil {
 		dt.wireMemAccess(elem, dt.memAccess)
 	}
+	if dt.instrDecode != nil {
+		dt.wireInstrDecode(elem, dt.instrDecode)
+	}
 }
 
 func (dt *DecodeTree) wireTraceElemOut(elem *DecodeTreeElement, outI ocsd.GenElemProcessor) {
 	if elem == nil || outI == nil {
 		return
 	}
-	if owner, ok := elem.DecoderHandle.(traceElemWiringOwner); ok {
+	if owner, ok := elem.DecoderHandle.(pipelineWiringOwner); ok {
 		owner.SetTraceElemOut(outI)
 	}
 }
@@ -180,8 +184,17 @@ func (dt *DecodeTree) wireMemAccess(elem *DecodeTreeElement, memI common.TargetM
 	if elem == nil || memI == nil {
 		return
 	}
-	if owner, ok := elem.DecoderHandle.(memAccessWiringOwner); ok {
+	if owner, ok := elem.DecoderHandle.(pipelineWiringOwner); ok {
 		owner.SetMemAccess(memI)
+	}
+}
+
+func (dt *DecodeTree) wireInstrDecode(elem *DecodeTreeElement, instr common.InstrDecode) {
+	if elem == nil || instr == nil {
+		return
+	}
+	if owner, ok := elem.DecoderHandle.(pipelineWiringOwner); ok {
+		owner.SetInstrDecode(instr)
 	}
 }
 
@@ -211,6 +224,14 @@ func (dt *DecodeTree) SetMemAccessI(memI common.TargetMemAccess) {
 	dt.memAccess = memI
 	for _, elem := range dt.decodeElements {
 		dt.wireMemAccess(elem, memI)
+	}
+}
+
+// SetInstrDecoderI attaches an instruction decoder interface to all registered decoders.
+func (dt *DecodeTree) SetInstrDecoderI(instr common.InstrDecode) {
+	dt.instrDecode = instr
+	for _, elem := range dt.decodeElements {
+		dt.wireInstrDecode(elem, instr)
 	}
 }
 
