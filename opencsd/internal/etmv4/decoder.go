@@ -811,7 +811,7 @@ func (d *PktDecode) commitElements() error {
 
 			case p0Addr:
 				d.returnStack.SetPopPending(false)
-				if d.returnStack.IsTInfoWaitAddr() {
+				if d.returnStack.TInfoWaitAddr() {
 					// equivalent to is_t_info_wait_addr / clear_t_info_wait_addr
 					d.returnStack.SetTInfoWaitAddr(false)
 				}

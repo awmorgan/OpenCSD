@@ -575,7 +575,7 @@ func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp way
 		case ocsd.InstrBrIndirect:
 			if A == ocsd.AtomE {
 				d.currPeState.valid = false
-				if d.returnStack.IsActive() && d.CurrPacketIn.Type == PktAtom && (d.instrInfo.Subtype == ocsd.SInstrV8Ret || d.instrInfo.Subtype == ocsd.SInstrV7ImpliedRet) {
+				if d.returnStack.Active() && d.CurrPacketIn.Type == PktAtom && (d.instrInfo.Subtype == ocsd.SInstrV8Ret || d.instrInfo.Subtype == ocsd.SInstrV7ImpliedRet) {
 					var nextIsa ocsd.ISA
 					d.instrInfo.InstrAddr = d.returnStack.Pop(&nextIsa)
 					d.instrInfo.NextISA = nextIsa

@@ -102,9 +102,9 @@ func (c *Config) CtxtIDBytes() int {
 func (c *Config) HasVirtExt() bool { return (c.RegCCER & ccerVirtExt) != 0 }
 func (c *Config) VMIDTrace() bool  { return (c.RegCtrl & ctrlVmidEna) != 0 }
 
-func (c *Config) HasTS() bool    { return (c.RegCCER & ccerHasTs) != 0 }
+func (c *Config) HasTS() bool     { return (c.RegCCER & ccerHasTs) != 0 }
 func (c *Config) TSEnabled() bool { return (c.RegCtrl & ctrlTsEna) != 0 }
-func (c *Config) TSPkt64() bool     { return (c.RegCCER & ccerTs64Bit) != 0 }
+func (c *Config) TSPkt64() bool   { return (c.RegCCER & ccerTs64Bit) != 0 }
 
 func (c *Config) TraceID() uint8 { return uint8(c.RegTrcID & 0x7F) }
 

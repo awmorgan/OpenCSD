@@ -9,7 +9,7 @@ import (
 func TestAddrReturnStack(t *testing.T) {
 	s := NewAddrReturnStack()
 
-	if s.IsActive() {
+	if s.Active() {
 		t.Errorf("Should default to inactive")
 	}
 
@@ -28,7 +28,7 @@ func TestAddrReturnStack(t *testing.T) {
 	s.SetPopPending(false)
 
 	s.SetTInfoWaitAddr(true)
-	if !s.IsTInfoWaitAddr() {
+	if !s.TInfoWaitAddr() {
 		t.Errorf("SetTInfoWaitAddr failed")
 	}
 	s.Push(0x2000, ocsd.ISAArm) // shouldn't push because tInfoWaitAddr

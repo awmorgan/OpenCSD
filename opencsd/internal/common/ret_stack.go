@@ -39,7 +39,7 @@ func (s *AddrReturnStack) SetActive(active bool) {
 	s.active = active
 }
 
-func (s *AddrReturnStack) IsActive() bool {
+func (s *AddrReturnStack) Active() bool {
 	return s.active
 }
 
@@ -112,6 +112,6 @@ func (s *AddrReturnStack) SetTInfoWaitAddr(wait bool) {
 	s.tInfoWaitAddr = wait
 }
 
-func (s *AddrReturnStack) IsTInfoWaitAddr() bool {
+func (s *AddrReturnStack) TInfoWaitAddr() bool {
 	return s.tInfoWaitAddr
 }
