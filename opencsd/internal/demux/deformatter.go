@@ -61,7 +61,7 @@ type FrameDeformatter struct {
 	bFsyncStartEob bool
 	trcCurrIdxSof  ocsd.TrcIndex
 
-	exFrmData [ocsd.DfrmtrFrameSize]byte
+	exFrmData []byte
 
 	inBlockBase      []byte // The block being processed (input block)
 	inBlockProcessed uint32
@@ -204,6 +204,11 @@ func (d *FrameDeformatter) resetStateParams() {
 	d.exFrmNBytes = 0
 	d.bFsyncStartEob = false
 	d.trcCurrIdxSof = ocsd.BadTrcIndex
+	if cap(d.exFrmData) < int(ocsd.DfrmtrFrameSize) {
+		d.exFrmData = make([]byte, ocsd.DfrmtrFrameSize)
+	} else {
+		d.exFrmData = d.exFrmData[:ocsd.DfrmtrFrameSize]
+	}
 
 	d.pendingData = nil
 	d.pendingIndex = ocsd.BadTrcIndex

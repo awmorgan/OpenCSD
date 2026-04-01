@@ -113,7 +113,7 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32, state *datapathSta
 				return false, fmt.Errorf("%w: Insufficient bytes for aligned frame at index %d", ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx)
 			}
 			d.exFrmNBytes = ocsd.DfrmtrFrameSize
-			copy(d.exFrmData[:], d.inBlockBase[d.inBlockProcessed+fSyncBytes:d.inBlockProcessed+fSyncBytes+ocsd.DfrmtrFrameSize])
+			copy(d.exFrmData, d.inBlockBase[d.inBlockProcessed+fSyncBytes:d.inBlockProcessed+fSyncBytes+ocsd.DfrmtrFrameSize])
 			d.trcCurrIdxSof = d.trcCurrIdx + ocsd.TrcIndex(fSyncBytes)
 			exBytes = ocsd.DfrmtrFrameSize
 		}
