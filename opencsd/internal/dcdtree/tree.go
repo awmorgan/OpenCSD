@@ -168,11 +168,6 @@ func (dt *DecodeTree) wireTraceElemOut(elem *DecodeTreeElement, outI ocsd.GenEle
 	}
 	if owner, ok := elem.DecoderHandle.(traceElemWiringOwner); ok {
 		owner.SetTraceElemOut(outI)
-		return
-	}
-	// Compatibility fallback while migrating away from function pointer extraction.
-	if elem.SetTraceElemOut != nil {
-		elem.SetTraceElemOut(outI)
 	}
 }
 
