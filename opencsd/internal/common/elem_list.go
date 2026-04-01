@@ -1,6 +1,7 @@
 package common
 
 import (
+	"errors"
 	"sync"
 
 	"opencsd/internal/ocsd"
@@ -151,9 +152,14 @@ func (l *GenElemList) SendElements() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 	for l.ElemToSend() && ocsd.DataRespIsCont(resp) {
 		slot := l.elems[0]
-		var err error
-		resp, err = out.TraceElemIn(slot.pktIndex, l.csID, slot.elem)
-		if err != nil && !ocsd.DataRespIsFatal(resp) {
+		err := out.TraceElemIn(slot.pktIndex, l.csID, slot.elem)
+		if err == nil || ocsd.IsDataContErr(err) {
+			resp = ocsd.RespCont
+		} else if ocsd.IsDataWaitErr(err) {
+			resp = ocsd.RespWait
+		} else if errors.Is(err, ocsd.ErrNotInit) {
+			resp = ocsd.RespFatalNotInit
+		} else {
 			resp = ocsd.RespFatalInvalidData
 		}
 		l.elems[0].elem = nil // nil-zero before reslice to release GC root
@@ -298,9 +304,14 @@ func (s *GenElemStack) SendElements() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 	for s.elemToSend > 0 && ocsd.DataRespIsCont(resp) {
 		slot := s.elems[s.sendElemIdx]
-		var err error
-		resp, err = out.TraceElemIn(slot.pktIndex, s.csID, slot.elem)
-		if err != nil && !ocsd.DataRespIsFatal(resp) {
+		err := out.TraceElemIn(slot.pktIndex, s.csID, slot.elem)
+		if err == nil || ocsd.IsDataContErr(err) {
+			resp = ocsd.RespCont
+		} else if ocsd.IsDataWaitErr(err) {
+			resp = ocsd.RespWait
+		} else if errors.Is(err, ocsd.ErrNotInit) {
+			resp = ocsd.RespFatalNotInit
+		} else {
 			resp = ocsd.RespFatalInvalidData
 		}
 		s.elemToSend--

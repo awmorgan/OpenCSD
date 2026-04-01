@@ -11,9 +11,9 @@ type testTrcElemIn struct {
 	elements []ocsd.TraceElement
 }
 
-func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
+func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
 	t.elements = append(t.elements, *elem)
-	return ocsd.RespCont, nil
+	return nil
 }
 
 type ItmStreamBuilder struct {

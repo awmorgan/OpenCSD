@@ -128,8 +128,8 @@ type myTrcGenElemIn struct {
 	lastID    uint8
 }
 
-func (m *myTrcGenElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
+func (m *myTrcGenElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
 	m.lastIndex = indexSOP
 	m.lastID = trcChanID
-	return ocsd.RespCont, nil
+	return nil
 }

@@ -131,12 +131,12 @@ func TestGenericElementPrinter(t *testing.T) {
 	// Test muted
 	gp.SetMute(true)
 	elem := ocsd.NewTraceElementWithType(ocsd.GenElemTraceOn)
-	resp, err := gp.TraceElemIn(123, 0x10, elem)
+	err := gp.TraceElemIn(123, 0x10, elem)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resp != ocsd.RespCont || buf.Len() != 0 {
-		t.Errorf("expected cont and no output, got %v", resp)
+	if buf.Len() != 0 {
+		t.Errorf("expected no output while muted")
 	}
 	gp.SetMute(false)
 
@@ -159,12 +159,9 @@ func TestGenericElementPrinter(t *testing.T) {
 
 	// Test wait functionality
 	gp.SetTestWaits(1)
-	resp, err = gp.TraceElemIn(300, 0x33, elem)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if resp != ocsd.RespWait {
-		t.Errorf("expected wait resp, got %v", resp)
+	err = gp.TraceElemIn(300, 0x33, elem)
+	if !ocsd.IsDataWaitErr(err) {
+		t.Fatalf("expected wait sentinel error, got %v", err)
 	}
 	if !gp.NeedAckWait() {
 		t.Errorf("expected need ack wait to be true")

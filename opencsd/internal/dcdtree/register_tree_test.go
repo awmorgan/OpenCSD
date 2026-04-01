@@ -16,8 +16,8 @@ func (f *fakeDataIn) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBl
 
 type fakeGenElemOut struct{}
 
-func (f *fakeGenElemOut) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
-	return ocsd.RespCont, nil
+func (f *fakeGenElemOut) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
+	return nil
 }
 
 type fakePipelineWiringHandle struct {

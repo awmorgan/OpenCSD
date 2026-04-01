@@ -1,6 +1,7 @@
 package common
 
 import (
+	"errors"
 	"opencsd/internal/ocsd"
 )
 
@@ -77,7 +78,17 @@ type DecoderBase struct {
 // OutputTraceElement sends an element to the downstream consumer using IndexCurrPkt.
 func (b *DecoderBase) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
 	if b.TraceElemOut != nil {
-		return b.TraceElemOut.TraceElemIn(b.IndexCurrPkt, traceID, elem)
+		err := b.TraceElemOut.TraceElemIn(b.IndexCurrPkt, traceID, elem)
+		if err == nil || ocsd.IsDataContErr(err) {
+			return ocsd.RespCont, nil
+		}
+		if ocsd.IsDataWaitErr(err) {
+			return ocsd.RespWait, nil
+		}
+		if errors.Is(err, ocsd.ErrNotInit) {
+			return ocsd.RespFatalNotInit, err
+		}
+		return ocsd.RespFatalInvalidData, err
 	}
 	return ocsd.RespFatalNotInit, ocsd.ErrNotInit
 }
@@ -85,7 +96,17 @@ func (b *DecoderBase) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement)
 // OutputTraceElementIdx sends an element to the downstream consumer at an explicit index.
 func (b *DecoderBase) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
 	if b.TraceElemOut != nil {
-		return b.TraceElemOut.TraceElemIn(idx, traceID, elem)
+		err := b.TraceElemOut.TraceElemIn(idx, traceID, elem)
+		if err == nil || ocsd.IsDataContErr(err) {
+			return ocsd.RespCont, nil
+		}
+		if ocsd.IsDataWaitErr(err) {
+			return ocsd.RespWait, nil
+		}
+		if errors.Is(err, ocsd.ErrNotInit) {
+			return ocsd.RespFatalNotInit, err
+		}
+		return ocsd.RespFatalInvalidData, err
 	}
 	return ocsd.RespFatalNotInit, ocsd.ErrNotInit
 }

@@ -77,10 +77,10 @@ type filteredGenElemPrinter struct {
 	validIDs     [256]bool
 }
 
-func (g *filteredGenElemPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
+func (g *filteredGenElemPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
 	if !g.allSourceIDs {
 		if !g.validIDs[trcChanID] {
-			return ocsd.RespCont, nil
+			return nil
 		}
 	}
 	return g.printer.TraceElemIn(indexSOP, trcChanID, elem)
