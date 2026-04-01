@@ -349,16 +349,16 @@ func TestITMPacketStringVariants(t *testing.T) {
 		t.Fatalf("SetValue size clamp failed: value=0x%X size=%d", pkt.Value, pkt.ValSz)
 	}
 
-	pkt.SetPacketType(PktDWT)
-	pkt.SetSrcID(0)
+	pkt.Type = PktDWT
+	pkt.SrcID = 0
 	pkt.SetValue(0x15, 1) // CPI, SLP, FLD
 	str := pkt.String()
 	if str == "" {
 		t.Fatalf("expected non-empty DWT string")
 	}
 
-	pkt.SetPacketType(PktSWIT)
-	pkt.SetSrcID(3)
+	pkt.Type = PktSWIT
+	pkt.SrcID = 3
 	pkt.SetValue(0xAA, 1)
 	str = pkt.String()
 	if str == "" {
@@ -370,47 +370,47 @@ func TestITMPacketStringVariants(t *testing.T) {
 		t.Errorf("Expected bad packet")
 	}
 
-	pkt.SetPacketType(PktTSLocal)
+	pkt.Type = PktTSLocal
 	for id := range uint8(4) {
-		pkt.SetSrcID(id)
+		pkt.SrcID = id
 		pkt.SetValue(0x10, 2)
 		if pkt.String() == "" {
 			t.Fatalf("expected non-empty local TS string for id=%d", id)
 		}
 	}
 
-	pkt.SetPacketType(PktTSGlobal1)
+	pkt.Type = PktTSGlobal1
 	pkt.SetValue(0x100, 3)
 	if pkt.String() == "" {
 		t.Fatalf("expected non-empty global TS1 string")
 	}
 
-	pkt.SetPacketType(PktTSGlobal2)
+	pkt.Type = PktTSGlobal2
 	pkt.SetExtValue(0x1000)
 	if pkt.String() == "" {
 		t.Fatalf("expected non-empty global TS2 string")
 	}
 
-	pkt.SetPacketType(PktExtension)
-	pkt.SetSrcID(0)
+	pkt.Type = PktExtension
+	pkt.SrcID = 0
 	if pkt.String() == "" {
 		t.Fatalf("expected non-empty extension SW string")
 	}
 
-	pkt.SetPacketType(PktExtension)
-	pkt.SetSrcID(0x80)
+	pkt.Type = PktExtension
+	pkt.SrcID = 0x80
 	if pkt.String() == "" {
 		t.Fatalf("expected non-empty extension HW string")
 	}
 
-	pkt.SetPacketType(PktOverflow)
+	pkt.Type = PktOverflow
 	if pkt.String() == "" {
 		t.Fatalf("expected non-empty overflow string")
 	}
 
 	// valSize coverage
 	pkt.ValSz = 0
-	pkt.SetPacketType(PktDWT)
+	pkt.Type = PktDWT
 	if pkt.String() == "" {
 		t.Fatalf("expected non-empty DWT string for val size 0")
 	}
@@ -426,7 +426,7 @@ func TestITMPacketStringVariants(t *testing.T) {
 
 	// DWT detailed coverage
 	for _, id := range []uint8{1, 2, 8, 9, 16, 18, 99} {
-		pkt.SetSrcID(id)
+		pkt.SrcID = id
 		if pkt.String() == "" {
 			t.Fatalf("expected non-empty DWT string for src id %d", id)
 		}
@@ -438,7 +438,7 @@ func TestITMPacketStringVariants(t *testing.T) {
 		PktBadSequence, PktReserved, PktType(99),
 	}
 	for _, pktType := range types {
-		pkt.SetPacketType(pktType)
+		pkt.Type = pktType
 		if pkt.String() == "" {
 			t.Fatalf("expected non-empty packet string for type %v", pktType)
 		}

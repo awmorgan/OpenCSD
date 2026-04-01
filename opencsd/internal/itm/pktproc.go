@@ -410,7 +410,7 @@ func (p *PktProc) setBadSequenceError(msg string) error {
 // setReservedHdrError records a reserved-header error on the processor.
 // Callers must return immediately after calling this.
 func (p *PktProc) setReservedHdrError(msg string) error {
-	p.currPacket.SetPacketType(PktReserved)
+	p.currPacket.Type = PktReserved
 	return fmt.Errorf("%w: %s", ocsd.ErrInvalidPcktHdr, msg)
 }
 
@@ -439,36 +439,36 @@ func (p *PktProc) ProcessHdr() error {
 
 	if (b & 0x03) != 0x00 { // Stimulus packets
 		if (b & 0x4) != 0 {
-			p.currPacket.SetPacketType(PktDWT)
+			p.currPacket.Type = PktDWT
 		} else {
-			p.currPacket.SetPacketType(PktSWIT)
+			p.currPacket.Type = PktSWIT
 		}
 		p.decodeState = decodeData
 		p.procState = procData
 	} else if (b & 0x0F) == 0x00 {
 		switch b & 0xF0 {
 		case 0x00:
-			p.currPacket.SetPacketType(PktAsync)
+			p.currPacket.Type = PktAsync
 			p.decodeState = decodeAsync
 			p.procState = procData
 		case 0x70:
-			p.currPacket.SetPacketType(PktOverflow)
+			p.currPacket.Type = PktOverflow
 			p.procState = procSendPkt
 		default:
-			p.currPacket.SetPacketType(PktTSLocal)
+			p.currPacket.Type = PktTSLocal
 			p.decodeState = decodeLocalTS
 			p.procState = procData
 		}
 	} else if (b & 0x0B) == 0x08 {
-		p.currPacket.SetPacketType(PktExtension)
+		p.currPacket.Type = PktExtension
 		p.decodeState = decodeExtension
 		p.procState = procData
 	} else if (b & 0xDF) == 0x94 {
 		if (b & 0x20) == 0x00 {
-			p.currPacket.SetPacketType(PktTSGlobal1)
+			p.currPacket.Type = PktTSGlobal1
 			p.decodeState = decodeGlobalTS1
 		} else {
-			p.currPacket.SetPacketType(PktTSGlobal2)
+			p.currPacket.Type = PktTSGlobal2
 			p.decodeState = decodeGlobalTS2
 		}
 		p.procState = procData
@@ -506,7 +506,7 @@ func (p *PktProc) PktData() error {
 	}
 
 	if len(p.packetData) == 1 {
-		p.currPacket.SetSrcID((p.headerByte >> 3) & 0x1F)
+		p.currPacket.SrcID = (p.headerByte >> 3) & 0x1F
 	}
 
 	for payloadBytesGot < payloadBytesReq {
@@ -599,9 +599,9 @@ func (p *PktProc) PktLocalTS() error {
 
 	if len(p.packetData) == 1 {
 		if (p.headerByte & 0x80) != 0 {
-			p.currPacket.SetSrcID((p.headerByte >> 4) & 0x3)
+			p.currPacket.SrcID = (p.headerByte >> 4) & 0x3
 		} else {
-			p.currPacket.SetSrcID(0)
+			p.currPacket.SrcID = 0
 			p.currPacket.SetValue(uint32((p.headerByte>>4)&0x7), 1)
 			p.procState = procSendPkt
 			return nil
@@ -630,7 +630,7 @@ func (p *PktProc) PktGlobalTS1() error {
 	if bGotContVal {
 		if len(p.packetData) == 5 {
 			b := p.packetData[4]
-			p.currPacket.SetSrcID((b >> 5) & 0x3)
+			p.currPacket.SrcID = (b >> 5) & 0x3
 			p.packetData[4] = b & 0x1F
 		}
 		v, err := p.extractContVal32()
@@ -686,7 +686,7 @@ func (p *PktProc) PktExtension() error {
 		if (p.headerByte & 0x4) != 0 {
 			srcIdVal |= 0x80
 		}
-		p.currPacket.SetSrcID(srcIdVal)
+		p.currPacket.SrcID = srcIdVal
 
 		value := uint32(0)
 		if len(p.packetData) > 1 {
@@ -767,7 +767,7 @@ func (p *PktProc) flushUnsyncedBytes() ocsd.DatapathResp {
 
 func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	p.currPacket.SetPacketType(PktNotSync)
+	p.currPacket.Type = PktNotSync
 	p.dumpUnsyncedBytes = 0
 
 	if !p.syncStart {
@@ -779,7 +779,7 @@ func (p *PktProc) waitForSync(blkStIndex ocsd.TrcIndex) ocsd.DatapathResp {
 			bFoundAsync, bAsyncErr := p.readAsyncSeq()
 			p.bStreamSync = bFoundAsync
 			if p.bStreamSync {
-				p.currPacket.SetPacketType(PktAsync)
+				p.currPacket.Type = PktAsync
 				p.procState = procSendPkt
 			} else if bAsyncErr {
 				p.dumpUnsyncedBytes = len(p.packetData)

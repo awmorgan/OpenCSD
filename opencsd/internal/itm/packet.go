@@ -68,20 +68,10 @@ func (p *Packet) Reset() {
 	p.ErrType = PktNoErrType
 }
 
-// SetPacketType sets the packet type.
-func (p *Packet) SetPacketType(pktType PktType) {
-	p.Type = pktType
-}
-
 // UpdateErrType updates the error type and sets the packet to the given error type.
 func (p *Packet) UpdateErrType(errType PktType) {
 	p.ErrType = p.Type // original type is the err type
 	p.Type = errType   // mark main type as an error
-}
-
-// SetSrcID sets the packet source ID.
-func (p *Packet) SetSrcID(srcID uint8) {
-	p.SrcID = srcID
 }
 
 var valMasks = [...]uint32{0xFF, 0xFFFF, 0xFFFFFF, 0xFFFFFFFF}
