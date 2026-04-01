@@ -165,10 +165,28 @@ func (d *FrameDeformatter) outputRawMonBytes(op ocsd.DatapathOp, index ocsd.TrcI
 	}
 }
 
+func (d *FrameDeformatter) callIDStream(stream ocsd.TrcDataProcessor, op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, error) {
+	if exp, ok := stream.(ocsd.TrcDataProcessorExplicit); ok {
+		switch op {
+		case ocsd.OpData:
+			return exp.TraceData(index, data)
+		case ocsd.OpEOT:
+			return 0, exp.TraceDataEOT()
+		case ocsd.OpFlush:
+			return 0, exp.TraceDataFlush()
+		case ocsd.OpReset:
+			return 0, exp.TraceDataReset(index)
+		default:
+			return 0, ocsd.ErrInvalidParamVal
+		}
+	}
+	return stream.TraceDataIn(op, index, data)
+}
+
 func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocsd.TrcIndex, state *datapathState) ocsd.DatapathResp {
 	for _, stream := range d.idStreams {
 		if stream != nil { // if attached
-			_, err := stream.TraceDataIn(op, index, nil)
+			_, err := d.callIDStream(stream, op, index, nil)
 			resp := ocsd.DataRespFromErr(err)
 			collateDataPathResp(state, resp, err)
 		}

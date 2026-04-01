@@ -82,12 +82,30 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 	}
 
 	const processChunk = 64 * 1024
+	callTraceData := func(proc ocsd.TrcDataProcessor, op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, error) {
+		if exp, ok := proc.(ocsd.TrcDataProcessorExplicit); ok {
+			switch op {
+			case ocsd.OpData:
+				return exp.TraceData(index, data)
+			case ocsd.OpEOT:
+				return 0, exp.TraceDataEOT()
+			case ocsd.OpFlush:
+				return 0, exp.TraceDataFlush()
+			case ocsd.OpReset:
+				return 0, exp.TraceDataReset(index)
+			default:
+				return 0, ocsd.ErrInvalidParamVal
+			}
+		}
+		return proc.TraceDataIn(op, index, data)
+	}
+
 	processWithContext := func(proc ocsd.TrcDataProcessor) (uint32, error) {
 		if proc == nil {
 			return 0, ocsd.ErrNotInit
 		}
 		if ctx == nil || op != ocsd.OpData || len(data) <= processChunk {
-			return proc.TraceDataIn(op, index, data)
+			return callTraceData(proc, op, index, data)
 		}
 
 		var total uint32
@@ -101,7 +119,7 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 			end := min(offset+processChunk, len(data))
 
 			chunkIdx := index + ocsd.TrcIndex(offset)
-			amt, err := proc.TraceDataIn(op, chunkIdx, data[offset:end])
+			amt, err := callTraceData(proc, op, chunkIdx, data[offset:end])
 			total += amt
 			if !ocsd.DataRespIsCont(ocsd.DataRespFromErr(err)) {
 				return total, err

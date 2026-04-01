@@ -288,7 +288,7 @@ func (d *FrameDeformatter) outputFrame(state *datapathState) bool {
 						d.outData[d.outProcessed].data[:d.outData[d.outProcessed].valid],
 						id)
 				}
-				bytesUsed, err := pDataIn.TraceDataIn(ocsd.OpData,
+				bytesUsed, err := d.callIDStream(pDataIn, ocsd.OpData,
 					d.outData[d.outProcessed].index+ocsd.TrcIndex(d.outData[d.outProcessed].used),
 					d.outData[d.outProcessed].data[d.outData[d.outProcessed].used:d.outData[d.outProcessed].valid])
 
