@@ -187,7 +187,7 @@ func (d *FrameDeformatter) callIDStream(stream ocsd.TrcDataProcessorExplicit, op
 	}
 }
 
-func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocsd.TrcIndex, state *datapathState) ocsd.DatapathResp {
+func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocsd.TrcIndex, state *datapathState) error {
 	for _, stream := range d.idStreams {
 		if stream != nil { // if attached
 			_, err := d.callIDStream(stream, op, index, nil)
@@ -202,20 +202,20 @@ func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocs
 			collateDataPathResp(state, ocsd.RespFatalInvalidData, err)
 		}
 	}
-	return state.highestResp()
+	return state.err
 }
 
-func (d *FrameDeformatter) Reset(state *datapathState) ocsd.DatapathResp {
+func (d *FrameDeformatter) Reset(state *datapathState) error {
 	d.resetStateParams()
 	return d.executeNoneDataOpAllIDs(ocsd.OpReset, 0, state)
 }
 
-func (d *FrameDeformatter) Flush(state *datapathState) ocsd.DatapathResp {
+func (d *FrameDeformatter) Flush(state *datapathState) error {
 	d.executeNoneDataOpAllIDs(ocsd.OpFlush, 0, state)
 	if ocsd.DataRespIsCont(state.highestResp()) {
 		d.outputFrame(state)
 	}
-	return state.highestResp()
+	return state.err
 }
 
 func (d *FrameDeformatter) resetStateParams() {
@@ -246,34 +246,34 @@ func (d *FrameDeformatter) resetStateParams() {
 
 // TraceDataIn implementation
 func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	resp := ocsd.RespFatalInvalidOp
 	state := newDatapathState()
 
 	d.outPackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrPackedRawOut) != 0
 	d.outUnpackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrUnpackedRawOut) != 0
 
 	var numBytesProcessed uint32
+	var err error
 
 	switch op {
 	case ocsd.OpReset:
-		resp = d.Reset(state)
+		err = d.Reset(state)
 	case ocsd.OpFlush:
-		resp = d.Flush(state)
+		err = d.Flush(state)
 	case ocsd.OpEOT:
-		resp = d.executeNoneDataOpAllIDs(ocsd.OpEOT, 0, state)
+		err = d.executeNoneDataOpAllIDs(ocsd.OpEOT, 0, state)
 	case ocsd.OpData:
 		if len(dataBlock) == 0 {
-			resp = ocsd.RespFatalInvalidParam
+			err = ocsd.ErrInvalidParamVal
 		} else {
-			resp, numBytesProcessed = d.processTraceData(index, dataBlock, state)
+			err, numBytesProcessed = d.processTraceData(index, dataBlock, state)
 		}
 	default:
-		// Unsupported operations
+		err = ocsd.ErrInvalidParamVal
 	}
-	if state.err != nil {
+	if state.err != nil && (err == nil || ocsd.DataRespFromErr(state.err) >= ocsd.DataRespFromErr(err)) {
 		return numBytesProcessed, state.err
 	}
-	return numBytesProcessed, ocsd.DataErrFromResp(resp, nil)
+	return numBytesProcessed, err
 }
 
 // TraceData is the explicit data entrypoint implementing TrcDataProcessorExplicit.
@@ -299,7 +299,7 @@ func (d *FrameDeformatter) TraceDataReset(index ocsd.TrcIndex) error {
 	return err
 }
 
-func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byte, state *datapathState) (resp ocsd.DatapathResp, numBytesProcessed uint32) {
+func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byte, state *datapathState) (outErr error, numBytesProcessed uint32) {
 	if d.alignment == 0 {
 		return d.processTraceDataError(fmt.Errorf("%w: Deformatter not configured", ocsd.ErrFail), ocsd.RespFatalSysErr, state), 0
 	}
@@ -329,14 +329,14 @@ func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byt
 			d.firstData = true
 		}
 		numBytesProcessed = uint32(len(dataBlock))
-		return state.highestResp(), numBytesProcessed
+		return state.err, numBytesProcessed
 	}
 
 	alignedBlock := d.pendingData[:processSize]
 	alignedIndex := d.pendingIndex
 
 	var alignedProcessed uint32
-	_, alignedProcessed = d.processTraceDataAligned(alignedIndex, alignedBlock, state)
+	outErr, alignedProcessed = d.processTraceDataAligned(alignedIndex, alignedBlock, state)
 
 	if alignedProcessed > 0 {
 		d.pendingData = d.pendingData[int(alignedProcessed):]
@@ -352,11 +352,13 @@ func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byt
 	}
 
 	numBytesProcessed = uint32(len(dataBlock))
-	resp = state.highestResp()
-	return resp, numBytesProcessed
+	if state.err != nil {
+		return state.err, numBytesProcessed
+	}
+	return outErr, numBytesProcessed
 }
 
-func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBlock []byte, state *datapathState) (resp ocsd.DatapathResp, numBytesProcessed uint32) {
+func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBlock []byte, state *datapathState) (outErr error, numBytesProcessed uint32) {
 	d.trcCurrIdx = index
 
 	// record incoming block
@@ -386,11 +388,13 @@ func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBloc
 	}
 
 	numBytesProcessed = d.inBlockProcessed
-	resp = state.highestResp()
-	return resp, numBytesProcessed
+	if state.err != nil {
+		return state.err, numBytesProcessed
+	}
+	return outErr, numBytesProcessed
 }
 
-func (d *FrameDeformatter) processTraceDataError(errObj error, resp ocsd.DatapathResp, state *datapathState) ocsd.DatapathResp {
+func (d *FrameDeformatter) processTraceDataError(errObj error, resp ocsd.DatapathResp, state *datapathState) error {
 	collateDataPathResp(state, resp, errObj)
-	return state.highestResp()
+	return state.err
 }
