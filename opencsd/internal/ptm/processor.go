@@ -138,7 +138,7 @@ func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, 
 	}
 }
 
-func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pktType PktType, pktData []byte) ocsd.DatapathResp {
+func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pktData []byte) ocsd.DatapathResp {
 	if len(pktData) > 0 {
 		p.outputRawPacketToMonitor(indexSOP, pkt, pktData)
 	}
@@ -345,7 +345,7 @@ func (p *PktProc) runDecodeAction() error {
 }
 
 func (p *PktProc) outputPacket() ocsd.DatapathResp {
-	resp := p.outputOnAllInterfaces(p.currPktIndex, &p.currPacket, p.currPacket.Type, p.currPacketData)
+	resp := p.outputOnAllInterfaces(p.currPktIndex, &p.currPacket, p.currPacketData)
 	p.currPacketData = p.currPacketData[:0]
 	return resp
 }

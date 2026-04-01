@@ -153,7 +153,7 @@ func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, 
 	}
 }
 
-func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pktType PktType, pktData []byte) ocsd.DatapathResp {
+func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pktData []byte) ocsd.DatapathResp {
 	if len(pktData) > 0 {
 		p.outputRawPacketToMonitor(indexSOP, pkt, pktData)
 	}
@@ -302,7 +302,7 @@ func (p *PktProc) IsBadPacket() bool {
 }
 
 func (p *PktProc) outputPacket() ocsd.DatapathResp {
-	resp := p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, p.currPacket.Type, p.packetData)
+	resp := p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, p.packetData)
 	p.packetData = p.packetData[:0]
 	p.resetNextPacket()
 	if p.nibble2ndValid {

@@ -630,16 +630,16 @@ func (d *PktDecode) decodePacket() error {
 		}
 
 	case PktBadSequence:
-		d.handleBadPacket(d.IndexCurrPkt, "Bad byte sequence in packet.")
+		d.handleBadPacket(d.IndexCurrPkt)
 
 	case PktBadTraceMode:
-		d.handleBadPacket(d.IndexCurrPkt, "Invalid packet type for trace mode.")
+		d.handleBadPacket(d.IndexCurrPkt)
 
 	case PktReserved:
-		d.handleBadPacket(d.IndexCurrPkt, "Reserved packet header")
+		d.handleBadPacket(d.IndexCurrPkt)
 
 	case PktReservedCfg:
-		d.handleBadPacket(d.IndexCurrPkt, "Reserved packet header for current configuration")
+		d.handleBadPacket(d.IndexCurrPkt)
 
 	// ETE timestamp marker compatibility alias
 	case PktTypeTS_MARKER:
@@ -908,7 +908,7 @@ func (d *PktDecode) commitElements() error {
 			}
 			if popElem {
 				if len(d.p0Stack) == 0 {
-					err = d.handlePacketSeqErr(ocsd.ErrCommitPktOverrun, errIdx, "Element stack underflow during commit pop")
+					err = d.handlePacketSeqErr(ocsd.ErrCommitPktOverrun, errIdx)
 					d.elemRes.P0Commit = 0
 					break
 				}
@@ -917,7 +917,7 @@ func (d *PktDecode) commitElements() error {
 				d.p0Stack = d.p0Stack[1:] // pop_front
 			}
 		} else {
-			err = d.handlePacketSeqErr(ocsd.ErrCommitPktOverrun, errIdx, "Not enough elements to commit")
+			err = d.handlePacketSeqErr(ocsd.ErrCommitPktOverrun, errIdx)
 			d.elemRes.P0Commit = 0
 			break
 		}
@@ -1032,7 +1032,7 @@ func (d *PktDecode) returnStackPop() error {
 		overflow := d.returnStack.Overflow
 		if overflow {
 			err = ocsd.ErrRetStackOverflow
-			err = d.handlePacketSeqErr(err, ocsd.BadTrcIndex, "Trace Return Stack Overflow.")
+			err = d.handlePacketSeqErr(err, ocsd.BadTrcIndex)
 		} else {
 			d.instrInfo.InstrAddr = popAddr
 			d.instrInfo.ISA = *isa
@@ -1228,7 +1228,7 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, elem *p0Elem) error {
 			d.needCtxt = true
 			return nil
 		}
-		return d.handlePacketSeqErr(err, elem.rootIndex, "Error processing atom packet")
+		return d.handlePacketSeqErr(err, elem.rootIndex)
 	}
 
 	if WPRes == wpFound {
@@ -1262,7 +1262,7 @@ func (d *PktDecode) processAtom(atom ocsd.AtmVal, elem *p0Elem) error {
 		// Check for discontinuous ranges that can indicate an inconsistent/corrupt
 		// program image used for decode. Mirrors the C++ etmv4 decoder logic.
 		if !d.nextRangeCheckOK(addrRange.stAddr) {
-			return d.handleBadImageError("Discontinuous ranges - Inconsistent program image for decode\n")
+			return d.handleBadImageError()
 		}
 		if atom == ocsd.AtomN {
 			// Branch not taken, next range is expected to continue at nextAddr.
@@ -1322,7 +1322,7 @@ func (d *PktDecode) processException(elem *p0Elem) error {
 		}
 
 		if idx >= len(d.p0Stack) || d.p0Stack[idx].p0Type != p0Addr {
-			return d.handlePacketSeqErr(ocsd.ErrBadPacketSeq, d.IndexCurrPkt, "Address missing in exception packet.")
+			return d.handlePacketSeqErr(ocsd.ErrBadPacketSeq, d.IndexCurrPkt)
 		}
 		pAddressElem = d.p0Stack[idx]
 		excepRetAddr = pAddressElem.addrVal
@@ -1726,7 +1726,7 @@ func (d *PktDecode) cancelElements() error {
 			}
 		} else {
 			err = ocsd.ErrCommitPktOverrun
-			err = d.handlePacketSeqErr(err, d.IndexCurrPkt, "Not enough elements to cancel")
+			err = d.handlePacketSeqErr(err, d.IndexCurrPkt)
 			d.elemRes.P0Cancel = 0
 			break
 		}
@@ -1767,7 +1767,7 @@ func (d *PktDecode) mispredictAtom() error {
 	}
 
 	if !foundAtom {
-		err = d.handlePacketSeqErr(ocsd.ErrCommitPktOverrun, d.IndexCurrPkt, "Not found mispredict atom")
+		err = d.handlePacketSeqErr(ocsd.ErrCommitPktOverrun, d.IndexCurrPkt)
 	}
 	d.elemRes.Mispredict = false
 	return err
@@ -1826,7 +1826,7 @@ func (d *PktDecode) doTraceInfoPacket() {
 	}
 }
 
-func (d *PktDecode) handlePacketSeqErr(err error, idx ocsd.TrcIndex, reason string) error {
+func (d *PktDecode) handlePacketSeqErr(err error, idx ocsd.TrcIndex) error {
 	d.resetDecoderState()
 	d.currState = noSync
 	d.unsyncEOTInfo = ocsd.UnsyncBadPacket
@@ -1834,14 +1834,14 @@ func (d *PktDecode) handlePacketSeqErr(err error, idx ocsd.TrcIndex, reason stri
 	return err
 }
 
-func (d *PktDecode) handleBadPacket(idx ocsd.TrcIndex, reason string) {
+func (d *PktDecode) handleBadPacket(idx ocsd.TrcIndex) {
 	d.resetDecoderState()
 	d.currState = noSync
 	d.unsyncEOTInfo = ocsd.UnsyncBadPacket
 	d.unsyncPktIdx = idx
 }
 
-func (d *PktDecode) handleBadImageError(reason string) error {
+func (d *PktDecode) handleBadImageError() error {
 	d.resetDecoderState()
 	d.currState = noSync
 	d.unsyncEOTInfo = ocsd.UnsyncBadImage

@@ -280,7 +280,7 @@ func (d *PktDecode) handleWaitISync() (decoderState, ocsd.DatapathResp, bool) {
 	d.waitISync = true
 	packetIn := d.CurrPacketIn
 	if packetIn.Type == PktISync || packetIn.Type == PktISyncCycle {
-		resp := d.processISync(packetIn.Type == PktISyncCycle, true)
+		resp := d.processISync(true)
 		d.waitISync = false
 		return d.nextSendOrDecodeState(), resp, false
 	}
@@ -422,7 +422,7 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 	case PktBranchAddress:
 		resp = d.processBranchAddr()
 	case PktISyncCycle, PktISync:
-		resp = d.processISync(packetIn.Type == PktISyncCycle, false)
+		resp = d.processISync(false)
 	case PktPHdr:
 		resp = d.processPHdr()
 	case PktContextID:
@@ -488,7 +488,7 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 	return resp, done
 }
 
-func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp {
+func (d *PktDecode) processISync(firstSync bool) ocsd.DatapathResp {
 	packetIn := d.CurrPacketIn
 	ctxtUpdate := packetIn.Context.UpdatedC || packetIn.Context.UpdatedV || packetIn.Context.Updated
 

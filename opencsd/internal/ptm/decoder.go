@@ -475,7 +475,7 @@ func (d *PktDecode) processBranch() ocsd.DatapathResp {
 			resp, _ = d.OutputTraceElement(d.csID, &d.outputElem)
 		} else {
 			if d.currPeState.valid {
-				resp = d.processAtomRange(ocsd.AtomE, "BranchAddr", traceWaypoint, 0)
+				resp = d.processAtomRange(ocsd.AtomE, traceWaypoint, 0)
 			}
 		}
 
@@ -496,7 +496,7 @@ func (d *PktDecode) processWPUpdate() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 
 	if d.currPeState.valid {
-		resp = d.processAtomRange(ocsd.AtomE, "WP update", traceToAddrIncl, d.CurrPacketIn.AddrVal)
+		resp = d.processAtomRange(ocsd.AtomE, traceToAddrIncl, d.CurrPacketIn.AddrVal)
 	}
 
 	d.checkPendingNacc(&resp)
@@ -511,7 +511,7 @@ func (d *PktDecode) processAtom() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 
 	for d.atoms.numAtoms() > 0 && d.currPeState.valid && ocsd.DataRespIsCont(resp) {
-		resp = d.processAtomRange(d.atoms.getCurrAtomVal(), "atom", traceWaypoint, 0)
+		resp = d.processAtomRange(d.atoms.getCurrAtomVal(), traceWaypoint, 0)
 		if !d.currPeState.valid {
 			d.atoms.clearAll()
 		} else {
@@ -542,7 +542,7 @@ func (d *PktDecode) checkPendingNacc(resp *ocsd.DatapathResp) {
 	}
 }
 
-func (d *PktDecode) processAtomRange(A ocsd.AtmVal, pktMsg string, traceWPOp waypointTraceOp, nextAddrMatch ocsd.VAddr) ocsd.DatapathResp {
+func (d *PktDecode) processAtomRange(A ocsd.AtmVal, traceWPOp waypointTraceOp, nextAddrMatch ocsd.VAddr) ocsd.DatapathResp {
 	resp := ocsd.RespCont
 
 	wpFound := false

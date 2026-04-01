@@ -91,7 +91,7 @@ func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, 
 	}
 }
 
-func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pktType PktType, pktData []byte) ocsd.DatapathResp {
+func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pktData []byte) ocsd.DatapathResp {
 	if len(pktData) > 0 {
 		p.outputRawPacketToMonitor(indexSOP, pkt, pktData)
 	}
@@ -634,7 +634,7 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 	var dpResp ocsd.DatapathResp
 	if true { // assuming p.isInit=true conceptually
 		if !p.bSendPartPkt {
-			dpResp = p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, p.currPacket.Type, p.currPacketData)
+			dpResp = p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, p.currPacketData)
 			if p.bStreamSync {
 				p.processState = procHdr
 			} else {
@@ -642,7 +642,7 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 			}
 			p.currPacketData = p.currPacketData[:0]
 		} else {
-			dpResp = p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, p.currPacket.Type, p.partPktData)
+			dpResp = p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, p.partPktData)
 			p.processState = p.postPartPktState
 			p.packetIndex += ocsd.TrcIndex(len(p.partPktData))
 			p.bSendPartPkt = false
