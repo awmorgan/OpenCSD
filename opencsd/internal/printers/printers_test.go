@@ -8,17 +8,6 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-type mockLogger struct {
-	bytes.Buffer
-}
-
-func (m *mockLogger) LogError(_ ocsd.HandleErrLog, _ error) {}
-func (m *mockLogger) LogMessage(_ ocsd.HandleErrLog, _ ocsd.ErrSeverity, msg string) {
-	m.WriteString(msg)
-}
-func (m *mockLogger) LastError() error          { return nil }
-func (m *mockLogger) LastIDError(_ uint8) error { return nil }
-
 func TestItemPrinter(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewItemPrinter(&buf)
@@ -42,15 +31,9 @@ func TestItemPrinter(t *testing.T) {
 		t.Error("expected id print muted")
 	}
 
-	ml := &mockLogger{}
-	p.SetMessageLogger(ml)
-
 	p.ItemPrintLine("Hello Test\n")
 	if buf.String() != "Hello Test\n" {
 		t.Errorf("buf string mismatch: %q", buf.String())
-	}
-	if ml.String() != "Hello Test\n" {
-		t.Errorf("logger string mismatch: %q", ml.String())
 	}
 }
 

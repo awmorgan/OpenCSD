@@ -1,21 +1,6 @@
 package common
 
-import (
-	"opencsd/internal/ocsd"
-)
-
-// ErrorLogger represents the ITraceErrorLog interface.
-// handle identifies the error source (use ocsd.HandleGenErr / HandleGenWarn / HandleGenInfo
-// for callers that are not registered as a named error source).
-type ErrorLogger interface {
-	LogError(handle ocsd.HandleErrLog, err error)
-	LogMessage(handle ocsd.HandleErrLog, sev ocsd.ErrSeverity, msg string)
-	// LastError returns the most recently logged error, or nil if none.
-	LastError() error
-	// LastIDError returns the most recently logged error for the given
-	// CoreSight trace source channel ID, or nil if none.
-	LastIDError(chanID uint8) error
-}
+import "opencsd/internal/ocsd"
 
 // DataRespStr returns a string representation for an ocsd.DatapathResp value.
 // It matches the exact strings from ocsdDataRespStr::getStr() in C++.

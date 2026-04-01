@@ -3,15 +3,11 @@ package printers
 import (
 	"fmt"
 	"io"
-
-	"opencsd/internal/common"
-	"opencsd/internal/ocsd"
 )
 
 // ItemPrinter translates the C++ ItemPrinter class.
 type ItemPrinter struct {
 	writer      io.Writer
-	errLog      common.ErrorLogger
 	testWaits   int
 	muted       bool
 	idPrintMute bool
@@ -24,18 +20,10 @@ func NewItemPrinter(writer io.Writer) *ItemPrinter {
 	}
 }
 
-// SetMessageLogger sets the optional error logger for the printer.
-func (p *ItemPrinter) SetMessageLogger(logger common.ErrorLogger) {
-	p.errLog = logger
-}
-
-// ItemPrintLine writes the given message to the writer and optionally logs it.
+// ItemPrintLine writes the given message to the writer.
 func (p *ItemPrinter) ItemPrintLine(msg string) {
 	if p.writer != nil {
 		fmt.Fprint(p.writer, msg)
-	}
-	if p.errLog != nil {
-		p.errLog.LogMessage(ocsd.HandleGenInfo, ocsd.ErrSevInfo, msg)
 	}
 }
 
