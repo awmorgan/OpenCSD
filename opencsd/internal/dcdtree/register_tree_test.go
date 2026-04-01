@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -18,13 +19,16 @@ func (f *fakeDataIn) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, e
 	return f.TraceDataIn(ocsd.OpData, index, dataBlock)
 }
 func (f *fakeDataIn) TraceDataEOT() error {
-	_, err := f.TraceDataIn(ocsd.OpEOT, 0, nil); return err
+	_, err := f.TraceDataIn(ocsd.OpEOT, 0, nil)
+	return err
 }
 func (f *fakeDataIn) TraceDataFlush() error {
-	_, err := f.TraceDataIn(ocsd.OpFlush, 0, nil); return err
+	_, err := f.TraceDataIn(ocsd.OpFlush, 0, nil)
+	return err
 }
 func (f *fakeDataIn) TraceDataReset(index ocsd.TrcIndex) error {
-	_, err := f.TraceDataIn(ocsd.OpReset, index, nil); return err
+	_, err := f.TraceDataIn(ocsd.OpReset, index, nil)
+	return err
 }
 
 type fakeGenElemOut struct{}
@@ -34,6 +38,7 @@ func (f *fakeGenElemOut) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, el
 }
 
 type fakePipelineWiringHandle struct {
+	common.OpMode
 	traceOut  ocsd.GenElemProcessor
 	traceSets int
 }
@@ -42,6 +47,8 @@ func (h *fakePipelineWiringHandle) SetTraceElemOut(out ocsd.GenElemProcessor) {
 	h.traceOut = out
 	h.traceSets++
 }
+
+type fakeDecoderHandle struct{ common.OpMode }
 
 func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)
@@ -53,7 +60,7 @@ func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	if err := tree.AddDecoder(0x23, "TEST_SINGLE", ocsd.ProtocolSTM, &fakeDataIn{}, struct{}{}); err != nil {
+	if err := tree.AddDecoder(0x23, "TEST_SINGLE", ocsd.ProtocolSTM, &fakeDataIn{}, &fakeDecoderHandle{}); err != nil {
 		t.Fatalf("AddDecoder failed: %v", err)
 	}
 	if _, ok := tree.decodeElements[0]; !ok {
@@ -97,7 +104,7 @@ func TestDecodeTreeAddDecoderDirectInjection(t *testing.T) {
 	defer tree.Destroy()
 
 	pktIn := &fakeDataIn{}
-	handle := struct{}{}
+	handle := &fakeDecoderHandle{}
 	if err := tree.AddDecoder(0x45, "direct", ocsd.ProtocolSTM, pktIn, handle); err != nil {
 		t.Fatalf("AddDecoder failed: %v", err)
 	}
@@ -165,7 +172,7 @@ func TestDecodeTreeAddDecoderRejectsOutOfRangeRouteID(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	err = tree.AddDecoder(0x80, "direct", ocsd.ProtocolSTM, &fakeDataIn{}, struct{}{})
+	err = tree.AddDecoder(0x80, "direct", ocsd.ProtocolSTM, &fakeDataIn{}, &fakeDecoderHandle{})
 	if !errors.Is(err, ocsd.ErrInvalidID) {
 		t.Fatalf("expected ErrInvalidID for route ID 0x80, got %v", err)
 	}

@@ -144,17 +144,17 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 }
 
 // AddDecoder registers an already-instantiated decoder into the tree for routing only.
-func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, handle any) error {
+func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, handle DecoderHandle) error {
 	return dt.addDecoder(routeID, name, protocol, pktIn, handle, nil)
 }
 
 // AddWiredDecoder registers an already-instantiated decoder into the tree with explicit
 // late trace-sink wiring support.
-func (dt *DecodeTree) AddWiredDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, handle any, wiring pipelineWiringOwner) error {
+func (dt *DecodeTree) AddWiredDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, handle DecoderHandle, wiring pipelineWiringOwner) error {
 	return dt.addDecoder(routeID, name, protocol, pktIn, handle, wiring)
 }
 
-func (dt *DecodeTree) addDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, handle any, wiring pipelineWiringOwner) error {
+func (dt *DecodeTree) addDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, handle DecoderHandle, wiring pipelineWiringOwner) error {
 	if dt.treeType == ocsd.TrcSrcSingle {
 		routeID = 0
 	}
