@@ -845,7 +845,8 @@ func TestDecoderContProcess(t *testing.T) {
 
 	// BadSequence
 	pkt.ResetState()
-	pkt.Type = PktBadSequence
+	pkt.Type = PktASync
+	pkt.Err = ocsd.ErrBadPacketSeq
 	dec.PacketDataIn(ocsd.OpData, 3, pkt)
 
 	// ExceptionRet
@@ -912,7 +913,7 @@ func TestPtmPacketString(t *testing.T) {
 
 	// All packet type names
 	types := []PktType{
-		PktNotSync, PktIncompleteEOT, PktNoError, PktBranchAddress,
+		PktNotSync, PktIncompleteEOT, PktBranchAddress,
 		PktASync, PktISync, PktTrigger, PktWPointUpdate, PktIgnore,
 		PktContextID, PktVMID, PktAtom, PktTimestamp, PktExceptionRet,
 		PktBadSequence, PktReserved, PktType(99),
@@ -1394,7 +1395,7 @@ func TestDecoderDecodePacket_RemainingBranches(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpData, 3, pkt3)
 
 	// Ignored types in decodePacket
-	for _, tp := range []PktType{PktIncompleteEOT, PktNoError, PktASync, PktIgnore} {
+	for _, tp := range []PktType{PktIncompleteEOT, PktASync, PktIgnore} {
 		p := &Packet{}
 		p.ResetState()
 		p.Type = tp

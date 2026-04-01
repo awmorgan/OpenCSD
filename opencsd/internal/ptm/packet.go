@@ -1,6 +1,7 @@
 package ptm
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -14,7 +15,6 @@ const (
 	// markers for unknown packets
 	PktNotSync       PktType = iota // no sync found yet
 	PktIncompleteEOT                // flushing incomplete packet at end of trace.
-	PktNoError                      // no error base type packet.
 
 	// markers for valid packets
 	PktBranchAddress     // Branch address with optional exception.
@@ -58,8 +58,8 @@ type Excep struct {
 
 // Packet represents a parsed PTM packet element.
 type Packet struct {
-	Type    PktType
-	ErrType PktType
+	Type PktType
+	Err  error
 
 	CurrISA ocsd.ISA
 	PrevISA ocsd.ISA
@@ -83,8 +83,10 @@ type Packet struct {
 	Exception Excep
 }
 
+var errIncompleteEOT = errors.New("incomplete packet flushed at end of trace")
+
 func (p *Packet) Clear() {
-	p.ErrType = PktNoError
+	p.Err = nil
 	p.CycleCount = 0
 	p.CCValid = false
 	p.Context.Updated = false
@@ -200,17 +202,18 @@ func (p *Packet) SetAtomFromPHdr(pHdr uint8) {
 }
 
 func (p *Packet) IsBadPacket() bool {
-	return p.Type >= PktBadSequence
+	return p.Err != nil
 }
 
 func (p *Packet) String() string {
-	name, desc := packetTypeName(p.Type)
+	displayType := p.displayType()
+	name, desc := packetTypeName(displayType)
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "%s : %s; ", name, desc)
 
-	switch p.Type {
+	switch displayType {
 	case PktBadSequence:
-		errName, _ := packetTypeName(p.ErrType)
+		errName, _ := packetTypeName(p.Type)
 		fmt.Fprintf(&sb, "[%s]; ", errName)
 	case PktAtom:
 		sb.WriteString(p.getAtomStr())
@@ -372,8 +375,6 @@ func packetTypeName(t PktType) (string, string) {
 		return "NOTSYNC", "PTM Not Synchronised"
 	case PktIncompleteEOT:
 		return "INCOMPLETE_EOT", "Incomplete packet flushed at end of trace"
-	case PktNoError:
-		return "NO_ERROR", "Error type not set"
 	case PktBadSequence:
 		return "BAD_SEQUENCE", "Invalid sequence in packet"
 	case PktReserved:
@@ -403,6 +404,22 @@ func packetTypeName(t PktType) (string, string) {
 	default:
 		return "UNKNOWN", "Unknown packet type"
 	}
+}
+
+func (p *Packet) displayType() PktType {
+	if p.Err == nil {
+		return p.Type
+	}
+	if errors.Is(p.Err, errIncompleteEOT) {
+		return PktIncompleteEOT
+	}
+	if errors.Is(p.Err, ocsd.ErrBadPacketSeq) {
+		return PktBadSequence
+	}
+	if errors.Is(p.Err, ocsd.ErrInvalidPcktHdr) {
+		return PktReserved
+	}
+	return p.Type
 }
 
 func maskBits64(bits int) uint64 {

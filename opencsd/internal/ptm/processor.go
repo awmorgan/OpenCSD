@@ -345,8 +345,8 @@ func (p *PktProc) readByte() bool {
 }
 
 func (p *PktProc) malformedPacketErr(msg string) error {
-	p.currPacket.ErrType = PktBadSequence
-	return fmt.Errorf("%w: %s", ocsd.ErrBadPacketSeq, msg)
+	p.currPacket.Err = fmt.Errorf("%w: %s", ocsd.ErrBadPacketSeq, msg)
+	return p.currPacket.Err
 }
 
 func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, ocsd.DatapathResp, error) {
@@ -466,8 +466,7 @@ func (p *PktProc) OnEOT() ocsd.DatapathResp {
 	}
 	resp := ocsd.RespCont
 	if len(p.currPacketData) > 0 {
-		p.currPacket.ErrType = p.currPacket.Type
-		p.currPacket.Type = PktIncompleteEOT
+		p.currPacket.Err = errIncompleteEOT
 		resp = p.outputPacket()
 	}
 	return resp

@@ -395,15 +395,26 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 
 	pkt := d.CurrPacketIn
+	if pkt.Err != nil {
+		switch {
+		case errors.Is(pkt.Err, errIncompleteEOT):
+			return resp
+		case errors.Is(pkt.Err, ocsd.ErrBadPacketSeq), errors.Is(pkt.Err, ocsd.ErrInvalidPcktHdr):
+			d.currState = decodeWaitSync
+			d.needIsync = true
+			d.outputElem.SetType(ocsd.GenElemNoSync)
+			return ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
+		default:
+			d.currState = decodeWaitSync
+			d.needIsync = true
+			d.outputElem.SetType(ocsd.GenElemNoSync)
+			return ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
+		}
+	}
 
 	switch pkt.Type {
-	case PktNotSync, PktIncompleteEOT, PktNoError:
+	case PktNotSync:
 		// ignore
-	case PktBadSequence, PktReserved:
-		d.currState = decodeWaitSync
-		d.needIsync = true
-		d.outputElem.SetType(ocsd.GenElemNoSync)
-		resp = ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
 	case PktASync, PktIgnore:
 		// ignore
 	case PktISync:
