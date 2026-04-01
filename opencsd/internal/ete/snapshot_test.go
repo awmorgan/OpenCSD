@@ -173,6 +173,9 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 		return nil, fmt.Errorf("nil decode tree")
 	}
 
+	mapper := memacc.NewGlobalMapper()
+	memIf := &mapperAdapter{mapper: mapper}
+
 	eteDecoders := 0
 	seenTraceIDs := map[uint8]struct{}{}
 	srcDevNames := make([]string, 0, len(sourceTree.SourceCoreAssoc))
@@ -216,7 +219,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 			continue
 		}
 
-		proc, dec, err := ete.NewConfiguredPipeline(int(traceID), cfg)
+		proc, dec, err := ete.NewConfiguredPipelineWithDeps(int(traceID), cfg, nil, memIf, nil)
 		if err != nil {
 			return nil, fmt.Errorf("create ETE pipeline for %s failed: %v", srcDevName, err)
 		}
@@ -236,9 +239,6 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 	}
 
 	applyOpModeFlags(tree, eteOpFlags(opts))
-
-	mapper := memacc.NewGlobalMapper()
-	tree.SetMemAccessI(&mapperAdapter{mapper: mapper})
 
 	for _, dev := range reader.ParsedDeviceList {
 		if !strings.EqualFold(dev.DeviceClass, "core") {

@@ -388,8 +388,18 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 	}
 
 	mapper := memacc.NewGlobalMapper()
-	tree.SetMemAccessI(&mapperAdapter{mapper: mapper})
+	memIf := &mapperAdapter{mapper: mapper}
 	callbackReads := 0
+
+	if !packetOnly {
+		tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
+			dec, ok := elem.DecoderHandle.(*etmv4.PktDecode)
+			if !ok || dec == nil {
+				return
+			}
+			dec.SetMemAccess(memIf)
+		})
+	}
 
 	for _, dev := range reader.ParsedDeviceList {
 		if !strings.EqualFold(dev.DeviceClass, "core") {

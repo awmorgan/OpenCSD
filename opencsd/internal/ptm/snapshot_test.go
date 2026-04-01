@@ -142,6 +142,9 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		return nil, fmt.Errorf("nil decode tree")
 	}
 
+	mapper := memacc.NewGlobalMapper()
+	memIf := &mapperAdapter{mapper: mapper}
+
 	ptmDecoders := 0
 	for srcDevName := range sourceTree.SourceCoreAssoc {
 		dev := testutil.FindParsedDeviceByName(reader.ParsedDeviceList, srcDevName)
@@ -168,7 +171,7 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		}
 
 		traceID := cfg.TraceID()
-		proc, dec, err := ptm.NewConfiguredPipeline(int(traceID), cfg)
+		proc, dec, err := ptm.NewConfiguredPipelineWithDeps(int(traceID), cfg, nil, memIf, nil)
 		if err != nil {
 			return nil, fmt.Errorf("create PTM pipeline for %s failed: %v", srcDevName, err)
 		}
@@ -182,9 +185,6 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	if ptmDecoders == 0 {
 		return nil, fmt.Errorf("no PTM decoders found for source %s", sourceName)
 	}
-
-	mapper := memacc.NewGlobalMapper()
-	tree.SetMemAccessI(&mapperAdapter{mapper: mapper})
 
 	for _, dev := range reader.ParsedDeviceList {
 		if !strings.EqualFold(dev.DeviceClass, "core") {

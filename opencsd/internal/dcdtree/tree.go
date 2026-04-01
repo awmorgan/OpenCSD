@@ -38,7 +38,6 @@ type DecodeTree struct {
 
 	decoderRoot ocsd.TrcDataProcessor
 	instrDecode common.InstrDecode
-	memAccess   common.TargetMemAccess
 	genElemOut  ocsd.GenElemProcessor
 }
 
@@ -172,11 +171,6 @@ func (dt *DecodeTree) attachElementDependencies(elem *DecodeTreeElement) {
 			elem.SetInstrDecode(dt.instrDecode)
 		}
 	}
-	if dt.memAccess != nil {
-		if elem.SetMemAccess != nil {
-			elem.SetMemAccess(dt.memAccess)
-		}
-	}
 }
 
 // RemoveDecoder removes a decoder mapped to the given CSID.
@@ -208,16 +202,6 @@ func (dt *DecodeTree) SetInstrDecoder(instrDec common.InstrDecode) {
 	for _, elem := range dt.decodeElements {
 		if elem.SetInstrDecode != nil {
 			elem.SetInstrDecode(instrDec)
-		}
-	}
-}
-
-// SetMemAccessI attaches the memory accessor interface for instruction decoding.
-func (dt *DecodeTree) SetMemAccessI(memI common.TargetMemAccess) {
-	dt.memAccess = memI
-	for _, elem := range dt.decodeElements {
-		if elem.SetMemAccess != nil {
-			elem.SetMemAccess(memI)
 		}
 	}
 }

@@ -13,10 +13,6 @@ type instrDecodeSetterOwner interface {
 	SetInstrDecode(common.InstrDecode)
 }
 
-type memAccSetterOwner interface {
-	SetMemAccess(common.TargetMemAccess)
-}
-
 // DecodeTreeElement represents a registered decoder instance within the trace decode tree.
 type DecodeTreeElement struct {
 	DecoderTypeName string                // Registered name of the decoder
@@ -24,7 +20,6 @@ type DecodeTreeElement struct {
 	DecoderHandle   any                   // Pointer to the decoder processor (PktDecode)
 	SetTraceElemOut func(ocsd.GenElemProcessor)
 	SetInstrDecode  func(common.InstrDecode)
-	SetMemAccess    func(common.TargetMemAccess)
 	Protocol        ocsd.TraceProtocol // Protocol type
 	Created         bool               // True if decode tree created this element
 }
@@ -43,18 +38,12 @@ func NewDecodeTreeElement(name string, dcdHandle any, dataIn ocsd.TrcDataProcess
 		setInstrDecode = owner.SetInstrDecode
 	}
 
-	var setMemAccess func(common.TargetMemAccess)
-	if owner, ok := dcdHandle.(memAccSetterOwner); ok {
-		setMemAccess = owner.SetMemAccess
-	}
-
 	return &DecodeTreeElement{
 		DecoderTypeName: name,
 		DataIn:          dataIn,
 		DecoderHandle:   dcdHandle,
 		SetTraceElemOut: setTraceElemOut,
 		SetInstrDecode:  setInstrDecode,
-		SetMemAccess:    setMemAccess,
 		Protocol:        protocol,
 		Created:         created,
 	}

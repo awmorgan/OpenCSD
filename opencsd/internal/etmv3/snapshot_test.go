@@ -225,6 +225,10 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		return nil, fmt.Errorf("nil decode tree")
 	}
 
+	// Set up memory accessors.
+	mapper := memacc.NewGlobalMapper()
+	memIf := &mapperAdapter{mapper: mapper}
+
 	etmDecoders := 0
 	for srcDevName := range sourceTree.SourceCoreAssoc {
 		dev := testutil.FindParsedDeviceByName(reader.ParsedDeviceList, srcDevName)
@@ -256,7 +260,7 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		}
 
 		traceID := cfg.TraceID()
-		proc, dec, err := etmv3.NewConfiguredPipeline(int(traceID), cfg)
+		proc, dec, err := etmv3.NewConfiguredPipelineWithDeps(int(traceID), cfg, nil, memIf, nil)
 		if err != nil {
 			return nil, fmt.Errorf("create ETMv3 pipeline for %s failed: %v", srcDevName, err)
 		}
@@ -270,10 +274,6 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	if etmDecoders == 0 {
 		return nil, fmt.Errorf("no ETMv3 decoders found for source %s", sourceName)
 	}
-
-	// Set up memory accessors.
-	mapper := memacc.NewGlobalMapper()
-	tree.SetMemAccessI(&mapperAdapter{mapper: mapper})
 
 	for _, dev := range reader.ParsedDeviceList {
 		if !strings.EqualFold(dev.DeviceClass, "core") {
