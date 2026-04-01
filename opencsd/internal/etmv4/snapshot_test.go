@@ -357,9 +357,9 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 
 		// Inject into the DecodeTree.
 		if dec == nil {
-			err = tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec, nil)
+			err = tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec)
 		} else {
-			err = tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec, dec)
+			err = tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec, dec)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("create ETMv4 decoder for %s failed: %v", srcDevName, err)

@@ -40,7 +40,7 @@ func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	if err := tree.AddDecoder(0x23, "TEST_SINGLE", ocsd.ProtocolSTM, &fakeDataIn{}, struct{}{}, nil); err != nil {
+	if err := tree.AddDecoder(0x23, "TEST_SINGLE", ocsd.ProtocolSTM, &fakeDataIn{}, struct{}{}); err != nil {
 		t.Fatalf("AddDecoder failed: %v", err)
 	}
 	if _, ok := tree.decodeElements[0]; !ok {
@@ -85,7 +85,7 @@ func TestDecodeTreeAddDecoderDirectInjection(t *testing.T) {
 
 	pktIn := &fakeDataIn{}
 	handle := struct{}{}
-	if err := tree.AddDecoder(0x45, "direct", ocsd.ProtocolSTM, pktIn, handle, nil); err != nil {
+	if err := tree.AddDecoder(0x45, "direct", ocsd.ProtocolSTM, pktIn, handle); err != nil {
 		t.Fatalf("AddDecoder failed: %v", err)
 	}
 
@@ -103,7 +103,7 @@ func TestDecodeTreeAddDecoderDirectInjection(t *testing.T) {
 		t.Fatal("expected injected decoder handle to be preserved")
 	}
 
-	err = tree.AddDecoder(0x00, "duplicate", ocsd.ProtocolSTM, pktIn, handle, nil)
+	err = tree.AddDecoder(0x00, "duplicate", ocsd.ProtocolSTM, pktIn, handle)
 	if !errors.Is(err, ocsd.ErrAttachTooMany) {
 		t.Fatalf("expected ErrAttachTooMany for duplicate route, got %v", err)
 	}
@@ -122,7 +122,7 @@ func TestDecodeTreePipelineWiringPropagatesToRegisteredDecoder(t *testing.T) {
 	// Pre-bind dependency before decoder registration.
 	tree.SetGenTraceElemOutI(traceOutA)
 
-	if err := tree.AddDecoder(0x22, "wired", ocsd.ProtocolETMV4I, &fakeDataIn{}, h, h); err != nil {
+	if err := tree.AddWiredDecoder(0x22, "wired", ocsd.ProtocolETMV4I, &fakeDataIn{}, h, h); err != nil {
 		t.Fatalf("AddDecoder failed: %v", err)
 	}
 
@@ -152,7 +152,7 @@ func TestDecodeTreeAddDecoderRejectsOutOfRangeRouteID(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	err = tree.AddDecoder(0x80, "direct", ocsd.ProtocolSTM, &fakeDataIn{}, struct{}{}, nil)
+	err = tree.AddDecoder(0x80, "direct", ocsd.ProtocolSTM, &fakeDataIn{}, struct{}{})
 	if !errors.Is(err, ocsd.ErrInvalidID) {
 		t.Fatalf("expected ErrInvalidID for route ID 0x80, got %v", err)
 	}
