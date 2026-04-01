@@ -22,9 +22,9 @@ func NewRawFramePrinter(writer io.Writer) *RawFramePrinter {
 }
 
 // TraceRawFrameIn responds to the RawFrameProcessor datapath interface.
-func (p *RawFramePrinter) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, frameElem ocsd.RawframeElem, data []byte, traceID uint8) ocsd.DatapathResp {
+func (p *RawFramePrinter) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, frameElem ocsd.RawframeElem, data []byte, traceID uint8) error {
 	if p.IsMuted() {
-		return ocsd.RespCont
+		return nil
 	}
 
 	if op == ocsd.OpData { // only interested in actual frame data
@@ -67,5 +67,5 @@ func (p *RawFramePrinter) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcInde
 		p.ItemPrintLine(sb.String())
 	}
 
-	return ocsd.RespCont
+	return nil
 }

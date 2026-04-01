@@ -176,9 +176,9 @@ type mockRawSink struct {
 	out *bytes.Buffer
 }
 
-func (m *mockRawSink) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, frameElem ocsd.RawframeElem, data []byte, traceID uint8) ocsd.DatapathResp {
+func (m *mockRawSink) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, frameElem ocsd.RawframeElem, data []byte, traceID uint8) error {
 	if op != ocsd.OpData {
-		return ocsd.RespCont
+		return nil
 	}
 
 	var elemStr string
@@ -209,7 +209,7 @@ func (m *mockRawSink) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, f
 	}
 
 	m.out.WriteString("\n")
-	return ocsd.RespCont
+	return nil
 }
 
 func resetDecoder(df *FrameDeformatter, t *testing.T) {

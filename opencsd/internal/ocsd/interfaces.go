@@ -52,5 +52,5 @@ type PacketMonitor[P any] interface {
 
 // RawFrameProcessor is the input interface for raw frame bytes.
 type RawFrameProcessor interface {
-	TraceRawFrameIn(op DatapathOp, index TrcIndex, frameElem RawframeElem, data []byte, traceID uint8) DatapathResp
+	TraceRawFrameIn(op DatapathOp, index TrcIndex, frameElem RawframeElem, data []byte, traceID uint8) error
 }

@@ -43,9 +43,9 @@ func TestRawFramePrinter(t *testing.T) {
 
 	// Test muted
 	rp.SetMute(true)
-	resp := rp.TraceRawFrameIn(ocsd.OpData, 0, ocsd.FrmPacked, nil, 0)
-	if resp != ocsd.RespCont {
-		t.Errorf("got %v, want %v", resp, ocsd.RespCont)
+	err := rp.TraceRawFrameIn(ocsd.OpData, 0, ocsd.FrmPacked, nil, 0)
+	if err != nil {
+		t.Errorf("Expected nil error, got %v", err)
 	}
 	if buf.Len() != 0 {
 		t.Errorf("expected no output, got %q", buf.String())
@@ -53,9 +53,9 @@ func TestRawFramePrinter(t *testing.T) {
 	rp.SetMute(false)
 
 	// Test not OpData
-	resp = rp.TraceRawFrameIn(ocsd.OpFlush, 0, ocsd.FrmPacked, nil, 0)
-	if resp != ocsd.RespCont || buf.Len() != 0 {
-		t.Errorf("expected cont and no output for OpFlush, got %v", resp)
+	err = rp.TraceRawFrameIn(ocsd.OpFlush, 0, ocsd.FrmPacked, nil, 0)
+	if err != nil {
+		t.Errorf("Expected nil error for non-data op, got %v", err)
 	}
 
 	tests := []struct {

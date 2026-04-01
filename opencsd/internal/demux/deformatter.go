@@ -161,7 +161,7 @@ func (d *FrameDeformatter) rawChanEnabled(id uint8) bool {
 
 func (d *FrameDeformatter) outputRawMonBytes(op ocsd.DatapathOp, index ocsd.TrcIndex, frameElem ocsd.RawframeElem, data []byte, traceID uint8) {
 	if d.rawTraceFrame != nil {
-		d.rawTraceFrame.TraceRawFrameIn(op, index, frameElem, data, traceID)
+		_ = d.rawTraceFrame.TraceRawFrameIn(op, index, frameElem, data, traceID)
 	}
 }
 
@@ -174,7 +174,10 @@ func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocs
 	}
 
 	if d.rawTraceFrame != nil {
-		d.rawTraceFrame.TraceRawFrameIn(op, 0, ocsd.FrmNone, nil, 0)
+		err := d.rawTraceFrame.TraceRawFrameIn(op, 0, ocsd.FrmNone, nil, 0)
+		if err != nil {
+			collateDataPathResp(state, ocsd.RespFatalInvalidData, err)
+		}
 	}
 	return state.highestResp
 }
