@@ -79,7 +79,7 @@ type DecoderBase struct {
 func (b *DecoderBase) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
 	if b.TraceElemOut != nil {
 		err := b.TraceElemOut.TraceElemIn(b.IndexCurrPkt, traceID, elem)
-		if err == nil || ocsd.IsDataContErr(err) {
+		if ocsd.IsDataContErr(err) {
 			return ocsd.RespCont, nil
 		}
 		if ocsd.IsDataWaitErr(err) {
@@ -97,7 +97,7 @@ func (b *DecoderBase) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement)
 func (b *DecoderBase) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
 	if b.TraceElemOut != nil {
 		err := b.TraceElemOut.TraceElemIn(idx, traceID, elem)
-		if err == nil || ocsd.IsDataContErr(err) {
+		if ocsd.IsDataContErr(err) {
 			return ocsd.RespCont, nil
 		}
 		if ocsd.IsDataWaitErr(err) {

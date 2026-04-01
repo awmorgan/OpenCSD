@@ -121,15 +121,12 @@ func TestDatapathFlowControlSentinels(t *testing.T) {
 	if !IsDataWaitErr(ErrWait) {
 		t.Error("IsDataWaitErr(ErrWait) should be true")
 	}
-	if IsDataWaitErr(ErrCont) {
-		t.Error("IsDataWaitErr(ErrCont) should be false")
+	if IsDataWaitErr(nil) {
+		t.Error("IsDataWaitErr(nil) should be false")
 	}
 
 	if !IsDataContErr(nil) {
 		t.Error("IsDataContErr(nil) should be true")
-	}
-	if !IsDataContErr(ErrCont) {
-		t.Error("IsDataContErr(ErrCont) should be true")
 	}
 	if IsDataContErr(ErrWait) {
 		t.Error("IsDataContErr(ErrWait) should be false")

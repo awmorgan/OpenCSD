@@ -133,7 +133,6 @@ const (
 // interfaces away from DatapathResp values.
 var (
 	ErrWait = errors.New("datapath flow-control wait")
-	ErrCont = errors.New("datapath flow-control continue")
 )
 
 func DataRespIsFatal(x DatapathResp) bool     { return x >= RespFatalNotInit }
@@ -147,8 +146,7 @@ func DataRespIsWait(x DatapathResp) bool      { return x >= RespWait && x < Resp
 func IsDataWaitErr(err error) bool { return errors.Is(err, ErrWait) }
 
 // IsDataContErr returns true when err indicates continue semantics.
-// Nil is treated as continue, and ErrCont is available as a transitional sentinel.
-func IsDataContErr(err error) bool { return err == nil || errors.Is(err, ErrCont) }
+func IsDataContErr(err error) bool { return err == nil }
 
 // DataRespFromErr maps transitional datapath sentinel errors to DatapathResp.
 func DataRespFromErr(err error) DatapathResp {

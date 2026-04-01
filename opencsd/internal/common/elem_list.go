@@ -153,7 +153,7 @@ func (l *GenElemList) SendElements() ocsd.DatapathResp {
 	for l.ElemToSend() && ocsd.DataRespIsCont(resp) {
 		slot := l.elems[0]
 		err := out.TraceElemIn(slot.pktIndex, l.csID, slot.elem)
-		if err == nil || ocsd.IsDataContErr(err) {
+		if ocsd.IsDataContErr(err) {
 			resp = ocsd.RespCont
 		} else if ocsd.IsDataWaitErr(err) {
 			resp = ocsd.RespWait
@@ -305,7 +305,7 @@ func (s *GenElemStack) SendElements() ocsd.DatapathResp {
 	for s.elemToSend > 0 && ocsd.DataRespIsCont(resp) {
 		slot := s.elems[s.sendElemIdx]
 		err := out.TraceElemIn(slot.pktIndex, s.csID, slot.elem)
-		if err == nil || ocsd.IsDataContErr(err) {
+		if ocsd.IsDataContErr(err) {
 			resp = ocsd.RespCont
 		} else if ocsd.IsDataWaitErr(err) {
 			resp = ocsd.RespWait
