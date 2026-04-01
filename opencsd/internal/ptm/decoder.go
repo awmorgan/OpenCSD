@@ -102,9 +102,7 @@ func NewPktDecode(cfg *Config) *PktDecode {
 	}
 	d := &PktDecode{
 		DecoderBase: common.DecoderBase{
-			Name:          fmt.Sprintf("DCD_PTM_%d", instIDNum),
-			UsesMemAccess: true,
-			UsesIDecode:   true,
+			Name: fmt.Sprintf("DCD_PTM_%d", instIDNum),
 		},
 	}
 	d.configureDecoder()
@@ -123,20 +121,15 @@ func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) { d.MemAccess = mem
 // SetInstrDecode satisfies dcdtree's instrDecodeSetterOwner interface.
 func (d *PktDecode) SetInstrDecode(dec common.InstrDecode) { d.InstrDecode = dec }
 
-// SetNeedsMemAccess controls whether memory access is required for decode.
-func (d *PktDecode) SetNeedsMemAccess(needs bool) { d.UsesMemAccess = needs }
+// SetNeedsMemAccess is retained as a no-op while decoder dependency setup migrates.
+func (d *PktDecode) SetNeedsMemAccess(bool) {}
 
-// SetNeedsInstructionDecode controls whether instruction decode is required.
-func (d *PktDecode) SetNeedsInstructionDecode(needs bool) { d.UsesIDecode = needs }
+// SetNeedsInstructionDecode is retained as a no-op while decoder dependency setup migrates.
+func (d *PktDecode) SetNeedsInstructionDecode(bool) {}
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) (ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
 	var err error
-
-	if reason := d.DecodeNotReadyReason(); reason != "" {
-		err = fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason)
-		return ocsd.RespFatalNotInit, err
-	}
 
 	switch op {
 	case ocsd.OpData:
@@ -205,8 +198,6 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 	if d.Config == nil {
 		return ocsd.ErrNotInit
 	}
-	d.ConfigInitOK = true
-
 	d.csID = d.Config.TraceID()
 
 	if d.Config.HasRetStack() {

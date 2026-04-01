@@ -44,9 +44,7 @@ func NewPktDecode(cfg *Config) *PktDecode {
 	}
 	d := &PktDecode{
 		DecoderBase: common.DecoderBase{
-			Name:          fmt.Sprintf("DCD_ITM_%d", instID),
-			UsesMemAccess: true,
-			UsesIDecode:   true,
+			Name: fmt.Sprintf("DCD_ITM_%d", instID),
 		},
 	}
 	d.configureDecoder()
@@ -72,18 +70,12 @@ func (d *PktDecode) SetProtocolConfig(cfg *Config) error {
 		return ocsd.ErrNotInit
 	}
 	d.csID = d.Config.TraceID()
-	d.ConfigInitOK = true
 	return nil
 }
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) (ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
 	var err error
-	if reason := d.DecodeNotReadyReason(); reason != "" {
-		err = fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason)
-		return ocsd.RespFatalNotInit, err
-	}
-
 	switch op {
 	case ocsd.OpData:
 		if pktIn == nil {
@@ -172,9 +164,7 @@ func (d *PktDecode) TraceID() uint8 {
 func (d *PktDecode) configureDecoder() {
 	d.csID = 0
 
-	// base decoder state - ITM requires no memory and instruction decode.
-	d.UsesMemAccess = false
-	d.UsesIDecode = false
+	// base decoder state - ITM does not use memory or instruction decode.
 	d.unsyncInfo = common.UnsyncInitDecoder
 	d.resetDecoder()
 }

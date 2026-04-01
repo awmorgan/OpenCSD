@@ -71,10 +71,7 @@ type DecoderBase struct {
 	MemAccess    TargetMemAccess
 	InstrDecode  InstrDecode
 
-	IndexCurrPkt  ocsd.TrcIndex
-	ConfigInitOK  bool
-	UsesMemAccess bool
-	UsesIDecode   bool
+	IndexCurrPkt ocsd.TrcIndex
 }
 
 // OutputTraceElement sends an element to the downstream consumer using IndexCurrPkt.
@@ -93,53 +90,29 @@ func (b *DecoderBase) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, el
 	return ocsd.RespFatalNotInit, ocsd.ErrNotInit
 }
 
-// DecodeNotReadyReason returns a human-readable explanation of why the decoder is not
-// ready, or an empty string if the decoder is ready to process packets.
-func (b *DecoderBase) DecodeNotReadyReason() string {
-	if !b.ConfigInitOK {
-		return "No decoder configuration information"
-	}
-	if b.TraceElemOut == nil {
-		return "No element output interface attached and enabled"
-	}
-	if b.UsesMemAccess && b.MemAccess == nil {
-		return "No memory access interface attached and enabled"
-	}
-	if b.UsesIDecode && b.InstrDecode == nil {
-		return "No instruction decoder interface attached and enabled"
-	}
-	return ""
-}
-
 // AccessMemory reads target memory via the attached TargetMemAccess interface.
 func (b *DecoderBase) AccessMemory(address ocsd.VAddr, traceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
-	if b.UsesMemAccess {
-		if b.MemAccess != nil {
-			return b.MemAccess.ReadTargetMemory(address, traceID, memSpace, reqBytes)
-		}
+	if b.MemAccess != nil {
+		return b.MemAccess.ReadTargetMemory(address, traceID, memSpace, reqBytes)
 	}
 	return 0, nil, ocsd.ErrDcdInterfaceUnused
 }
 
 // InstrDecodeCall calls the attached instruction decoder.
 func (b *DecoderBase) InstrDecodeCall(instrInfo *ocsd.InstrInfo) error {
-	if b.UsesIDecode {
-		if b.InstrDecode != nil {
-			return b.InstrDecode.DecodeInstruction(instrInfo)
-		}
+	if b.InstrDecode != nil {
+		return b.InstrDecode.DecodeInstruction(instrInfo)
 	}
 	return ocsd.ErrDcdInterfaceUnused
 }
 
 // InvalidateMemAccCache invalidates the memory access cache for the given trace ID.
 func (b *DecoderBase) InvalidateMemAccCache(traceID uint8) error {
-	if !b.UsesMemAccess {
-		return ocsd.ErrDcdInterfaceUnused
-	}
 	if b.MemAccess != nil {
 		b.MemAccess.InvalidateMemAccCache(traceID)
+		return nil
 	}
-	return nil
+	return ocsd.ErrDcdInterfaceUnused
 }
 
 // ProcBase holds the shared state for a packet processor.

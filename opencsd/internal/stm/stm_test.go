@@ -315,12 +315,12 @@ func TestSTMFlushResetAndBadPacketClassification(t *testing.T) {
 	}
 
 	resp, _ = dec.PacketDataIn(ocsd.OpFlush, 0, nil)
-	if resp != ocsd.RespFatalNotInit {
-		t.Errorf("Expected RespFatalNotInit on decoder flush without full init, got %v", resp)
+	if ocsd.DataRespIsFatal(resp) {
+		t.Errorf("Expected non-fatal response on decoder flush, got %v", resp)
 	}
 	resp, _ = dec.PacketDataIn(ocsd.OpReset, 0, nil)
-	if resp != ocsd.RespFatalNotInit {
-		t.Errorf("Expected RespFatalNotInit on decoder reset without full init, got %v", resp)
+	if ocsd.DataRespIsFatal(resp) {
+		t.Errorf("Expected non-fatal response on decoder reset, got %v", resp)
 	}
 
 	pkt := &Packet{}

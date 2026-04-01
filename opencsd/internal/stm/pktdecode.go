@@ -47,9 +47,7 @@ func NewPktDecode(cfg *Config) *PktDecode {
 	}
 	d := &PktDecode{
 		DecoderBase: common.DecoderBase{
-			Name:          fmt.Sprintf("DCD_STM_%d", instIDNum),
-			UsesMemAccess: true,
-			UsesIDecode:   true,
+			Name: fmt.Sprintf("DCD_STM_%d", instIDNum),
 		},
 	}
 	d.configureDecoder()
@@ -75,18 +73,12 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 		return ocsd.ErrNotInit
 	}
 	d.csID = d.Config.TraceID()
-	d.ConfigInitOK = true
 	return nil
 }
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) (ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
 	var err error
-	if reason := d.DecodeNotReadyReason(); reason != "" {
-		err = fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason)
-		return ocsd.RespFatalNotInit, err
-	}
-
 	switch op {
 	case ocsd.OpData:
 		if pktIn == nil {
@@ -178,8 +170,6 @@ func (d *PktDecode) configureDecoder() {
 	d.numPktCorrelation = 1
 	d.csID = 0
 
-	d.UsesMemAccess = false
-	d.UsesIDecode = false
 	d.unsyncInfo = common.UnsyncInitDecoder
 	d.resetDecoder()
 }

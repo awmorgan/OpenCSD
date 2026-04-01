@@ -184,9 +184,7 @@ func NewPktDecode(cfg *Config) *PktDecode {
 	}
 	d := &PktDecode{
 		DecoderBase: common.DecoderBase{
-			Name:          fmt.Sprintf("DCD_ETMV4_%d", instIDNum),
-			UsesMemAccess: true,
-			UsesIDecode:   true,
+			Name: fmt.Sprintf("DCD_ETMV4_%d", instIDNum),
 		},
 	}
 	d.ConfigureSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms | ocsd.OpflgPktdecAA64OpcodeChk)
@@ -201,11 +199,6 @@ func NewPktDecode(cfg *Config) *PktDecode {
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *TracePacket) (ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
 	var packetErr error
-
-	if reason := d.DecodeNotReadyReason(); reason != "" {
-		packetErr = fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason)
-		return ocsd.RespFatalNotInit, packetErr
-	}
 
 	switch op {
 	case ocsd.OpData:
@@ -280,7 +273,6 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 	if d.config == nil {
 		return ocsd.ErrInvalidParamVal
 	}
-	d.ConfigInitOK = true
 	// Extract basic config elements
 	d.maxSpecDepth = int(d.config.MaxSpecDepth())
 	d.configureDecoder()

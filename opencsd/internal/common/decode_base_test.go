@@ -33,21 +33,9 @@ func TestDecoderBase(t *testing.T) {
 		t.Errorf("expected 0x00 after masking unsupported flags, got 0x%x", b.ComponentOpMode())
 	}
 
-	// DecodeNotReadyReason — no config yet
-	if reason := b.DecodeNotReadyReason(); reason == "" {
-		t.Errorf("expected non-empty not-ready reason before ConfigInitOK")
-	}
-
 	// Wire a trace element output
 	elemIn := &myTrcGenElemIn{}
 	b.TraceElemOut = elemIn
-	b.ConfigInitOK = true
-	b.UsesMemAccess = false
-	b.UsesIDecode = false
-
-	if reason := b.DecodeNotReadyReason(); reason != "" {
-		t.Errorf("expected empty not-ready reason, got: %s", reason)
-	}
 
 	elem := ocsd.NewTraceElement()
 	resp, err := b.OutputTraceElement(123, elem)
@@ -67,9 +55,7 @@ func TestDecoderBase(t *testing.T) {
 		t.Errorf("OutputTraceElementIdx failed: resp=%v lastIndex=%v", resp, elemIn.lastIndex)
 	}
 
-	// AccessMemory / InstrDecodeCall when interfaces unused
-	b.UsesMemAccess = false
-	b.UsesIDecode = false
+	// AccessMemory / InstrDecodeCall when interfaces are not attached
 	_, _, memErr := b.AccessMemory(0x1000, 123, ocsd.MemSpaceAny, 4)
 	if memErr != ocsd.ErrDcdInterfaceUnused {
 		t.Errorf("expected ErrDcdInterfaceUnused for AccessMemory, got %v", memErr)
