@@ -23,11 +23,11 @@ type capturePktSink struct {
 	packets []Packet
 }
 
-func (c *capturePktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) ocsd.DatapathResp {
+func (c *capturePktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) (ocsd.DatapathResp, error) {
 	if op == ocsd.OpData && pkt != nil {
 		c.packets = append(c.packets, *pkt)
 	}
-	return ocsd.RespCont
+	return ocsd.RespCont, nil
 }
 
 func newSyncedProc(config *Config) (*PktProc, *capturePktSink) {

@@ -13,9 +13,9 @@ type testTrcElemIn struct {
 	elements []ocsd.TraceElement
 }
 
-func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
+func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
 	t.elements = append(t.elements, *elem)
-	return ocsd.RespCont
+	return ocsd.RespCont, nil
 }
 
 type rawPktCapture struct {
@@ -78,8 +78,8 @@ func makeAsyncBlock() []byte {
 // noopPktSink is a no-op packet receiver that just swallows packets without decoding.
 type noopPktSink struct{}
 
-func (n *noopPktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) ocsd.DatapathResp {
-	return ocsd.RespCont
+func (n *noopPktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) (ocsd.DatapathResp, error) {
+	return ocsd.RespCont, nil
 }
 
 // setupProcOnly creates a processor with a no-op sink (doesn't decode packets)
@@ -554,7 +554,7 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	resp := dec.PacketDataIn(ocsd.OpData, 1, pkt2)
+	resp, _ := dec.PacketDataIn(ocsd.OpData, 1, pkt2)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Atom E failed: %v", resp)
 	}
@@ -1142,7 +1142,7 @@ func TestDecoderAtomMultiStep(t *testing.T) {
 	pkt.Type = PktAtom
 	pkt.Atom.EnBits = 0x1 // E
 	pkt.Atom.Num = 1
-	resp := dec.PacketDataIn(ocsd.OpData, 2, pkt)
+	resp, _ := dec.PacketDataIn(ocsd.OpData, 2, pkt)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("multiStep atom failed: %v", resp)
 	}

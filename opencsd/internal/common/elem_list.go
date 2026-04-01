@@ -151,7 +151,11 @@ func (l *GenElemList) SendElements() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 	for l.ElemToSend() && ocsd.DataRespIsCont(resp) {
 		slot := l.elems[0]
-		resp = out.TraceElemIn(slot.pktIndex, l.csID, slot.elem)
+		var err error
+		resp, err = out.TraceElemIn(slot.pktIndex, l.csID, slot.elem)
+		if err != nil && !ocsd.DataRespIsFatal(resp) {
+			resp = ocsd.RespFatalInvalidData
+		}
 		l.elems[0].elem = nil // nil-zero before reslice to release GC root
 		l.elems = l.elems[1:]
 		putPoolElem(slot.elem)
@@ -298,7 +302,11 @@ func (s *GenElemStack) SendElements() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 	for s.elemToSend > 0 && ocsd.DataRespIsCont(resp) {
 		slot := s.elems[s.sendElemIdx]
-		resp = out.TraceElemIn(slot.pktIndex, s.csID, slot.elem)
+		var err error
+		resp, err = out.TraceElemIn(slot.pktIndex, s.csID, slot.elem)
+		if err != nil && !ocsd.DataRespIsFatal(resp) {
+			resp = ocsd.RespFatalInvalidData
+		}
 		s.elemToSend--
 		s.sendElemIdx++
 	}

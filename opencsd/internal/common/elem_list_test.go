@@ -10,9 +10,9 @@ type dummySendIf struct {
 	sentCount int
 }
 
-func (d *dummySendIf) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
+func (d *dummySendIf) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
 	d.sentCount++
-	return ocsd.RespCont
+	return ocsd.RespCont, nil
 }
 
 func TestGenElemList(t *testing.T) {

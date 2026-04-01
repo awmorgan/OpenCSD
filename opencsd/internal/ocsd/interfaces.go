@@ -37,12 +37,12 @@ type TrcDataProcessor interface {
 
 // GenElemProcessor is the input interface for generic trace elements.
 type GenElemProcessor interface {
-	TraceElemIn(indexSOP TrcIndex, trcChanID uint8, elem *TraceElement) DatapathResp
+	TraceElemIn(indexSOP TrcIndex, trcChanID uint8, elem *TraceElement) (DatapathResp, error)
 }
 
 // PacketProcessor provides input for discrete protocol packets.
 type PacketProcessor[P any] interface {
-	PacketDataIn(op DatapathOp, indexSOP TrcIndex, pkt *P) DatapathResp
+	PacketDataIn(op DatapathOp, indexSOP TrcIndex, pkt *P) (DatapathResp, error)
 }
 
 // PacketMonitor provides packet monitor functionality off the decode path.

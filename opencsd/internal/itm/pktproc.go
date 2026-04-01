@@ -87,7 +87,8 @@ func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor[Packet]) { p.PktRawMon
 
 func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) ocsd.DatapathResp {
 	if p.PktOutI != nil {
-		return p.PktOutI.PacketDataIn(ocsd.OpData, indexSOP, pkt)
+		resp, _ := p.PktOutI.PacketDataIn(ocsd.OpData, indexSOP, pkt)
+		return resp
 	}
 	return ocsd.RespCont
 }
@@ -121,7 +122,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 	case ocsd.OpEOT:
 		resp = p.OnEOT()
 		if out := p.PktOutI; out != nil && !ocsd.DataRespIsFatal(resp) {
-			resp = out.PacketDataIn(ocsd.OpEOT, 0, nil)
+			resp, err = out.PacketDataIn(ocsd.OpEOT, 0, nil)
 		}
 		if rawMon := p.PktRawMonI; rawMon != nil {
 			rawMon.RawPacketDataMon(ocsd.OpEOT, 0, nil, nil)
@@ -129,11 +130,11 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 	case ocsd.OpFlush:
 		resp = p.OnFlush()
 		if out := p.PktOutI; ocsd.DataRespIsCont(resp) && out != nil {
-			resp = out.PacketDataIn(ocsd.OpFlush, 0, nil)
+			resp, err = out.PacketDataIn(ocsd.OpFlush, 0, nil)
 		}
 	case ocsd.OpReset:
 		if out := p.PktOutI; out != nil {
-			resp = out.PacketDataIn(ocsd.OpReset, index, nil)
+			resp, err = out.PacketDataIn(ocsd.OpReset, index, nil)
 		}
 		if !ocsd.DataRespIsFatal(resp) {
 			resp = p.OnReset()

@@ -12,9 +12,9 @@ type testTrcElemIn struct {
 	elements []ocsd.TraceElement
 }
 
-func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
+func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
 	t.elements = append(t.elements, *elem)
-	return ocsd.RespCont
+	return ocsd.RespCont, nil
 }
 
 type mockMemAcc struct {

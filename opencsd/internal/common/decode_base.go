@@ -33,8 +33,8 @@ type OpModeManager interface {
 
 // TraceElementOutputter provides methods to send trace elements downstream.
 type TraceElementOutputter interface {
-	OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp
-	OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp
+	OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error)
+	OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error)
 }
 
 // OpMode is an embeddable component that manages operational mode flags.
@@ -78,19 +78,19 @@ type DecoderBase struct {
 }
 
 // OutputTraceElement sends an element to the downstream consumer using IndexCurrPkt.
-func (b *DecoderBase) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
+func (b *DecoderBase) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
 	if b.TraceElemOut != nil {
 		return b.TraceElemOut.TraceElemIn(b.IndexCurrPkt, traceID, elem)
 	}
-	return ocsd.RespFatalNotInit
+	return ocsd.RespFatalNotInit, ocsd.ErrNotInit
 }
 
 // OutputTraceElementIdx sends an element to the downstream consumer at an explicit index.
-func (b *DecoderBase) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
+func (b *DecoderBase) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
 	if b.TraceElemOut != nil {
 		return b.TraceElemOut.TraceElemIn(idx, traceID, elem)
 	}
-	return ocsd.RespFatalNotInit
+	return ocsd.RespFatalNotInit, ocsd.ErrNotInit
 }
 
 // DecodeNotReadyReason returns a human-readable explanation of why the decoder is not

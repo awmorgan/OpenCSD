@@ -31,7 +31,7 @@ func NewGenericElementPrinter(writer io.Writer) *GenericElementPrinter {
 }
 
 // TraceElemIn implements the GenElemProcessor interface.
-func (p *GenericElementPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
+func (p *GenericElementPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
 
 	if p.collectStats {
@@ -39,7 +39,7 @@ func (p *GenericElementPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID ui
 	}
 
 	if p.IsMuted() {
-		return resp
+		return resp, nil
 	}
 
 	var sb strings.Builder
@@ -65,7 +65,7 @@ func (p *GenericElementPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID ui
 		p.needWaitAck = true
 	}
 
-	return resp
+	return resp, nil
 }
 
 // AckWait acknowledges a wait signal.

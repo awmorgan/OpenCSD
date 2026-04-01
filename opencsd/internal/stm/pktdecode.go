@@ -80,12 +80,12 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 	return nil
 }
 
-func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) ocsd.DatapathResp {
+func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) (ocsd.DatapathResp, error) {
 	resp := ocsd.RespCont
 	d.lastErr = nil
 	if reason := d.DecodeNotReadyReason(); reason != "" {
 		d.lastErr = fmt.Errorf("%w: %s", ocsd.ErrNotInit, reason)
-		return ocsd.RespFatalNotInit
+		return ocsd.RespFatalNotInit, d.lastErr
 	}
 
 	switch op {
@@ -108,7 +108,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 		d.lastErr = ocsd.ErrInvalidParamVal
 		resp = ocsd.RespFatalInvalidOp
 	}
-	return resp
+	return resp, d.lastErr
 }
 
 func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
@@ -138,7 +138,7 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 func (d *PktDecode) handleNoSync() (decoderState, ocsd.DatapathResp, bool) {
 	d.outputElem.SetType(ocsd.GenElemNoSync)
 	d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncInfo(d.unsyncInfo))
-	resp := d.OutputTraceElement(d.csID, &d.outputElem)
+	resp, _ := d.OutputTraceElement(d.csID, &d.outputElem)
 	return dcdWaitSync, resp, false // continue to waitSync
 }
 
@@ -157,7 +157,8 @@ func (d *PktDecode) handleDecodePkts() (decoderState, ocsd.DatapathResp, bool) {
 func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	d.outputElem.SetType(ocsd.GenElemEOTrace)
 	d.outputElem.SetUnSyncEOTReason(ocsd.UnsyncEOT)
-	return d.OutputTraceElement(d.csID, &d.outputElem)
+	resp, _ := d.OutputTraceElement(d.csID, &d.outputElem)
+	return resp
 }
 
 func (d *PktDecode) OnReset() ocsd.DatapathResp {
@@ -256,7 +257,7 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 			d.swtPacketInfo.SetHasTimestamp(true)
 		}
 		d.outputElem.SetSWTInfo(d.swtPacketInfo)
-		resp = d.OutputTraceElement(d.csID, &d.outputElem)
+		resp, _ = d.OutputTraceElement(d.csID, &d.outputElem)
 	}
 
 	return resp, done

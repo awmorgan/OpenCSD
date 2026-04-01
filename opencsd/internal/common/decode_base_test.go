@@ -50,13 +50,19 @@ func TestDecoderBase(t *testing.T) {
 	}
 
 	elem := ocsd.NewTraceElement()
-	resp := b.OutputTraceElement(123, elem)
+	resp, err := b.OutputTraceElement(123, elem)
+	if err != nil {
+		t.Fatalf("OutputTraceElement error = %v", err)
+	}
 	if resp != ocsd.RespCont {
 		t.Errorf("OutputTraceElement resp = %v, want RespCont", resp)
 	}
 
 	b.IndexCurrPkt = 42
-	resp = b.OutputTraceElementIdx(99, 123, elem)
+	resp, err = b.OutputTraceElementIdx(99, 123, elem)
+	if err != nil {
+		t.Fatalf("OutputTraceElementIdx error = %v", err)
+	}
 	if resp != ocsd.RespCont || elemIn.lastIndex != 99 {
 		t.Errorf("OutputTraceElementIdx failed: resp=%v lastIndex=%v", resp, elemIn.lastIndex)
 	}
@@ -136,8 +142,8 @@ type myTrcGenElemIn struct {
 	lastID    uint8
 }
 
-func (m *myTrcGenElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
+func (m *myTrcGenElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
 	m.lastIndex = indexSOP
 	m.lastID = trcChanID
-	return ocsd.RespCont
+	return ocsd.RespCont, nil
 }

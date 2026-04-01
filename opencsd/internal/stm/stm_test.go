@@ -11,9 +11,9 @@ type testTrcElemIn struct {
 	elements []ocsd.TraceElement
 }
 
-func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) ocsd.DatapathResp {
+func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
 	t.elements = append(t.elements, *elem)
-	return ocsd.RespCont
+	return ocsd.RespCont, nil
 }
 
 type StmStreamBuilder struct {
@@ -314,11 +314,11 @@ func TestSTMFlushResetAndBadPacketClassification(t *testing.T) {
 		t.Errorf("Expected non-fatal response on proc reset, got %v", resp)
 	}
 
-	resp = dec.PacketDataIn(ocsd.OpFlush, 0, nil)
+	resp, _ = dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 	if resp != ocsd.RespFatalNotInit {
 		t.Errorf("Expected RespFatalNotInit on decoder flush without full init, got %v", resp)
 	}
-	resp = dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	resp, _ = dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	if resp != ocsd.RespFatalNotInit {
 		t.Errorf("Expected RespFatalNotInit on decoder reset without full init, got %v", resp)
 	}
