@@ -57,6 +57,21 @@ type options struct {
 	logFile          bool
 	logFileName      string
 	help             bool
+
+	// parse-only flag state used to finalize composite options.
+	flagDecodeOnly   bool
+	flagTPIU         bool
+	flagTPIUHSync    bool
+	flagDirectBrCond bool
+	flagStrictBrCond bool
+	flagRangeCont    bool
+	flagHaltErr      bool
+	flagSrcAddrN     bool
+	flagAA64Opcode   bool
+	flagLogStdout    bool
+	flagLogStderr    bool
+	flagLogFile      bool
+	flagLogFileName  string
 }
 
 type mappedRange struct {
@@ -820,6 +835,84 @@ func (i *idListValue) Set(value string) error {
 	return nil
 }
 
+type uint32Value struct {
+	target *uint32
+}
+
+func (u *uint32Value) String() string {
+	if u == nil || u.target == nil {
+		return "0"
+	}
+	return strconv.FormatUint(uint64(*u.target), 10)
+}
+
+func (u *uint32Value) Set(value string) error {
+	v, err := strconv.ParseUint(value, 0, 32)
+	if err != nil {
+		return err
+	}
+	*u.target = uint32(v)
+	return nil
+}
+
+func (o *options) finalizeParsedFlags() {
+	if o.flagDecodeOnly {
+		o.decodeOnly = true
+		o.decode = true
+	}
+
+	if o.flagTPIU {
+		o.tpiuFormat = true
+	}
+	if o.flagTPIUHSync {
+		o.tpiuFormat = true
+		o.hasHSync = true
+	}
+
+	if o.flagDirectBrCond {
+		o.additionalFlags |= ocsd.OpflgNUncondDirBrChk
+	}
+	if o.flagStrictBrCond {
+		o.additionalFlags |= ocsd.OpflgStrictNUncondBrChk
+	}
+	if o.flagRangeCont {
+		o.additionalFlags |= ocsd.OpflgChkRangeContinue
+	}
+	if o.flagHaltErr {
+		o.additionalFlags |= ocsd.OpflgPktdecHaltBadPkts
+	}
+	if o.flagSrcAddrN {
+		o.additionalFlags |= ocsd.OpflgPktdecSrcAddrNAtoms
+	}
+	if o.flagAA64Opcode {
+		o.additionalFlags |= ocsd.OpflgPktdecAA64OpcodeChk
+	}
+
+	if len(o.idList) > 0 {
+		o.allSourceIDs = false
+	}
+
+	switch {
+	case o.flagLogStdout:
+		o.logStdout = true
+		o.logStderr = false
+		o.logFile = false
+	case o.flagLogStderr:
+		o.logStdout = false
+		o.logStderr = true
+		o.logFile = false
+	case o.flagLogFileName != "":
+		o.logFileName = o.flagLogFileName
+		o.logStdout = false
+		o.logStderr = false
+		o.logFile = true
+	case o.flagLogFile:
+		o.logStdout = false
+		o.logStderr = false
+		o.logFile = true
+	}
+}
+
 func parseOptions(args []string) (options, error) {
 	opts := options{
 		allSourceIDs: true,
@@ -850,40 +943,28 @@ func parseOptions(args []string) (options, error) {
 	fs.BoolVar(&opts.memCacheDisable, "macc_cache_disable", false, "Disable memory cache")
 
 	// Custom flag for multiple IDs
-	var ids idListValue
-	fs.Var(&ids, "id", "Set an ID to list (may be used multiple times)")
+	fs.Var((*idListValue)(&opts.idList), "id", "Set an ID to list (may be used multiple times)")
 
-	// Intermediate variables for composite/complex logic
-	var decodeOnly, tpiu, tpiuHsync bool
-	fs.BoolVar(&decodeOnly, "decode_only", false, "Decode only, no packet printer output")
-	fs.BoolVar(&tpiu, "tpiu", false, "Input from TPIU - sync by FSYNC")
-	fs.BoolVar(&tpiuHsync, "tpiu_hsync", false, "Input from TPIU - sync by FSYNC and HSYNC")
+	fs.BoolVar(&opts.flagDecodeOnly, "decode_only", false, "Decode only, no packet printer output")
+	fs.BoolVar(&opts.flagTPIU, "tpiu", false, "Input from TPIU - sync by FSYNC")
+	fs.BoolVar(&opts.flagTPIUHSync, "tpiu_hsync", false, "Input from TPIU - sync by FSYNC and HSYNC")
 
-	// Bitfield flags mapping
-	var directBrCond, strictBrCond, rangeCont, haltErr, srcAddrN, aa64OpcodeChk bool
-	fs.BoolVar(&directBrCond, "direct_br_cond", false, "Additional flag: direct_br_cond")
-	fs.BoolVar(&strictBrCond, "strict_br_cond", false, "Additional flag: strict_br_cond")
-	fs.BoolVar(&rangeCont, "range_cont", false, "Additional flag: range_cont")
-	fs.BoolVar(&haltErr, "halt_err", false, "Additional flag: halt_err")
-	fs.BoolVar(&srcAddrN, "src_addr_n", false, "Additional flag: src_addr_n")
-	fs.BoolVar(&aa64OpcodeChk, "aa64_opcode_chk", false, "Additional flag: aa64_opcode_chk")
+	fs.BoolVar(&opts.flagDirectBrCond, "direct_br_cond", false, "Additional flag: direct_br_cond")
+	fs.BoolVar(&opts.flagStrictBrCond, "strict_br_cond", false, "Additional flag: strict_br_cond")
+	fs.BoolVar(&opts.flagRangeCont, "range_cont", false, "Additional flag: range_cont")
+	fs.BoolVar(&opts.flagHaltErr, "halt_err", false, "Additional flag: halt_err")
+	fs.BoolVar(&opts.flagSrcAddrN, "src_addr_n", false, "Additional flag: src_addr_n")
+	fs.BoolVar(&opts.flagAA64Opcode, "aa64_opcode_chk", false, "Additional flag: aa64_opcode_chk")
 
-	// Cache pagination mapped to uint instead of uint32 for the flag parser
-	var memCachePageSize, memCachePageNum uint
-	fs.UintVar(&memCachePageSize, "macc_cache_p_size", 0, "Memory cache page size")
-	fs.UintVar(&memCachePageNum, "macc_cache_p_num", 0, "Memory cache page number")
+	fs.Var(&uint32Value{target: &opts.memCachePageSize}, "macc_cache_p_size", "Memory cache page size")
+	fs.Var(&uint32Value{target: &opts.memCachePageNum}, "macc_cache_p_num", "Memory cache page number")
 
-	// Output routing flags
-	var logStdout, logStderr, logFile bool
-	var logFileName string
-	fs.BoolVar(&logStdout, "logstdout", false, "Output to stdout")
-	fs.BoolVar(&logStderr, "logstderr", false, "Output to stderr")
-	fs.BoolVar(&logFile, "logfile", false, "Output to default file")
-	fs.StringVar(&logFileName, "logfilename", "", "Output to specific file name")
+	fs.BoolVar(&opts.flagLogStdout, "logstdout", false, "Output to stdout")
+	fs.BoolVar(&opts.flagLogStderr, "logstderr", false, "Output to stderr")
+	fs.BoolVar(&opts.flagLogFile, "logfile", false, "Output to default file")
+	fs.StringVar(&opts.flagLogFileName, "logfilename", "", "Output to specific file name")
 
-	// Help flags
-	var help bool
-	fs.BoolVar(&help, "help", false, "Show help")
+	fs.BoolVar(&opts.help, "help", false, "Show help")
 
 	// Parse the arguments
 	if err := fs.Parse(args); err != nil {
@@ -894,77 +975,12 @@ func parseOptions(args []string) (options, error) {
 		return opts, fmt.Errorf("trace packet lister: error parsing flags: %w", err)
 	}
 
-	if help {
+	if opts.help {
 		opts.help = true
 		return opts, nil
 	}
 
-	if decodeOnly {
-		opts.decodeOnly = true
-		opts.decode = true
-	}
-
-	if tpiu {
-		opts.tpiuFormat = true
-	}
-	if tpiuHsync {
-		opts.tpiuFormat = true
-		opts.hasHSync = true
-	}
-
-	// Apply bitfield combinations
-	if directBrCond {
-		opts.additionalFlags |= ocsd.OpflgNUncondDirBrChk
-	}
-	if strictBrCond {
-		opts.additionalFlags |= ocsd.OpflgStrictNUncondBrChk
-	}
-	if rangeCont {
-		opts.additionalFlags |= ocsd.OpflgChkRangeContinue
-	}
-	if haltErr {
-		opts.additionalFlags |= ocsd.OpflgPktdecHaltBadPkts
-	}
-	if srcAddrN {
-		opts.additionalFlags |= ocsd.OpflgPktdecSrcAddrNAtoms
-	}
-	if aa64OpcodeChk {
-		opts.additionalFlags |= ocsd.OpflgPktdecAA64OpcodeChk
-	}
-
-	// Apply ID list
-	if len(ids) > 0 {
-		opts.allSourceIDs = false
-		opts.idList = append(opts.idList, ids...)
-	}
-
-	// Cast cache numbers back to uint32
-	if memCachePageSize > 0 {
-		opts.memCachePageSize = uint32(memCachePageSize)
-	}
-	if memCachePageNum > 0 {
-		opts.memCachePageNum = uint32(memCachePageNum)
-	}
-
-	// Apply mutual-exclusive logging rules
-	if logStdout {
-		opts.logStdout = true
-		opts.logStderr = false
-		opts.logFile = false
-	} else if logStderr {
-		opts.logStdout = false
-		opts.logStderr = true
-		opts.logFile = false
-	} else if logFileName != "" {
-		opts.logFileName = logFileName
-		opts.logStdout = false
-		opts.logStderr = false
-		opts.logFile = true
-	} else if logFile {
-		opts.logStdout = false
-		opts.logStderr = false
-		opts.logFile = true
-	}
+	opts.finalizeParsedFlags()
 
 	return opts, nil
 }

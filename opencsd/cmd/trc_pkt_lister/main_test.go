@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"opencsd/internal/memacc"
+	"opencsd/internal/ocsd"
 	"opencsd/internal/snapshot"
 	"os"
 	"path/filepath"
@@ -683,6 +684,74 @@ func TestParseOptionsFromGoldenAllBehavioralFlags(t *testing.T) {
 		if f == "-src_name" {
 			t.Errorf("parseOptionsFromGolden forwarded -src_name into extraFlags; it should be consumed but not forwarded")
 		}
+	}
+}
+
+func TestParseOptionsCompositeFlags(t *testing.T) {
+	opts, err := parseOptions([]string{
+		"-decode_only",
+		"-tpiu_hsync",
+		"-direct_br_cond",
+		"-range_cont",
+		"-macc_cache_p_size", "4096",
+		"-macc_cache_p_num", "2",
+		"-id", "0x10",
+		"-id", "0x20",
+	})
+	if err != nil {
+		t.Fatalf("parseOptions failed: %v", err)
+	}
+
+	if !opts.decodeOnly || !opts.decode {
+		t.Fatalf("expected decode_only to imply decode; decodeOnly=%v decode=%v", opts.decodeOnly, opts.decode)
+	}
+	if !opts.tpiuFormat || !opts.hasHSync {
+		t.Fatalf("expected tpiu_hsync to set tpiuFormat+hasHSync; tpiuFormat=%v hasHSync=%v", opts.tpiuFormat, opts.hasHSync)
+	}
+
+	wantFlags := uint32(ocsd.OpflgNUncondDirBrChk | ocsd.OpflgChkRangeContinue)
+	if opts.additionalFlags != wantFlags {
+		t.Fatalf("additionalFlags mismatch: got 0x%x want 0x%x", opts.additionalFlags, wantFlags)
+	}
+
+	if opts.memCachePageSize != 4096 || opts.memCachePageNum != 2 {
+		t.Fatalf("cache values mismatch: size=%d num=%d", opts.memCachePageSize, opts.memCachePageNum)
+	}
+
+	if opts.allSourceIDs {
+		t.Fatal("expected allSourceIDs=false when -id is provided")
+	}
+	if len(opts.idList) != 2 || opts.idList[0] != 0x10 || opts.idList[1] != 0x20 {
+		t.Fatalf("unexpected idList: %v", opts.idList)
+	}
+}
+
+func TestParseOptionsLoggingPrecedence(t *testing.T) {
+	defaultOpts, err := parseOptions(nil)
+	if err != nil {
+		t.Fatalf("parseOptions default failed: %v", err)
+	}
+	if !defaultOpts.logStdout || defaultOpts.logStderr || !defaultOpts.logFile || defaultOpts.logFileName != defaultLogFile {
+		t.Fatalf("unexpected default logging options: stdout=%v stderr=%v file=%v fileName=%q", defaultOpts.logStdout, defaultOpts.logStderr, defaultOpts.logFile, defaultOpts.logFileName)
+	}
+
+	stdoutWins, err := parseOptions([]string{"-logfile", "-logfilename", "custom.ppl", "-logstderr", "-logstdout"})
+	if err != nil {
+		t.Fatalf("parseOptions precedence failed: %v", err)
+	}
+	if !stdoutWins.logStdout || stdoutWins.logStderr || stdoutWins.logFile {
+		t.Fatalf("expected logstdout precedence, got stdout=%v stderr=%v file=%v", stdoutWins.logStdout, stdoutWins.logStderr, stdoutWins.logFile)
+	}
+	if stdoutWins.logFileName != defaultLogFile {
+		t.Fatalf("expected default logfile name to remain, got %q", stdoutWins.logFileName)
+	}
+
+	fileNameWins, err := parseOptions([]string{"-logfile", "-logfilename", "named-output.ppl"})
+	if err != nil {
+		t.Fatalf("parseOptions logfilename failed: %v", err)
+	}
+	if fileNameWins.logStdout || fileNameWins.logStderr || !fileNameWins.logFile || fileNameWins.logFileName != "named-output.ppl" {
+		t.Fatalf("expected logfilename behavior, got stdout=%v stderr=%v file=%v fileName=%q", fileNameWins.logStdout, fileNameWins.logStderr, fileNameWins.logFile, fileNameWins.logFileName)
 	}
 }
 
