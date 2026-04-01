@@ -147,6 +147,31 @@ func (m *mockDataSinkWait) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, 
 // Ensure mockDataSinkWait implements TrcDataProcessor
 var _ ocsd.TrcDataProcessor = (*mockDataSinkWait)(nil)
 
+type mockDataSinkWaitOnce struct {
+	waited bool
+	total  uint32
+}
+
+func (m *mockDataSinkWaitOnce) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
+	if op != ocsd.OpData {
+		return 0, ocsd.RespCont, nil
+	}
+	if !m.waited {
+		m.waited = true
+		used := uint32(2)
+		if len(dataBlock) < 2 {
+			used = uint32(len(dataBlock))
+		}
+		m.total += used
+		return used, ocsd.RespWait, nil
+	}
+	used := uint32(len(dataBlock))
+	m.total += used
+	return used, ocsd.RespCont, nil
+}
+
+var _ ocsd.TrcDataProcessor = (*mockDataSinkWaitOnce)(nil)
+
 type mockRawSink struct {
 	out *bytes.Buffer
 }
@@ -486,5 +511,42 @@ func TestRunDemuxBadDataTest(t *testing.T) {
 	_, resp, inErr := df.TraceDataIn(ocsd.OpData, 0, bufBad)
 	if resp != ocsd.RespFatalInvalidData || !errors.Is(inErr, ocsd.ErrDfrmtrBadFhsync) {
 		t.Errorf("Expected RespFatalInvalidData and ErrDfrmtrBadFhsync, got resp=%v err=%v", resp, inErr)
+	}
+}
+
+func TestDemuxWaitResumeWithFlush(t *testing.T) {
+	df := NewFrameDeformatter()
+	if err := df.Configure(baseCfg); err != nil {
+		t.Fatalf("Configure failed: %v", err)
+	}
+
+	sink := &mockDataSinkWaitOnce{}
+	df.SetIDStream(0x10, sink)
+
+	buf := makeBufMemAlign()
+	processed, resp, err := df.TraceDataIn(ocsd.OpData, 0, buf)
+	if err != nil {
+		t.Fatalf("TraceDataIn OpData returned error: %v", err)
+	}
+	if processed != uint32(len(buf)) {
+		t.Fatalf("processed mismatch: got %d want %d", processed, len(buf))
+	}
+	if !ocsd.DataRespIsWait(resp) {
+		t.Fatalf("expected wait response on first pass, got %v", resp)
+	}
+	if sink.total == 0 {
+		t.Fatalf("expected sink to consume some bytes before wait")
+	}
+
+	beforeFlushTotal := sink.total
+	_, flushResp, flushErr := df.TraceDataIn(ocsd.OpFlush, 0, nil)
+	if flushErr != nil {
+		t.Fatalf("TraceDataIn OpFlush returned error: %v", flushErr)
+	}
+	if !ocsd.DataRespIsCont(flushResp) {
+		t.Fatalf("expected continue response on flush resume, got %v", flushResp)
+	}
+	if sink.total <= beforeFlushTotal {
+		t.Fatalf("expected additional bytes consumed on flush resume: before=%d after=%d", beforeFlushTotal, sink.total)
 	}
 }
