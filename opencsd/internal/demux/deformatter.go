@@ -16,7 +16,7 @@ type outData struct {
 
 type datapathState struct {
 	highestResp ocsd.DatapathResp
-	lastErr     error
+	err         error
 }
 
 func newDatapathState() *datapathState {
@@ -28,7 +28,7 @@ func collateDataPathResp(state *datapathState, resp ocsd.DatapathResp, err error
 		state.highestResp = resp
 	}
 	if err != nil {
-		state.lastErr = err
+		state.err = err
 		if ocsd.RespFatalInvalidData > state.highestResp {
 			state.highestResp = ocsd.RespFatalInvalidData
 		}
@@ -236,7 +236,7 @@ func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, 
 	default:
 		// Unsupported operations
 	}
-	err = state.lastErr
+	err = state.err
 
 	return numBytesProcessed, resp, err
 }
