@@ -23,12 +23,10 @@ import (
 // buildDecInDecodePkts returns a decoder that has gone through Reset→ASync→ISync
 // so currState==decodePkts. The testTrcElemIn sink is attached.
 func buildDecInDecodePkts(config *Config) (*PktDecode, *testTrcElemIn) {
-	dec, err := NewConfiguredPktDecode(0, config)
+	dec, err := NewConfiguredPktDecode(0, config, &mockMemAcc{failAfter: -1}, idec.NewDecoder())
 	if err != nil {
 		panic(err)
 	}
-	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
-	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
 
@@ -76,8 +74,6 @@ func containsElemType(out *testTrcElemIn, want ocsd.GenElemType) bool {
 // noSync→sendUnsyncPacket → GenElemNoSync emitted, then transitions to waitAsync.
 func TestSendUnsyncPacket_EmitsNoSync(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, &Config{})
-	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
-	dec.SetInstrDecode(idec.NewDecoder())
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
 	// Do NOT call OpReset - decoder starts in noSync
@@ -99,8 +95,6 @@ func TestSendUnsyncPacket_UnsyncInfoPreserved(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, &Config{})
 	out := &testTrcElemIn{}
 	dec.SetTraceElemOut(out)
-	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
-	dec.SetInstrDecode(idec.NewDecoder())
 
 	// NoSync state → any packet triggers sendUnsyncPacket → GenElemNoSync
 	pkt := &Packet{}

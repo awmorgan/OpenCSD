@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
 
@@ -50,17 +51,19 @@ func (m *mockMemAcc) InvalidateMemAccCache(csTraceID uint8) {}
 
 func TestETMv3TypedConstructors(t *testing.T) {
 	config := &Config{}
+	mem := &mockMemAcc{failAfter: -1}
+	instr := idec.NewDecoder()
 	proc, err := NewConfiguredPktProc(1, config)
 	if err != nil || proc == nil || proc.Config != config {
 		t.Fatalf("NewConfiguredPktProc failed: proc=%v err=%v", proc, err)
 	}
 
-	dec, err := NewConfiguredPktDecode(2, config)
+	dec, err := NewConfiguredPktDecode(2, config, mem, instr)
 	if err != nil || dec == nil || dec.Config != config {
 		t.Fatalf("NewConfiguredPktDecode failed: dec=%v err=%v", dec, err)
 	}
 
-	proc, dec, err = NewConfiguredPipeline(3, config)
+	proc, dec, err = NewConfiguredPipeline(3, config, &mockMemAcc{failAfter: -1}, idec.NewDecoder())
 	if err != nil || proc == nil || dec == nil {
 		t.Fatalf("NewConfiguredPipeline failed: proc=%v dec=%v err=%v", proc, dec, err)
 	}
@@ -71,8 +74,14 @@ func TestETMv3TypedConstructors(t *testing.T) {
 	if proc, err := NewConfiguredPktProc(0, nil); proc != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 		t.Fatalf("expected nil-config proc constructor failure, got proc=%v err=%v", proc, err)
 	}
-	if dec, err := NewConfiguredPktDecode(0, nil); dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
+	if dec, err := NewConfiguredPktDecode(0, nil, mem, instr); dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 		t.Fatalf("expected nil-config decode constructor failure, got dec=%v err=%v", dec, err)
+	}
+	if dec, err := NewConfiguredPktDecode(0, config, nil, instr); dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
+		t.Fatalf("expected nil-mem decode constructor failure, got dec=%v err=%v", dec, err)
+	}
+	if dec, err := NewConfiguredPktDecode(0, config, mem, nil); dec != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
+		t.Fatalf("expected nil-decoder constructor failure, got dec=%v err=%v", dec, err)
 	}
 }
 
@@ -87,7 +96,7 @@ func mustNewConfiguredPktProc(tb testing.TB, config *Config) *PktProc {
 
 func mustNewConfiguredPktDecode(tb testing.TB, config *Config) *PktDecode {
 	tb.Helper()
-	dec, err := NewConfiguredPktDecode(0, config)
+	dec, err := NewConfiguredPktDecode(0, config, &mockMemAcc{failAfter: -1}, idec.NewDecoder())
 	if err != nil {
 		tb.Fatalf("NewConfiguredPktDecode failed: %v", err)
 	}

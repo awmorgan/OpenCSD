@@ -33,16 +33,18 @@ func TestCodeFollower(t *testing.T) {
 
 	realID := idec.NewDecoder()
 
-	// Test with nil dependencies - should return ErrNotInit
-	cf := NewCodeFollowerWithInterfaces(nil, nil)
-
-	// Test without valid interfaces
-	_, err := cf.FollowSingleAtom(0x1000, ocsd.AtomN)
-	if !errors.Is(err, ocsd.ErrNotInit) {
-		t.Errorf("Expected NotInit error")
+	if cf, err := NewCodeFollowerWithInterfaces(nil, realID); cf != nil || !errors.Is(err, ocsd.ErrInvalidParamVal) {
+		t.Fatalf("expected nil mem access constructor failure, got cf=%v err=%v", cf, err)
 	}
 
-	cf = NewCodeFollowerWithInterfaces(mockMem, realID)
+	if cf, err := NewCodeFollowerWithInterfaces(mockMem, nil); cf != nil || !errors.Is(err, ocsd.ErrInvalidParamVal) {
+		t.Fatalf("expected nil decoder constructor failure, got cf=%v err=%v", cf, err)
+	}
+
+	cf, err := NewCodeFollowerWithInterfaces(mockMem, realID)
+	if err != nil {
+		t.Fatalf("NewCodeFollowerWithInterfaces failed: %v", err)
+	}
 
 	cf.Arch = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA}
 	cf.InstrInfo.PeType = ocsd.ArchProfile{Arch: ocsd.ArchV8, Profile: ocsd.ProfileCortexA}

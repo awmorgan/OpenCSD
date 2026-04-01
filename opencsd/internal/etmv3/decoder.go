@@ -57,19 +57,31 @@ type PktDecode struct {
 }
 
 // NewPktDecode creates a new ETMv3 trace decoder.
-func NewPktDecode(cfg *Config) (*PktDecode, error) {
+func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("%w: ETMv3 config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
+	if mem == nil {
+		return nil, fmt.Errorf("%w: ETMv3 mem access cannot be nil", ocsd.ErrInvalidParamVal)
+	}
+	if instr == nil {
+		return nil, fmt.Errorf("%w: ETMv3 instruction decoder cannot be nil", ocsd.ErrInvalidParamVal)
+	}
 
 	instID := int(cfg.TraceID())
+	codeFollower, err := common.NewCodeFollowerWithInterfaces(mem, instr)
+	if err != nil {
+		return nil, err
+	}
 
 	d := &PktDecode{
 		Name:           fmt.Sprintf("DCD_ETMV3_%d", instID),
+		MemAccess:      mem,
+		InstrDecode:    instr,
 		peContext:      &ocsd.PEContext{},
 		outputElemList: common.NewGenElemList(),
+		codeFollower:   codeFollower,
 	}
-	d.codeFollower = common.NewCodeFollowerWithInterfaces(d.MemAccess, d.InstrDecode)
 	d.configureDecoder()
 	if err := d.SetProtocolConfig(cfg); err != nil {
 		return nil, err
@@ -77,18 +89,30 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 	return d, nil
 }
 
-func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) {
-	d.MemAccess = mem
-	if d.codeFollower != nil {
-		d.codeFollower.SetInterfaces(d.MemAccess, d.InstrDecode)
+func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) error {
+	if mem == nil {
+		return fmt.Errorf("%w: ETMv3 mem access cannot be nil", ocsd.ErrInvalidParamVal)
 	}
+	if d.codeFollower != nil {
+		if err := d.codeFollower.SetInterfaces(mem, d.InstrDecode); err != nil {
+			return err
+		}
+	}
+	d.MemAccess = mem
+	return nil
 }
 
-func (d *PktDecode) SetInstrDecode(decoder common.InstrDecode) {
-	d.InstrDecode = decoder
-	if d.codeFollower != nil {
-		d.codeFollower.SetInterfaces(d.MemAccess, d.InstrDecode)
+func (d *PktDecode) SetInstrDecode(decoder common.InstrDecode) error {
+	if decoder == nil {
+		return fmt.Errorf("%w: ETMv3 instruction decoder cannot be nil", ocsd.ErrInvalidParamVal)
 	}
+	if d.codeFollower != nil {
+		if err := d.codeFollower.SetInterfaces(d.MemAccess, decoder); err != nil {
+			return err
+		}
+	}
+	d.InstrDecode = decoder
+	return nil
 }
 
 // SetTraceElemOut satisfies dcdtree's traceElemSetterOwner interface.
@@ -155,9 +179,6 @@ func (d *PktDecode) InvalidateMemAccCache(traceID uint8) error {
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) error {
 	resp := ocsd.RespCont
 	var packetErr error
-	if d.codeFollower != nil {
-		d.codeFollower.SetInterfaces(d.MemAccess, d.InstrDecode)
-	}
 
 	switch op {
 	case ocsd.OpData:
@@ -937,30 +958,28 @@ func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, error) {
 }
 
 // NewConfiguredPktDecode creates an ETMv3 packet decoder with a typed config.
-func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
+func NewConfiguredPktDecode(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
 	_ = instID
-	return NewPktDecode(cfg)
+	return NewPktDecode(cfg, mem, instr)
 }
 
 // NewConfiguredPktDecodeWithDeps creates an ETMv3 decoder and injects dependencies.
 func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
-	dec, err := NewConfiguredPktDecode(instID, cfg)
+	dec, err := NewConfiguredPktDecode(instID, cfg, mem, instr)
 	if err != nil {
 		return nil, err
 	}
 	dec.SetTraceElemOut(out)
-	dec.SetMemAccess(mem)
-	dec.SetInstrDecode(instr)
 	return dec, nil
 }
 
 // NewConfiguredPipeline creates and wires a typed ETMv3 processor/decoder pair.
-func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, error) {
+func NewConfiguredPipeline(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktProc, *PktDecode, error) {
 	proc, err := NewConfiguredPktProc(instID, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	dec, err := NewConfiguredPktDecode(instID, cfg)
+	dec, err := NewConfiguredPktDecode(instID, cfg, mem, instr)
 	if err != nil {
 		return nil, nil, err
 	}

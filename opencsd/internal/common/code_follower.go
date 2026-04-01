@@ -3,6 +3,7 @@ package common
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
 )
@@ -24,7 +25,6 @@ type CodeFollower struct {
 	HasNext      bool
 	HasNaccErr   bool
 	Instructs    uint32
-	Valid        bool
 }
 
 // FollowResult contains the decoded single-atom follow outcome.
@@ -44,8 +44,16 @@ func (r FollowResult) HasRange() bool {
 }
 
 // NewCodeFollowerWithInterfaces creates a CodeFollower and attaches required decoder interfaces.
-// Both memAccess and idDecode must be non-nil; the CodeFollower is only valid when both are provided.
-func NewCodeFollowerWithInterfaces(memAccess TargetMemAccess, idDecode InstrDecode) *CodeFollower {
+
+// Both memAccess and idDecode must be non-nil.
+func NewCodeFollowerWithInterfaces(memAccess TargetMemAccess, idDecode InstrDecode) (*CodeFollower, error) {
+	if memAccess == nil {
+		return nil, fmt.Errorf("%w: code follower mem access cannot be nil", ocsd.ErrInvalidParamVal)
+	}
+	if idDecode == nil {
+		return nil, fmt.Errorf("%w: code follower instruction decoder cannot be nil", ocsd.ErrInvalidParamVal)
+	}
+
 	cf := &CodeFollower{
 		MemAccess:    memAccess,
 		IdDecode:     idDecode,
@@ -56,16 +64,21 @@ func NewCodeFollowerWithInterfaces(memAccess TargetMemAccess, idDecode InstrDeco
 		HasNext:      false,
 		HasNaccErr:   false,
 		Instructs:    0,
-		Valid:        false,
 	}
-	// Valid is computed lazily in FollowSingleAtom; requires non-nil interfaces.
-	return cf
+	return cf, nil
 }
 
 // SetInterfaces updates the active memory and instruction decode interfaces.
-func (cf *CodeFollower) SetInterfaces(memAccess TargetMemAccess, idDecode InstrDecode) {
+func (cf *CodeFollower) SetInterfaces(memAccess TargetMemAccess, idDecode InstrDecode) error {
+	if memAccess == nil {
+		return fmt.Errorf("%w: code follower mem access cannot be nil", ocsd.ErrInvalidParamVal)
+	}
+	if idDecode == nil {
+		return fmt.Errorf("%w: code follower instruction decoder cannot be nil", ocsd.ErrInvalidParamVal)
+	}
 	cf.MemAccess = memAccess
 	cf.IdDecode = idDecode
+	return nil
 }
 
 func (cf *CodeFollower) SetDSBDMBasWP() {
@@ -99,23 +112,18 @@ func (cf *CodeFollower) DecodeSingleOpCode() error {
 	return err
 }
 
-func (cf *CodeFollower) resetFollowerState() bool {
+func (cf *CodeFollower) resetFollowerState() {
 	cf.HasNext = false
 	cf.HasNaccErr = false
 	cf.Instructs = 0
 	cf.EndAddr = cf.StartAddr
 	cf.NextAddr = cf.StartAddr
 	cf.NoAccessAddr = cf.StartAddr
-
-	cf.Valid = cf.MemAccess != nil && cf.IdDecode != nil
-	return cf.Valid
 }
 
 // followSingleAtomInternal decodes an instruction at a single location and calculates the next address.
 func (cf *CodeFollower) followSingleAtomInternal(addrStart ocsd.VAddr, atom ocsd.AtmVal) error {
-	if !cf.resetFollowerState() {
-		return ocsd.ErrNotInit
-	}
+	cf.resetFollowerState()
 
 	cf.EndAddr = addrStart
 	cf.StartAddr = addrStart
