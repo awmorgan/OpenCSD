@@ -52,11 +52,12 @@ type PktDecode struct {
 }
 
 // NewPktDecode creates a new ETMv3 trace decoder.
-func NewPktDecode(cfg *Config) *PktDecode {
-	instID := 0
-	if cfg != nil {
-		instID = int(cfg.TraceID())
+func NewPktDecode(cfg *Config) (*PktDecode, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("%w: ETMv3 config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
+
+	instID := int(cfg.TraceID())
 
 	d := &PktDecode{
 		DecoderBase: common.DecoderBase{
@@ -67,10 +68,10 @@ func NewPktDecode(cfg *Config) *PktDecode {
 	}
 	d.codeFollower = common.NewCodeFollowerWithInterfaces(d.MemAccess, d.InstrDecode)
 	d.configureDecoder()
-	if cfg != nil {
-		_ = d.SetProtocolConfig(cfg)
+	if err := d.SetProtocolConfig(cfg); err != nil {
+		return nil, err
 	}
-	return d
+	return d, nil
 }
 
 func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) {
@@ -847,12 +848,8 @@ func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, error) {
 
 // NewConfiguredPktDecode creates an ETMv3 packet decoder with a typed config.
 func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("%w: ETMv3 config cannot be nil", ocsd.ErrInvalidParamVal)
-	}
 	_ = instID
-	dec := NewPktDecode(cfg)
-	return dec, nil
+	return NewPktDecode(cfg)
 }
 
 // NewConfiguredPipeline creates and wires a typed ETMv3 processor/decoder pair.
