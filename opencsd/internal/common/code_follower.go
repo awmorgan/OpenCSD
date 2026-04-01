@@ -43,9 +43,12 @@ func (r FollowResult) HasRange() bool {
 	return r.RangeSt < r.RangeEn
 }
 
-// NewCodeFollower creates a new CodeFollower.
-func NewCodeFollower() *CodeFollower {
+// NewCodeFollowerWithInterfaces creates a CodeFollower and attaches required decoder interfaces.
+// Both memAccess and idDecode must be non-nil; the CodeFollower is only valid when both are provided.
+func NewCodeFollowerWithInterfaces(memAccess TargetMemAccess, idDecode InstrDecode) *CodeFollower {
 	cf := &CodeFollower{
+		MemAccess:    memAccess,
+		IdDecode:     idDecode,
 		StartAddr:    ocsd.VAddr(ocsd.VAMask),
 		EndAddr:      ocsd.VAddr(ocsd.VAMask),
 		NextAddr:     ocsd.VAddr(ocsd.VAMask),
@@ -55,15 +58,7 @@ func NewCodeFollower() *CodeFollower {
 		Instructs:    0,
 		Valid:        false,
 	}
-	return cf
-}
-
-// NewCodeFollowerWithInterfaces creates a CodeFollower and attaches decoder interfaces.
-func NewCodeFollowerWithInterfaces(memAccess TargetMemAccess, idDecode InstrDecode) *CodeFollower {
-	cf := NewCodeFollower()
-	cf.MemAccess = memAccess
-	cf.IdDecode = idDecode
-	// valid is computed lazily in FollowSingleAtom.
+	// Valid is computed lazily in FollowSingleAtom; requires non-nil interfaces.
 	return cf
 }
 

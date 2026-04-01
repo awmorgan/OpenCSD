@@ -33,9 +33,10 @@ func TestCodeFollower(t *testing.T) {
 
 	realID := idec.NewDecoder()
 
-	cf := NewCodeFollower()
+	// Test with nil dependencies - should return ErrNotInit
+	cf := NewCodeFollowerWithInterfaces(nil, nil)
 
-	// Test without valid
+	// Test without valid interfaces
 	_, err := cf.FollowSingleAtom(0x1000, ocsd.AtomN)
 	if !errors.Is(err, ocsd.ErrNotInit) {
 		t.Errorf("Expected NotInit error")
