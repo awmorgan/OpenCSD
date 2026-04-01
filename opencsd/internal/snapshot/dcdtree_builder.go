@@ -7,6 +7,7 @@ import (
 	"opencsd/internal/ete"
 	"opencsd/internal/etmv3"
 	"opencsd/internal/etmv4"
+	"opencsd/internal/idec"
 	"opencsd/internal/itm"
 	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
@@ -78,6 +79,8 @@ type DecodeTreeBuilder struct {
 	tree           *dcdtree.DecodeTree
 	packetProcOnly bool
 	bufferFileName string
+	memIf          common.TargetMemAccess
+	instrDecode    common.InstrDecode
 }
 
 // NewDecodeTreeBuilder creates a new builder for DecodeTree from a snapshot.
@@ -135,9 +138,12 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 
 	// Create a memory accessor mapper in full-decoder mode only.
 	var mapper memacc.Mapper
+	b.memIf = nil
+	b.instrDecode = nil
 	if !packetProcOnly {
 		mapper = memacc.NewGlobalMapper()
-		b.tree.SetMemAccessI(&mapperAdapter{mapper: mapper})
+		b.memIf = &mapperAdapter{mapper: mapper}
+		b.instrDecode = idec.NewDecoder()
 	}
 
 	numDecodersCreated := 0
@@ -262,7 +268,7 @@ func (b *DecodeTreeBuilder) createETMv3Decoder(coreName string, devSrc *ParsedDe
 		return b.tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV3, ocsd.ProtocolETMV3, proc, proc)
 	}
 
-	proc, dec, err := etmv3.NewConfiguredPipeline(int(cfg.TraceID()), cfg)
+	proc, dec, err := etmv3.NewConfiguredPipelineWithDeps(int(cfg.TraceID()), cfg, nil, b.memIf, b.instrDecode)
 	if err != nil {
 		return fmt.Errorf("ETMv3 NewConfiguredPipeline failed: %w", err)
 	}
@@ -295,7 +301,7 @@ func (b *DecodeTreeBuilder) createPTMDecoder(coreName string, devSrc *ParsedDevi
 		return b.tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdPTM, ocsd.ProtocolPTM, proc, proc)
 	}
 
-	proc, dec, err := ptm.NewConfiguredPipeline(int(cfg.TraceID()), cfg)
+	proc, dec, err := ptm.NewConfiguredPipelineWithDeps(int(cfg.TraceID()), cfg, nil, b.memIf, b.instrDecode)
 	if err != nil {
 		return fmt.Errorf("PTM NewConfiguredPipeline failed: %w", err)
 	}
@@ -339,7 +345,7 @@ func (b *DecodeTreeBuilder) createETEDecoder(coreName string, devSrc *ParsedDevi
 		return b.tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETE, ocsd.ProtocolETE, proc, proc)
 	}
 
-	proc, dec, err := ete.NewConfiguredPipeline(int(cfg.TraceID()), cfg)
+	proc, dec, err := ete.NewConfiguredPipelineWithDeps(int(cfg.TraceID()), cfg, nil, b.memIf, b.instrDecode)
 	if err != nil {
 		return fmt.Errorf("ETE NewConfiguredPipeline failed: %w", err)
 	}
@@ -396,7 +402,7 @@ func (b *DecodeTreeBuilder) createETMv4Decoder(coreName string, devSrc *ParsedDe
 		return b.tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, proc)
 	}
 
-	proc, dec, err := etmv4.NewConfiguredPipeline(int(cfg.TraceID()), cfg)
+	proc, dec, err := etmv4.NewConfiguredPipelineWithDeps(int(cfg.TraceID()), cfg, nil, b.memIf, b.instrDecode)
 	if err != nil {
 		return fmt.Errorf("ETMv4 NewConfiguredPipeline failed: %w", err)
 	}
@@ -416,7 +422,7 @@ func (b *DecodeTreeBuilder) createSTMDecoder(devSrc *ParsedDevice) error {
 		return b.tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdSTM, ocsd.ProtocolSTM, proc, proc)
 	}
 
-	proc, dec, err := stm.NewConfiguredPipeline(int(cfg.TraceID()), cfg)
+	proc, dec, err := stm.NewConfiguredPipelineWithDeps(int(cfg.TraceID()), cfg, nil, b.memIf, b.instrDecode)
 	if err != nil {
 		return fmt.Errorf("STM NewConfiguredPipeline failed: %w", err)
 	}
@@ -436,7 +442,7 @@ func (b *DecodeTreeBuilder) createITMDecoder(devSrc *ParsedDevice) error {
 		return b.tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdITM, ocsd.ProtocolITM, proc, proc)
 	}
 
-	proc, dec, err := itm.NewConfiguredPipeline(int(cfg.TraceID()), cfg)
+	proc, dec, err := itm.NewConfiguredPipelineWithDeps(int(cfg.TraceID()), cfg, nil, b.memIf, b.instrDecode)
 	if err != nil {
 		return fmt.Errorf("ITM NewConfiguredPipeline failed: %w", err)
 	}

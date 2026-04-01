@@ -2,6 +2,7 @@ package itm
 
 import (
 	"fmt"
+	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -21,6 +22,18 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
 	return NewPktDecode(cfg)
 }
 
+// NewConfiguredPktDecodeWithDeps creates an ITM decoder and injects dependencies.
+func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
+	dec, err := NewConfiguredPktDecode(instID, cfg)
+	if err != nil {
+		return nil, err
+	}
+	dec.SetTraceElemOut(out)
+	dec.SetMemAccess(mem)
+	dec.SetInstrDecode(instr)
+	return dec, nil
+}
+
 // NewConfiguredPipeline creates and wires a typed ITM processor/decoder pair.
 func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, error) {
 	proc, err := NewConfiguredPktProc(instID, cfg)
@@ -28,6 +41,20 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, error
 		return nil, nil, err
 	}
 	dec, err := NewConfiguredPktDecode(instID, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	proc.SetPktOut(dec)
+	return proc, dec, nil
+}
+
+// NewConfiguredPipelineWithDeps creates and wires an ITM processor/decoder pair with dependencies.
+func NewConfiguredPipelineWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*PktProc, *PktDecode, error) {
+	proc, err := NewConfiguredPktProc(instID, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, out, mem, instr)
 	if err != nil {
 		return nil, nil, err
 	}
