@@ -197,6 +197,27 @@ func (p *Processor) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlo
 	return 0, nil
 }
 
+func (p *Processor) callPktOut(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *TracePacket) error {
+	if p.pktOut == nil {
+		return nil
+	}
+	if exp, ok := p.pktOut.(ocsd.PacketProcessorExplicit[TracePacket]); ok {
+		switch op {
+		case ocsd.OpData:
+			return exp.TracePacketData(indexSOP, pkt)
+		case ocsd.OpEOT:
+			return exp.TracePacketEOT()
+		case ocsd.OpFlush:
+			return exp.TracePacketFlush()
+		case ocsd.OpReset:
+			return exp.TracePacketReset(indexSOP)
+		default:
+			return ocsd.ErrInvalidParamVal
+		}
+	}
+	return p.pktOut.PacketDataIn(op, indexSOP, pkt)
+}
+
 // TraceData is the explicit data-path entrypoint used by split interfaces.
 func (p *Processor) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	return p.TraceDataIn(ocsd.OpData, index, dataBlock)
@@ -295,7 +316,7 @@ func (p *Processor) onEOT() ocsd.DatapathResp {
 	}
 
 	if p.pktOut != nil && !ocsd.DataRespIsFatal(resp) {
-		resp = ocsd.DataRespFromErr(p.pktOut.PacketDataIn(ocsd.OpEOT, 0, nil))
+		resp = ocsd.DataRespFromErr(p.callPktOut(ocsd.OpEOT, 0, nil))
 	}
 
 	return resp
@@ -308,7 +329,7 @@ func (p *Processor) onReset() ocsd.DatapathResp {
 
 	resp := ocsd.RespCont
 	if p.pktOut != nil {
-		resp = ocsd.DataRespFromErr(p.pktOut.PacketDataIn(ocsd.OpReset, 0, nil))
+		resp = ocsd.DataRespFromErr(p.callPktOut(ocsd.OpReset, 0, nil))
 	}
 	if !ocsd.DataRespIsFatal(resp) {
 		p.resetProcessorState()
@@ -323,7 +344,7 @@ func (p *Processor) onFlush() ocsd.DatapathResp {
 
 	resp := ocsd.RespCont
 	if p.pktOut != nil {
-		resp = ocsd.DataRespFromErr(p.pktOut.PacketDataIn(ocsd.OpFlush, 0, nil))
+		resp = ocsd.DataRespFromErr(p.callPktOut(ocsd.OpFlush, 0, nil))
 	}
 	return resp
 }
@@ -423,7 +444,7 @@ func (p *Processor) outputPacket() ocsd.DatapathResp {
 		return ocsd.RespCont
 	}
 	pkt := p.currPacket
-	resp := ocsd.DataRespFromErr(p.pktOut.PacketDataIn(ocsd.OpData, p.packetIndex, &pkt)) //nolint:gosec
+	resp := ocsd.DataRespFromErr(p.callPktOut(ocsd.OpData, p.packetIndex, &pkt)) //nolint:gosec
 	return resp
 }
 
@@ -439,7 +460,7 @@ func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
 	if !p.sentNotsyncPacket {
 		if p.pktOut != nil {
 			pkt := p.currPacket
-			resp = ocsd.DataRespFromErr(p.pktOut.PacketDataIn(ocsd.OpData, p.packetIndex, &pkt))
+			resp = ocsd.DataRespFromErr(p.callPktOut(ocsd.OpData, p.packetIndex, &pkt))
 		}
 		p.sentNotsyncPacket = true
 	}

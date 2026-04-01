@@ -141,9 +141,30 @@ func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor[Packet]) { p.PktRawMon
 
 func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) ocsd.DatapathResp {
 	if p.PktOutI != nil {
-		return ocsd.DataRespFromErr(p.PktOutI.PacketDataIn(ocsd.OpData, indexSOP, pkt))
+		return ocsd.DataRespFromErr(p.callPktOut(ocsd.OpData, indexSOP, pkt))
 	}
 	return ocsd.RespCont
+}
+
+func (p *PktProc) callPktOut(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) error {
+	if p.PktOutI == nil {
+		return nil
+	}
+	if exp, ok := p.PktOutI.(ocsd.PacketProcessorExplicit[Packet]); ok {
+		switch op {
+		case ocsd.OpData:
+			return exp.TracePacketData(indexSOP, pkt)
+		case ocsd.OpEOT:
+			return exp.TracePacketEOT()
+		case ocsd.OpFlush:
+			return exp.TracePacketFlush()
+		case ocsd.OpReset:
+			return exp.TracePacketReset(indexSOP)
+		default:
+			return ocsd.ErrInvalidParamVal
+		}
+	}
+	return p.PktOutI.PacketDataIn(op, indexSOP, pkt)
 }
 
 func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, pData []byte) {
@@ -174,8 +195,8 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 		}
 	case ocsd.OpEOT:
 		resp = p.OnEOT()
-		if out := p.PktOutI; out != nil && !ocsd.DataRespIsFatal(resp) {
-			err = out.PacketDataIn(ocsd.OpEOT, 0, nil)
+		if p.PktOutI != nil && !ocsd.DataRespIsFatal(resp) {
+			err = p.callPktOut(ocsd.OpEOT, 0, nil)
 			resp = ocsd.DataRespFromErr(err)
 			if ocsd.IsDataWaitErr(err) {
 				err = nil
@@ -186,16 +207,16 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 		}
 	case ocsd.OpFlush:
 		resp = p.OnFlush()
-		if out := p.PktOutI; ocsd.DataRespIsCont(resp) && out != nil {
-			err = out.PacketDataIn(ocsd.OpFlush, 0, nil)
+		if ocsd.DataRespIsCont(resp) && p.PktOutI != nil {
+			err = p.callPktOut(ocsd.OpFlush, 0, nil)
 			resp = ocsd.DataRespFromErr(err)
 			if ocsd.IsDataWaitErr(err) {
 				err = nil
 			}
 		}
 	case ocsd.OpReset:
-		if out := p.PktOutI; out != nil {
-			err = out.PacketDataIn(ocsd.OpReset, index, nil)
+		if p.PktOutI != nil {
+			err = p.callPktOut(ocsd.OpReset, index, nil)
 			resp = ocsd.DataRespFromErr(err)
 			if ocsd.IsDataWaitErr(err) {
 				err = nil
