@@ -172,11 +172,10 @@ func (b *DecoderBase) InvalidateMemAccCache(traceID uint8) error {
 }
 
 // ProcBase holds the shared state for a packet processor.
-// It composes BaseLogger for logging and OpMode for operational flag management.
+// It composes OpMode for operational flag management.
 // Concrete processors embed this struct and call its methods via promotion.
 type ProcBase[P any] struct {
 	Name string
-	BaseLogger
 	OpMode
 
 	PktOutI    ocsd.PacketProcessor[P]

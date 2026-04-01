@@ -96,7 +96,7 @@ type PktProc struct {
 	currDecode decodeAction
 }
 
-func NewPktProc(cfg *Config, logger ocsd.Logger) *PktProc {
+func NewPktProc(cfg *Config, _ ocsd.Logger) *PktProc {
 	instIDNum := 0
 	if cfg != nil {
 		instIDNum = int(cfg.TraceID())
@@ -104,10 +104,6 @@ func NewPktProc(cfg *Config, logger ocsd.Logger) *PktProc {
 	p := &PktProc{
 		ProcBase: common.ProcBase[Packet]{
 			Name: fmt.Sprintf("PKTP_PTM_%d", instIDNum),
-			BaseLogger: common.BaseLogger{
-				Logger:       logger,
-				ErrVerbosity: ocsd.ErrSevNone,
-			},
 		},
 	}
 	p.ResetStats()
