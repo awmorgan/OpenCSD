@@ -187,9 +187,6 @@ func (m *mockRawSink) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, f
 	return ocsd.RespCont
 }
 
-// Global buffer and tracker to collect all Frame Data strings
-var globalSinkOut = &bytes.Buffer{}
-
 func resetDecoder(df *FrameDeformatter, t *testing.T) {
 	_, resp, _ := df.TraceDataIn(ocsd.OpReset, 0, nil)
 	if resp != ocsd.RespCont {
@@ -220,7 +217,8 @@ func TestDemuxInit(t *testing.T) {
 func TestRunMemAlignTest(t *testing.T) {
 	df := NewFrameDeformatter()
 	df.Configure(baseCfg)
-	sink := &mockRawSink{out: globalSinkOut}
+	out := &bytes.Buffer{}
+	sink := &mockRawSink{out: out}
 	df.SetRawTraceFrame(sink)
 
 	// 1
@@ -447,7 +445,8 @@ func TestRunHSyncFSyncTest(t *testing.T) {
 	df := NewFrameDeformatter()
 	cfg := (baseCfg & ^uint32(ocsd.DfrmtrFrameMemAlign)) | ocsd.DfrmtrHasHsyncs | ocsd.DfrmtrHasFsyncs
 	df.Configure(cfg)
-	sink := &mockRawSink{out: globalSinkOut}
+	out := &bytes.Buffer{}
+	sink := &mockRawSink{out: out}
 	df.SetRawTraceFrame(sink)
 
 	// 1
@@ -478,7 +477,8 @@ func TestRunHSyncFSyncTest(t *testing.T) {
 func TestRunDemuxBadDataTest(t *testing.T) {
 	df := NewFrameDeformatter()
 	df.Configure(baseCfg | ocsd.DfrmtrResetOn4xFsync)
-	sink := &mockRawSink{out: globalSinkOut}
+	out := &bytes.Buffer{}
+	sink := &mockRawSink{out: out}
 	df.SetRawTraceFrame(sink)
 
 	resetDecoder(df, t)
