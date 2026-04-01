@@ -371,7 +371,7 @@ func (d *PktDecode) emitPendingNacc() ocsd.DatapathResp {
 
 	elem, err := d.getNextOpElemAt(d.pendingNaccIdx)
 	if err != nil {
-		d.LogError(ocsd.ErrSevError, err)
+		d.lastErr = err
 		d.unsyncInfo = common.UnsyncBadPacket
 		d.resetDecoder()
 		return ocsd.RespFatalSysErr
@@ -394,7 +394,7 @@ func (d *PktDecode) preISyncValid(pktType PktType) bool {
 func (d *PktDecode) sendUnsyncPacket() ocsd.DatapathResp {
 	elem, err := d.getNextOpElem()
 	if err != nil {
-		d.LogError(ocsd.ErrSevError, err)
+		d.lastErr = err
 		d.unsyncInfo = common.UnsyncBadPacket
 		d.resetDecoder()
 		return ocsd.RespFatalSysErr
@@ -424,7 +424,7 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 
 	switch packetIn.Type {
 	case PktNotSync:
-		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Trace Packet Synchronisation Lost", ocsd.ErrBadPacketSeq))
+		d.lastErr = fmt.Errorf("%w: trace packet synchronisation lost", ocsd.ErrBadPacketSeq)
 		d.unsyncInfo = common.UnsyncBadPacket
 		d.resetDecoder()
 		return ocsd.RespFatalSysErr, true
@@ -484,20 +484,20 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 			elem.Timestamp = packetIn.Timestamp
 		}
 	case PktStoreFail, PktOOOData, PktOOOAddrPlc, PktNormData, PktDataSuppressed, PktValNotTraced, PktBadTraceMode:
-		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Invalid packet type : Data Tracing decode not supported", ocsd.ErrHWCfgUnsupp))
+		d.lastErr = fmt.Errorf("%w: invalid packet type: data tracing decode not supported", ocsd.ErrHWCfgUnsupp)
 		resp = ocsd.RespFatalInvalidData
 	case PktBadSequence:
-		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Bad Packet sequence", ocsd.ErrBadPacketSeq))
+		d.lastErr = fmt.Errorf("%w: bad packet sequence", ocsd.ErrBadPacketSeq)
 		resp = ocsd.RespFatalInvalidData
 	case PktReserved:
 		fallthrough
 	default:
-		d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Reserved or unknown packet ID", ocsd.ErrBadPacketSeq))
+		d.lastErr = fmt.Errorf("%w: reserved or unknown packet ID", ocsd.ErrBadPacketSeq)
 		resp = ocsd.RespFatalInvalidData
 	}
 
 	if err != nil {
-		d.LogError(ocsd.ErrSevError, err)
+		d.lastErr = err
 		d.unsyncInfo = common.UnsyncBadPacket
 		d.resetDecoder()
 		return ocsd.RespFatalSysErr, true
@@ -527,7 +527,7 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 
 	elem, err := d.getNextOpElem()
 	if err != nil {
-		d.LogError(ocsd.ErrSevError, err)
+		d.lastErr = err
 		d.unsyncInfo = common.UnsyncBadPacket
 		d.resetDecoder()
 		return ocsd.RespFatalSysErr
@@ -540,7 +540,7 @@ func (d *PktDecode) processISync(withCC bool, firstSync bool) ocsd.DatapathResp 
 		}
 		elem, err = d.getNextOpElem()
 		if err != nil {
-			d.LogError(ocsd.ErrSevError, err)
+			d.lastErr = err
 			d.unsyncInfo = common.UnsyncBadPacket
 			d.resetDecoder()
 			return ocsd.RespFatalSysErr
@@ -693,7 +693,7 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 	if updatePEContext {
 		elem, err := d.getNextOpElem()
 		if err != nil {
-			d.LogError(ocsd.ErrSevError, err)
+			d.lastErr = err
 			d.unsyncInfo = common.UnsyncBadPacket
 			d.resetDecoder()
 			return ocsd.RespFatalSysErr
@@ -706,7 +706,7 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 		if packetIn.Exception.Number != 0 {
 			elem, err := d.getNextOpElem()
 			if err != nil {
-				d.LogError(ocsd.ErrSevError, err)
+				d.lastErr = err
 				d.unsyncInfo = common.UnsyncBadPacket
 				d.resetDecoder()
 				return ocsd.RespFatalSysErr
@@ -761,7 +761,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 			if !d.sentUnknown || d.Config.IsCycleAcc() {
 				elem, err := d.getNextOpElem()
 				if err != nil {
-					d.LogError(ocsd.ErrSevError, err)
+					d.lastErr = err
 					d.unsyncInfo = common.UnsyncBadPacket
 					d.resetDecoder()
 					return ocsd.RespFatalSysErr
@@ -788,14 +788,14 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 				d.codeFollower.SetISA(isa)
 				errCF := d.codeFollower.FollowSingleAtom(ocsd.VAddr(d.iAddr), val)
 				if errCF != nil && !errors.Is(errCF, ocsd.ErrMemNacc) {
-					d.LogError(ocsd.ErrSevError, fmt.Errorf("%w: Error following atom", errCF))
+					d.lastErr = fmt.Errorf("%w: error following atom", errCF)
 					return ocsd.RespFatalSysErr
 				}
 
 				if d.codeFollower.NumInstructs() > 0 {
 					elem, err = d.getNextOpElem()
 					if err != nil {
-						d.LogError(ocsd.ErrSevError, err)
+						d.lastErr = err
 						return ocsd.RespFatalSysErr
 					}
 					elem.SetType(ocsd.GenElemInstrRange)
@@ -841,7 +841,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 				// CC only packet (atomsNum == 0)
 				elem, err := d.getNextOpElem()
 				if err != nil {
-					d.LogError(ocsd.ErrSevError, err)
+					d.lastErr = err
 					return ocsd.RespFatalSysErr
 				}
 				elem.SetType(ocsd.GenElemCycleCount)
