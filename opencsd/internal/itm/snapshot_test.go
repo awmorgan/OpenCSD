@@ -176,7 +176,7 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		}
 
 		traceID := cfg.TraceID()
-		proc, dec, err := itm.NewConfiguredPipeline(int(traceID), cfg)
+		proc, dec, err := itm.NewPipeline(int(traceID), cfg, nil, nil, nil)
 		if err != nil {
 			return nil, fmt.Errorf("create ITM pipeline for %s failed: %v", srcDevName, err)
 		}

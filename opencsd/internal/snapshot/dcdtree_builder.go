@@ -439,16 +439,16 @@ func (b *DecodeTreeBuilder) createITMDecoder(devSrc *ParsedDevice) error {
 		cfg.RegTCR = uint32(parseUint(val))
 	}
 	if b.packetProcOnly {
-		proc, err := itm.NewConfiguredPktProc(int(cfg.TraceID()), cfg)
+		proc, _, err := itm.NewPipeline(int(cfg.TraceID()), cfg, nil, nil, nil)
 		if err != nil {
-			return fmt.Errorf("ITM NewConfiguredPktProc failed: %w", err)
+			return fmt.Errorf("ITM NewPipeline failed: %w", err)
 		}
 		return b.tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdITM, ocsd.ProtocolITM, proc, proc)
 	}
 
-	proc, dec, err := itm.NewConfiguredPipelineWithDeps(int(cfg.TraceID()), cfg, nil, b.memIf, b.instrDecode)
+	proc, dec, err := itm.NewPipeline(int(cfg.TraceID()), cfg, nil, b.memIf, b.instrDecode)
 	if err != nil {
-		return fmt.Errorf("ITM NewConfiguredPipeline failed: %w", err)
+		return fmt.Errorf("ITM NewPipeline failed: %w", err)
 	}
 	return b.tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdITM, ocsd.ProtocolITM, proc, dec, dec)
 }

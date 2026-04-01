@@ -6,58 +6,29 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-// NewConfiguredPktProc creates an ITM packet processor with a typed config.
-func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, error) {
+// NewPipeline creates and wires an ITM processor/decoder pair with optional dependencies.
+// The config is required (instID is retained for backwards compatibility but not used).
+// Dependencies (out, mem, instr) may be nil; when nil, the decoder operations that require
+// them will fail at runtime (by design for packet-only or partial-decode modes).
+func NewPipeline(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*PktProc, *PktDecode, error) {
 	if cfg == nil {
-		return nil, fmt.Errorf("%w: ITM config cannot be nil", ocsd.ErrInvalidParamVal)
+		return nil, nil, fmt.Errorf("%w: ITM config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
 	_ = instID
+
 	proc := NewPktProc(cfg)
-	return proc, nil
-}
-
-// NewConfiguredPktDecode creates an ITM packet decoder with a typed config.
-func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
-	_ = instID
-	return NewPktDecode(cfg)
-}
-
-// NewConfiguredPktDecodeWithDeps creates an ITM decoder and injects dependencies.
-func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
-	dec, err := NewConfiguredPktDecode(instID, cfg)
+	dec, err := NewPktDecode(cfg)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	// Inject dependencies unconditionally (they may be nil).
 	dec.SetTraceElemOut(out)
 	dec.SetMemAccess(mem)
 	dec.SetInstrDecode(instr)
-	return dec, nil
-}
 
-// NewConfiguredPipeline creates and wires a typed ITM processor/decoder pair.
-func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, error) {
-	proc, err := NewConfiguredPktProc(instID, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	dec, err := NewConfiguredPktDecode(instID, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
+	// Wire processor output to decoder input.
 	proc.SetPktOut(dec)
-	return proc, dec, nil
-}
 
-// NewConfiguredPipelineWithDeps creates and wires an ITM processor/decoder pair with dependencies.
-func NewConfiguredPipelineWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*PktProc, *PktDecode, error) {
-	proc, err := NewConfiguredPktProc(instID, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, out, mem, instr)
-	if err != nil {
-		return nil, nil, err
-	}
-	proc.SetPktOut(dec)
 	return proc, dec, nil
 }
