@@ -6,7 +6,7 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-type outData struct {
+type outDataEntry struct {
 	id    uint8
 	valid uint32
 	index ocsd.TrcIndex
@@ -66,7 +66,7 @@ type FrameDeformatter struct {
 	inBlockBase      []byte // The block being processed (input block)
 	inBlockProcessed uint32
 
-	outData      [16]outData
+	outData      [16]outDataEntry
 	outDataIdx   uint32
 	outProcessed uint32
 
