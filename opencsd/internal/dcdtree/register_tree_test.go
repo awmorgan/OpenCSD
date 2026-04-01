@@ -39,13 +39,6 @@ func (f *fakeGenElemOut) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, el
 
 type fakePipelineWiringHandle struct {
 	common.OpMode
-	traceOut  ocsd.GenElemProcessor
-	traceSets int
-}
-
-func (h *fakePipelineWiringHandle) SetTraceElemOut(out ocsd.GenElemProcessor) {
-	h.traceOut = out
-	h.traceSets++
 }
 
 type fakeManager struct{ common.OpMode }
@@ -142,26 +135,30 @@ func TestDecodeTreePipelineWiringPropagatesToRegisteredDecoder(t *testing.T) {
 	// Pre-bind dependency before decoder registration.
 	tree.SetGenTraceElemOutI(traceOutA)
 
-	if err := tree.AddWiredDecoder(0x22, "wired", ocsd.ProtocolETMV4I, &fakeDataIn{}, h, h); err != nil {
+	var traceOut ocsd.GenElemProcessor
+	traceSets := 0
+	wireFunc := func(out ocsd.GenElemProcessor) { traceOut = out; traceSets++ }
+
+	if err := tree.AddWiredDecoder(0x22, "wired", ocsd.ProtocolETMV4I, &fakeDataIn{}, h, wireFunc); err != nil {
 		t.Fatalf("AddDecoder failed: %v", err)
 	}
 
-	if h.traceOut != traceOutA {
+	if traceOut != traceOutA {
 		t.Fatal("expected pre-bound trace sink to be applied on decoder attach")
 	}
-	if h.traceSets != 1 {
-		t.Fatalf("expected single trace sink setter call on attach, got trace=%d", h.traceSets)
+	if traceSets != 1 {
+		t.Fatalf("expected single trace sink setter call on attach, got trace=%d", traceSets)
 	}
 
 	// Update dependency after registration and verify propagation.
 	traceOutB := &fakeGenElemOut{}
 	tree.SetGenTraceElemOutI(traceOutB)
 
-	if h.traceOut != traceOutB {
+	if traceOut != traceOutB {
 		t.Fatal("expected post-bind trace sink update to reach registered decoder")
 	}
-	if h.traceSets != 2 {
-		t.Fatalf("expected second trace sink setter call on update, got trace=%d", h.traceSets)
+	if traceSets != 2 {
+		t.Fatalf("expected second trace sink setter call on update, got trace=%d", traceSets)
 	}
 }
 

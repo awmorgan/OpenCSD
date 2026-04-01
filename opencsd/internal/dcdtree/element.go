@@ -5,24 +5,22 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-// pipelineWiringOwner defines the explicit late-binding contract used by decode tree
-// when dependencies must be wired after decoder construction.
-type pipelineWiringOwner interface {
-	SetTraceElemOut(ocsd.GenElemProcessor)
-}
+// wireTraceElemFn is the function type used to wire a trace element sink into a decoder after
+// construction. Callers may pass a decoder method value (dec.SetTraceElemOut) or a plain closure.
+type wireTraceElemFn func(ocsd.GenElemProcessor)
 
 // DecodeTreeElement represents a registered decoder instance within the trace decode tree.
 type DecodeTreeElement struct {
 	DecoderTypeName string                        // Registered name of the decoder
 	DataIn          ocsd.TrcDataProcessorExplicit // Interface for feeding trace data
 	Manager         common.OpModeManager          // Operational mode manager for decoder
-	PipelineWiring  pipelineWiringOwner           // Explicit late-bound dependency wiring owner
+	PipelineWiring  wireTraceElemFn               // Explicit late-bound dependency wiring owner
 	Protocol        ocsd.TraceProtocol            // Protocol type
 	Created         bool                          // True if decode tree created this element
 }
 
 // NewDecodeTreeElement creates a new DecodeTreeElement record.
-func NewDecodeTreeElement(name string, modeManager common.OpModeManager, wiring pipelineWiringOwner, dataIn ocsd.TrcDataProcessorExplicit, created bool) *DecodeTreeElement {
+func NewDecodeTreeElement(name string, modeManager common.OpModeManager, wiring wireTraceElemFn, dataIn ocsd.TrcDataProcessorExplicit, created bool) *DecodeTreeElement {
 	protocol := ocsd.ProtocolUnknown
 
 	return &DecodeTreeElement{

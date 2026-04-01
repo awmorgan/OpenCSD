@@ -151,11 +151,11 @@ func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.Trace
 
 // AddWiredDecoder registers an already-instantiated decoder into the tree with explicit
 // late trace-sink wiring support.
-func (dt *DecodeTree) AddWiredDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, modeManager common.OpModeManager, wiring pipelineWiringOwner) error {
+func (dt *DecodeTree) AddWiredDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, modeManager common.OpModeManager, wiring wireTraceElemFn) error {
 	return dt.addDecoder(routeID, name, protocol, pktIn, modeManager, wiring)
 }
 
-func (dt *DecodeTree) addDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, modeManager common.OpModeManager, wiring pipelineWiringOwner) error {
+func (dt *DecodeTree) addDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, modeManager common.OpModeManager, wiring wireTraceElemFn) error {
 	if dt.treeType == ocsd.TrcSrcSingle {
 		routeID = 0
 	}
@@ -191,7 +191,7 @@ func (dt *DecodeTree) wireTraceElemOut(elem *DecodeTreeElement, outI ocsd.GenEle
 		return
 	}
 	if elem.PipelineWiring != nil {
-		elem.PipelineWiring.SetTraceElemOut(outI)
+		elem.PipelineWiring(outI)
 	}
 }
 

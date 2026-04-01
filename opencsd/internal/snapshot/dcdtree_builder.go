@@ -279,7 +279,7 @@ func (b *DecodeTreeBuilder) createETMv3Decoder(coreName string, devSrc *ParsedDe
 	if err != nil {
 		return fmt.Errorf("ETMv3 NewConfiguredPipeline failed: %w", err)
 	}
-	return b.tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV3, ocsd.ProtocolETMV3, proc, dec, dec)
+	return b.tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV3, ocsd.ProtocolETMV3, proc, dec, dec.SetTraceElemOut)
 }
 
 func (b *DecodeTreeBuilder) createPTMDecoder(coreName string, devSrc *ParsedDevice) error {
@@ -312,7 +312,7 @@ func (b *DecodeTreeBuilder) createPTMDecoder(coreName string, devSrc *ParsedDevi
 	if err != nil {
 		return fmt.Errorf("PTM NewConfiguredPipeline failed: %w", err)
 	}
-	return b.tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdPTM, ocsd.ProtocolPTM, proc, dec, dec)
+	return b.tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdPTM, ocsd.ProtocolPTM, proc, dec, dec.SetTraceElemOut)
 }
 
 func (b *DecodeTreeBuilder) createETEDecoder(coreName string, devSrc *ParsedDevice) error {
@@ -353,7 +353,7 @@ func (b *DecodeTreeBuilder) createETEDecoder(coreName string, devSrc *ParsedDevi
 	if err != nil {
 		return fmt.Errorf("ETE NewConfiguredPipeline failed: %w", err)
 	}
-	return b.tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdETE, ocsd.ProtocolETE, proc, dec, dec)
+	return b.tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdETE, ocsd.ProtocolETE, proc, dec, dec.SetTraceElemOut)
 }
 
 func (b *DecodeTreeBuilder) createETMv4Decoder(coreName string, devSrc *ParsedDevice) error {
@@ -410,7 +410,7 @@ func (b *DecodeTreeBuilder) createETMv4Decoder(coreName string, devSrc *ParsedDe
 	if err != nil {
 		return fmt.Errorf("ETMv4 NewConfiguredPipeline failed: %w", err)
 	}
-	return b.tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec, dec)
+	return b.tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec, dec.SetTraceElemOut)
 }
 
 func (b *DecodeTreeBuilder) createSTMDecoder(devSrc *ParsedDevice) error {
@@ -430,7 +430,7 @@ func (b *DecodeTreeBuilder) createSTMDecoder(devSrc *ParsedDevice) error {
 	if err != nil {
 		return fmt.Errorf("STM NewConfiguredPipeline failed: %w", err)
 	}
-	return b.tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdSTM, ocsd.ProtocolSTM, proc, dec, dec)
+	return b.tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdSTM, ocsd.ProtocolSTM, proc, dec, dec.SetTraceElemOut)
 }
 
 func (b *DecodeTreeBuilder) createITMDecoder(devSrc *ParsedDevice) error {
@@ -450,7 +450,7 @@ func (b *DecodeTreeBuilder) createITMDecoder(devSrc *ParsedDevice) error {
 	if err != nil {
 		return fmt.Errorf("ITM NewPipeline failed: %w", err)
 	}
-	return b.tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdITM, ocsd.ProtocolITM, proc, dec, dec)
+	return b.tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdITM, ocsd.ProtocolITM, proc, dec, dec.SetTraceElemOut)
 }
 
 // addCoreDumpMemory adds memory region accessors from a core device's dump definitions.
