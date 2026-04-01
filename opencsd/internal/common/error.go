@@ -32,16 +32,3 @@ func DataRespStr(resp ocsd.DatapathResp) string {
 		return "Unknown OCSD_RESP type."
 	}
 }
-
-/*
-Annotated Error Usage:
-
-Caller packages should annotate base errors with context using fmt.Errorf and %w:
-
-    if err := memacc.Read(addr, len, buf); err != nil {
-        return fmt.Errorf("%w: at index %d, channel %02x", ocsd.ErrMemNacc, idx, chanID)
-    }
-
-This allows downstream components to use errors.Is(err, ocsd.ErrMemNacc) while
-preserving the diagnostic context in the error string.
-*/
