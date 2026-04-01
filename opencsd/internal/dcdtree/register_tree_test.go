@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -21,40 +20,14 @@ func (f *fakeGenElemOut) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, el
 	return ocsd.RespCont, nil
 }
 
-type fakeMemAccess struct{}
-
-func (f *fakeMemAccess) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
-	return 0, nil, nil
-}
-
-func (f *fakeMemAccess) InvalidateMemAccCache(csTraceID uint8) {}
-
-type fakeInstrDecode struct{}
-
-func (f *fakeInstrDecode) DecodeInstruction(instrInfo *ocsd.InstrInfo) error { return nil }
-
 type fakePipelineWiringHandle struct {
 	traceOut  ocsd.GenElemProcessor
-	mem       common.TargetMemAccess
-	instr     common.InstrDecode
 	traceSets int
-	memSets   int
-	instrSets int
 }
 
 func (h *fakePipelineWiringHandle) SetTraceElemOut(out ocsd.GenElemProcessor) {
 	h.traceOut = out
 	h.traceSets++
-}
-
-func (h *fakePipelineWiringHandle) SetMemAccess(mem common.TargetMemAccess) {
-	h.mem = mem
-	h.memSets++
-}
-
-func (h *fakePipelineWiringHandle) SetInstrDecode(instr common.InstrDecode) {
-	h.instr = instr
-	h.instrSets++
 }
 
 func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
@@ -145,38 +118,30 @@ func TestDecodeTreePipelineWiringPropagatesToRegisteredDecoder(t *testing.T) {
 
 	h := &fakePipelineWiringHandle{}
 	traceOutA := &fakeGenElemOut{}
-	memA := &fakeMemAccess{}
-	instrA := &fakeInstrDecode{}
 
-	// Pre-bind dependencies before decoder registration.
+	// Pre-bind dependency before decoder registration.
 	tree.SetGenTraceElemOutI(traceOutA)
-	tree.SetMemAccessI(memA)
-	tree.SetInstrDecoderI(instrA)
 
 	if err := tree.AddDecoder(0x22, "wired", ocsd.ProtocolETMV4I, &fakeDataIn{}, h, h); err != nil {
 		t.Fatalf("AddDecoder failed: %v", err)
 	}
 
-	if h.traceOut != traceOutA || h.mem != memA || h.instr != instrA {
-		t.Fatal("expected pre-bound dependencies to be applied on decoder attach")
+	if h.traceOut != traceOutA {
+		t.Fatal("expected pre-bound trace sink to be applied on decoder attach")
 	}
-	if h.traceSets != 1 || h.memSets != 1 || h.instrSets != 1 {
-		t.Fatalf("expected single setter call each on attach, got trace=%d mem=%d instr=%d", h.traceSets, h.memSets, h.instrSets)
+	if h.traceSets != 1 {
+		t.Fatalf("expected single trace sink setter call on attach, got trace=%d", h.traceSets)
 	}
 
-	// Update dependencies after registration and verify propagation.
+	// Update dependency after registration and verify propagation.
 	traceOutB := &fakeGenElemOut{}
-	memB := &fakeMemAccess{}
-	instrB := &fakeInstrDecode{}
 	tree.SetGenTraceElemOutI(traceOutB)
-	tree.SetMemAccessI(memB)
-	tree.SetInstrDecoderI(instrB)
 
-	if h.traceOut != traceOutB || h.mem != memB || h.instr != instrB {
-		t.Fatal("expected post-bind dependency updates to reach registered decoder")
+	if h.traceOut != traceOutB {
+		t.Fatal("expected post-bind trace sink update to reach registered decoder")
 	}
-	if h.traceSets != 2 || h.memSets != 2 || h.instrSets != 2 {
-		t.Fatalf("expected second setter call each on update, got trace=%d mem=%d instr=%d", h.traceSets, h.memSets, h.instrSets)
+	if h.traceSets != 2 {
+		t.Fatalf("expected second trace sink setter call on update, got trace=%d", h.traceSets)
 	}
 }
 

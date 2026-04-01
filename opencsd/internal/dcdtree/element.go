@@ -1,7 +1,6 @@
 package dcdtree
 
 import (
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -9,8 +8,6 @@ import (
 // when dependencies must be wired after decoder construction.
 type pipelineWiringOwner interface {
 	SetTraceElemOut(ocsd.GenElemProcessor)
-	SetMemAccess(common.TargetMemAccess)
-	SetInstrDecode(common.InstrDecode)
 }
 
 // DecodeTreeElement represents a registered decoder instance within the trace decode tree.
