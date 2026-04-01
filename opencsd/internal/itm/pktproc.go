@@ -178,6 +178,29 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 	}
 }
 
+// TraceData is the explicit data-path entrypoint used by split interfaces.
+func (p *PktProc) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+	return p.TraceDataIn(ocsd.OpData, index, dataBlock)
+}
+
+// TraceDataEOT forwards an EOT control operation through the legacy multiplexer.
+func (p *PktProc) TraceDataEOT() error {
+	_, err := p.TraceDataIn(ocsd.OpEOT, 0, nil)
+	return err
+}
+
+// TraceDataFlush forwards a flush control operation through the legacy multiplexer.
+func (p *PktProc) TraceDataFlush() error {
+	_, err := p.TraceDataIn(ocsd.OpFlush, 0, nil)
+	return err
+}
+
+// TraceDataReset forwards a reset control operation through the legacy multiplexer.
+func (p *PktProc) TraceDataReset(index ocsd.TrcIndex) error {
+	_, err := p.TraceDataIn(ocsd.OpReset, index, nil)
+	return err
+}
+
 func (p *PktProc) SetProtocolConfig(config *Config) error {
 	if config != nil {
 		p.Config = config
