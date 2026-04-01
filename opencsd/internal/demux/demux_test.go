@@ -365,7 +365,7 @@ func TestDemuxEdgeCases(t *testing.T) {
 	df.outData[0].id = 0x10 // Valid test stream ID
 
 	// Triggers executeNoneDataOpAllIDs continuation bounds
-	df.executeNoneDataOpAllIDs(ocsd.OpData, 0, newDatapathState())
+	df.executeNoneDataOpAllIDs(ocsd.OpData, 0)
 
 	resetDecoder(df, t)
 	df.TraceDataIn(ocsd.OpData, 0, buf)

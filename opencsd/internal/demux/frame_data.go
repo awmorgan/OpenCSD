@@ -51,12 +51,12 @@ func (d *FrameDeformatter) outputUnsyncedBytes(numBytes uint32) {
 	// Not implemented in C++ lib
 }
 
-func (d *FrameDeformatter) checkForResetFSyncPatterns(dataBlockSize uint32, state *datapathState) (fSyncBytes uint32, err error) {
+func (d *FrameDeformatter) checkForResetFSyncPatterns(dataBlockSize uint32) (fSyncBytes uint32, resp ocsd.DatapathResp, err error) {
 	const FSYNC_PATTERN uint32 = 0x7FFFFFFF
 	checkForFsync := true
 	numFsyncs := 0
 	bytesProcessed := d.inBlockProcessed
-	err = nil
+	resp = ocsd.RespCont
 
 	for checkForFsync && (bytesProcessed < dataBlockSize) {
 		if bytesProcessed+3 < dataBlockSize && binary.LittleEndian.Uint32(d.inBlockBase[bytesProcessed:]) == FSYNC_PATTERN {
@@ -69,19 +69,20 @@ func (d *FrameDeformatter) checkForResetFSyncPatterns(dataBlockSize uint32, stat
 
 	if numFsyncs > 0 {
 		if numFsyncs%4 == 0 {
-			d.executeNoneDataOpAllIDs(ocsd.OpReset, d.trcCurrIdx, state)
+			resp, err = d.executeNoneDataOpAllIDs(ocsd.OpReset, d.trcCurrIdx)
 			d.currSrcID = ocsd.BadCSSrcID
 			d.exFrmNBytes = 0
 			d.trcCurrIdxSof = ocsd.BadTrcIndex
 		} else {
+			resp = ocsd.RespFatalInvalidData
 			err = ocsd.ErrDfrmtrBadFhsync
 		}
 	}
 	fSyncBytes += uint32(numFsyncs * 4)
-	return fSyncBytes, err
+	return fSyncBytes, resp, err
 }
 
-func (d *FrameDeformatter) extractFrame(dataBlockSize uint32, state *datapathState) (bool, error) {
+func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) (bool, ocsd.DatapathResp, error) {
 	const FSYNC_PATTERN uint32 = 0x7FFFFFFF
 	const HSYNC_PATTERN uint16 = 0x7FFF
 	const FSYNC_START uint16 = 0xFFFF
@@ -90,27 +91,36 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32, state *datapathSta
 	fSyncBytes := uint32(0)
 	exBytes := uint32(0)
 	totalProcessed := uint32(0)
+	resp := ocsd.RespCont
+	var outErr error
 
 	if bufLeft == 0 {
-		return false, nil
+		return false, resp, nil
 	}
 
 	if d.cfgFlags&ocsd.DfrmtrFrameMemAlign != 0 {
 		if d.cfgFlags&ocsd.DfrmtrResetOn4xFsync != 0 {
-			fSyncBytes, err := d.checkForResetFSyncPatterns(dataBlockSize, state)
+			fSyncBytes, syncResp, syncErr := d.checkForResetFSyncPatterns(dataBlockSize)
+			resp, outErr = mergeDataPathResult(resp, outErr, syncResp, syncErr)
 
 			if fSyncBytes > 0 && (d.outPackedRaw || d.outUnpackedRaw) {
 				d.outputRawMonBytes(ocsd.OpData, d.trcCurrIdx, ocsd.FrmFsync, d.inBlockBase[d.inBlockProcessed:d.inBlockProcessed+fSyncBytes], 0)
 			}
-			if err != nil {
-				return false, fmt.Errorf("%w: Incorrect FSYNC frame reset pattern at index %d", err, d.trcCurrIdx)
+			if syncErr != nil {
+				if syncErr == ocsd.ErrDfrmtrBadFhsync {
+					return false, ocsd.RespFatalInvalidData, fmt.Errorf("%w: Incorrect FSYNC frame reset pattern at index %d", syncErr, d.trcCurrIdx)
+				}
+				return false, resp, outErr
+			}
+			if !ocsd.DataRespIsCont(resp) {
+				return false, resp, outErr
 			}
 			bufLeft -= fSyncBytes
 		}
 
 		if bufLeft > 0 {
 			if bufLeft < ocsd.DfrmtrFrameSize {
-				return false, fmt.Errorf("%w: Insufficient bytes for aligned frame at index %d", ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx)
+				return false, ocsd.RespFatalInvalidData, fmt.Errorf("%w: Insufficient bytes for aligned frame at index %d", ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx)
 			}
 			d.exFrmNBytes = ocsd.DfrmtrFrameSize
 			copy(d.exFrmData, d.inBlockBase[d.inBlockProcessed+fSyncBytes:d.inBlockProcessed+fSyncBytes+ocsd.DfrmtrFrameSize])
@@ -128,7 +138,7 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32, state *datapathSta
 		if hasFSyncs && d.exFrmNBytes == 0 {
 			if d.bFsyncStartEob {
 				if bufLeft >= 2 && binary.LittleEndian.Uint16(d.inBlockBase[dataPtrIdx:]) != HSYNC_PATTERN {
-					return false, fmt.Errorf("%w: Bad FSYNC pattern before frame or invalid ID.(0x7F) at index %d", ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx)
+					return false, ocsd.RespFatalInvalidData, fmt.Errorf("%w: Bad FSYNC pattern before frame or invalid ID.(0x7F) at index %d", ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx)
 				} else if bufLeft >= 2 {
 					fSyncBytes += 2
 					bufLeft -= 2
@@ -168,10 +178,10 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32, state *datapathSta
 				if hasHSyncs {
 					hSyncBytes += 2
 				} else {
-					return false, fmt.Errorf("%w: Bad HSYNC in frame at index %d", ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx)
+					return false, ocsd.RespFatalInvalidData, fmt.Errorf("%w: Bad HSYNC in frame at index %d", ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx)
 				}
 			case FSYNC_START:
-				return false, fmt.Errorf("%w: Bad FSYNC start in frame or invalid ID (0x7F) at index %d", ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx)
+				return false, ocsd.RespFatalInvalidData, fmt.Errorf("%w: Bad FSYNC start in frame or invalid ID (0x7F) at index %d", ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx)
 			default:
 				d.exFrmNBytes += 2
 				exBytes += 2
@@ -182,7 +192,7 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32, state *datapathSta
 		}
 
 		if bufLeft == 1 {
-			return false, fmt.Errorf("%w: Odd trailing byte in frame stream at index %d", ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx)
+			return false, ocsd.RespFatalInvalidData, fmt.Errorf("%w: Odd trailing byte in frame stream at index %d", ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx)
 		}
 
 		totalProcessed = exBytes + fSyncBytes + hSyncBytes
@@ -197,7 +207,7 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32, state *datapathSta
 
 	// In C++ it updates stats here, omitted for this Go port since DemuxStats isn't passed around yet
 
-	return d.exFrmNBytes == ocsd.DfrmtrFrameSize, nil
+	return d.exFrmNBytes == ocsd.DfrmtrFrameSize, resp, outErr
 }
 
 func (d *FrameDeformatter) unpackFrame() bool {
@@ -273,7 +283,7 @@ func (d *FrameDeformatter) unpackFrame() bool {
 	return true
 }
 
-func (d *FrameDeformatter) outputFrame(state *datapathState) bool {
+func (d *FrameDeformatter) outputFrame(resp ocsd.DatapathResp, outErr error) (bool, ocsd.DatapathResp, error) {
 	contProcessing := true
 
 	for d.outProcessed < uint32(len(d.outData)) && contProcessing {
@@ -292,10 +302,9 @@ func (d *FrameDeformatter) outputFrame(state *datapathState) bool {
 					d.outData[d.outProcessed].index+ocsd.TrcIndex(d.outData[d.outProcessed].used),
 					d.outData[d.outProcessed].data[d.outData[d.outProcessed].used:d.outData[d.outProcessed].valid])
 
-				resp := ocsd.DataRespFromErr(err)
-				collateDataPathResp(state, resp, err)
+				resp, outErr = mergeDataPathResult(resp, outErr, ocsd.DataRespFromErr(err), err)
 
-				if !ocsd.DataRespIsCont(state.highestResp()) {
+				if !ocsd.DataRespIsCont(resp) {
 					contProcessing = false
 					d.outData[d.outProcessed].used += bytesUsed
 					if d.outData[d.outProcessed].used == d.outData[d.outProcessed].valid {
@@ -325,5 +334,5 @@ func (d *FrameDeformatter) outputFrame(state *datapathState) bool {
 			d.outProcessed++
 		}
 	}
-	return contProcessing
+	return contProcessing, resp, outErr
 }
