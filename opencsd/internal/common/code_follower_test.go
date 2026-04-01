@@ -36,7 +36,7 @@ func TestCodeFollower(t *testing.T) {
 	cf := NewCodeFollower()
 
 	// Test without valid
-	err := cf.FollowSingleAtom(0x1000, ocsd.AtomN)
+	_, err := cf.FollowSingleAtomResult(0x1000, ocsd.AtomN)
 	if !errors.Is(err, ocsd.ErrNotInit) {
 		t.Errorf("Expected NotInit error")
 	}
@@ -48,33 +48,33 @@ func TestCodeFollower(t *testing.T) {
 	cf.SetTraceID(0x12)
 	cf.SetMemSpace(ocsd.MemSpaceAny)
 
-	err = cf.FollowSingleAtom(0x1000, ocsd.AtomE)
-	if err != nil || !cf.HasNext() {
+	res, err := cf.FollowSingleAtomResult(0x1000, ocsd.AtomE)
+	if err != nil || !res.HasNext {
 		t.Errorf("FollowSingleAtom failed")
 	}
-	if !cf.HasRange() {
+	if !res.HasRange() {
 		t.Errorf("Expected valid range after successful follow")
 	}
 
-	if cf.NumInstructs() != 1 {
+	if res.NumInstr != 1 {
 		t.Errorf("Expected 1 instruction")
 	}
 
-	if cf.NextAddr() != 0x1004 {
-		t.Errorf("Expected next addr 0x1004, got 0x%X", cf.NextAddr())
+	if res.NextAddr != 0x1004 {
+		t.Errorf("Expected next addr 0x1004, got 0x%X", res.NextAddr)
 	}
 
 	// Test branch
 	mockMem.dataToReturn = []byte{0xFF, 0x03, 0x00, 0x14} // A64 B 0x2000 from 0x1004 (offset 0xFFC)
-	err = cf.FollowSingleAtom(0x1004, ocsd.AtomE)
-	if err != nil || cf.NextAddr() != 0x2000 {
+	res, err = cf.FollowSingleAtomResult(0x1004, ocsd.AtomE)
+	if err != nil || res.NextAddr != 0x2000 {
 		t.Errorf("Branch target not followed")
 	}
 
 	// Test Thumb 32-bit decode requirement
 	cf.SetISA(ocsd.ISAThumb2)
 	mockMem.dataToReturn = []byte{0x00, 0xF0, 0x01, 0x02} // Provide full 4 bytes so DecodeSingleOpCode succeeds
-	err = cf.FollowSingleAtom(0x1008, ocsd.AtomN)
+	_, err = cf.FollowSingleAtomResult(0x1008, ocsd.AtomN)
 	if err != nil {
 		t.Errorf("Thumb 32-bit fetch failed")
 	}
@@ -82,12 +82,12 @@ func TestCodeFollower(t *testing.T) {
 	// Test MemNacc
 	mockMem.errToReturn = ocsd.ErrMemNacc
 	mockMem.dataToReturn = nil
-	err = cf.FollowSingleAtom(0x2000, ocsd.AtomN)
-	if !errors.Is(err, ocsd.ErrMemNacc) || !cf.HasNaccError() {
+	res, err = cf.FollowSingleAtomResult(0x2000, ocsd.AtomN)
+	if !errors.Is(err, ocsd.ErrMemNacc) || !res.HasNacc {
 		t.Errorf("MemNacc error not tracked properly")
 	}
-	if cf.NaccAddr() != 0x2000 {
-		t.Errorf("Expected nacc addr 0x2000, got 0x%X", cf.NaccAddr())
+	if res.NaccAddr != 0x2000 {
+		t.Errorf("Expected nacc addr 0x2000, got 0x%X", res.NaccAddr)
 	}
 	if cf.MemSpace() != ocsd.MemSpaceAny {
 		t.Errorf("Expected memory space to be preserved")
@@ -96,14 +96,5 @@ func TestCodeFollower(t *testing.T) {
 	cf.SetDSBDMBasWP()
 	if cf.InstrInfo().DsbDmbWaypoints != 1 {
 		t.Errorf("Expected DSB/DMB waypoint mode to be enabled")
-	}
-
-	cf.ClearNaccError()
-	if cf.HasNaccError() {
-		t.Errorf("ClearError failed")
-	}
-	cf.ClearNaccError()
-	if cf.HasNaccError() {
-		t.Errorf("ClearNacc failed")
 	}
 }
