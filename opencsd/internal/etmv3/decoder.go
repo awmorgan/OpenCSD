@@ -752,22 +752,22 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 
 				// Follow instructions for this atom
 				d.codeFollower.SetISA(isa)
-				errCF := d.codeFollower.FollowSingleAtom(ocsd.VAddr(d.iAddr), val)
+				followRes, errCF := d.codeFollower.FollowSingleAtomResult(ocsd.VAddr(d.iAddr), val)
 				if errCF != nil && !errors.Is(errCF, ocsd.ErrMemNacc) {
 					return ocsd.RespFatalSysErr
 				}
 
-				if d.codeFollower.NumInstructs() > 0 {
+				if followRes.NumInstr > 0 {
 					elem, err = d.getNextOpElem()
 					if err != nil {
 						return ocsd.RespFatalSysErr
 					}
 					elem.SetType(ocsd.GenElemInstrRange)
-					elem.StartAddr = d.codeFollower.RangeSt()
-					elem.EndAddr = d.codeFollower.RangeEn()
-					elem.Payload.NumInstrRange = d.codeFollower.NumInstructs()
+					elem.StartAddr = followRes.RangeSt
+					elem.EndAddr = followRes.RangeEn
+					elem.Payload.NumInstrRange = followRes.NumInstr
 
-					instrInfo := d.codeFollower.InstrInfo()
+					instrInfo := &followRes.InstrInfo
 					elem.LastInstrExecuted = val == ocsd.AtomE
 					elem.LastInstrType = instrInfo.Type
 					elem.LastInstrSubtype = instrInfo.Subtype
@@ -779,27 +779,26 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 						elem.SetCycleCount(d.atomCC(packetIn, atomsNum, isCCPacket))
 					}
 
-					d.iAddr = uint64(d.codeFollower.NextAddr())
+					d.iAddr = uint64(followRes.NextAddr)
 					isa = instrInfo.NextISA
 
-					if !d.codeFollower.HasNext() {
+					if !followRes.HasNext {
 						d.setNeedAddr(true)
 					}
 				}
 
 				if errors.Is(errCF, ocsd.ErrMemNacc) {
 					if d.outputElemList.NumElem() > 0 && d.outputElemList.ElemType(d.outputElemList.NumElem()-1) == ocsd.GenElemInstrRange {
-						d.queuePendingNacc(uint64(d.codeFollower.NaccAddr()), memSpace)
+						d.queuePendingNacc(uint64(followRes.NaccAddr), memSpace)
 					} else {
 						elem, err = d.getNextOpElem()
 						if err == nil {
 							elem.SetType(ocsd.GenElemAddrNacc)
-							elem.StartAddr = ocsd.VAddr(d.codeFollower.NaccAddr())
+							elem.StartAddr = ocsd.VAddr(followRes.NaccAddr)
 							elem.Payload.ExceptionNum = uint32(memSpace)
 						}
 					}
 					d.setNeedAddr(true)
-					d.codeFollower.ClearNaccError()
 				}
 			} else if d.Config.IsCycleAcc() {
 				// CC only packet (atomsNum == 0)
