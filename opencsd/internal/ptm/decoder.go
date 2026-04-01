@@ -423,9 +423,10 @@ func (d *PktDecode) processIsync() ocsd.DatapathResp {
 		if d.needIsync || pkt.ISyncReason != ocsd.ISyncPeriodic {
 			d.outputElem.SetType(ocsd.GenElemTraceOn)
 			d.outputElem.SetTraceOnReason(ocsd.TraceOnNormal)
-			if pkt.ISyncReason == ocsd.ISyncTraceRestartAfterOverflow {
+			switch pkt.ISyncReason {
+			case ocsd.ISyncTraceRestartAfterOverflow:
 				d.outputElem.SetTraceOnReason(ocsd.TraceOnOverflow)
-			} else if pkt.ISyncReason == ocsd.ISyncDebugExit {
+			case ocsd.ISyncDebugExit:
 				d.outputElem.SetTraceOnReason(ocsd.TraceOnExDebug)
 			}
 			if pkt.CCValid {

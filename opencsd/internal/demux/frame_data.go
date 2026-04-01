@@ -160,15 +160,16 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32, state *datapathSta
 
 			dataPairVal := binary.LittleEndian.Uint16(d.inBlockBase[dataPtrIdx:])
 
-			if dataPairVal == HSYNC_PATTERN {
+			switch dataPairVal {
+			case HSYNC_PATTERN:
 				if hasHSyncs {
 					hSyncBytes += 2
 				} else {
 					return false, fmt.Errorf("%w: Bad HSYNC in frame at index %d", ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx)
 				}
-			} else if dataPairVal == FSYNC_START {
+			case FSYNC_START:
 				return false, fmt.Errorf("%w: Bad FSYNC start in frame or invalid ID (0x7F) at index %d", ocsd.ErrDfrmtrBadFhsync, d.trcCurrIdx)
-			} else {
+			default:
 				d.exFrmNBytes += 2
 				exBytes += 2
 			}

@@ -313,15 +313,16 @@ func (p *PktProc) processHeaderByte(by uint8) {
 			p.throwPacketHeaderErr("Invalid P-Header.")
 		}
 	} else if (by & 0xF3) == 0x00 {
-		if by == 0x00 {
+		switch by {
+		case 0x00:
 			p.currPacket.Type = PktASync
-		} else if by == 0x04 {
+		case 0x04:
 			p.currPacket.Type = PktCycleCount
-		} else if by == 0x08 {
+		case 0x08:
 			p.currPacket.Type = PktISync
 			p.isyncGotCC = false
 			p.isyncGetLSiP = false
-		} else if by == 0x0C {
+		case 0x0C:
 			p.currPacket.Type = PktTrigger
 			p.processState = sendPkt
 		}
@@ -1106,9 +1107,10 @@ func (p *PktProc) extractDataAddress() (addr uint64, bits uint8, updateBE bool, 
 func (p *PktProc) extractDataValue(sizeCode int) uint32 {
 	val := uint32(0)
 	bytes := sizeCode
-	if bytes == 3 {
+	switch bytes {
+	case 3:
 		bytes = 4
-	} else if bytes == 0 {
+	case 0:
 		return 0 // no value
 	}
 

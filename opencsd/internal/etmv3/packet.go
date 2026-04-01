@@ -249,7 +249,8 @@ func (p *Packet) UpdateAtomFromPHdr(pHdr uint8, cycleAccurate bool) bool {
 
 	if !cycleAccurate {
 		// Non-cycle-accurate mode
-		if (pHdr & 0x3) == 0x0 {
+		switch pHdr & 0x3 {
+		case 0x0:
 			// Format 1 (non-CA)
 			p.PHdrFmt = 1
 			e := (pHdr >> 2) & 0xF
@@ -259,7 +260,7 @@ func (p *Packet) UpdateAtomFromPHdr(pHdr uint8, cycleAccurate bool) bool {
 			}
 			p.Atom.Num = e + n
 			p.Atom.EnBits = (uint32(1) << e) - 1
-		} else if (pHdr & 0x3) == 0x2 {
+		case 0x2:
 			// Format 2 (non-CA)
 			p.PHdrFmt = 2
 			p.Atom.Num = 2
@@ -270,7 +271,7 @@ func (p *Packet) UpdateAtomFromPHdr(pHdr uint8, cycleAccurate bool) bool {
 			if (pHdr & 0x4) == 0 {
 				p.Atom.EnBits |= 2
 			}
-		} else {
+		default:
 			isValid = false
 		}
 	} else {

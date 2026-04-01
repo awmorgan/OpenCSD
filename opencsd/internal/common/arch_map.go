@@ -138,9 +138,10 @@ func getPatternMatchCoreName(coreName string) (ocsd.ArchProfile, bool) {
 			ap.Arch = ocsd.ArchAA64
 			ap.Profile = ocsd.ProfileCortexA
 			if len(rest) > 5 && rest[4] == '-' {
-				if rest[5] == 'R' {
+				switch rest[5] {
+				case 'R':
 					ap.Profile = ocsd.ProfileCortexR
-				} else if rest[5] == 'M' {
+				case 'M':
 					ap.Profile = ocsd.ProfileCortexM
 				}
 			}

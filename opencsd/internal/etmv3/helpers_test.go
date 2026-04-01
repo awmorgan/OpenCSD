@@ -33,9 +33,10 @@ func (m *mockMemAcc) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSp
 	isHit := m.hitAfter >= 0 && m.calls > m.hitAfter
 
 	if isHit {
-		if m.instrType == ocsd.InstrBrIndirect {
+		switch m.instrType {
+		case ocsd.InstrBrIndirect:
 			return reqBytes, []byte{0x1E, 0xFF, 0x2F, 0xE1}, nil // BX LR (0xE12FFF1E - unconditional)
-		} else if m.instrType == ocsd.InstrOther {
+		case ocsd.InstrOther:
 			return reqBytes, []byte{0x00, 0x00, 0x80, 0xE0}, nil // ADD R0, R0, R0
 		}
 		// Default to branch
