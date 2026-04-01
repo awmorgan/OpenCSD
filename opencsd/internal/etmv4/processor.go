@@ -1,6 +1,9 @@
 package etmv4
 
 import (
+	"errors"
+	"fmt"
+
 	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
@@ -309,7 +312,7 @@ func (p *Processor) onEOT() ocsd.DatapathResp {
 
 	resp := ocsd.RespCont
 	if len(p.currPacketData) != 0 {
-		p.currPacket.ErrType = PktIncompleteEOT
+		p.currPacket.Err = errIncompleteEOT
 		resp = p.outputPacket()
 		p.resetPacketState()
 	}
@@ -357,7 +360,7 @@ func (p *Processor) resetPacketState() {
 	p.currPacketData = p.currPacketData[:0]
 
 	p.currPacket.Type = 0
-	p.currPacket.ErrType = PktNoErrType
+	p.currPacket.Err = nil
 	p.currPacket.ErrHdrVal = 0
 
 	p.currPacket.Valid.CycleCount = false
@@ -509,16 +512,15 @@ func (p *Processor) iPktNoPayload(lastByte uint8) {
 }
 
 func (p *Processor) iPktReserved(lastByte uint8) {
-	p.currPacket.ErrType = p.currPacket.Type
+	p.currPacket.Err = errReservedHeader
 	p.currPacket.ErrHdrVal = lastByte
 	p.currPacket.Type = PktReserved
 	p.processState = SendPkt
 }
 
 func (p *Processor) iPktInvalidCfg(lastByte uint8) {
-	p.currPacket.ErrType = p.currPacket.Type
+	p.currPacket.Err = errReservedCfg
 	p.currPacket.ErrHdrVal = lastByte
-	p.currPacket.Type = PktReservedCfg
 	p.processState = SendPkt
 }
 
@@ -540,8 +542,7 @@ func (p *Processor) iPktExtension(lastByte uint8) {
 			p.currPacket.Type = PktAsync
 			p.currDecode = decodePktASync
 		default:
-			p.currPacket.ErrType = p.currPacket.Type
-			p.currPacket.Type = PktBadSequence
+			p.currPacket.Err = ocsd.ErrBadPacketSeq
 			p.processState = SendPkt
 		}
 	}
@@ -556,8 +557,7 @@ func (p *Processor) iPktASync(lastByte uint8) {
 		}
 		p.processState = SendPkt
 		if len(p.currPacketData) != 12 || lastByte != 0x80 {
-			p.currPacket.Type = PktBadSequence
-			p.currPacket.ErrType = PktAsync
+			p.currPacket.Err = ocsd.ErrBadPacketSeq
 		} else {
 			p.isSync = true
 		}
@@ -566,8 +566,7 @@ func (p *Processor) iPktASync(lastByte uint8) {
 			p.dumpUnsyncedBytes = 1
 			p.processState = SendUnsynced
 		} else {
-			p.currPacket.Type = PktBadSequence
-			p.currPacket.ErrType = PktAsync
+			p.currPacket.Err = ocsd.ErrBadPacketSeq
 			p.processState = SendPkt
 		}
 	}
@@ -1088,11 +1087,10 @@ func (p *Processor) update32BitAddress(currAddr ocsd.VAddr, newVal32 uint32) ocs
 }
 
 func (p *Processor) markMalformedCurrentPacket(errType PktType) {
-	if p.processState == SendPkt && p.currPacket.Type == PktBadSequence {
+	if p.processState == SendPkt && errors.Is(p.currPacket.Err, ocsd.ErrBadPacketSeq) {
 		return
 	}
-	p.currPacket.ErrType = errType
-	p.currPacket.Type = PktBadSequence
+	p.currPacket.Err = fmt.Errorf("%w: malformed %s", ocsd.ErrBadPacketSeq, errType.String())
 	p.processState = SendPkt
 }
 
@@ -1133,8 +1131,7 @@ func (p *Processor) iPktQ(lastByte uint8) {
 			p.countDone = true // no count in type F
 
 		default:
-			p.currPacket.ErrType = p.currPacket.Type
-			p.currPacket.Type = PktBadSequence
+			p.currPacket.Err = ocsd.ErrBadPacketSeq
 			p.processState = SendPkt
 			return
 		}

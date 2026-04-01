@@ -636,6 +636,16 @@ func (d *PktDecode) decodePacket() error {
 	pkt := d.CurrPacketIn
 	isAddr := false
 
+	if pkt.Err != nil {
+		switch pkt.EffectiveType() {
+		case PktIncompleteEOT:
+			return nil
+		case PktBadSequence, PktBadTraceMode, PktReserved, PktReservedCfg:
+			d.handleBadPacket(d.IndexCurrPkt)
+			return nil
+		}
+	}
+
 	switch pkt.Type {
 	case PktAsync, PktIgnore:
 		// Do nothing

@@ -1,6 +1,7 @@
 package etmv4
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -231,7 +232,7 @@ type Valid struct {
 // Trace packet element.
 type TracePacket struct {
 	Type      PktType
-	ErrType   PktType
+	Err       error
 	ErrHdrVal uint8
 
 	// intra-packet data - valid across packets.
@@ -278,14 +279,30 @@ type TracePacket struct {
 	ProtocolVersion uint8
 }
 
+var errIncompleteEOT = errors.New("incomplete packet flushed at end of trace")
+var errReservedCfg = errors.New("packet type reserved for current configuration")
+var errReservedHeader = errors.New("packet header reserved encoding")
+
 // EffectiveType returns the packet type used for reporting/printing.
 // Only incomplete-EOT overrides the packet type for raw packet output.
 func (p *TracePacket) EffectiveType() PktType {
 	if p == nil {
 		return PktNoErrType
 	}
-	if p.ErrType == PktIncompleteEOT {
-		return p.ErrType
+	if p.Err == nil {
+		return p.Type
+	}
+	if errors.Is(p.Err, errIncompleteEOT) {
+		return PktIncompleteEOT
+	}
+	if errors.Is(p.Err, errReservedCfg) {
+		return PktReservedCfg
+	}
+	if errors.Is(p.Err, errReservedHeader) || errors.Is(p.Err, ocsd.ErrInvalidPcktHdr) {
+		return PktReserved
+	}
+	if errors.Is(p.Err, ocsd.ErrBadPacketSeq) {
+		return PktBadSequence
 	}
 	return p.Type
 }
@@ -607,9 +624,8 @@ func (p *TracePacket) HeaderString() string {
 	// For I_INCOMPLETE_EOT, p.Type holds the original packet type that was interrupted.
 	if et == PktIncompleteEOT && p.Type != PktNoErrType {
 		fmt.Fprintf(&desc, "[%s]", p.Type.String())
-	} else if (et == PktBadSequence || et == PktReservedCfg) && p.ErrType != PktNoErrType && p.ErrType != PktIncompleteEOT {
-		// For I_BAD_SEQUENCE and I_RESERVED_CFG, ErrType holds the original type.
-		fmt.Fprintf(&desc, "[%s]", p.ErrType.String())
+	} else if et == PktBadSequence || et == PktReservedCfg {
+		fmt.Fprintf(&desc, "[%s]", p.Type.String())
 	}
 
 	switch et {
