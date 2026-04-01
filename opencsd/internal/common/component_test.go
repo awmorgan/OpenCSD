@@ -5,12 +5,7 @@ import (
 )
 
 func TestComponentRuntimeViaDecoderBase(t *testing.T) {
-	b := &DecoderBase{
-		Name: "TestComp",
-	}
-	if b.Name != "TestComp" {
-		t.Errorf("expected name TestComp, got %s", b.Name)
-	}
+	b := &OpMode{}
 
 	b.ConfigureSupportedOpModes(0x0F)
 	err := b.SetComponentOpMode(0x01)
