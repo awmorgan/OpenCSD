@@ -5,10 +5,6 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-// DecoderHandle is the typed decoder registration handle stored by the decode tree.
-// Concrete values may be packet processors or packet decoders, depending on pipeline mode.
-type DecoderHandle = common.OpModeManager
-
 // pipelineWiringOwner defines the explicit late-binding contract used by decode tree
 // when dependencies must be wired after decoder construction.
 type pipelineWiringOwner interface {
@@ -19,20 +15,20 @@ type pipelineWiringOwner interface {
 type DecodeTreeElement struct {
 	DecoderTypeName string                        // Registered name of the decoder
 	DataIn          ocsd.TrcDataProcessorExplicit // Interface for feeding trace data
-	DecoderHandle   DecoderHandle                 // Decoder registration handle
+	Manager         common.OpModeManager          // Operational mode manager for decoder
 	PipelineWiring  pipelineWiringOwner           // Explicit late-bound dependency wiring owner
 	Protocol        ocsd.TraceProtocol            // Protocol type
 	Created         bool                          // True if decode tree created this element
 }
 
 // NewDecodeTreeElement creates a new DecodeTreeElement record.
-func NewDecodeTreeElement(name string, dcdHandle DecoderHandle, wiring pipelineWiringOwner, dataIn ocsd.TrcDataProcessorExplicit, created bool) *DecodeTreeElement {
+func NewDecodeTreeElement(name string, modeManager common.OpModeManager, wiring pipelineWiringOwner, dataIn ocsd.TrcDataProcessorExplicit, created bool) *DecodeTreeElement {
 	protocol := ocsd.ProtocolUnknown
 
 	return &DecodeTreeElement{
 		DecoderTypeName: name,
 		DataIn:          dataIn,
-		DecoderHandle:   dcdHandle,
+		Manager:         modeManager,
 		PipelineWiring:  wiring,
 		Protocol:        protocol,
 		Created:         created,

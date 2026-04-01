@@ -145,17 +145,17 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 }
 
 // AddDecoder registers an already-instantiated decoder into the tree for routing only.
-func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, handle common.OpModeManager) error {
-	return dt.addDecoder(routeID, name, protocol, pktIn, handle, nil)
+func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, modeManager common.OpModeManager) error {
+	return dt.addDecoder(routeID, name, protocol, pktIn, modeManager, nil)
 }
 
 // AddWiredDecoder registers an already-instantiated decoder into the tree with explicit
 // late trace-sink wiring support.
-func (dt *DecodeTree) AddWiredDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, handle common.OpModeManager, wiring pipelineWiringOwner) error {
-	return dt.addDecoder(routeID, name, protocol, pktIn, handle, wiring)
+func (dt *DecodeTree) AddWiredDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, modeManager common.OpModeManager, wiring pipelineWiringOwner) error {
+	return dt.addDecoder(routeID, name, protocol, pktIn, modeManager, wiring)
 }
 
-func (dt *DecodeTree) addDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, handle common.OpModeManager, wiring pipelineWiringOwner) error {
+func (dt *DecodeTree) addDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, modeManager common.OpModeManager, wiring pipelineWiringOwner) error {
 	if dt.treeType == ocsd.TrcSrcSingle {
 		routeID = 0
 	}
@@ -168,7 +168,7 @@ func (dt *DecodeTree) addDecoder(routeID uint8, name string, protocol ocsd.Trace
 	}
 
 	// No decoder manager is needed for direct injection.
-	elem := NewDecodeTreeElement(name, handle, wiring, pktIn, true)
+	elem := NewDecodeTreeElement(name, modeManager, wiring, pktIn, true)
 	elem.Protocol = protocol
 
 	dt.decodeElements[routeID] = elem

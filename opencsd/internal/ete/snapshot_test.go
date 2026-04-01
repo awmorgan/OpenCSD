@@ -626,7 +626,7 @@ func applyOpModeFlags(tree *dcdtree.DecodeTree, flags uint32) {
 		if elem == nil {
 			return
 		}
-		apply(elem.DecoderHandle)
+		apply(elem.Manager)
 	})
 }
 

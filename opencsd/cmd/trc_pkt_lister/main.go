@@ -517,7 +517,7 @@ func applyAdditionalFlags(tree *dcdtree.DecodeTree, flags uint32) error {
 		if elem == nil || applyErr != nil {
 			return
 		}
-		if err := apply(elem.DecoderHandle); err != nil {
+		if err := apply(elem.Manager); err != nil {
 			applyErr = err
 		}
 	})

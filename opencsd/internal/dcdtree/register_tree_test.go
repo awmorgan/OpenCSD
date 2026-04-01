@@ -48,7 +48,7 @@ func (h *fakePipelineWiringHandle) SetTraceElemOut(out ocsd.GenElemProcessor) {
 	h.traceSets++
 }
 
-type fakeDecoderHandle struct{ common.OpMode }
+type fakeManager struct{ common.OpMode }
 
 func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)
@@ -60,7 +60,7 @@ func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	if err := tree.AddDecoder(0x23, "TEST_SINGLE", ocsd.ProtocolSTM, &fakeDataIn{}, &fakeDecoderHandle{}); err != nil {
+	if err := tree.AddDecoder(0x23, "TEST_SINGLE", ocsd.ProtocolSTM, &fakeDataIn{}, &fakeManager{}); err != nil {
 		t.Fatalf("AddDecoder failed: %v", err)
 	}
 	if _, ok := tree.decodeElements[0]; !ok {
@@ -104,8 +104,8 @@ func TestDecodeTreeAddDecoderDirectInjection(t *testing.T) {
 	defer tree.Destroy()
 
 	pktIn := &fakeDataIn{}
-	handle := &fakeDecoderHandle{}
-	if err := tree.AddDecoder(0x45, "direct", ocsd.ProtocolSTM, pktIn, handle); err != nil {
+	manager := &fakeManager{}
+	if err := tree.AddDecoder(0x45, "direct", ocsd.ProtocolSTM, pktIn, manager); err != nil {
 		t.Fatalf("AddDecoder failed: %v", err)
 	}
 
@@ -119,11 +119,11 @@ func TestDecodeTreeAddDecoderDirectInjection(t *testing.T) {
 	if elem.DataIn != pktIn {
 		t.Fatal("expected injected packet processor to be preserved")
 	}
-	if elem.DecoderHandle != handle {
-		t.Fatal("expected injected decoder handle to be preserved")
+	if elem.Manager != manager {
+		t.Fatal("expected injected mode manager to be preserved")
 	}
 
-	err = tree.AddDecoder(0x00, "duplicate", ocsd.ProtocolSTM, pktIn, handle)
+	err = tree.AddDecoder(0x00, "duplicate", ocsd.ProtocolSTM, pktIn, manager)
 	if !errors.Is(err, ocsd.ErrAttachTooMany) {
 		t.Fatalf("expected ErrAttachTooMany for duplicate route, got %v", err)
 	}
@@ -172,7 +172,7 @@ func TestDecodeTreeAddDecoderRejectsOutOfRangeRouteID(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	err = tree.AddDecoder(0x80, "direct", ocsd.ProtocolSTM, &fakeDataIn{}, &fakeDecoderHandle{})
+	err = tree.AddDecoder(0x80, "direct", ocsd.ProtocolSTM, &fakeDataIn{}, &fakeManager{})
 	if !errors.Is(err, ocsd.ErrInvalidID) {
 		t.Fatalf("expected ErrInvalidID for route ID 0x80, got %v", err)
 	}

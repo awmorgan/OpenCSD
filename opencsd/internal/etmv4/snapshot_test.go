@@ -377,7 +377,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 				return
 			}
 			if opts.extraOpFlags != 0 {
-				if opComp, ok := elem.DecoderHandle.(interface {
+				if opComp, ok := elem.Manager.(interface {
 					SetComponentOpMode(uint32) error
 					ComponentOpMode() uint32
 					SupportedOpModes() uint32
@@ -389,7 +389,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 				}
 			}
 			if opts.instrRangeLimit > 0 {
-				if dcd, ok := elem.DecoderHandle.(*etmv4.PktDecode); ok {
+				if dcd, ok := elem.Manager.(*etmv4.PktDecode); ok {
 					dcd.SetInstrRangeLimit(opts.instrRangeLimit)
 				}
 			}
