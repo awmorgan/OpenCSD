@@ -27,7 +27,12 @@ var isyncOnReasonMap = [...]ocsd.TraceOnReason{
 // PktDecode implements the ETMv3 packet decoder converting packets to generic TraceElements
 // Ported from trc_pkt_decode_etmv3.cpp
 type PktDecode struct {
-	common.DecoderBase
+	Name string
+	common.OpMode
+	TraceElemOut ocsd.GenElemProcessor
+	MemAccess    common.TargetMemAccess
+	InstrDecode  common.InstrDecode
+	IndexCurrPkt ocsd.TrcIndex
 	Config       *Config
 	CurrPacketIn *Packet
 
@@ -60,9 +65,7 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 	instID := int(cfg.TraceID())
 
 	d := &PktDecode{
-		DecoderBase: common.DecoderBase{
-			Name: fmt.Sprintf("DCD_ETMV3_%d", instID),
-		},
+		Name:           fmt.Sprintf("DCD_ETMV3_%d", instID),
 		peContext:      &ocsd.PEContext{},
 		outputElemList: common.NewGenElemList(),
 	}
@@ -92,6 +95,67 @@ func (d *PktDecode) SetInstrDecode(decoder common.InstrDecode) {
 func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
 	d.TraceElemOut = out
 	d.outputElemList.SetSendIf(out)
+}
+
+// OutputTraceElement sends an element using IndexCurrPkt.
+func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
+	if d.TraceElemOut != nil {
+		err := d.TraceElemOut.TraceElemIn(d.IndexCurrPkt, traceID, elem)
+		if ocsd.IsDataContErr(err) {
+			return ocsd.RespCont, nil
+		}
+		if ocsd.IsDataWaitErr(err) {
+			return ocsd.RespWait, nil
+		}
+		if errors.Is(err, ocsd.ErrNotInit) {
+			return ocsd.RespFatalNotInit, err
+		}
+		return ocsd.RespFatalInvalidData, err
+	}
+	return ocsd.RespFatalNotInit, ocsd.ErrNotInit
+}
+
+// OutputTraceElementIdx sends an element at an explicit index.
+func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) (ocsd.DatapathResp, error) {
+	if d.TraceElemOut != nil {
+		err := d.TraceElemOut.TraceElemIn(idx, traceID, elem)
+		if ocsd.IsDataContErr(err) {
+			return ocsd.RespCont, nil
+		}
+		if ocsd.IsDataWaitErr(err) {
+			return ocsd.RespWait, nil
+		}
+		if errors.Is(err, ocsd.ErrNotInit) {
+			return ocsd.RespFatalNotInit, err
+		}
+		return ocsd.RespFatalInvalidData, err
+	}
+	return ocsd.RespFatalNotInit, ocsd.ErrNotInit
+}
+
+// AccessMemory reads target memory.
+func (d *PktDecode) AccessMemory(address ocsd.VAddr, traceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
+	if d.MemAccess != nil {
+		return d.MemAccess.ReadTargetMemory(address, traceID, memSpace, reqBytes)
+	}
+	return 0, nil, ocsd.ErrDcdInterfaceUnused
+}
+
+// InstrDecodeCall calls the attached instruction decoder.
+func (d *PktDecode) InstrDecodeCall(instrInfo *ocsd.InstrInfo) error {
+	if d.InstrDecode != nil {
+		return d.InstrDecode.DecodeInstruction(instrInfo)
+	}
+	return ocsd.ErrDcdInterfaceUnused
+}
+
+// InvalidateMemAccCache invalidates the memory access cache.
+func (d *PktDecode) InvalidateMemAccCache(traceID uint8) error {
+	if d.MemAccess != nil {
+		d.MemAccess.InvalidateMemAccCache(traceID)
+		return nil
+	}
+	return ocsd.ErrDcdInterfaceUnused
 }
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) error {
