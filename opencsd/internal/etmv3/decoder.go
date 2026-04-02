@@ -27,8 +27,8 @@ var isyncOnReasonMap = [...]ocsd.TraceOnReason{
 // PktDecode implements the ETMv3 packet decoder converting packets to generic TraceElements
 // Ported from trc_pkt_decode_etmv3.cpp
 type PktDecode struct {
-	Name string
-	common.OpMode
+	Name         string
+	opMode       common.OpMode
 	TraceElemOut ocsd.GenElemProcessor
 	MemAccess    common.TargetMemAccess
 	InstrDecode  common.InstrDecode
@@ -54,6 +54,15 @@ type PktDecode struct {
 	pendingNaccMem ocsd.MemSpaceAcc
 
 	csID uint8
+}
+
+func (d *PktDecode) ComponentOpMode() uint32  { return d.opMode.ComponentOpMode() }
+func (d *PktDecode) SupportedOpModes() uint32 { return d.opMode.SupportedOpModes() }
+func (d *PktDecode) SetComponentOpMode(opFlags uint32) error {
+	return d.opMode.SetComponentOpMode(opFlags)
+}
+func (d *PktDecode) ConfigureSupportedOpModes(flags uint32) {
+	d.opMode.ConfigureSupportedOpModes(flags)
 }
 
 // NewPktDecode creates a new ETMv3 trace decoder.

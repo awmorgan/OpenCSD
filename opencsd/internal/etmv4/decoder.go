@@ -115,8 +115,8 @@ type elemRes struct {
 
 // PktDecode decodes ETMv4 trace packets into generic trace elements.
 type PktDecode struct {
-	Name string
-	common.OpMode
+	Name         string
+	opMode       common.OpMode
 	TraceElemOut ocsd.GenElemProcessor
 	MemAccess    common.TargetMemAccess
 	InstrDecode  common.InstrDecode
@@ -171,6 +171,15 @@ type PktDecode struct {
 		nextStAddr ocsd.VAddr
 		valid      bool
 	}
+}
+
+func (d *PktDecode) ComponentOpMode() uint32  { return d.opMode.ComponentOpMode() }
+func (d *PktDecode) SupportedOpModes() uint32 { return d.opMode.SupportedOpModes() }
+func (d *PktDecode) SetComponentOpMode(opFlags uint32) error {
+	return d.opMode.SetComponentOpMode(opFlags)
+}
+func (d *PktDecode) ConfigureSupportedOpModes(flags uint32) {
+	d.opMode.ConfigureSupportedOpModes(flags)
 }
 
 // SetTraceElemOut satisfies dcdtree's traceElemSetterOwner interface.

@@ -38,10 +38,22 @@ func (f *fakeGenElemOut) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, el
 }
 
 type fakePipelineWiringHandle struct {
-	common.OpMode
+	opMode common.OpMode
 }
 
-type fakeManager struct{ common.OpMode }
+func (f *fakePipelineWiringHandle) ComponentOpMode() uint32  { return f.opMode.ComponentOpMode() }
+func (f *fakePipelineWiringHandle) SupportedOpModes() uint32 { return f.opMode.SupportedOpModes() }
+func (f *fakePipelineWiringHandle) SetComponentOpMode(opFlags uint32) error {
+	return f.opMode.SetComponentOpMode(opFlags)
+}
+
+type fakeManager struct{ opMode common.OpMode }
+
+func (f *fakeManager) ComponentOpMode() uint32  { return f.opMode.ComponentOpMode() }
+func (f *fakeManager) SupportedOpModes() uint32 { return f.opMode.SupportedOpModes() }
+func (f *fakeManager) SetComponentOpMode(opFlags uint32) error {
+	return f.opMode.SetComponentOpMode(opFlags)
+}
 
 func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)

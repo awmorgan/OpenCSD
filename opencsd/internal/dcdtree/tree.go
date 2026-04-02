@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"opencsd/internal/common"
 	"opencsd/internal/demux"
 
 	"opencsd/internal/memacc"
@@ -37,6 +36,13 @@ type DecodeTree struct {
 
 	decoderRoot ocsd.TrcDataProcessorExplicit
 	genElemOut  ocsd.GenElemProcessor
+}
+
+// OpModeComponent is the minimal operational mode interface decode-tree consumes.
+type OpModeComponent interface {
+	ComponentOpMode() uint32
+	SupportedOpModes() uint32
+	SetComponentOpMode(opFlags uint32) error
 }
 
 // NewDecodeTree creates a new Trace Decode Tree using the supplied decoder registry.
@@ -145,17 +151,17 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 }
 
 // AddDecoder registers an already-instantiated decoder into the tree for routing only.
-func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, modeManager common.OpModeManager) error {
+func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, modeManager OpModeComponent) error {
 	return dt.addDecoder(routeID, name, protocol, pktIn, modeManager, nil)
 }
 
 // AddWiredDecoder registers an already-instantiated decoder into the tree with explicit
 // late trace-sink wiring support.
-func (dt *DecodeTree) AddWiredDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, modeManager common.OpModeManager, wiring wireTraceElemFn) error {
+func (dt *DecodeTree) AddWiredDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, modeManager OpModeComponent, wiring wireTraceElemFn) error {
 	return dt.addDecoder(routeID, name, protocol, pktIn, modeManager, wiring)
 }
 
-func (dt *DecodeTree) addDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, modeManager common.OpModeManager, wiring wireTraceElemFn) error {
+func (dt *DecodeTree) addDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, modeManager OpModeComponent, wiring wireTraceElemFn) error {
 	if dt.treeType == ocsd.TrcSrcSingle {
 		routeID = 0
 	}

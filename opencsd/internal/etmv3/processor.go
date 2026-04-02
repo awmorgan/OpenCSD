@@ -19,8 +19,8 @@ const (
 // PktProc implements the ETMv3 packet processor.
 // Ported from trc_pkt_proc_etmv3_impl.cpp
 type PktProc struct {
-	Name string
-	common.OpMode
+	Name          string
+	opMode        common.OpMode
 	Stats         ocsd.DecodeStats
 	statsInit     bool
 	Config        *Config
@@ -51,6 +51,13 @@ type PktProc struct {
 
 	packetIndex ocsd.TrcIndex
 }
+
+func (p *PktProc) ComponentOpMode() uint32  { return p.opMode.ComponentOpMode() }
+func (p *PktProc) SupportedOpModes() uint32 { return p.opMode.SupportedOpModes() }
+func (p *PktProc) SetComponentOpMode(opFlags uint32) error {
+	return p.opMode.SetComponentOpMode(opFlags)
+}
+func (p *PktProc) ConfigureSupportedOpModes(flags uint32) { p.opMode.ConfigureSupportedOpModes(flags) }
 
 // NewPktProc creates a new ETMv3 packet processor
 func NewPktProc(cfg *Config) *PktProc {
@@ -156,58 +163,22 @@ func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pkt
 }
 
 func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	resp := ocsd.RespCont
-	var processed uint32 = 0
-	var err error
-
+	// Compatibility entrypoint: route op-style callers to explicit methods.
 	switch op {
 	case ocsd.OpData:
-		if len(dataBlock) == 0 {
-			err = fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
-			resp = ocsd.RespFatalInvalidParam
-		} else {
-			processed, err = p.ProcessData(index, dataBlock)
-			resp = ocsd.DataRespFromErr(err)
-		}
+		return p.TraceData(index, dataBlock)
 	case ocsd.OpEOT:
-		resp = p.OnEOT()
-		if p.pktOut != nil && !ocsd.DataRespIsFatal(resp) {
-			err = p.callPktOut(ocsd.OpEOT, 0, nil)
-			resp = ocsd.DataRespFromErr(err)
-			if ocsd.IsDataWaitErr(err) {
-				err = nil
-			}
-		}
-		if rawMon := p.PktRawMonI; rawMon != nil {
-			rawMon.RawPacketDataMon(ocsd.OpEOT, 0, nil, nil)
-		}
+		return 0, p.TraceDataEOT()
 	case ocsd.OpFlush:
-		resp = p.OnFlush()
-		if ocsd.DataRespIsCont(resp) && p.pktOut != nil {
-			err = p.callPktOut(ocsd.OpFlush, 0, nil)
-			resp = ocsd.DataRespFromErr(err)
-			if ocsd.IsDataWaitErr(err) {
-				err = nil
-			}
-		}
+		return 0, p.TraceDataFlush()
 	case ocsd.OpReset:
-		if p.pktOut != nil {
-			err = p.callPktOut(ocsd.OpReset, index, nil)
-			resp = ocsd.DataRespFromErr(err)
-			if ocsd.IsDataWaitErr(err) {
-				err = nil
-			}
-		}
-		if !ocsd.DataRespIsFatal(resp) {
-			resp = p.OnReset()
-		}
-		if rawMon := p.PktRawMonI; rawMon != nil {
-			rawMon.RawPacketDataMon(ocsd.OpReset, index, nil, nil)
-		}
+		return 0, p.TraceDataReset(index)
 	default:
-		err = fmt.Errorf("%w: packet processor: unknown datapath operation", ocsd.ErrInvalidParamVal)
-		resp = ocsd.RespFatalInvalidOp
+		return 0, fmt.Errorf("%w: packet processor: unknown datapath operation", ocsd.ErrInvalidParamVal)
 	}
+}
+
+func (p *PktProc) runDatapathResult(processed uint32, resp ocsd.DatapathResp, err error) (uint32, error) {
 	if ocsd.DataRespIsCont(resp) {
 		return processed, nil
 	}
@@ -231,25 +202,65 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 
 // TraceData is the explicit data-path entrypoint used by split interfaces.
 func (p *PktProc) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	return p.TraceDataIn(ocsd.OpData, index, dataBlock)
+	if len(dataBlock) == 0 {
+		return p.runDatapathResult(0, ocsd.RespFatalInvalidParam, fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal))
+	}
+	processed, err := p.ProcessData(index, dataBlock)
+	return p.runDatapathResult(processed, ocsd.DataRespFromErr(err), err)
 }
 
-// TraceDataEOT forwards an EOT control operation through the legacy multiplexer.
+// TraceDataEOT handles end-of-trace control without op multiplexing.
 func (p *PktProc) TraceDataEOT() error {
-	_, err := p.TraceDataIn(ocsd.OpEOT, 0, nil)
-	return err
+	resp := p.OnEOT()
+	var err error
+	if p.pktOut != nil && !ocsd.DataRespIsFatal(resp) {
+		err = p.callPktOut(ocsd.OpEOT, 0, nil)
+		resp = ocsd.DataRespFromErr(err)
+		if ocsd.IsDataWaitErr(err) {
+			err = nil
+		}
+	}
+	if rawMon := p.PktRawMonI; rawMon != nil {
+		rawMon.RawPacketDataMon(ocsd.OpEOT, 0, nil, nil)
+	}
+	_, outErr := p.runDatapathResult(0, resp, err)
+	return outErr
 }
 
-// TraceDataFlush forwards a flush control operation through the legacy multiplexer.
+// TraceDataFlush handles flush control without op multiplexing.
 func (p *PktProc) TraceDataFlush() error {
-	_, err := p.TraceDataIn(ocsd.OpFlush, 0, nil)
-	return err
+	resp := p.OnFlush()
+	var err error
+	if ocsd.DataRespIsCont(resp) && p.pktOut != nil {
+		err = p.callPktOut(ocsd.OpFlush, 0, nil)
+		resp = ocsd.DataRespFromErr(err)
+		if ocsd.IsDataWaitErr(err) {
+			err = nil
+		}
+	}
+	_, outErr := p.runDatapathResult(0, resp, err)
+	return outErr
 }
 
-// TraceDataReset forwards a reset control operation through the legacy multiplexer.
+// TraceDataReset handles reset control without op multiplexing.
 func (p *PktProc) TraceDataReset(index ocsd.TrcIndex) error {
-	_, err := p.TraceDataIn(ocsd.OpReset, index, nil)
-	return err
+	resp := ocsd.RespCont
+	var err error
+	if p.pktOut != nil {
+		err = p.callPktOut(ocsd.OpReset, index, nil)
+		resp = ocsd.DataRespFromErr(err)
+		if ocsd.IsDataWaitErr(err) {
+			err = nil
+		}
+	}
+	if !ocsd.DataRespIsFatal(resp) {
+		resp = p.OnReset()
+	}
+	if rawMon := p.PktRawMonI; rawMon != nil {
+		rawMon.RawPacketDataMon(ocsd.OpReset, index, nil, nil)
+	}
+	_, outErr := p.runDatapathResult(0, resp, err)
+	return outErr
 }
 
 func (p *PktProc) resetProcessorState() {

@@ -65,8 +65,8 @@ const (
 
 // PktProc converts the byte stream into basic STM trace packets.
 type PktProc struct {
-	Name string
-	common.OpMode
+	Name       string
+	opMode     common.OpMode
 	Stats      ocsd.DecodeStats
 	statsInit  bool
 	Config     *Config
@@ -115,6 +115,13 @@ type PktProc struct {
 	isSync      bool
 	syncIndex   ocsd.TrcIndex
 }
+
+func (p *PktProc) ComponentOpMode() uint32  { return p.opMode.ComponentOpMode() }
+func (p *PktProc) SupportedOpModes() uint32 { return p.opMode.SupportedOpModes() }
+func (p *PktProc) SetComponentOpMode(opFlags uint32) error {
+	return p.opMode.SetComponentOpMode(opFlags)
+}
+func (p *PktProc) ConfigureSupportedOpModes(flags uint32) { p.opMode.ConfigureSupportedOpModes(flags) }
 
 func NewPktProc(cfg *Config) *PktProc {
 	instIDNum := 0

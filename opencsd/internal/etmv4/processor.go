@@ -71,7 +71,7 @@ type tableEntry struct {
 // Processor parses byte streams for ETMv4 packets.
 // Ported from TrcPktProcEtmV4I.
 type Processor struct {
-	common.OpMode
+	opMode common.OpMode
 	config Config
 
 	// output interface
@@ -138,6 +138,15 @@ type Processor struct {
 	f1P1Done bool
 	f1P2Done bool
 	f1HasP2  bool
+}
+
+func (p *Processor) ComponentOpMode() uint32  { return p.opMode.ComponentOpMode() }
+func (p *Processor) SupportedOpModes() uint32 { return p.opMode.SupportedOpModes() }
+func (p *Processor) SetComponentOpMode(opFlags uint32) error {
+	return p.opMode.SetComponentOpMode(opFlags)
+}
+func (p *Processor) ConfigureSupportedOpModes(flags uint32) {
+	p.opMode.ConfigureSupportedOpModes(flags)
 }
 
 // Ensure the struct satisfies TrcDataProcessorExplicit

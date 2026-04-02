@@ -242,57 +242,64 @@ func (d *FrameDeformatter) resetStateParams() {
 
 // TraceDataIn implementation
 func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	d.outPackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrPackedRawOut) != 0
-	d.outUnpackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrUnpackedRawOut) != 0
-
-	var numBytesProcessed uint32
-	resp := ocsd.RespCont
-	var err error
-
 	switch op {
 	case ocsd.OpReset:
-		resp, err = d.Reset()
+		return 0, d.TraceDataReset(index)
 	case ocsd.OpFlush:
-		resp, err = d.Flush()
+		return 0, d.TraceDataFlush()
 	case ocsd.OpEOT:
-		resp, err = d.executeNoneDataOpAllIDs(ocsd.OpEOT, 0)
+		return 0, d.TraceDataEOT()
 	case ocsd.OpData:
-		if len(dataBlock) == 0 {
-			resp = ocsd.RespFatalInvalidParam
-			err = ocsd.ErrInvalidParamVal
-		} else {
-			numBytesProcessed, resp, err = d.processTraceData(index, dataBlock)
-		}
+		return d.TraceData(index, dataBlock)
 	default:
-		resp = ocsd.RespFatalInvalidParam
-		err = ocsd.ErrInvalidParamVal
+		return 0, ocsd.ErrInvalidParamVal
 	}
+}
+
+// TraceData is the explicit data entrypoint implementing TrcDataProcessorExplicit.
+func (d *FrameDeformatter) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+	d.outPackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrPackedRawOut) != 0
+	d.outUnpackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrUnpackedRawOut) != 0
+	if len(dataBlock) == 0 {
+		return 0, ocsd.ErrInvalidParamVal
+	}
+	numBytesProcessed, resp, err := d.processTraceData(index, dataBlock)
 	if err == nil && !ocsd.DataRespIsCont(resp) {
 		err = ocsd.DataErrFromResp(resp, nil)
 	}
 	return numBytesProcessed, err
 }
 
-// TraceData is the explicit data entrypoint implementing TrcDataProcessorExplicit.
-func (d *FrameDeformatter) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	return d.TraceDataIn(ocsd.OpData, index, dataBlock)
-}
-
 // TraceDataEOT forwards an EOT operation through the legacy multiplexer.
 func (d *FrameDeformatter) TraceDataEOT() error {
-	_, err := d.TraceDataIn(ocsd.OpEOT, 0, nil)
+	d.outPackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrPackedRawOut) != 0
+	d.outUnpackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrUnpackedRawOut) != 0
+	resp, err := d.executeNoneDataOpAllIDs(ocsd.OpEOT, 0)
+	if err == nil && !ocsd.DataRespIsCont(resp) {
+		err = ocsd.DataErrFromResp(resp, nil)
+	}
 	return err
 }
 
 // TraceDataFlush forwards a flush operation through the legacy multiplexer.
 func (d *FrameDeformatter) TraceDataFlush() error {
-	_, err := d.TraceDataIn(ocsd.OpFlush, 0, nil)
+	d.outPackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrPackedRawOut) != 0
+	d.outUnpackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrUnpackedRawOut) != 0
+	resp, err := d.Flush()
+	if err == nil && !ocsd.DataRespIsCont(resp) {
+		err = ocsd.DataErrFromResp(resp, nil)
+	}
 	return err
 }
 
 // TraceDataReset forwards a reset operation through the legacy multiplexer.
 func (d *FrameDeformatter) TraceDataReset(index ocsd.TrcIndex) error {
-	_, err := d.TraceDataIn(ocsd.OpReset, index, nil)
+	d.outPackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrPackedRawOut) != 0
+	d.outUnpackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrUnpackedRawOut) != 0
+	resp, err := d.Reset()
+	if err == nil && !ocsd.DataRespIsCont(resp) {
+		err = ocsd.DataErrFromResp(resp, nil)
+	}
 	return err
 }
 

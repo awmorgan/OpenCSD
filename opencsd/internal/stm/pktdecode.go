@@ -17,8 +17,8 @@ const (
 )
 
 type PktDecode struct {
-	Name string
-	common.OpMode
+	Name         string
+	opMode       common.OpMode
 	TraceElemOut ocsd.GenElemProcessor
 	MemAccess    common.TargetMemAccess
 	InstrDecode  common.InstrDecode
@@ -41,6 +41,15 @@ type PktDecode struct {
 
 	decodePass1 bool
 	outputElem  ocsd.TraceElement
+}
+
+func (d *PktDecode) ComponentOpMode() uint32  { return d.opMode.ComponentOpMode() }
+func (d *PktDecode) SupportedOpModes() uint32 { return d.opMode.SupportedOpModes() }
+func (d *PktDecode) SetComponentOpMode(opFlags uint32) error {
+	return d.opMode.SetComponentOpMode(opFlags)
+}
+func (d *PktDecode) ConfigureSupportedOpModes(flags uint32) {
+	d.opMode.ConfigureSupportedOpModes(flags)
 }
 
 // NewPktDecode creates a new STM packet decoder.
