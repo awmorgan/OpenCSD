@@ -213,7 +213,8 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			err = fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
 			resp = ocsd.RespFatalInvalidParam
 		} else {
-			processed, resp, err = p.ProcessData(index, dataBlock)
+			processed, err = p.ProcessData(index, dataBlock)
+			resp = ocsd.DataRespFromErr(err)
 		}
 	case ocsd.OpEOT:
 		resp = p.OnEOT()
@@ -345,17 +346,17 @@ func (p *PktProc) readByte() bool {
 }
 
 func (p *PktProc) malformedPacketErr(msg string) error {
-	p.currPacket.Err = fmt.Errorf("%w: %s", ocsd.ErrBadPacketSeq, msg)
-	return p.currPacket.Err
+	p.currPacket.Type = PktBadSequence
+	return fmt.Errorf("%w: %s", ocsd.ErrBadPacketSeq, msg)
 }
 
-func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, ocsd.DatapathResp, error) {
+func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, error) {
 	resp := ocsd.RespCont
 	var err error
 
 	p.dataInProcessed = 0
 	if p.Config == nil {
-		return 0, ocsd.RespFatalNotInit, nil
+		return 0, ocsd.ErrNotInit
 	}
 
 	p.dataIn = dataBlock
@@ -372,7 +373,16 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, o
 		}
 	}
 
-	return p.dataInProcessed, resp, err
+	if ocsd.DataRespIsCont(resp) {
+		return p.dataInProcessed, nil
+	}
+	if ocsd.DataRespIsWait(resp) {
+		return p.dataInProcessed, ocsd.ErrWait
+	}
+	if err != nil {
+		return p.dataInProcessed, err
+	}
+	return p.dataInProcessed, ocsd.DataErrFromResp(resp, nil)
 }
 
 func (p *PktProc) doProcessLoop() (resp ocsd.DatapathResp, currByte uint8, ok bool, err error) {
@@ -466,7 +476,7 @@ func (p *PktProc) OnEOT() ocsd.DatapathResp {
 	}
 	resp := ocsd.RespCont
 	if len(p.currPacketData) > 0 {
-		p.currPacket.Err = errIncompleteEOT
+		p.currPacket.Type = PktIncompleteEOT
 		resp = p.outputPacket()
 	}
 	return resp

@@ -1,11 +1,8 @@
 package itm
 
 import (
-	"errors"
 	"fmt"
 	"strings"
-
-	"opencsd/internal/ocsd"
 )
 
 // PktType represents the ITM packet type.
@@ -57,10 +54,7 @@ type Packet struct {
 	Value  uint32 /**< packet data payload - interpretation depends on type */
 	ValSz  uint8  /**< size of value in bytes */
 	ValExt uint8  /**< additional value bits to handle top of [63:26] timestamp packet (38 bits of ts) */
-	Err    error
 }
-
-var errIncompleteEOT = errors.New("incomplete packet flushed at end of trace")
 
 // Reset initializes packet to a clean state.
 func (p *Packet) Reset() {
@@ -69,7 +63,6 @@ func (p *Packet) Reset() {
 	p.Value = 0
 	p.ValSz = 0
 	p.ValExt = 0
-	p.Err = nil
 }
 
 var valMasks = [...]uint32{0xFF, 0xFFFF, 0xFFFFFF, 0xFFFFFFFF}
@@ -97,18 +90,17 @@ func (p *Packet) ExtValue() uint64 {
 
 // IsBadPacket returns true if the packet type indicates a bad sequence or reserved protocol.
 func (p *Packet) IsBadPacket() bool {
-	return p.Err != nil
+	return p.Type == PktIncompleteEOT || p.Type == PktBadSequence || p.Type == PktReserved
 }
 
 // String provides a string representation of the packet, matching C++ trc_pkt_elem_itm formatting.
 func (p *Packet) String() string {
 	var sb strings.Builder
-	displayType := p.displayType()
-	name, desc := (&Packet{Type: displayType}).typeNameAndDesc()
+	name, desc := (&Packet{Type: p.Type}).typeNameAndDesc()
 	sb.WriteString(name)
 	sb.WriteString(": ")
 
-	switch displayType {
+	switch p.Type {
 	case PktSWIT:
 		fmt.Fprintf(&sb, "{src id: 0x%02x}  ", p.SrcID)
 		p.writeHexVal(&sb)
@@ -132,22 +124,6 @@ func (p *Packet) String() string {
 	sb.WriteString(desc)
 	sb.WriteString("'")
 	return sb.String()
-}
-
-func (p *Packet) displayType() PktType {
-	if p.Err == nil {
-		return p.Type
-	}
-	if errors.Is(p.Err, ocsd.ErrInvalidPcktHdr) {
-		return PktReserved
-	}
-	if errors.Is(p.Err, errIncompleteEOT) {
-		return PktIncompleteEOT
-	}
-	if errors.Is(p.Err, ocsd.ErrBadPacketSeq) {
-		return PktBadSequence
-	}
-	return p.Type
 }
 
 func (p *Packet) typeNameAndDesc() (string, string) {

@@ -2,7 +2,6 @@ package stm
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 
 	"opencsd/internal/common"
@@ -265,21 +264,14 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 	d.outputElem.SetType(ocsd.GenElemSWTrace)
 	d.clearSWTPerPcktInfo()
 
-	if d.CurrPacketIn.Err != nil {
-		switch {
-		case errors.Is(d.CurrPacketIn.Err, errIncompleteEOT):
-			return resp, done
-		case errors.Is(d.CurrPacketIn.Err, ocsd.ErrBadPacketSeq), errors.Is(d.CurrPacketIn.Err, ocsd.ErrInvalidPcktHdr):
-			resp = ocsd.RespFatalInvalidData
-			d.unsyncInfo = ocsd.UnsyncBadPacket
-			d.resetDecoder()
-			return resp, done
-		default:
-			resp = ocsd.RespFatalInvalidData
-			d.unsyncInfo = ocsd.UnsyncBadPacket
-			d.resetDecoder()
-			return resp, done
-		}
+	switch d.CurrPacketIn.Type {
+	case PktIncompleteEOT:
+		return resp, done
+	case PktBadSequence, PktReserved:
+		resp = ocsd.RespFatalInvalidData
+		d.unsyncInfo = ocsd.UnsyncBadPacket
+		d.resetDecoder()
+		return resp, done
 	}
 
 	switch d.CurrPacketIn.Type {

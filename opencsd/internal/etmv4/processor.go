@@ -166,38 +166,15 @@ func (p *Processor) SetPktRawMonitor(mon ocsd.PacketMonitor) {
 
 // TraceDataIn implements ocsd.TrcDataProcessor.
 func (p *Processor) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	mapRespErr := func(consumed uint32, resp ocsd.DatapathResp, err error) (uint32, error) {
-		if ocsd.DataRespIsCont(resp) {
-			return consumed, nil
-		}
-		if ocsd.DataRespIsWait(resp) {
-			return consumed, ocsd.ErrWait
-		}
-		if err != nil {
-			return consumed, err
-		}
-		switch resp {
-		case ocsd.RespFatalNotInit:
-			return consumed, ocsd.ErrNotInit
-		case ocsd.RespFatalInvalidParam, ocsd.RespFatalInvalidOp:
-			return consumed, ocsd.ErrInvalidParamVal
-		case ocsd.RespFatalSysErr:
-			return consumed, ocsd.ErrFail
-		default:
-			return consumed, ocsd.ErrDataDecodeFatal
-		}
-	}
-
 	switch op {
 	case ocsd.OpData:
-		consumed, resp, err := p.processData(index, dataBlock)
-		return mapRespErr(consumed, resp, err)
+		return p.processData(index, dataBlock)
 	case ocsd.OpEOT:
-		return mapRespErr(0, p.onEOT(), nil)
+		return 0, ocsd.DataErrFromResp(p.onEOT(), nil)
 	case ocsd.OpReset:
-		return mapRespErr(0, p.onReset(), nil)
+		return 0, ocsd.DataErrFromResp(p.onReset(), nil)
 	case ocsd.OpFlush:
-		return mapRespErr(0, p.onFlush(), nil)
+		return 0, ocsd.DataErrFromResp(p.onFlush(), nil)
 	}
 	return 0, nil
 }
@@ -243,9 +220,9 @@ func (p *Processor) TraceDataReset(index ocsd.TrcIndex) error {
 	return err
 }
 
-func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
+func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if !p.isInit {
-		return 0, ocsd.RespFatalNotInit, nil
+		return 0, ocsd.ErrNotInit
 	}
 
 	p.blockIndex = index
@@ -298,11 +275,11 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 			p.processState = ProcData
 
 		case ProcErr:
-			return uint32(consumed), resp, nil
+			return uint32(consumed), ocsd.DataErrFromResp(resp, nil)
 		}
 	}
 
-	return uint32(consumed), resp, nil
+	return uint32(consumed), ocsd.DataErrFromResp(resp, nil)
 }
 
 func (p *Processor) onEOT() ocsd.DatapathResp {

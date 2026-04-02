@@ -1,7 +1,6 @@
 package itm
 
 import (
-	"errors"
 	"fmt"
 
 	"opencsd/internal/common"
@@ -274,21 +273,14 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 
 	d.itmInfo = ocsd.SWTItmInfo{}
 
-	if d.CurrPacketIn.Err != nil {
-		switch {
-		case errors.Is(d.CurrPacketIn.Err, errIncompleteEOT):
-			return resp
-		case errors.Is(d.CurrPacketIn.Err, ocsd.ErrBadPacketSeq), errors.Is(d.CurrPacketIn.Err, ocsd.ErrInvalidPcktHdr):
-			resp = ocsd.RespFatalInvalidData
-			d.unsyncInfo = ocsd.UnsyncBadPacket
-			d.resetDecoder()
-			return resp
-		default:
-			resp = ocsd.RespFatalInvalidData
-			d.unsyncInfo = ocsd.UnsyncBadPacket
-			d.resetDecoder()
-			return resp
-		}
+	switch d.CurrPacketIn.Type {
+	case PktIncompleteEOT:
+		return resp
+	case PktBadSequence, PktReserved:
+		resp = ocsd.RespFatalInvalidData
+		d.unsyncInfo = ocsd.UnsyncBadPacket
+		d.resetDecoder()
+		return resp
 	}
 
 	switch d.CurrPacketIn.Type {

@@ -5,7 +5,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"testing"
 
 	"opencsd/internal/snapshot"
 )
@@ -189,15 +188,6 @@ func ParseHexOrDec(s string) uint64 {
 	v, err := parseHexOrDecErr(s)
 	if err != nil {
 		return 0
-	}
-	return v
-}
-
-func ParseHexOrDecTB(t testing.TB, s string) uint64 {
-	t.Helper()
-	v, err := parseHexOrDecErr(s)
-	if err != nil {
-		t.Fatalf("%v", err)
 	}
 	return v
 }

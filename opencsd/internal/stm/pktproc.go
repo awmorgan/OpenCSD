@@ -228,7 +228,8 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			err = fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
 			resp = ocsd.RespFatalInvalidParam
 		} else {
-			processed, resp, err = p.ProcessData(index, dataBlock)
+			processed, err = p.ProcessData(index, dataBlock)
+			resp = ocsd.DataRespFromErr(err)
 		}
 	case ocsd.OpEOT:
 		resp = p.OnEOT()
@@ -313,7 +314,7 @@ func (p *PktProc) TraceDataReset(index ocsd.TrcIndex) error {
 	return err
 }
 
-func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
+func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	resp := ocsd.RespCont
 	var err error
 	p.dataIn = dataBlock
@@ -334,7 +335,16 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, oc
 		}
 	}
 
-	return p.dataInUsed, resp, err
+	if ocsd.DataRespIsCont(resp) {
+		return p.dataInUsed, nil
+	}
+	if ocsd.DataRespIsWait(resp) {
+		return p.dataInUsed, ocsd.ErrWait
+	}
+	if err != nil {
+		return p.dataInUsed, err
+	}
+	return p.dataInUsed, ocsd.DataErrFromResp(resp, nil)
 }
 
 func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp, err error, handled bool) {
@@ -387,7 +397,8 @@ func (p *PktProc) handleProcError(err error) (resp ocsd.DatapathResp, outErr err
 func (p *PktProc) OnEOT() ocsd.DatapathResp {
 	resp := ocsd.RespCont
 	if p.numNibbles > 0 {
-		p.currPacket.Err = errIncompleteEOT
+		p.currPacket.OrigType = p.currPacket.Type
+		p.currPacket.SetPacketType(PktIncompleteEOT, false)
 		resp = p.outputPacket()
 	}
 	return resp
@@ -429,16 +440,17 @@ func (p *PktProc) outputPacket() ocsd.DatapathResp {
 // setBadSequenceError records a bad-sequence error on the processor.
 // Callers must return immediately after calling this.
 func (p *PktProc) setBadSequenceError(msg string) error {
-	p.currPacket.Err = fmt.Errorf("%w: %s", ocsd.ErrBadPacketSeq, msg)
-	return p.currPacket.Err
+	p.currPacket.OrigType = p.currPacket.Type
+	p.currPacket.SetPacketType(PktBadSequence, false)
+	return fmt.Errorf("%w: %s", ocsd.ErrBadPacketSeq, msg)
 }
 
 // setReservedHdrError records a reserved-header error on the processor.
 // Callers must return immediately after calling this.
 func (p *PktProc) setReservedHdrError(msg string) error {
+	p.currPacket.OrigType = p.currPacket.Type
 	p.currPacket.SetPacketType(PktReserved, false)
-	p.currPacket.Err = fmt.Errorf("%w: %s", ocsd.ErrInvalidPcktHdr, msg)
-	return p.currPacket.Err
+	return fmt.Errorf("%w: %s", ocsd.ErrInvalidPcktHdr, msg)
 }
 
 func (p *PktProc) resetProcessorState() {

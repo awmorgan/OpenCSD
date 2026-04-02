@@ -365,11 +365,11 @@ func TestITMPacketStringVariants(t *testing.T) {
 		t.Fatalf("expected non-empty SWIT string")
 	}
 
-	pkt.Err = ocsd.ErrBadPacketSeq
+	pkt.Type = PktBadSequence
 	if !pkt.IsBadPacket() {
 		t.Errorf("Expected bad packet")
 	}
-	pkt.Err = nil
+	pkt.Type = PktSWIT
 
 	pkt.Type = PktTSLocal
 	for id := range uint8(4) {

@@ -1,11 +1,8 @@
 package stm
 
 import (
-	"errors"
 	"fmt"
 	"strings"
-
-	"opencsd/internal/ocsd"
 )
 
 // PktType represents STM protocol packet types.
@@ -56,7 +53,8 @@ const (
 
 // Packet represents a trace packet with packet printing functionality
 type Packet struct {
-	Type PktType
+	Type     PktType
+	OrigType PktType
 
 	Master  uint8
 	Channel uint16
@@ -75,11 +73,7 @@ type Packet struct {
 		D32 uint32
 		D64 uint64
 	}
-
-	Err error
 }
-
-var errIncompleteEOT = errors.New("incomplete packet flushed at end of trace")
 
 // ResetStartState initializes packet state at start of decoder.
 func (p *Packet) ResetStartState() {
@@ -88,12 +82,13 @@ func (p *Packet) ResetStartState() {
 	p.Timestamp = 0
 	p.TSType = TSUnknown
 	p.Type = PktNotSync
+	p.OrigType = PktNotSync
 	p.ResetNextPacket()
 }
 
 // ResetNextPacket initializes state for the next packet.
 func (p *Packet) ResetNextPacket() {
-	p.Err = nil
+	p.OrigType = p.Type
 	p.PktTSBits = 0
 	p.PktHasMarker = 0
 	p.PktHasTS = 0
@@ -152,7 +147,7 @@ func (p *Packet) IsTSPkt() bool {
 }
 
 func (p *Packet) IsBadPacket() bool {
-	return p.Err != nil
+	return p.Type == PktIncompleteEOT || p.Type == PktBadSequence || p.Type == PktReserved
 }
 
 func (p *Packet) pktTypeName(pktType PktType) string {
@@ -206,7 +201,7 @@ func (p *Packet) String() string {
 	var sb strings.Builder
 	var name, desc string
 	addMarkerTS := false
-	displayType := p.displayType()
+	displayType := p.Type
 
 	switch displayType {
 	case PktReserved:
@@ -282,7 +277,7 @@ func (p *Packet) String() string {
 
 	switch displayType {
 	case PktIncompleteEOT, PktBadSequence:
-		fmt.Fprintf(&sb, "[%s]", p.pktTypeName(p.Type))
+		fmt.Fprintf(&sb, "[%s]", p.pktTypeName(p.OrigType))
 	case PktVersion:
 		fmt.Fprintf(&sb, "; Ver=%d", p.Payload.D8)
 	case PktFreq:
@@ -316,20 +311,4 @@ func (p *Packet) String() string {
 	}
 
 	return sb.String()
-}
-
-func (p *Packet) displayType() PktType {
-	if p.Err == nil {
-		return p.Type
-	}
-	if errors.Is(p.Err, ocsd.ErrInvalidPcktHdr) {
-		return PktReserved
-	}
-	if errors.Is(p.Err, errIncompleteEOT) {
-		return PktIncompleteEOT
-	}
-	if errors.Is(p.Err, ocsd.ErrBadPacketSeq) {
-		return PktBadSequence
-	}
-	return p.Type
 }

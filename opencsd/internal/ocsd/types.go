@@ -112,8 +112,9 @@ const (
 	OpReset DatapathOp = 3
 )
 
-// DatapathResp represents trace datapath responses.
-type DatapathResp uint32
+// DatapathResp is a transitional uint32 alias while datapath code migrates
+// to standard Go error-only control flow.
+type DatapathResp = uint32
 
 const (
 	RespCont              DatapathResp = 0

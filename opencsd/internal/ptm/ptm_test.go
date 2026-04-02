@@ -847,7 +847,7 @@ func TestDecoderContProcess(t *testing.T) {
 	// BadSequence
 	pkt.ResetState()
 	pkt.Type = PktASync
-	pkt.Err = ocsd.ErrBadPacketSeq
+	pkt.Type = PktBadSequence
 	dec.PacketDataIn(ocsd.OpData, 3, pkt)
 
 	// ExceptionRet

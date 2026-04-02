@@ -166,7 +166,8 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			err = fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
 			resp = ocsd.RespFatalInvalidParam
 		} else {
-			processed, resp, err = p.ProcessData(index, dataBlock)
+			processed, err = p.ProcessData(index, dataBlock)
+			resp = ocsd.DataRespFromErr(err)
 		}
 	case ocsd.OpEOT:
 		resp = p.OnEOT()
@@ -303,7 +304,7 @@ func (p *PktProc) OnEOT() ocsd.DatapathResp {
 	return resp
 }
 
-func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, ocsd.DatapathResp, error) {
+func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	resp := ocsd.RespCont
 	p.bytesProcessed = 0
 	dataBlockSize := len(dataBlock)
@@ -339,10 +340,25 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, oc
 		if err == nil {
 			err = ocsd.ErrPktInterpFail
 		}
-		return uint32(p.bytesProcessed), resp, err
+		if ocsd.DataRespIsCont(resp) {
+			return uint32(p.bytesProcessed), nil
+		}
+		if ocsd.DataRespIsWait(resp) {
+			return uint32(p.bytesProcessed), ocsd.ErrWait
+		}
+		if err != nil {
+			return uint32(p.bytesProcessed), err
+		}
+		return uint32(p.bytesProcessed), ocsd.DataErrFromResp(resp, nil)
 	}
 
-	return uint32(p.bytesProcessed), resp, nil
+	if ocsd.DataRespIsCont(resp) {
+		return uint32(p.bytesProcessed), nil
+	}
+	if ocsd.DataRespIsWait(resp) {
+		return uint32(p.bytesProcessed), ocsd.ErrWait
+	}
+	return uint32(p.bytesProcessed), ocsd.DataErrFromResp(resp, nil)
 }
 
 func (p *PktProc) waitForSync(dataBlock []byte) int {
