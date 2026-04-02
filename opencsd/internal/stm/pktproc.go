@@ -76,6 +76,12 @@ const (
 
 type procStateFn func(ocsd.TrcIndex) (ocsd.DatapathResp, error, bool)
 
+type packetEvent struct {
+	index ocsd.TrcIndex
+	pkt   Packet
+	data  []byte
+}
+
 // PktProc converts the byte stream into basic STM trace packets.
 type PktProc struct {
 	Name       string
@@ -115,6 +121,8 @@ type PktProc struct {
 	packetData              []byte
 	packetDataRef           *[]byte
 	bWaitSyncSaveSuppressed bool
+	pendingPackets          []packetEvent
+	collectPackets          bool
 
 	val8  uint8
 	val16 uint16
@@ -236,10 +244,29 @@ func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, 
 }
 
 func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pktData []byte) ocsd.DatapathResp {
+	if p.collectPackets {
+		dataCopy := append([]byte(nil), pktData...)
+		p.pendingPackets = append(p.pendingPackets, packetEvent{index: indexSOP, pkt: *pkt, data: dataCopy})
+		return ocsd.RespCont
+	}
 	if len(pktData) > 0 {
 		p.outputRawPacketToMonitor(indexSOP, pkt, pktData)
 	}
 	return p.outputDecodedPacket(indexSOP, pkt)
+}
+
+// NextPacket returns the next queued packet event for pull-style consumption.
+func (p *PktProc) NextPacket() (ocsd.TrcIndex, Packet, []byte, error) {
+	if len(p.pendingPackets) == 0 {
+		return 0, Packet{}, nil, io.EOF
+	}
+	e := p.pendingPackets[0]
+	p.pendingPackets = p.pendingPackets[1:]
+	return e.index, e.pkt, e.data, nil
+}
+
+func (p *PktProc) putBackPacket(index ocsd.TrcIndex, pkt Packet, data []byte) {
+	p.pendingPackets = append([]packetEvent{{index: index, pkt: pkt, data: data}}, p.pendingPackets...)
 }
 
 func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
@@ -253,8 +280,37 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			err = fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
 			resp = ocsd.RespFatalInvalidParam
 		} else {
+			p.collectPackets = true
 			processed, err = p.ProcessData(index, dataBlock)
+			p.collectPackets = false
 			resp = ocsd.DataRespFromErr(err)
+			if !ocsd.DataRespIsCont(resp) {
+				break
+			}
+			resp = ocsd.RespCont
+			err = nil
+			for {
+				evtIndex, evtPkt, evtData, nextErr := p.NextPacket()
+				if errors.Is(nextErr, io.EOF) {
+					break
+				}
+				if nextErr != nil {
+					err = nextErr
+					resp = ocsd.RespFatalSysErr
+					break
+				}
+				if len(evtData) > 0 {
+					p.outputRawPacketToMonitor(evtIndex, &evtPkt, evtData)
+				}
+				resp = p.outputDecodedPacket(evtIndex, &evtPkt)
+				if ocsd.DataRespIsWait(resp) {
+					p.putBackPacket(evtIndex, evtPkt, evtData)
+					break
+				}
+				if ocsd.DataRespIsFatal(resp) {
+					break
+				}
+			}
 		}
 	case ocsd.OpEOT:
 		resp = p.OnEOT()
@@ -516,6 +572,8 @@ func (p *PktProc) resetProcessorState() {
 	p.nibble2ndValid = false
 	p.resetNextPacket()
 	p.bWaitSyncSaveSuppressed = false
+	p.pendingPackets = p.pendingPackets[:0]
+	p.collectPackets = false
 	if p.packetData == nil {
 		p.packetDataRef = stmGetPacketBufRef()
 		p.packetData = (*p.packetDataRef)[:0]

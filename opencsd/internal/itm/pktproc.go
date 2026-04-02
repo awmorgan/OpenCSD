@@ -35,6 +35,14 @@ const (
 
 type procStateFn func(ocsd.TrcIndex) (ocsd.DatapathResp, error, bool)
 
+type packetEvent struct {
+	index       ocsd.TrcIndex
+	pkt         Packet
+	data        []byte
+	emitRaw     bool
+	emitDecoded bool
+}
+
 var itmPacketDataPool = sync.Pool{
 	New: func() any {
 		b := make([]byte, 0, 64)
@@ -69,6 +77,8 @@ type PktProc struct {
 	sentNotSyncPacket bool
 	syncStart         bool
 	dumpUnsyncedBytes int
+	pendingPackets    []packetEvent
+	collectPackets    bool
 
 	decodeState packetDecodeState
 }
@@ -149,6 +159,10 @@ func (p *PktProc) StatsAddBadSeqCount(count uint32) { p.Stats.BadSequenceErrs +=
 func (p *PktProc) StatsAddBadHdrCount(count uint32) { p.Stats.BadHeaderErrs += count }
 
 func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) ocsd.DatapathResp {
+	if p.collectPackets {
+		p.pendingPackets = append(p.pendingPackets, packetEvent{index: indexSOP, pkt: *pkt, emitDecoded: true})
+		return ocsd.RespCont
+	}
 	if p.pktOut != nil {
 		return ocsd.DataRespFromErr(p.callPktOut(ocsd.OpData, indexSOP, pkt))
 	}
@@ -174,16 +188,40 @@ func (p *PktProc) callPktOut(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Pa
 }
 
 func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, pData []byte) {
+	if p.collectPackets {
+		dataCopy := append([]byte(nil), pData...)
+		p.pendingPackets = append(p.pendingPackets, packetEvent{index: indexSOP, pkt: *pkt, data: dataCopy, emitRaw: true})
+		return
+	}
 	if p.PktRawMonI != nil && len(pData) > 0 {
 		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, indexSOP, pkt, pData)
 	}
 }
 
 func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pktData []byte) ocsd.DatapathResp {
+	if p.collectPackets {
+		dataCopy := append([]byte(nil), pktData...)
+		p.pendingPackets = append(p.pendingPackets, packetEvent{index: indexSOP, pkt: *pkt, data: dataCopy, emitRaw: len(pktData) > 0, emitDecoded: true})
+		return ocsd.RespCont
+	}
 	if len(pktData) > 0 {
 		p.outputRawPacketToMonitor(indexSOP, pkt, pktData)
 	}
 	return p.outputDecodedPacket(indexSOP, pkt)
+}
+
+// NextPacket returns the next queued packet event for pull-style consumption.
+func (p *PktProc) NextPacket() (packetEvent, error) {
+	if len(p.pendingPackets) == 0 {
+		return packetEvent{}, io.EOF
+	}
+	e := p.pendingPackets[0]
+	p.pendingPackets = p.pendingPackets[1:]
+	return e, nil
+}
+
+func (p *PktProc) putBackPacket(e packetEvent) {
+	p.pendingPackets = append([]packetEvent{e}, p.pendingPackets...)
 }
 
 func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
@@ -197,8 +235,37 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			err = fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
 			resp = ocsd.RespFatalInvalidParam
 		} else {
+			p.collectPackets = true
 			processed, err = p.ProcessData(index, dataBlock)
+			p.collectPackets = false
 			resp = ocsd.DataRespFromErr(err)
+			if ocsd.DataRespIsCont(resp) {
+				err = nil
+				for {
+					e, nextErr := p.NextPacket()
+					if errors.Is(nextErr, io.EOF) {
+						break
+					}
+					if nextErr != nil {
+						err = nextErr
+						resp = ocsd.RespFatalSysErr
+						break
+					}
+					if e.emitRaw && len(e.data) > 0 {
+						p.outputRawPacketToMonitor(e.index, &e.pkt, e.data)
+					}
+					if e.emitDecoded {
+						resp = p.outputDecodedPacket(e.index, &e.pkt)
+						if ocsd.DataRespIsWait(resp) {
+							p.putBackPacket(e)
+							break
+						}
+						if ocsd.DataRespIsFatal(resp) {
+							break
+						}
+					}
+				}
+			}
 		}
 	case ocsd.OpEOT:
 		resp = p.OnEOT()
@@ -297,6 +364,8 @@ func (p *PktProc) resetProcessorState() {
 	p.sentNotSyncPacket = false
 	p.syncStart = false
 	p.dumpUnsyncedBytes = 0
+	p.pendingPackets = p.pendingPackets[:0]
+	p.collectPackets = false
 }
 
 func (p *PktProc) resetNextPacket() {
