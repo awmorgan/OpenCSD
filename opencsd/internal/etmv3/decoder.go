@@ -3,9 +3,16 @@ package etmv3
 import (
 	"errors"
 	"fmt"
+	"io"
 	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
+
+type traceElemEvent struct {
+	index   ocsd.TrcIndex
+	traceID uint8
+	elem    ocsd.TraceElement
+}
 
 type decoderState int
 
@@ -54,6 +61,10 @@ type PktDecode struct {
 	pendingNaccMem ocsd.MemSpaceAcc
 
 	csID uint8
+
+	// Pull-iterator fields (for API consistency with other decoders)
+	pendingElements []traceElemEvent
+	collectElements bool
 }
 
 func (d *PktDecode) ComponentOpMode() uint32  { return d.opMode.ComponentOpMode() }
@@ -197,7 +208,24 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 		} else {
 			d.CurrPacketIn = pktIn
 			d.IndexCurrPkt = indexSOP
+			d.collectElements = true
 			resp = d.ProcessPacket()
+			d.collectElements = false
+			// Drain queued elements
+			if ocsd.DataRespIsCont(resp) {
+				packetErr = nil
+				for {
+					_, _, _, nextErr := d.NextElement()
+					if errors.Is(nextErr, io.EOF) {
+						break
+					}
+					if nextErr != nil {
+						packetErr = nextErr
+						resp = ocsd.DataRespFromErr(nextErr)
+						break
+					}
+				}
+			}
 		}
 	case ocsd.OpEOT:
 		resp = d.OnEOT()
@@ -232,6 +260,35 @@ func (d *PktDecode) TracePacketReset(indexSOP ocsd.TrcIndex) error {
 	return d.PacketDataIn(ocsd.OpReset, indexSOP, nil)
 }
 
+// NextElement returns the next queued trace element or EOF if none available.
+func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
+	if len(d.pendingElements) == 0 {
+		return 0, 0, ocsd.TraceElement{}, io.EOF
+	}
+	e := d.pendingElements[0]
+	d.pendingElements = d.pendingElements[1:]
+	if d.TraceElemOut != nil {
+		err := d.TraceElemOut.TraceElemIn(e.index, e.traceID, &e.elem)
+		if ocsd.IsDataContErr(err) {
+			return e.index, e.traceID, e.elem, nil
+		}
+		if ocsd.IsDataWaitErr(err) {
+			d.putBackElement(e.index, e.traceID, e.elem)
+			return 0, 0, ocsd.TraceElement{}, ocsd.ErrWait
+		}
+		if err != nil {
+			return 0, 0, ocsd.TraceElement{}, err
+		}
+	}
+	return e.index, e.traceID, e.elem, nil
+}
+
+// putBackElement unreads an element to the front of the pending queue.
+func (d *PktDecode) putBackElement(index ocsd.TrcIndex, traceID uint8, elem ocsd.TraceElement) {
+	e := traceElemEvent{index, traceID, elem}
+	d.pendingElements = append([]traceElemEvent{e}, d.pendingElements...)
+}
+
 func (d *PktDecode) configureDecoder() {
 	d.csID = 0
 	d.resetDecoder()
@@ -249,6 +306,7 @@ func (d *PktDecode) resetDecoder() {
 	d.pendingNaccIdx = 0
 	d.pendingNaccAdr = 0
 	d.pendingNaccMem = ocsd.MemSpaceNone
+	d.pendingElements = d.pendingElements[:0]
 	d.outputElemList.Reset()
 }
 
