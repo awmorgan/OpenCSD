@@ -74,6 +74,8 @@ const (
 	decodeExtractTS
 )
 
+type procStateFn func(ocsd.TrcIndex) (ocsd.DatapathResp, error, bool)
+
 // PktProc converts the byte stream into basic STM trace packets.
 type PktProc struct {
 	Name       string
@@ -373,34 +375,60 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 }
 
 func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp, err error, handled bool) {
-	resp = ocsd.RespCont
+	fn := p.currentProcStateFn()
+	if fn == nil {
+		return ocsd.RespCont, nil, false
+	}
+	return fn(index)
+}
 
+func (p *PktProc) currentProcStateFn() procStateFn {
 	switch p.procState {
 	case procWaitSync:
-		p.waitForSync(index)
+		return p.stateWaitSync
 	case procHdrState:
-		p.packetIndex = index + ocsd.TrcIndex(p.dataInUsed)
-		if p.readNibble() {
-			p.procState = procDataState
-			p.currDecode = p.op1N[p.nibble]
-		} else {
-			break
-		}
-		fallthrough
+		return p.stateHdr
 	case procDataState:
-		err = p.runDecodeAction()
-		if errResp, loopErr, errHandled := p.handleProcError(err); errHandled {
-			return errResp, loopErr, true
-		}
-		if p.procState != procSendPkt {
-			break
-		}
-		fallthrough
+		return p.stateData
 	case procSendPkt:
-		resp = p.outputPacket()
+		return p.stateSendPkt
+	default:
+		return nil
 	}
+}
 
-	return resp, nil, false
+func (p *PktProc) stateWaitSync(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool) {
+	p.waitForSync(index)
+	if p.procState == procSendPkt {
+		return p.stateSendPkt(index)
+	}
+	return ocsd.RespCont, nil, false
+}
+
+func (p *PktProc) stateHdr(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool) {
+	p.packetIndex = index + ocsd.TrcIndex(p.dataInUsed)
+	if p.readNibble() {
+		p.procState = procDataState
+		p.currDecode = p.op1N[p.nibble]
+		return p.stateData(index)
+	}
+	return ocsd.RespCont, nil, false
+}
+
+func (p *PktProc) stateData(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool) {
+	err := p.runDecodeAction()
+	if errResp, loopErr, errHandled := p.handleProcError(err); errHandled {
+		return errResp, loopErr, true
+	}
+	if p.procState == procSendPkt {
+		return p.stateSendPkt(index)
+	}
+	return ocsd.RespCont, nil, false
+}
+
+func (p *PktProc) stateSendPkt(_ ocsd.TrcIndex) (ocsd.DatapathResp, error, bool) {
+	resp := p.outputPacket()
+	return resp, nil, true
 }
 
 func (p *PktProc) handleProcError(err error) (resp ocsd.DatapathResp, outErr error, handled bool) {
