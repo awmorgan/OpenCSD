@@ -16,6 +16,8 @@ const (
 	dcdDecodePkts
 )
 
+type stateFn func() (stateFn, ocsd.DatapathResp, bool)
+
 type PktDecode struct {
 	Name         string
 	opMode       common.OpMode
@@ -184,24 +186,46 @@ func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
 	d.decodePass1 = true
 
 	var resp ocsd.DatapathResp
-	for {
-		var next decoderState
-		var done bool
-		switch d.currState {
-		case dcdNoSync:
-			next, resp, done = d.handleNoSync()
-		case dcdWaitSync:
-			next, resp, done = d.handleWaitSync()
-		case dcdDecodePkts:
-			next, resp, done = d.handleDecodePkts()
-		default:
-			return ocsd.RespCont
-		}
-		d.currState = next
+	for fn := d.currentStateFn(); fn != nil; {
+		next, loopResp, done := fn()
+		resp = loopResp
 		if done {
 			return resp
 		}
+		fn = next
 	}
+	return ocsd.RespCont
+}
+
+func (d *PktDecode) currentStateFn() stateFn {
+	switch d.currState {
+	case dcdNoSync:
+		return d.stateNoSync
+	case dcdWaitSync:
+		return d.stateWaitSync
+	case dcdDecodePkts:
+		return d.stateDecodePkts
+	default:
+		return nil
+	}
+}
+
+func (d *PktDecode) stateNoSync() (stateFn, ocsd.DatapathResp, bool) {
+	next, resp, done := d.handleNoSync()
+	d.currState = next
+	return d.currentStateFn(), resp, done
+}
+
+func (d *PktDecode) stateWaitSync() (stateFn, ocsd.DatapathResp, bool) {
+	next, resp, done := d.handleWaitSync()
+	d.currState = next
+	return d.currentStateFn(), resp, done
+}
+
+func (d *PktDecode) stateDecodePkts() (stateFn, ocsd.DatapathResp, bool) {
+	next, resp, done := d.handleDecodePkts()
+	d.currState = next
+	return d.currentStateFn(), resp, done
 }
 
 func (d *PktDecode) handleNoSync() (decoderState, ocsd.DatapathResp, bool) {

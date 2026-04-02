@@ -1,8 +1,12 @@
 package stm
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"sync"
 
 	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
@@ -16,6 +20,13 @@ const (
 	procDataState
 	procSendPkt
 )
+
+var stmPacketDataPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 0, 64)
+		return &b
+	},
+}
 
 type decodeAction int
 
@@ -95,9 +106,12 @@ type PktProc struct {
 	dataIn      []byte
 	dataInSize  uint32
 	dataInUsed  uint32
+	blockReader *bytes.Reader
+	dataReader  *bufio.Reader
 	packetIndex ocsd.TrcIndex
 
 	packetData              []byte
+	packetDataRef           *[]byte
 	bWaitSyncSaveSuppressed bool
 
 	val8  uint8
@@ -131,6 +145,8 @@ func NewPktProc(cfg *Config) *PktProc {
 	p := &PktProc{
 		Name: fmt.Sprintf("PKTP_STM_%d", instIDNum),
 	}
+	p.packetDataRef = stmGetPacketBufRef()
+	p.packetData = (*p.packetDataRef)[:0]
 	p.ResetStats()
 	p.ConfigureSupportedOpModes(ocsd.OpflgPktprocCommon)
 	p.resetProcessorState()
@@ -327,6 +343,8 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 	p.dataIn = dataBlock
 	p.dataInSize = uint32(len(dataBlock))
 	p.dataInUsed = 0
+	p.blockReader = bytes.NewReader(dataBlock)
+	p.dataReader = bufio.NewReaderSize(p.blockReader, 4096)
 
 	for p.dataToProcess() && ocsd.DataRespIsCont(resp) {
 		errResp, loopErr, handled := p.processStateLoop(index)
@@ -430,8 +448,11 @@ func (p *PktProc) IsBadPacket() bool {
 }
 
 func (p *PktProc) outputPacket() ocsd.DatapathResp {
-	resp := p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, p.packetData)
-	p.packetData = p.packetData[:0]
+	pktData := p.packetData
+	resp := p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, pktData)
+	stmPutPacketBufRef(p.packetDataRef, pktData)
+	p.packetDataRef = stmGetPacketBufRef()
+	p.packetData = (*p.packetDataRef)[:0]
 	p.resetNextPacket()
 	if p.nibble2ndValid {
 		p.savePacketByte(p.nibble2nd << 4)
@@ -467,7 +488,10 @@ func (p *PktProc) resetProcessorState() {
 	p.nibble2ndValid = false
 	p.resetNextPacket()
 	p.bWaitSyncSaveSuppressed = false
-	p.packetData = nil
+	if p.packetData == nil {
+		p.packetDataRef = stmGetPacketBufRef()
+		p.packetData = (*p.packetDataRef)[:0]
+	}
 }
 
 func (p *PktProc) resetNextPacket() {
@@ -1027,19 +1051,44 @@ func (p *PktProc) readNibble() bool {
 		p.nibble2ndValid = false
 		p.numNibbles++
 		p.checkSyncNibble()
-	} else if p.dataInUsed < p.dataInSize {
-		p.nibble = p.dataIn[p.dataInUsed]
-		p.dataInUsed++
+	} else {
+		streamByte, ok := p.readStreamByte()
+		if !ok {
+			return false
+		}
+		p.nibble = streamByte
 		p.savePacketByte(p.nibble)
 		p.nibble2nd = (p.nibble >> 4) & 0xF
 		p.nibble2ndValid = true
 		p.nibble &= 0xF
 		p.numNibbles++
 		p.checkSyncNibble()
-	} else {
-		dataFound = false
 	}
 	return dataFound
+}
+
+func (p *PktProc) readStreamByte() (byte, bool) {
+	if p.dataReader == nil {
+		return 0, false
+	}
+	var single [1]byte
+	_, err := io.ReadFull(p.dataReader, single[:])
+	if err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return 0, false
+		}
+		return 0, false
+	}
+	p.refreshDataUsed()
+	return single[0], true
+}
+
+func (p *PktProc) refreshDataUsed() {
+	if p.blockReader == nil || p.dataReader == nil {
+		return
+	}
+	remaining := p.blockReader.Len() + p.dataReader.Buffered()
+	p.dataInUsed = p.dataInSize - uint32(remaining)
 }
 
 func (p *PktProc) pktNeedsTS() {
@@ -1253,5 +1302,18 @@ func (p *PktProc) savePacketByte(val uint8) {
 }
 
 func (p *PktProc) dataToProcess() bool {
-	return (p.dataInUsed < p.dataInSize) || p.nibble2ndValid || (p.procState == procSendPkt)
+	hasStream := p.dataReader != nil && (p.dataReader.Buffered() > 0 || (p.blockReader != nil && p.blockReader.Len() > 0))
+	return hasStream || p.nibble2ndValid || (p.procState == procSendPkt)
+}
+
+func stmGetPacketBufRef() *[]byte {
+	return stmPacketDataPool.Get().(*[]byte)
+}
+
+func stmPutPacketBufRef(bufRef *[]byte, buf []byte) {
+	if bufRef == nil {
+		return
+	}
+	*bufRef = buf[:0]
+	stmPacketDataPool.Put(bufRef)
 }

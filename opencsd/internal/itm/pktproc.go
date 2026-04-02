@@ -1,9 +1,12 @@
 package itm
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"sync"
 
 	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
@@ -30,6 +33,13 @@ const (
 	decodeGlobalTS2
 )
 
+var itmPacketDataPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 0, 64)
+		return &b
+	},
+}
+
 // PktProc converts incoming byte stream into ITM packets
 type PktProc struct {
 	Name       string
@@ -47,11 +57,13 @@ type PktProc struct {
 	dataIn      []byte
 	dataInSize  uint32
 	dataInUsed  uint32
-	dataReader  *bytes.Reader
+	blockReader *bytes.Reader
+	dataReader  *bufio.Reader
 	packetIndex ocsd.TrcIndex
 
 	headerByte        uint8
 	packetData        []uint8
+	packetDataRef     *[]byte
 	sentNotSyncPacket bool
 	syncStart         bool
 	dumpUnsyncedBytes int
@@ -75,6 +87,8 @@ func NewPktProc(cfg *Config) *PktProc {
 	p := &PktProc{
 		Name: fmt.Sprintf("PKTP_ITM_%d", instID),
 	}
+	p.packetDataRef = itmGetPacketBufRef()
+	p.packetData = (*p.packetDataRef)[:0]
 	p.ResetStats()
 	p.ConfigureSupportedOpModes(ocsd.OpflgPktprocCommon)
 	p.resetProcessorState()
@@ -284,6 +298,10 @@ func (p *PktProc) resetProcessorState() {
 }
 
 func (p *PktProc) resetNextPacket() {
+	if p.packetData == nil {
+		p.packetDataRef = itmGetPacketBufRef()
+		p.packetData = (*p.packetDataRef)[:0]
+	}
 	p.packetData = p.packetData[:0] // clear
 	p.currPacket.Reset()
 	p.decodeState = decodeNone
@@ -298,7 +316,7 @@ func (p *PktProc) dataToProcess() bool {
 	if p.procState == procSendPkt {
 		return true
 	}
-	return p.dataReader != nil && p.dataReader.Len() > 0
+	return p.dataReader != nil && (p.dataReader.Buffered() > 0 || (p.blockReader != nil && p.blockReader.Len() > 0))
 }
 
 func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
@@ -307,7 +325,8 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 	p.dataIn = dataBlock
 	p.dataInSize = uint32(len(dataBlock))
 	p.dataInUsed = 0
-	p.dataReader = bytes.NewReader(dataBlock)
+	p.blockReader = bytes.NewReader(dataBlock)
+	p.dataReader = bufio.NewReaderSize(p.blockReader, 4096)
 
 	for p.dataToProcess() && ocsd.DataRespIsCont(resp) {
 		errResp, loopErr, handled := p.processStateLoop(index)
@@ -406,8 +425,11 @@ func (p *PktProc) IsBadPacket() bool {
 }
 
 func (p *PktProc) outputPacket() ocsd.DatapathResp {
-	resp := p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, p.packetData)
-	p.packetData = p.packetData[:0]
+	pktData := p.packetData
+	resp := p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, pktData)
+	itmPutPacketBufRef(p.packetDataRef, pktData)
+	p.packetDataRef = itmGetPacketBufRef()
+	p.packetData = (*p.packetDataRef)[:0]
 	p.resetNextPacket()
 	if p.streamSync {
 		p.procState = procHdr
@@ -439,12 +461,20 @@ func (p *PktProc) readByte() (byte, bool) {
 	if p.dataReader != nil {
 		b, err := p.dataReader.ReadByte()
 		if err == nil {
-			p.dataInUsed = p.dataInSize - uint32(p.dataReader.Len())
+			p.refreshDataUsed()
 			p.savePacketByte(b)
 			return b, true
 		}
 	}
 	return 0, false
+}
+
+func (p *PktProc) refreshDataUsed() {
+	if p.blockReader == nil || p.dataReader == nil {
+		return
+	}
+	remaining := p.blockReader.Len() + p.dataReader.Buffered()
+	p.dataInUsed = p.dataInSize - uint32(remaining)
 }
 
 func (p *PktProc) ProcessHdr() error {
@@ -526,11 +556,21 @@ func (p *PktProc) PktData() error {
 		p.currPacket.SrcID = (p.headerByte >> 3) & 0x1F
 	}
 
-	for payloadBytesGot < payloadBytesReq {
-		if _, ok := p.readByte(); !ok {
-			break
+	if payloadBytesGot < payloadBytesReq {
+		remaining := payloadBytesReq - payloadBytesGot
+		start := len(p.packetData)
+		p.packetData = append(p.packetData, make([]byte, remaining)...)
+		n, err := io.ReadFull(p.dataReader, p.packetData[start:])
+		if err != nil {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+				p.packetData = p.packetData[:start+n]
+				p.refreshDataUsed()
+				return nil
+			}
+			return err
 		}
-		payloadBytesGot++
+		p.refreshDataUsed()
+		payloadBytesGot += n
 	}
 
 	if payloadBytesGot == payloadBytesReq {
@@ -558,6 +598,18 @@ func (p *PktProc) readContBytes(limit int) bool {
 		bDone = ((b & 0x80) == 0x00)
 	}
 	return bDone
+}
+
+func itmGetPacketBufRef() *[]byte {
+	return itmPacketDataPool.Get().(*[]byte)
+}
+
+func itmPutPacketBufRef(bufRef *[]byte, buf []byte) {
+	if bufRef == nil {
+		return
+	}
+	*bufRef = buf[:0]
+	itmPacketDataPool.Put(bufRef)
 }
 
 func (p *PktProc) extractContVal32() (uint32, error) {
