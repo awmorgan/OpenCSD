@@ -8,15 +8,6 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-type testTrcElemIn struct {
-	elements []ocsd.TraceElement
-}
-
-func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
-	t.elements = append(t.elements, *elem)
-	return nil
-}
-
 type ItmStreamBuilder struct {
 	data []byte
 }
@@ -225,8 +216,7 @@ func TestITMTypedConstructors(t *testing.T) {
 		cfg := &Config{}
 		cfg.SetTraceID(0x24)
 
-		outReceiver := &testTrcElemIn{}
-		proc, dec, err := NewPipeline(5, cfg, outReceiver, nil, nil)
+		proc, dec, err := NewPipeline(5, cfg, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("NewPipeline with deps failed: %v", err)
 		}
