@@ -124,10 +124,7 @@ func TestSendUnsyncPacket_UnsyncInfoPreserved(t *testing.T) {
 
 // TestProcessBranchAddr_NoException_SetsAddr: simple branch updates iAddr.
 func TestProcessBranchAddr_NoException_SetsAddr(t *testing.T) {
-	dec, out := buildDecInDecodePkts(&Config{})
-
-	// Flush out elements from ISync
-	n0 := len(out.elements)
+	dec := buildDecInDecodePktsPull(t, &Config{})
 
 	pkt := &Packet{}
 	pkt.ResetState()
@@ -136,11 +133,7 @@ func TestProcessBranchAddr_NoException_SetsAddr(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpData, 2, pkt)
 
 	// Branch should NOT emit any elements (no exception, just sets address)
-	if len(out.elements) > n0 {
-		// This is actually expected – branch commits pending element
-		// Just verify no crash and decoder stayed in decodePkts
-		_ = out.elements
-	}
+	_ = drainDecodedElements(t, dec)
 	// Verify iAddr was updated (internal field)
 	if dec.iAddr != 0x4000 {
 		t.Errorf("expected iAddr=0x4000, got 0x%X", dec.iAddr)
@@ -153,7 +146,7 @@ func TestProcessBranchAddr_NoException_SetsAddr(t *testing.T) {
 // TestProcessBranchAddr_CancelPendElem: Cancel=true → CancelPendElem called.
 func TestProcessBranchAddr_CancelPendElem(t *testing.T) {
 	config := &Config{}
-	dec, out := buildDecInDecodePkts(config)
+	dec := buildDecInDecodePktsPull(t, config)
 
 	// First send an atom to create a pending InstrRange element
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBr}
@@ -167,7 +160,6 @@ func TestProcessBranchAddr_CancelPendElem(t *testing.T) {
 	phdrPkt.Atom.Num = 1
 	phdrPkt.Atom.EnBits = 0x1
 	dec.PacketDataIn(ocsd.OpData, 2, phdrPkt)
-	n0 := len(out.elements)
 
 	// Now send BranchAddress with Cancel=true → CancelPendElem
 	brPkt := &Packet{}
@@ -177,8 +169,7 @@ func TestProcessBranchAddr_CancelPendElem(t *testing.T) {
 	brPkt.ExceptionCancel = true
 	dec.PacketDataIn(ocsd.OpData, 3, brPkt)
 
-	// Elements shouldn't have grown (the pending elem was cancelled)
-	_ = n0
+	_ = drainDecodedElements(t, dec)
 	if dec.iAddr != 0x5000 {
 		t.Errorf("expected iAddr=0x5000, got 0x%X", dec.iAddr)
 	}
@@ -186,8 +177,7 @@ func TestProcessBranchAddr_CancelPendElem(t *testing.T) {
 
 // TestProcessBranchAddr_ExcepContextUpdate_EmitsPeContext: exception present + context changed.
 func TestProcessBranchAddr_ExcepContextUpdate_EmitsPeContext(t *testing.T) {
-	dec, out := buildDecInDecodePkts(&Config{})
-	n0 := len(out.elements)
+	dec := buildDecInDecodePktsPull(t, &Config{})
 
 	pkt := &Packet{}
 	pkt.ResetState()
@@ -201,12 +191,13 @@ func TestProcessBranchAddr_ExcepContextUpdate_EmitsPeContext(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpData, 2, pkt)
 
 	// Should have emitted at least PeContext + Exception elements
-	if len(out.elements) <= n0 {
+	elems := drainDecodedElements(t, dec)
+	if len(elems) == 0 {
 		t.Error("expected new elements for exception with context update")
 	}
 	hasPeCtx := false
 	hasExcep := false
-	for _, e := range out.elements[n0:] {
+	for _, e := range elems {
 		if e.ElemType == ocsd.GenElemPeContext {
 			hasPeCtx = true
 		}
@@ -229,7 +220,7 @@ func TestProcessBranchAddr_ExcepContextUpdate_EmitsPeContext(t *testing.T) {
 // sec=SecSecure == peContext.SecurityLevel=SecSecure → no security change.
 // el=ELUnknown == peContext.ExceptionLevel=ELUnknown → no EL change → bUpdatePEContext=false.
 func TestProcessBranchAddr_ExcepPresent_SameSecuritySameEL(t *testing.T) {
-	dec, out := buildDecInDecodePkts(&Config{})
+	dec := buildDecInDecodePktsPull(t, &Config{})
 	// ISync in buildDecInDecodePkts doesn't set Context.Updated, so peContext is default.
 	// After first ISync, peContext is reset: SecurityLevel=SecSecure, ExceptionLevel=ELUnknown.
 
@@ -237,8 +228,6 @@ func TestProcessBranchAddr_ExcepPresent_SameSecuritySameEL(t *testing.T) {
 	if dec.peContext.SecurityLevel != ocsd.SecSecure {
 		t.Logf("peContext.SecurityLevel=%v", dec.peContext.SecurityLevel)
 	}
-
-	n0 := len(out.elements)
 
 	pkt := &Packet{}
 	pkt.ResetState()
@@ -254,7 +243,7 @@ func TestProcessBranchAddr_ExcepPresent_SameSecuritySameEL(t *testing.T) {
 
 	// Exception element must be present
 	hasExcep := false
-	for _, e := range out.elements[n0:] {
+	for _, e := range drainDecodedElements(t, dec) {
 		if e.ElemType == ocsd.GenElemException {
 			hasExcep = true
 		}
@@ -266,8 +255,7 @@ func TestProcessBranchAddr_ExcepPresent_SameSecuritySameEL(t *testing.T) {
 
 // TestProcessBranchAddr_ExcepPresent_NumberZero: exception present but Number==0 → no exception elem.
 func TestProcessBranchAddr_ExcepPresent_NumberZero(t *testing.T) {
-	dec, out := buildDecInDecodePkts(&Config{})
-	n0 := len(out.elements)
+	dec := buildDecInDecodePktsPull(t, &Config{})
 
 	pkt := &Packet{}
 	pkt.ResetState()
@@ -278,7 +266,7 @@ func TestProcessBranchAddr_ExcepPresent_NumberZero(t *testing.T) {
 
 	dec.PacketDataIn(ocsd.OpData, 2, pkt)
 
-	for _, e := range out.elements[n0:] {
+	for _, e := range drainDecodedElements(t, dec) {
 		if e.ElemType == ocsd.GenElemException {
 			t.Error("should NOT emit GenElemException when exception.Number == 0")
 		}
