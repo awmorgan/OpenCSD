@@ -131,7 +131,9 @@ func TestGenericElementPrinter(t *testing.T) {
 	// Test muted
 	gp.SetMute(true)
 	elem := ocsd.NewTraceElementWithType(ocsd.GenElemTraceOn)
-	err := gp.TraceElemIn(123, 0x10, elem)
+	elem.Index = 123
+	elem.TraceID = 0x10
+	err := gp.PrintElement(elem)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -142,7 +144,9 @@ func TestGenericElementPrinter(t *testing.T) {
 
 	// test mute id print
 	gp.MuteIDPrint(true)
-	gp.TraceElemIn(100, 0x11, elem)
+	elem.Index = 100
+	elem.TraceID = 0x11
+	gp.PrintElement(elem)
 	if strings.Contains(buf.String(), "Idx:100; ID:11;") {
 		t.Errorf("did not expect id output, got %q", buf.String())
 	}
@@ -150,7 +154,9 @@ func TestGenericElementPrinter(t *testing.T) {
 	buf.Reset()
 
 	// standard elem test
-	gp.TraceElemIn(200, 0x22, elem)
+	elem.Index = 200
+	elem.TraceID = 0x22
+	gp.PrintElement(elem)
 	expt := "Idx:200; ID:22; OCSD_GEN_TRC_ELEM_TRACE_ON( [begin or filter])\n"
 	if buf.String() != expt {
 		t.Errorf("expected %q, got %q", expt, buf.String())
@@ -159,7 +165,9 @@ func TestGenericElementPrinter(t *testing.T) {
 
 	// Test wait functionality
 	gp.SetTestWaits(1)
-	err = gp.TraceElemIn(300, 0x33, elem)
+	elem.Index = 300
+	elem.TraceID = 0x33
+	err = gp.PrintElement(elem)
 	if !ocsd.IsDataWaitErr(err) {
 		t.Fatalf("expected wait sentinel error, got %v", err)
 	}
@@ -169,7 +177,9 @@ func TestGenericElementPrinter(t *testing.T) {
 
 	buf.Reset()
 	// Next element without ack wait
-	gp.TraceElemIn(301, 0x33, elem)
+	elem.Index = 301
+	elem.TraceID = 0x33
+	gp.PrintElement(elem)
 	if !strings.Contains(buf.String(), "WARNING") {
 		t.Errorf("expected warning for unacknowledged wait, got %s", buf.String())
 	}
@@ -180,18 +190,28 @@ func TestGenericElementPrinter(t *testing.T) {
 
 	// with ack wait
 	gp.SetTestWaits(1)
-	gp.TraceElemIn(400, 0x44, elem) // sets needAckWait = true
-	gp.AckWait()                    // manual clear
+	elem.Index = 400
+	elem.TraceID = 0x44
+	gp.PrintElement(elem) // sets needAckWait = true
+	gp.AckWait()          // manual clear
 	buf.Reset()
-	gp.TraceElemIn(401, 0x44, elem)
+	elem.Index = 401
+	elem.TraceID = 0x44
+	gp.PrintElement(elem)
 	if strings.Contains(buf.String(), "WARNING") {
 		t.Errorf("did not expect warning, got %s", buf.String())
 	}
 
 	// Test collect stats
 	gp.SetCollectStats()
-	gp.TraceElemIn(500, 0x55, ocsd.NewTraceElementWithType(ocsd.GenElemPeContext))
-	gp.TraceElemIn(501, 0x55, ocsd.NewTraceElementWithType(ocsd.GenElemPeContext))
+	ctxElemA := ocsd.NewTraceElementWithType(ocsd.GenElemPeContext)
+	ctxElemA.Index = 500
+	ctxElemA.TraceID = 0x55
+	gp.PrintElement(ctxElemA)
+	ctxElemB := ocsd.NewTraceElementWithType(ocsd.GenElemPeContext)
+	ctxElemB.Index = 501
+	ctxElemB.TraceID = 0x55
+	gp.PrintElement(ctxElemB)
 
 	buf.Reset()
 	gp.PrintStats()

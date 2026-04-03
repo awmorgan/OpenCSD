@@ -397,7 +397,7 @@ func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericEl
 		if err != nil {
 			return err
 		}
-		if printErr := printer.TraceElemIn(elem.Index, elem.TraceID, elem); printErr != nil && !ocsd.IsDataWaitErr(printErr) {
+		if printErr := printer.PrintElement(elem); printErr != nil && !ocsd.IsDataWaitErr(printErr) {
 			return printErr
 		}
 	}

@@ -30,8 +30,11 @@ func NewGenericElementPrinter(writer io.Writer) *GenericElementPrinter {
 	}
 }
 
-// TraceElemIn implements the GenElemProcessor interface.
-func (p *GenericElementPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
+// PrintElement prints a single generic trace element.
+func (p *GenericElementPrinter) PrintElement(elem *ocsd.TraceElement) error {
+	if elem == nil {
+		return nil
+	}
 	if p.collectStats {
 		p.packetCounts[elem.ElemType]++
 	}
@@ -42,7 +45,7 @@ func (p *GenericElementPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID ui
 
 	var sb strings.Builder
 	if !p.IDPrintMuted() {
-		sb.WriteString(fmt.Sprintf("Idx:%d; ID:%x; ", indexSOP, trcChanID))
+		sb.WriteString(fmt.Sprintf("Idx:%d; ID:%x; ", elem.Index, elem.TraceID))
 	}
 
 	// append trace element standard formatting
