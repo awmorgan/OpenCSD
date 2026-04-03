@@ -23,12 +23,12 @@ func (s *pktDecodeSink) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, ele
 		return nil
 	}
 	d := s.decoder
-	if d.TraceElemOut == nil {
+	if d.traceElemOut == nil {
 		e := traceElemEvent{indexSOP, trcChanID, cloneQueuedElem(elem)}
 		d.pendingElements = append(d.pendingElements, e)
 		return nil
 	}
-	err := d.TraceElemOut.TraceElemIn(indexSOP, trcChanID, elem)
+	err := d.traceElemOut.TraceElemIn(indexSOP, trcChanID, elem)
 	if ocsd.IsDataContErr(err) {
 		return nil
 	}
@@ -59,7 +59,7 @@ var isyncOnReasonMap = [...]ocsd.TraceOnReason{
 // Ported from trc_pkt_decode_etmv3.cpp
 type PktDecode struct {
 	Name         string
-	TraceElemOut ocsd.GenElemProcessor
+	traceElemOut ocsd.GenElemProcessor
 	MemAccess    common.TargetMemAccess
 	InstrDecode  common.InstrDecode
 	IndexCurrPkt ocsd.TrcIndex
@@ -154,7 +154,7 @@ func (d *PktDecode) SetInstrDecode(decoder common.InstrDecode) error {
 
 // SetTraceElemOut satisfies dcdtree's traceElemSetterOwner interface.
 func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
-	d.TraceElemOut = out
+	d.traceElemOut = out
 }
 
 // OutputTraceElement sends an element using IndexCurrPkt.
@@ -208,7 +208,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 			resp = d.ProcessPacket()
 			d.collectElements = false
 			// Drain queued elements only when using legacy push sink wiring.
-			if ocsd.DataRespIsCont(resp) && d.TraceElemOut != nil {
+			if ocsd.DataRespIsCont(resp) && d.traceElemOut != nil {
 				packetErr = nil
 				for {
 					_, _, _, nextErr := d.NextElement()
@@ -263,8 +263,8 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 	}
 	e := d.pendingElements[0]
 	d.pendingElements = d.pendingElements[1:]
-	if d.TraceElemOut != nil {
-		err := d.TraceElemOut.TraceElemIn(e.index, e.traceID, &e.elem)
+	if d.traceElemOut != nil {
+		err := d.traceElemOut.TraceElemIn(e.index, e.traceID, &e.elem)
 		if ocsd.IsDataContErr(err) {
 			return e.index, e.traceID, e.elem, nil
 		}
