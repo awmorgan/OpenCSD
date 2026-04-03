@@ -30,6 +30,10 @@ import (
 
 const defaultLogFile = "trc_pkt_lister.ppl"
 
+type traceElemOutSetter interface {
+	SetTraceElemOut(out ocsd.GenElemProcessor)
+}
+
 type options struct {
 	ssDir            string
 	ssVerbose        bool
@@ -304,7 +308,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 		var pullAdapter *common.PushToPullAdapter
 		if opts.decode {
 			pullAdapter = common.NewPushToPullAdapter()
-			tree.SetGenTraceElemOutI(pullAdapter)
+			bindTreeTraceElemSink(tree, pullAdapter)
 		}
 		return processInputFile(streamOut, tree, builder.BufferFileName(), pullAdapter, genAdapter, genPrinter, opts)
 	}
@@ -321,7 +325,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 		var pullAdapter *common.PushToPullAdapter
 		if opts.decode {
 			pullAdapter = common.NewPushToPullAdapter()
-			tree.SetGenTraceElemOutI(pullAdapter)
+			bindTreeTraceElemSink(tree, pullAdapter)
 		}
 		if err := processInputFile(streamOut, tree, binFile, pullAdapter, genAdapter, genPrinter, opts); err != nil {
 			fmt.Fprintf(out, "Trace Packet Lister : ERROR : Multi-session decode for buffer %s failed. Aborting.\n\n", sourceName)
@@ -348,7 +352,7 @@ func framedTailError(traceIndex uint32, pendingLen, align int) error {
 
 func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, adapter *common.PushToPullAdapter, genAdapter *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
 	if adapter == nil || genAdapter == nil {
-		return processInputFileProducer(out, tree, fileName, genPrinter, opts)
+		return processInputFileProducer(out, tree, fileName, nil, genPrinter, opts)
 	}
 
 	if err := drainBootstrapElements(adapter, genAdapter, genPrinter); err != nil {
@@ -357,7 +361,7 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 
 	errCh := make(chan error, 1)
 	go func() {
-		err := processInputFileProducer(out, tree, fileName, genPrinter, opts)
+		err := processInputFileProducer(out, tree, fileName, adapter, genPrinter, opts)
 		adapter.CloseWithError(err)
 		errCh <- err
 	}()
@@ -448,7 +452,29 @@ func drainBootstrapElements(adapter *common.PushToPullAdapter, genAdapter *filte
 	}
 }
 
-func processInputFileProducer(out io.Writer, tree *dcdtree.DecodeTree, fileName string, genPrinter *printers.GenericElementPrinter, opts options) error {
+func drainTreeElementsToSink(tree *dcdtree.DecodeTree, sink ocsd.GenElemProcessor) error {
+	if tree == nil || sink == nil {
+		return nil
+	}
+
+	for {
+		elem, err := tree.Next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if elem == nil {
+			continue
+		}
+		if err := sink.TraceElemIn(elem.Index, elem.TraceID, elem); err != nil {
+			return err
+		}
+	}
+}
+
+func processInputFileProducer(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink ocsd.GenElemProcessor, genPrinter *printers.GenericElementPrinter, opts options) error {
 	file, err := os.Open(fileName)
 	if err != nil {
 		return fmt.Errorf("trace packet lister: error: unable to open trace buffer %s: %w", fileName, err)
@@ -465,6 +491,10 @@ func processInputFileProducer(out io.Writer, tree *dcdtree.DecodeTree, fileName 
 	align := frameAlignment(tree)
 	isFramed := tree.FrameDeformatter() != nil
 	var footer [8]byte
+
+	if err := drainTreeElementsToSink(tree, sink); err != nil {
+		return fmt.Errorf("trace packet lister: pre-data element drain error: %w", err)
+	}
 
 	pushPending := func() {
 		for len(pending) > 0 && !ocsd.DataRespIsFatal(dataPathResp) {
@@ -485,6 +515,11 @@ func processInputFileProducer(out io.Writer, tree *dcdtree.DecodeTree, fileName 
 				}
 			}
 
+			if sinkErr := drainTreeElementsToSink(tree, sink); sinkErr != nil {
+				dataPathErr = fmt.Errorf("drain generic elements: %w", sinkErr)
+				return
+			}
+
 			if used > 0 {
 				n := copy(pending, pending[used:])
 				pending = pending[:n]
@@ -501,6 +536,10 @@ func processInputFileProducer(out io.Writer, tree *dcdtree.DecodeTree, fileName 
 				dataPathResp = ocsd.DataRespFromErr(dpErr)
 				if dpErr != nil {
 					dataPathErr = fmt.Errorf("flush after wait: %w", dpErr)
+					return
+				}
+				if sinkErr := drainTreeElementsToSink(tree, sink); sinkErr != nil {
+					dataPathErr = fmt.Errorf("drain generic elements after flush: %w", sinkErr)
 					return
 				}
 				if ocsd.DataRespIsFatal(dataPathResp) {
@@ -587,10 +626,16 @@ func processInputFileProducer(out io.Writer, tree *dcdtree.DecodeTree, fileName 
 	if _, err := tree.TraceDataIn(ocsd.OpEOT, 0, nil); err != nil {
 		return fmt.Errorf("trace packet lister: OpEOT error: %w", err)
 	}
+	if err := drainTreeElementsToSink(tree, sink); err != nil {
+		return fmt.Errorf("trace packet lister: post-EOT element drain error: %w", err)
+	}
 
 	if opts.multiSession {
 		if _, err := tree.TraceDataIn(ocsd.OpReset, 0, nil); err != nil {
 			return fmt.Errorf("trace packet lister: OpReset error: %w", err)
+		}
+		if err := drainTreeElementsToSink(tree, sink); err != nil {
+			return fmt.Errorf("trace packet lister: post-reset element drain error: %w", err)
 		}
 	}
 
@@ -626,6 +671,28 @@ func frameAlignment(tree *dcdtree.DecodeTree) int {
 		return 4
 	}
 	return 16
+}
+
+func bindTreeTraceElemSink(tree *dcdtree.DecodeTree, sink ocsd.GenElemProcessor) {
+	if tree == nil || sink == nil {
+		return
+	}
+
+	tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
+		if elem == nil || elem.Iterator == nil {
+			return
+		}
+		if setter, ok := elem.Iterator.(traceElemOutSetter); ok {
+			setter.SetTraceElemOut(sink)
+			return
+		}
+		switch dec := elem.Iterator.(type) {
+		case *itm.PktDecode:
+			dec.TraceElemOut = sink
+		case *ptm.PktDecode:
+			dec.TraceElemOut = sink
+		}
+	})
 }
 
 func applyAdditionalFlags(tree *dcdtree.DecodeTree, flags uint32) error {

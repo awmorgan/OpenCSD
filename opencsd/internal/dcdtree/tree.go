@@ -37,25 +37,6 @@ type DecodeTree struct {
 	createdMapper bool
 
 	decoderRoot ocsd.TrcDataProcessorExplicit
-	genElemOut  ocsd.GenElemProcessor
-}
-
-type teeGenElemOut struct {
-	primary   ocsd.GenElemProcessor
-	secondary ocsd.GenElemProcessor
-}
-
-func (t *teeGenElemOut) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
-	if t.primary != nil {
-		err := t.primary.TraceElemIn(indexSOP, trcChanID, elem)
-		if !ocsd.IsDataContErr(err) {
-			return err
-		}
-	}
-	if t.secondary != nil {
-		return t.secondary.TraceElemIn(indexSOP, trcChanID, elem)
-	}
-	return nil
 }
 
 // NewDecodeTree creates a new Trace Decode Tree using the supplied decoder registry.
@@ -123,13 +104,7 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 		}
 		if ctx == nil || op != ocsd.OpData || len(data) <= processChunk {
 			processed, err := callTraceData(proc, op, index, data)
-			if !ocsd.IsDataContErr(err) {
-				return processed, err
-			}
-			if pullErr := dt.drainPullIteratorsToSink(); pullErr != nil {
-				return processed, pullErr
-			}
-			return processed, nil
+			return processed, err
 		}
 
 		var total uint32
@@ -147,9 +122,6 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 			total += amt
 			if !ocsd.DataRespIsCont(ocsd.DataRespFromErr(err)) {
 				return total, err
-			}
-			if pullErr := dt.drainPullIteratorsToSink(); pullErr != nil {
-				return total, pullErr
 			}
 			if amt == 0 {
 				break
@@ -173,25 +145,35 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 	return 0, ocsd.ErrNotInit
 }
 
-// AddDecoder registers an already-instantiated decoder into the tree for routing only.
-func (dt *DecodeTree) AddDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, flagApplier common.FlagApplier) error {
-	return dt.addDecoder(routeID, name, protocol, pktIn, nil, flagApplier, nil)
-}
-
-// AddPullDecoder registers a pull-based iterator decoder into the tree.
-func (dt *DecodeTree) AddPullDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, iter ocsd.TraceIterator) error {
+// AddPullDecoder registers decoder input routing and pull-based output iteration into the tree.
+func (dt *DecodeTree) AddPullDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, iter ocsd.TraceIterator, flagApplier common.FlagApplier) error {
 	if dt.treeType == ocsd.TrcSrcSingle {
 		routeID = 0
 	}
 	if routeID >= 0x80 {
 		return ocsd.ErrInvalidID
 	}
-	if iter == nil {
+	if pktIn == nil && iter == nil {
 		return ocsd.ErrNotInit
 	}
 
 	if elem, exists := dt.decodeElements[routeID]; exists {
+		if pktIn != nil && elem.DataIn != nil {
+			return ocsd.ErrAttachTooMany
+		}
+		if iter != nil && elem.Iterator != nil {
+			return ocsd.ErrAttachTooMany
+		}
+		if pktIn != nil {
+			elem.DataIn = pktIn
+			if dt.frameDeformatter != nil {
+				dt.frameDeformatter.SetIDStream(routeID, pktIn)
+			}
+		}
 		elem.Iterator = iter
+		if elem.FlagApplier == nil {
+			elem.FlagApplier = flagApplier
+		}
 		if elem.Protocol == ocsd.ProtocolUnknown {
 			elem.Protocol = protocol
 		}
@@ -201,92 +183,15 @@ func (dt *DecodeTree) AddPullDecoder(routeID uint8, name string, protocol ocsd.T
 		return nil
 	}
 
-	return dt.addDecoder(routeID, name, protocol, nil, iter, nil, nil)
-}
-
-// AddWiredDecoder registers an already-instantiated decoder into the tree with explicit
-// late trace-sink wiring support.
-func (dt *DecodeTree) AddWiredDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, flagApplier common.FlagApplier, wiring wireTraceElemFn) error {
-	return dt.addDecoder(routeID, name, protocol, pktIn, nil, flagApplier, wiring)
-}
-
-func (dt *DecodeTree) addDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, iter ocsd.TraceIterator, flagApplier common.FlagApplier, wiring wireTraceElemFn) error {
-	if dt.treeType == ocsd.TrcSrcSingle {
-		routeID = 0
-	}
-	if routeID >= 0x80 {
-		return ocsd.ErrInvalidID
-	}
-
-	if _, exists := dt.decodeElements[routeID]; exists {
-		return ocsd.ErrAttachTooMany
-	}
-	if pktIn == nil && iter == nil {
-		return ocsd.ErrNotInit
-	}
-
 	// No decoder manager is needed for direct injection.
-	elem := NewDecodeTreeElement(name, flagApplier, wiring, pktIn, iter, true)
+	elem := NewDecodeTreeElement(name, flagApplier, pktIn, iter, true)
 	elem.Protocol = protocol
 
 	dt.decodeElements[routeID] = elem
 	if dt.frameDeformatter != nil && pktIn != nil {
 		dt.frameDeformatter.SetIDStream(routeID, pktIn)
 	}
-	dt.attachElementDependencies(elem)
-
 	return nil
-}
-
-func (dt *DecodeTree) attachElementDependencies(elem *DecodeTreeElement) {
-	if elem == nil || elem.PipelineWiring == nil || dt.genElemOut == nil {
-		return
-	}
-	dt.wireTraceElemOut(elem, dt.genElemOut)
-}
-
-func (dt *DecodeTree) drainPullIteratorsToSink() error {
-	if dt.genElemOut == nil {
-		return nil
-	}
-
-	for {
-		progressed := false
-		for _, csID := range dt.sortedElementIDs() {
-			elem := dt.decodeElements[csID]
-			if elem == nil || elem.Iterator == nil {
-				continue
-			}
-
-			trcElem, err := elem.Iterator.Next()
-			if errors.Is(err, io.EOF) {
-				continue
-			}
-			if err != nil {
-				return err
-			}
-			if trcElem == nil {
-				continue
-			}
-
-			if err := dt.genElemOut.TraceElemIn(trcElem.Index, trcElem.TraceID, trcElem); err != nil {
-				return err
-			}
-			progressed = true
-		}
-		if !progressed {
-			return nil
-		}
-	}
-}
-
-func (dt *DecodeTree) wireTraceElemOut(elem *DecodeTreeElement, outI ocsd.GenElemProcessor) {
-	if elem == nil || outI == nil {
-		return
-	}
-	if elem.PipelineWiring != nil {
-		elem.PipelineWiring(outI)
-	}
 }
 
 func (dt *DecodeTree) nextFromElement(elem *DecodeTreeElement) (*ocsd.TraceElement, error) {
@@ -295,22 +200,6 @@ func (dt *DecodeTree) nextFromElement(elem *DecodeTreeElement) (*ocsd.TraceEleme
 	}
 	if elem.Iterator != nil {
 		return elem.Iterator.Next()
-	}
-	if elem.PushAdapter == nil && elem.PipelineWiring != nil {
-		elem.PushAdapter = common.NewPushToPullAdapter()
-		if dt.genElemOut != nil {
-			dt.wireTraceElemOut(elem, &teeGenElemOut{primary: dt.genElemOut, secondary: elem.PushAdapter})
-		} else {
-			dt.wireTraceElemOut(elem, elem.PushAdapter)
-		}
-	}
-	if elem.PushAdapter != nil {
-		trcElem, err := elem.PushAdapter.Next()
-		if err != nil {
-			return nil, err
-		}
-		elem.PushAdapter.Ack()
-		return trcElem, nil
 	}
 	return nil, io.EOF
 }
@@ -351,22 +240,7 @@ func (dt *DecodeTree) RemoveDecoder(csID uint8) {
 	if dt.frameDeformatter != nil {
 		dt.frameDeformatter.SetIDStream(routeID, nil)
 	}
-	if elem := dt.decodeElements[routeID]; elem != nil && elem.PushAdapter != nil {
-		elem.PushAdapter.Close()
-	}
 	delete(dt.decodeElements, routeID)
-}
-
-// SetGenTraceElemOutI attaches a sink for generic trace element outputs generated by the entire tree.
-func (dt *DecodeTree) SetGenTraceElemOutI(outI ocsd.GenElemProcessor) {
-	dt.genElemOut = outI
-	for _, elem := range dt.decodeElements {
-		if elem != nil && elem.PushAdapter != nil {
-			dt.wireTraceElemOut(elem, &teeGenElemOut{primary: outI, secondary: elem.PushAdapter})
-			continue
-		}
-		dt.wireTraceElemOut(elem, outI)
-	}
 }
 
 // FrameDeformatter returns the active frame demux.

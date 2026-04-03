@@ -3,6 +3,7 @@ package dcdtree
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	"opencsd/internal/ocsd"
@@ -30,26 +31,17 @@ func (f *fakeDataIn) TraceDataReset(index ocsd.TrcIndex) error {
 	return err
 }
 
-type fakeGenElemOut struct{}
-
-func (f *fakeGenElemOut) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
-	return nil
-}
-
-type fakePipelineWiringHandle struct {
-	appliedFlags uint32
-}
-
-func (f *fakePipelineWiringHandle) ApplyFlags(flags uint32) error {
-	f.appliedFlags |= flags
-	return nil
-}
-
 type fakeManager struct{ appliedFlags uint32 }
 
 func (f *fakeManager) ApplyFlags(flags uint32) error {
 	f.appliedFlags |= flags
 	return nil
+}
+
+type fakeIterator struct{}
+
+func (f *fakeIterator) Next() (*ocsd.TraceElement, error) {
+	return nil, io.EOF
 }
 
 func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
@@ -62,8 +54,8 @@ func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 	}
 	defer tree.Destroy()
 
-	if err := tree.AddDecoder(0x23, "TEST_SINGLE", ocsd.ProtocolSTM, &fakeDataIn{}, &fakeManager{}); err != nil {
-		t.Fatalf("AddDecoder failed: %v", err)
+	if err := tree.AddPullDecoder(0x23, "TEST_SINGLE", ocsd.ProtocolSTM, &fakeDataIn{}, nil, &fakeManager{}); err != nil {
+		t.Fatalf("AddPullDecoder failed: %v", err)
 	}
 	if _, ok := tree.decodeElements[0]; !ok {
 		t.Fatalf("expected decoder to be routed to ID 0 in single-source mode")
@@ -98,7 +90,7 @@ func TestDecodeTreeElementIterationIsOrdered(t *testing.T) {
 	}
 }
 
-func TestDecodeTreeAddDecoderDirectInjection(t *testing.T) {
+func TestDecodeTreeAddPullDecoderDirectInjection(t *testing.T) {
 	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)
 	if err != nil {
 		t.Fatalf("NewDecodeTree returned error: %v", err)
@@ -107,8 +99,8 @@ func TestDecodeTreeAddDecoderDirectInjection(t *testing.T) {
 
 	pktIn := &fakeDataIn{}
 	manager := &fakeManager{}
-	if err := tree.AddDecoder(0x45, "direct", ocsd.ProtocolSTM, pktIn, manager); err != nil {
-		t.Fatalf("AddDecoder failed: %v", err)
+	if err := tree.AddPullDecoder(0x45, "direct", ocsd.ProtocolSTM, pktIn, nil, manager); err != nil {
+		t.Fatalf("AddPullDecoder failed: %v", err)
 	}
 
 	elem, ok := tree.decodeElements[0]
@@ -125,60 +117,49 @@ func TestDecodeTreeAddDecoderDirectInjection(t *testing.T) {
 		t.Fatal("expected injected flag applier to be preserved")
 	}
 
-	err = tree.AddDecoder(0x00, "duplicate", ocsd.ProtocolSTM, pktIn, manager)
+	err = tree.AddPullDecoder(0x00, "duplicate", ocsd.ProtocolSTM, pktIn, nil, manager)
 	if !errors.Is(err, ocsd.ErrAttachTooMany) {
 		t.Fatalf("expected ErrAttachTooMany for duplicate route, got %v", err)
 	}
 }
 
-func TestDecodeTreePipelineWiringPropagatesToRegisteredDecoder(t *testing.T) {
+func TestDecodeTreeAddPullDecoderCanAttachIteratorAfterProcessor(t *testing.T) {
 	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)
 	if err != nil {
 		t.Fatalf("NewDecodeTree returned error: %v", err)
 	}
 	defer tree.Destroy()
 
-	h := &fakePipelineWiringHandle{}
-	traceOutA := &fakeGenElemOut{}
-
-	// Pre-bind dependency before decoder registration.
-	tree.SetGenTraceElemOutI(traceOutA)
-
-	var traceOut ocsd.GenElemProcessor
-	traceSets := 0
-	wireFunc := func(out ocsd.GenElemProcessor) { traceOut = out; traceSets++ }
-
-	if err := tree.AddWiredDecoder(0x22, "wired", ocsd.ProtocolETMV4I, &fakeDataIn{}, h, wireFunc); err != nil {
-		t.Fatalf("AddDecoder failed: %v", err)
+	proc := &fakeDataIn{}
+	if err := tree.AddPullDecoder(0x22, "pull", ocsd.ProtocolETMV4I, proc, nil, nil); err != nil {
+		t.Fatalf("initial AddPullDecoder failed: %v", err)
 	}
 
-	if traceOut != traceOutA {
-		t.Fatal("expected pre-bound trace sink to be applied on decoder attach")
-	}
-	if traceSets != 1 {
-		t.Fatalf("expected single trace sink setter call on attach, got trace=%d", traceSets)
+	iter := &fakeIterator{}
+	if err := tree.AddPullDecoder(0x22, "pull", ocsd.ProtocolETMV4I, nil, iter, nil); err != nil {
+		t.Fatalf("iterator AddPullDecoder failed: %v", err)
 	}
 
-	// Update dependency after registration and verify propagation.
-	traceOutB := &fakeGenElemOut{}
-	tree.SetGenTraceElemOutI(traceOutB)
-
-	if traceOut != traceOutB {
-		t.Fatal("expected post-bind trace sink update to reach registered decoder")
+	elem := tree.decodeElements[0]
+	if elem == nil {
+		t.Fatal("expected route 0 element to exist")
 	}
-	if traceSets != 2 {
-		t.Fatalf("expected second trace sink setter call on update, got trace=%d", traceSets)
+	if elem.DataIn != proc {
+		t.Fatal("expected initial processor to remain attached")
+	}
+	if elem.Iterator != iter {
+		t.Fatal("expected iterator to be attached on second call")
 	}
 }
 
-func TestDecodeTreeAddDecoderRejectsOutOfRangeRouteID(t *testing.T) {
+func TestDecodeTreeAddPullDecoderRejectsOutOfRangeRouteID(t *testing.T) {
 	tree, err := NewDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign)
 	if err != nil {
 		t.Fatalf("NewDecodeTree returned error: %v", err)
 	}
 	defer tree.Destroy()
 
-	err = tree.AddDecoder(0x80, "direct", ocsd.ProtocolSTM, &fakeDataIn{}, &fakeManager{})
+	err = tree.AddPullDecoder(0x80, "direct", ocsd.ProtocolSTM, &fakeDataIn{}, nil, &fakeManager{})
 	if !errors.Is(err, ocsd.ErrInvalidID) {
 		t.Fatalf("expected ErrInvalidID for route ID 0x80, got %v", err)
 	}
