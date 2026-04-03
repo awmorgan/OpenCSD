@@ -232,6 +232,9 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 			}
 			return nil, fmt.Errorf("attach ETE decoder for %s failed: %v", srcDevName, err)
 		}
+		if err := tree.AddPullDecoder(traceID, ocsd.BuiltinDcdETE, ocsd.ProtocolETE, dec); err != nil {
+			return nil, fmt.Errorf("attach ETE pull decoder for %s failed: %v", srcDevName, err)
+		}
 		eteDecoders++
 		seenTraceIDs[traceID] = struct{}{}
 	}

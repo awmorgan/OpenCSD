@@ -155,7 +155,10 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 			return nil, fmt.Errorf("create STM pipeline for %s failed: %v", srcDevName, err)
 		}
 
-		if err := tree.AddWiredDecoder(traceID, ocsd.BuiltinDcdSTM, ocsd.ProtocolSTM, proc, dec, func(out ocsd.GenElemProcessor) { dec.TraceElemOut = out }); err != nil {
+		if err := tree.AddWiredDecoder(traceID, ocsd.BuiltinDcdSTM, ocsd.ProtocolSTM, proc, dec, dec.SetTraceElemOut); err != nil {
+			return nil, fmt.Errorf("attach STM processor for %s failed: %v", srcDevName, err)
+		}
+		if err := tree.AddPullDecoder(traceID, ocsd.BuiltinDcdSTM, ocsd.ProtocolSTM, dec); err != nil {
 			return nil, fmt.Errorf("attach STM decoder for %s failed: %v", srcDevName, err)
 		}
 		stmDecoders++

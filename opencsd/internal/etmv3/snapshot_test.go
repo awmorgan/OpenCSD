@@ -274,6 +274,9 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		if err := tree.AddWiredDecoder(traceID, ocsd.BuiltinDcdETMV3, ocsd.ProtocolETMV3, proc, dec, dec.SetTraceElemOut); err != nil {
 			return nil, fmt.Errorf("attach ETMv3 decoder for %s failed: %v", srcDevName, err)
 		}
+		if err := tree.AddPullDecoder(traceID, ocsd.BuiltinDcdETMV3, ocsd.ProtocolETMV3, dec); err != nil {
+			return nil, fmt.Errorf("attach ETMv3 pull decoder for %s failed: %v", srcDevName, err)
+		}
 		etmDecoders++
 	}
 

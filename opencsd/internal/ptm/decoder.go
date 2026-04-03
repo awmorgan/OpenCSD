@@ -237,8 +237,8 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 			d.collectElements = true
 			resp = d.ProcessPacket()
 			d.collectElements = false
-			// Drain queued elements
-			if ocsd.DataRespIsCont(resp) {
+			// Drain queued elements only when using legacy push sink wiring.
+			if ocsd.DataRespIsCont(resp) && d.TraceElemOut != nil {
 				err = nil
 				for {
 					_, _, _, nextErr := d.NextElement()
@@ -269,6 +269,18 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 // TracePacketData is the explicit packet data entrypoint used by split interfaces.
 func (d *PktDecode) TracePacketData(indexSOP ocsd.TrcIndex, pktIn *Packet) error {
 	return d.PacketDataIn(ocsd.OpData, indexSOP, pktIn)
+}
+
+// Next returns one decoded trace element at a time for pull-based consumers.
+func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
+	idx, traceID, elem, err := d.NextElement()
+	if err != nil {
+		return nil, err
+	}
+	e := elem
+	e.Index = idx
+	e.TraceID = traceID
+	return &e, nil
 }
 
 // TracePacketEOT forwards an EOT control operation through the legacy multiplexer.

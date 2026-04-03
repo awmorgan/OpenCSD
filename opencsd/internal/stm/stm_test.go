@@ -3,19 +3,11 @@ package stm
 import (
 	"errors"
 	"fmt"
+	"io"
 	"testing"
 
 	"opencsd/internal/ocsd"
 )
-
-type testTrcElemIn struct {
-	elements []ocsd.TraceElement
-}
-
-func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
-	t.elements = append(t.elements, *elem)
-	return nil
-}
 
 type StmStreamBuilder struct {
 	data      []byte
@@ -57,9 +49,6 @@ func TestSTMEndToEndDecode(t *testing.T) {
 
 	// Op mode test
 	_ = proc.ApplyFlags(ocsd.OpflgPktprocUnsyncOnBadPkts)
-
-	outReceiver := &testTrcElemIn{}
-	dec.TraceElemOut = outReceiver
 
 	sb := &StmStreamBuilder{}
 
@@ -156,7 +145,19 @@ func TestSTMEndToEndDecode(t *testing.T) {
 		t.Logf("TraceDataIn EOT returned %v, err %v", res2, err2)
 	}
 
-	if len(outReceiver.elements) == 0 {
+	elemCount := 0
+	for {
+		_, pullErr := dec.Next()
+		if errors.Is(pullErr, io.EOF) {
+			break
+		}
+		if pullErr != nil {
+			t.Fatalf("pull decode failed: %v", pullErr)
+		}
+		elemCount++
+	}
+
+	if elemCount == 0 {
 		t.Error("Expected to receive parsed trace elements")
 	}
 }

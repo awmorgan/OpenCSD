@@ -28,7 +28,7 @@ type stateFn func() (stateFn, ocsd.DatapathResp, bool)
 
 type PktDecode struct {
 	Name         string
-	TraceElemOut ocsd.GenElemProcessor
+	traceElemOut ocsd.GenElemProcessor
 	MemAccess    common.TargetMemAccess
 	InstrDecode  common.InstrDecode
 	IndexCurrPkt ocsd.TrcIndex
@@ -51,12 +51,15 @@ type PktDecode struct {
 	decodePass1 bool
 	outputElem  ocsd.TraceElement
 
-	// Pull-iterator fields
 	pendingElements []traceElemEvent
-	collectElements bool
 }
 
 func (d *PktDecode) ApplyFlags(flags uint32) error { return nil }
+
+// SetTraceElemOut wires an optional legacy push-style sink.
+func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
+	d.traceElemOut = out
+}
 
 // NewPktDecode creates a new STM packet decoder.
 func NewPktDecode(cfg *Config) (*PktDecode, error) {
@@ -75,39 +78,18 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 	return d, nil
 }
 
-// OutputTraceElement sends an element to the downstream consumer using IndexCurrPkt (or queues if in collect mode).
+// OutputTraceElement queues an element for pull-based consumption using IndexCurrPkt.
 func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error {
-	if d.collectElements {
-		e := traceElemEvent{d.IndexCurrPkt, traceID, *elem}
-		d.pendingElements = append(d.pendingElements, e)
-		return nil
-	}
-	if d.TraceElemOut == nil {
-		return ocsd.ErrNotInit
-	}
-	err := d.TraceElemOut.TraceElemIn(d.IndexCurrPkt, traceID, elem)
-	if ocsd.IsDataContErr(err) {
-		return nil
-	}
-	if ocsd.IsDataWaitErr(err) {
-		return ocsd.ErrWait
-	}
-	return err
+	e := traceElemEvent{d.IndexCurrPkt, traceID, *elem}
+	d.pendingElements = append(d.pendingElements, e)
+	return nil
 }
 
-// OutputTraceElementIdx sends an element to the downstream consumer at an explicit index.
+// OutputTraceElementIdx queues an element at an explicit index.
 func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
-	if d.TraceElemOut == nil {
-		return ocsd.ErrNotInit
-	}
-	err := d.TraceElemOut.TraceElemIn(idx, traceID, elem)
-	if ocsd.IsDataContErr(err) {
-		return nil
-	}
-	if ocsd.IsDataWaitErr(err) {
-		return ocsd.ErrWait
-	}
-	return err
+	e := traceElemEvent{idx, traceID, *elem}
+	d.pendingElements = append(d.pendingElements, e)
+	return nil
 }
 
 // AccessMemory reads target memory via the attached TargetMemAccess interface.
@@ -156,11 +138,8 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 		} else {
 			d.CurrPacketIn = pktIn
 			d.IndexCurrPkt = indexSOP
-			d.collectElements = true
 			resp = d.ProcessPacket()
-			d.collectElements = false
-			// Drain queued elements
-			if ocsd.DataRespIsCont(resp) {
+			if ocsd.DataRespIsCont(resp) && d.traceElemOut != nil {
 				err = nil
 				for {
 					_, _, _, nextErr := d.NextElement()
@@ -177,6 +156,20 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 		}
 	case ocsd.OpEOT:
 		resp = d.OnEOT()
+		if ocsd.DataRespIsCont(resp) && d.traceElemOut != nil {
+			err = nil
+			for {
+				_, _, _, nextErr := d.NextElement()
+				if errors.Is(nextErr, io.EOF) {
+					break
+				}
+				if nextErr != nil {
+					err = nextErr
+					resp = ocsd.DataRespFromErr(err)
+					break
+				}
+			}
+		}
 	case ocsd.OpFlush:
 		resp = d.OnFlush()
 	case ocsd.OpReset:
@@ -324,8 +317,8 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 	}
 	e := d.pendingElements[0]
 	d.pendingElements = d.pendingElements[1:]
-	if d.TraceElemOut != nil {
-		err := d.TraceElemOut.TraceElemIn(e.index, e.traceID, &e.elem)
+	if d.traceElemOut != nil {
+		err := d.traceElemOut.TraceElemIn(e.index, e.traceID, &e.elem)
 		if ocsd.IsDataContErr(err) {
 			return e.index, e.traceID, e.elem, nil
 		}
@@ -338,6 +331,18 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 		}
 	}
 	return e.index, e.traceID, e.elem, nil
+}
+
+// Next returns one decoded trace element at a time for pull-based consumers.
+func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
+	idx, traceID, elem, err := d.NextElement()
+	if err != nil {
+		return nil, err
+	}
+	e := elem
+	e.Index = idx
+	e.TraceID = traceID
+	return &e, nil
 }
 
 // putBackElement unreads an element to the front of the pending queue.

@@ -287,8 +287,8 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 			d.collectElements = true
 			resp = d.ProcessPacket()
 			d.collectElements = false
-			// Drain queued elements
-			if ocsd.DataRespIsCont(resp) {
+			// Drain queued elements only when using legacy push sink wiring.
+			if ocsd.DataRespIsCont(resp) && d.TraceElemOut != nil {
 				packetErr = nil
 				for {
 					_, _, _, nextErr := d.NextElement()
@@ -357,6 +357,18 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 		}
 	}
 	return e.index, e.traceID, e.elem, nil
+}
+
+// Next returns one decoded trace element at a time for pull-based consumers.
+func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
+	idx, traceID, elem, err := d.NextElement()
+	if err != nil {
+		return nil, err
+	}
+	e := elem
+	e.Index = idx
+	e.TraceID = traceID
+	return &e, nil
 }
 
 // putBackElement unreads an element to the front of the pending queue.

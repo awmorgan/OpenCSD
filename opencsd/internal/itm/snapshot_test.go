@@ -186,6 +186,9 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		if err := tree.AddWiredDecoder(traceID, ocsd.BuiltinDcdITM, ocsd.ProtocolITM, proc, dec, func(out ocsd.GenElemProcessor) { dec.TraceElemOut = out }); err != nil {
 			return nil, fmt.Errorf("attach ITM decoder for %s failed: %v", srcDevName, err)
 		}
+		if err := tree.AddPullDecoder(traceID, ocsd.BuiltinDcdITM, ocsd.ProtocolITM, dec); err != nil {
+			return nil, fmt.Errorf("attach ITM pull decoder for %s failed: %v", srcDevName, err)
+		}
 		itmDecoders++
 	}
 
