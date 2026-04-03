@@ -56,7 +56,7 @@ func TestSTMEndToEndDecode(t *testing.T) {
 	}
 
 	// Op mode test
-	proc.SetComponentOpMode(ocsd.OpflgPktprocUnsyncOnBadPkts)
+	_ = proc.ApplyFlags(ocsd.OpflgPktprocUnsyncOnBadPkts)
 
 	outReceiver := &testTrcElemIn{}
 	dec.TraceElemOut = outReceiver
@@ -198,12 +198,12 @@ func TestSTMErrorCases(t *testing.T) {
 
 	// Try with bad packet handling component mode
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)
-	proc.SetComponentOpMode(ocsd.OpflgPktprocErrBadPkts)
+	_ = proc.ApplyFlags(ocsd.OpflgPktprocErrBadPkts)
 	_, err = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
 	resp = ocsd.DataRespFromErr(err)
 	// Should be fatal if ErrBadPkts mode is set
 	if !ocsd.DataRespIsFatal(resp) {
-		t.Errorf("Expected fatal response for reserved opcode when bad packet throwing is enabled. Mode=%x, Resp=%v", proc.ComponentOpMode(), resp)
+		t.Errorf("Expected fatal response for reserved opcode when bad packet throwing is enabled. Resp=%v", resp)
 	}
 
 	// Try gray TS
@@ -231,7 +231,7 @@ func TestSTMErrorCases(t *testing.T) {
 	_, err = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
 	resp = ocsd.DataRespFromErr(err)
 	if !ocsd.DataRespIsFatal(resp) {
-		t.Errorf("Expected fatal response for invalid TS size. Mode=%x, Resp=%v", proc.ComponentOpMode(), resp)
+		t.Errorf("Expected fatal response for invalid TS size. Resp=%v", resp)
 	}
 
 	// Try reserved F0n

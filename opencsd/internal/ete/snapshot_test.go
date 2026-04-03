@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"opencsd/internal/common"
 	"opencsd/internal/dcdtree"
 	"opencsd/internal/ete"
 	"opencsd/internal/etmv4"
@@ -64,12 +65,6 @@ type eteGoldenTestCase struct {
 	snapshotDir string
 	sourceName  string
 	options     eteDecodeOptions
-}
-
-type opModeComponent interface {
-	SetComponentOpMode(opFlags uint32) error
-	ComponentOpMode() uint32
-	SupportedOpModes() uint32
 }
 
 func TestETESnapshotsAgainstGolden(t *testing.T) {
@@ -616,21 +611,17 @@ func applyOpModeFlags(tree *dcdtree.DecodeTree, flags uint32) {
 		return
 	}
 	apply := func(component any) {
-		opComp, ok := component.(opModeComponent)
-		if !ok || opComp == nil {
+		applier, ok := component.(common.FlagApplier)
+		if !ok || applier == nil {
 			return
 		}
-		applyFlags := flags & opComp.SupportedOpModes()
-		if applyFlags == 0 {
-			return
-		}
-		_ = opComp.SetComponentOpMode(opComp.ComponentOpMode() | applyFlags)
+		_ = applier.ApplyFlags(flags)
 	}
 	tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
 		if elem == nil {
 			return
 		}
-		apply(elem.Manager)
+		apply(elem.FlagApplier)
 	})
 }
 

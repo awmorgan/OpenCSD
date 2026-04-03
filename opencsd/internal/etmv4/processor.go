@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -71,7 +70,6 @@ type tableEntry struct {
 // Processor parses byte streams for ETMv4 packets.
 // Ported from TrcPktProcEtmV4I.
 type Processor struct {
-	opMode common.OpMode
 	config Config
 
 	// output interface
@@ -140,14 +138,7 @@ type Processor struct {
 	f1HasP2  bool
 }
 
-func (p *Processor) ComponentOpMode() uint32  { return p.opMode.ComponentOpMode() }
-func (p *Processor) SupportedOpModes() uint32 { return p.opMode.SupportedOpModes() }
-func (p *Processor) SetComponentOpMode(opFlags uint32) error {
-	return p.opMode.SetComponentOpMode(opFlags)
-}
-func (p *Processor) ConfigureSupportedOpModes(flags uint32) {
-	p.opMode.ConfigureSupportedOpModes(flags)
-}
+func (p *Processor) ApplyFlags(flags uint32) error { return nil }
 
 // Ensure the struct satisfies TrcDataProcessorExplicit
 var _ ocsd.TrcDataProcessorExplicit = (*Processor)(nil)

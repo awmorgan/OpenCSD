@@ -2,7 +2,6 @@ package etmv3
 
 import (
 	"fmt"
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -20,7 +19,6 @@ const (
 // Ported from trc_pkt_proc_etmv3_impl.cpp
 type PktProc struct {
 	Name          string
-	opMode        common.OpMode
 	Stats         ocsd.DecodeStats
 	statsInit     bool
 	Config        *Config
@@ -52,12 +50,7 @@ type PktProc struct {
 	packetIndex ocsd.TrcIndex
 }
 
-func (p *PktProc) ComponentOpMode() uint32  { return p.opMode.ComponentOpMode() }
-func (p *PktProc) SupportedOpModes() uint32 { return p.opMode.SupportedOpModes() }
-func (p *PktProc) SetComponentOpMode(opFlags uint32) error {
-	return p.opMode.SetComponentOpMode(opFlags)
-}
-func (p *PktProc) ConfigureSupportedOpModes(flags uint32) { p.opMode.ConfigureSupportedOpModes(flags) }
+func (p *PktProc) ApplyFlags(flags uint32) error { return nil }
 
 // NewPktProc creates a new ETMv3 packet processor
 func NewPktProc(cfg *Config) *PktProc {

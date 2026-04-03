@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"opencsd/internal/common"
 	"opencsd/internal/dcdtree"
 	"opencsd/internal/etmv4"
 	"opencsd/internal/idec"
@@ -345,14 +346,19 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 
 		var proc ocsd.TrcDataProcessorExplicit
 		var dec *etmv4.PktDecode
+		var applier common.FlagApplier
 		var err error
 
 		// Conditionally instantiate either the processor alone, or the full pipeline
 		if packetOnly {
-			proc, err = etmv4.NewConfiguredProcessor(cfg)
+			var packetProc *etmv4.Processor
+			packetProc, err = etmv4.NewConfiguredProcessor(cfg)
+			proc = packetProc
+			applier = packetProc
 			// 'dec' remains nil
 		} else {
 			proc, dec, err = etmv4.NewConfiguredPipelineWithDeps(int(cfg.TraceID()), cfg, nil, memIf, instr)
+			applier = dec
 		}
 
 		if err != nil {
@@ -361,7 +367,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 
 		// Inject into the DecodeTree.
 		if dec == nil {
-			err = tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec)
+			err = tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, applier)
 		} else {
 			err = tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec, dec.SetTraceElemOut)
 		}
@@ -381,19 +387,12 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 				return
 			}
 			if opts.extraOpFlags != 0 {
-				if opComp, ok := elem.Manager.(interface {
-					SetComponentOpMode(uint32) error
-					ComponentOpMode() uint32
-					SupportedOpModes() uint32
-				}); ok {
-					flags := opts.extraOpFlags & opComp.SupportedOpModes()
-					if flags != 0 {
-						_ = opComp.SetComponentOpMode(opComp.ComponentOpMode() | flags)
-					}
+				if elem.FlagApplier != nil {
+					_ = elem.FlagApplier.ApplyFlags(opts.extraOpFlags)
 				}
 			}
 			if opts.instrRangeLimit > 0 {
-				if dcd, ok := elem.Manager.(*etmv4.PktDecode); ok {
+				if dcd, ok := elem.FlagApplier.(*etmv4.PktDecode); ok {
 					dcd.SetInstrRangeLimit(opts.instrRangeLimit)
 				}
 			}

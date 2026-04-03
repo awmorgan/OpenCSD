@@ -1,26 +1,19 @@
 package common
 
-import (
-	"testing"
-)
+import "testing"
 
-func TestComponentRuntimeViaDecoderBase(t *testing.T) {
-	b := &OpMode{}
+type fakeFlagApplier struct {
+	applied uint32
+}
 
-	b.ConfigureSupportedOpModes(0x0F)
-	err := b.SetComponentOpMode(0x01)
-	if err != nil {
-		t.Errorf("expected OK, got %v", err)
-	}
-	if b.ComponentOpMode() != 0x01 {
-		t.Errorf("expected op mode 0x01, got 0x%x", b.ComponentOpMode())
-	}
+func (f *fakeFlagApplier) ApplyFlags(flags uint32) error {
+	f.applied |= flags
+	return nil
+}
 
-	err = b.SetComponentOpMode(0x10)
-	if err != nil {
-		t.Errorf("expected OK for unsupported-flag mask behaviour, got %v", err)
-	}
-	if b.ComponentOpMode() != 0x00 {
-		t.Errorf("expected unsupported flags to be masked out, got 0x%x", b.ComponentOpMode())
+func TestFlagApplierContract(t *testing.T) {
+	var applier FlagApplier = &fakeFlagApplier{}
+	if err := applier.ApplyFlags(0x11); err != nil {
+		t.Fatalf("expected ApplyFlags to succeed, got %v", err)
 	}
 }

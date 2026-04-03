@@ -250,11 +250,11 @@ func TestITMErrorCases(t *testing.T) {
 	}
 
 	proc.TraceDataIn(ocsd.OpReset, 0, nil)
-	proc.SetComponentOpMode(ocsd.OpflgPktprocErrBadPkts)
+	_ = proc.ApplyFlags(ocsd.OpflgPktprocErrBadPkts)
 	_, err = proc.TraceDataIn(ocsd.OpData, 0, sb.data)
 	resp = ocsd.DataRespFromErr(err)
 	if !ocsd.DataRespIsFatal(resp) {
-		t.Errorf("Expected fatal response for reserved header (Mode = %x, Resp = %v)", proc.ComponentOpMode(), resp)
+		t.Errorf("Expected fatal response for reserved header (Resp = %v)", resp)
 	}
 
 	// bad sequence GTS1

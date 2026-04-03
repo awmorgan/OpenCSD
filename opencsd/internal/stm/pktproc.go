@@ -8,7 +8,6 @@ import (
 	"io"
 	"sync"
 
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -84,13 +83,14 @@ type packetEvent struct {
 
 // PktProc converts the byte stream into basic STM trace packets.
 type PktProc struct {
-	Name       string
-	opMode     common.OpMode
-	Stats      ocsd.DecodeStats
-	statsInit  bool
-	Config     *Config
-	pktOut     ocsd.PacketProcessorExplicit[Packet]
-	PktRawMonI ocsd.PacketMonitor
+	Name            string
+	Stats           ocsd.DecodeStats
+	statsInit       bool
+	Config          *Config
+	pktOut          ocsd.PacketProcessorExplicit[Packet]
+	PktRawMonI      ocsd.PacketMonitor
+	errBadPkts      bool
+	unsyncOnBadPkts bool
 
 	procState processState
 
@@ -140,12 +140,15 @@ type PktProc struct {
 	syncIndex   ocsd.TrcIndex
 }
 
-func (p *PktProc) ComponentOpMode() uint32  { return p.opMode.ComponentOpMode() }
-func (p *PktProc) SupportedOpModes() uint32 { return p.opMode.SupportedOpModes() }
-func (p *PktProc) SetComponentOpMode(opFlags uint32) error {
-	return p.opMode.SetComponentOpMode(opFlags)
+func (p *PktProc) ApplyFlags(flags uint32) error {
+	if (flags & ocsd.OpflgPktprocErrBadPkts) != 0 {
+		p.errBadPkts = true
+	}
+	if (flags & ocsd.OpflgPktprocUnsyncOnBadPkts) != 0 {
+		p.unsyncOnBadPkts = true
+	}
+	return nil
 }
-func (p *PktProc) ConfigureSupportedOpModes(flags uint32) { p.opMode.ConfigureSupportedOpModes(flags) }
 
 func NewPktProc(cfg *Config) *PktProc {
 	instIDNum := 0
@@ -158,7 +161,6 @@ func NewPktProc(cfg *Config) *PktProc {
 	p.packetDataRef = stmGetPacketBufRef()
 	p.packetData = (*p.packetDataRef)[:0]
 	p.ResetStats()
-	p.ConfigureSupportedOpModes(ocsd.OpflgPktprocCommon)
 	p.resetProcessorState()
 	p.buildOpTables()
 	if cfg != nil {
@@ -493,9 +495,9 @@ func (p *PktProc) handleProcError(err error) (resp ocsd.DatapathResp, outErr err
 	}
 
 	if (errors.Is(err, ocsd.ErrBadPacketSeq) || errors.Is(err, ocsd.ErrInvalidPcktHdr)) &&
-		(p.ComponentOpMode()&ocsd.OpflgPktprocErrBadPkts) == 0 {
+		!p.errBadPkts {
 		resp = p.outputPacket()
-		if (p.ComponentOpMode() & ocsd.OpflgPktprocUnsyncOnBadPkts) != 0 {
+		if p.unsyncOnBadPkts {
 			p.procState = procWaitSync
 		}
 		return resp, err, true

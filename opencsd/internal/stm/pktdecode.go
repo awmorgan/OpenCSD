@@ -28,7 +28,6 @@ type stateFn func() (stateFn, ocsd.DatapathResp, bool)
 
 type PktDecode struct {
 	Name         string
-	opMode       common.OpMode
 	TraceElemOut ocsd.GenElemProcessor
 	MemAccess    common.TargetMemAccess
 	InstrDecode  common.InstrDecode
@@ -57,14 +56,7 @@ type PktDecode struct {
 	collectElements bool
 }
 
-func (d *PktDecode) ComponentOpMode() uint32  { return d.opMode.ComponentOpMode() }
-func (d *PktDecode) SupportedOpModes() uint32 { return d.opMode.SupportedOpModes() }
-func (d *PktDecode) SetComponentOpMode(opFlags uint32) error {
-	return d.opMode.SetComponentOpMode(opFlags)
-}
-func (d *PktDecode) ConfigureSupportedOpModes(flags uint32) {
-	d.opMode.ConfigureSupportedOpModes(flags)
-}
+func (d *PktDecode) ApplyFlags(flags uint32) error { return nil }
 
 // NewPktDecode creates a new STM packet decoder.
 func NewPktDecode(cfg *Config) (*PktDecode, error) {

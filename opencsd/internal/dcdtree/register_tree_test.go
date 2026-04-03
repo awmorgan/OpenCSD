@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -38,21 +37,19 @@ func (f *fakeGenElemOut) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, el
 }
 
 type fakePipelineWiringHandle struct {
-	opMode common.OpMode
+	appliedFlags uint32
 }
 
-func (f *fakePipelineWiringHandle) ComponentOpMode() uint32  { return f.opMode.ComponentOpMode() }
-func (f *fakePipelineWiringHandle) SupportedOpModes() uint32 { return f.opMode.SupportedOpModes() }
-func (f *fakePipelineWiringHandle) SetComponentOpMode(opFlags uint32) error {
-	return f.opMode.SetComponentOpMode(opFlags)
+func (f *fakePipelineWiringHandle) ApplyFlags(flags uint32) error {
+	f.appliedFlags |= flags
+	return nil
 }
 
-type fakeManager struct{ opMode common.OpMode }
+type fakeManager struct{ appliedFlags uint32 }
 
-func (f *fakeManager) ComponentOpMode() uint32  { return f.opMode.ComponentOpMode() }
-func (f *fakeManager) SupportedOpModes() uint32 { return f.opMode.SupportedOpModes() }
-func (f *fakeManager) SetComponentOpMode(opFlags uint32) error {
-	return f.opMode.SetComponentOpMode(opFlags)
+func (f *fakeManager) ApplyFlags(flags uint32) error {
+	f.appliedFlags |= flags
+	return nil
 }
 
 func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
@@ -124,8 +121,8 @@ func TestDecodeTreeAddDecoderDirectInjection(t *testing.T) {
 	if elem.DataIn != pktIn {
 		t.Fatal("expected injected packet processor to be preserved")
 	}
-	if elem.Manager != manager {
-		t.Fatal("expected injected mode manager to be preserved")
+	if elem.FlagApplier != manager {
+		t.Fatal("expected injected flag applier to be preserved")
 	}
 
 	err = tree.AddDecoder(0x00, "duplicate", ocsd.ProtocolSTM, pktIn, manager)

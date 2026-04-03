@@ -123,7 +123,6 @@ type elemRes struct {
 // PktDecode decodes ETMv4 trace packets into generic trace elements.
 type PktDecode struct {
 	Name         string
-	opMode       common.OpMode
 	TraceElemOut ocsd.GenElemProcessor
 	MemAccess    common.TargetMemAccess
 	InstrDecode  common.InstrDecode
@@ -172,6 +171,8 @@ type PktDecode struct {
 
 	instrRangeLimit uint32
 	aa64BadOpcode   bool
+	srcAddrNAtoms   bool
+	aa64OpcodeCheck bool
 
 	// Expected start address for the next continuous range (C++ m_next_range_check).
 	nextRangeCheck struct {
@@ -184,13 +185,15 @@ type PktDecode struct {
 	collectElements bool
 }
 
-func (d *PktDecode) ComponentOpMode() uint32  { return d.opMode.ComponentOpMode() }
-func (d *PktDecode) SupportedOpModes() uint32 { return d.opMode.SupportedOpModes() }
-func (d *PktDecode) SetComponentOpMode(opFlags uint32) error {
-	return d.opMode.SetComponentOpMode(opFlags)
-}
-func (d *PktDecode) ConfigureSupportedOpModes(flags uint32) {
-	d.opMode.ConfigureSupportedOpModes(flags)
+func (d *PktDecode) ApplyFlags(flags uint32) error {
+	if (flags & ocsd.OpflgPktdecSrcAddrNAtoms) != 0 {
+		d.srcAddrNAtoms = true
+	}
+	if (flags & ocsd.OpflgPktdecAA64OpcodeChk) != 0 {
+		d.aa64OpcodeCheck = true
+	}
+	d.syncAA64OpcodeCheckMode()
+	return nil
 }
 
 // SetTraceElemOut satisfies dcdtree's traceElemSetterOwner interface.
@@ -263,7 +266,6 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 	d := &PktDecode{
 		Name: fmt.Sprintf("DCD_ETMV4_%d", instIDNum),
 	}
-	d.ConfigureSupportedOpModes(ocsd.OpflgPktdecCommon | ocsd.OpflgPktdecSrcAddrNAtoms | ocsd.OpflgPktdecAA64OpcodeChk)
 	if err := d.SetProtocolConfig(cfg); err != nil {
 		return nil, err
 	}
@@ -456,7 +458,7 @@ func (d *PktDecode) SetInstrRangeLimit(limit uint32) {
 }
 
 func (d *PktDecode) syncAA64OpcodeCheckMode() {
-	enabled := d.aa64BadOpcode || (d.ComponentOpMode()&ocsd.OpflgPktdecAA64OpcodeChk) != 0
+	enabled := d.aa64BadOpcode || d.aa64OpcodeCheck
 	if d.InstrDecode == nil {
 		return
 	}
@@ -1583,7 +1585,7 @@ func (d *PktDecode) processSourceAddress(elem *p0Elem) error {
 	srcAddr := elem.addrVal
 	currAddr := d.instrInfo.InstrAddr
 	var outRange instrRange
-	splitRangeOnN := (d.ComponentOpMode() & ocsd.OpflgPktdecSrcAddrNAtoms) != 0
+	splitRangeOnN := d.srcAddrNAtoms
 
 	bytesReq := uint32(4)
 	bytesRead, memData, errMem := d.accessMemory(srcAddr, d.getCurrMemSpace(), bytesReq)

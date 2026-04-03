@@ -589,17 +589,12 @@ func applyAdditionalFlags(tree *dcdtree.DecodeTree, flags uint32) error {
 	}
 
 	apply := func(component any) error {
-		opComp := component.(common.OpModeManager)
-		if opComp == nil {
+		applier, ok := component.(common.FlagApplier)
+		if !ok || applier == nil {
 			return nil
 		}
-		supported := opComp.SupportedOpModes()
-		applyFlags := flags & supported
-		if applyFlags == 0 {
-			return nil
-		}
-		if err := opComp.SetComponentOpMode(opComp.ComponentOpMode() | applyFlags); err != nil {
-			return fmt.Errorf("set op mode for %T with flags 0x%x: %w", component, applyFlags, err)
+		if err := applier.ApplyFlags(flags); err != nil {
+			return fmt.Errorf("apply flags for %T with flags 0x%x: %w", component, flags, err)
 		}
 		return nil
 	}
@@ -609,7 +604,7 @@ func applyAdditionalFlags(tree *dcdtree.DecodeTree, flags uint32) error {
 		if elem == nil || applyErr != nil {
 			return
 		}
-		if err := apply(elem.Manager); err != nil {
+		if err := apply(elem.FlagApplier); err != nil {
 			applyErr = err
 		}
 	})
