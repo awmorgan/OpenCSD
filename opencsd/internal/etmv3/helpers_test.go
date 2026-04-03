@@ -2,6 +2,7 @@ package etmv3
 
 import (
 	"errors"
+	"io"
 	"testing"
 
 	"opencsd/internal/idec"
@@ -105,4 +106,20 @@ func mustNewConfiguredPktDecode(tb testing.TB, config *Config) *PktDecode {
 
 func isErrorCode(err error, code error) bool {
 	return errors.Is(err, code)
+}
+
+func drainDecodedElements(t *testing.T, dec *PktDecode) []ocsd.TraceElement {
+	t.Helper()
+	elems := make([]ocsd.TraceElement, 0)
+	for {
+		elem, err := dec.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("decoder next failed: %v", err)
+		}
+		elems = append(elems, *elem)
+	}
+	return elems
 }

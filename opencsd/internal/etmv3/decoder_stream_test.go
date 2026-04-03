@@ -8,7 +8,7 @@ import (
 
 func TestDecoderAtomProcessing(t *testing.T) {
 	config := &Config{}
-	dec, out := setupDecFast(config)
+	dec := setupDecFast(config)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -46,14 +46,14 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	pkt4.Atom.Num = 3
 	dec.PacketDataIn(ocsd.OpData, 3, pkt4)
 
-	if len(out.elements) == 0 {
+	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements from atom processing")
 	}
 }
 
 func TestDecoderWPUpdate(t *testing.T) {
 	config := &Config{}
-	dec, out := setupDecFast(config)
+	dec := setupDecFast(config)
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
 	pkt := &Packet{}
@@ -71,14 +71,14 @@ func TestDecoderWPUpdate(t *testing.T) {
 	pkt2.Addr = 0x3000
 	dec.PacketDataIn(ocsd.OpData, 1, pkt2)
 
-	if len(out.elements) == 0 {
+	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements from WP update")
 	}
 }
 
 func TestDecoderBranchWithException(t *testing.T) {
 	config := &Config{}
-	dec, out := setupDecFast(config)
+	dec := setupDecFast(config)
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
 	pkt := &Packet{}
@@ -99,14 +99,14 @@ func TestDecoderBranchWithException(t *testing.T) {
 	pkt3.CycleCount = 10
 	dec.PacketDataIn(ocsd.OpData, 2, pkt3)
 
-	if len(out.elements) == 0 {
+	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements")
 	}
 }
 
 func TestDecoderMemNacc(t *testing.T) {
 	config := &Config{}
-	dec, out := setupDecFast(config)
+	dec := setupDecFast(config)
 	mem := &mockMemAcc{failAfter: 1, hitAfter: -1} // fail on 2nd read, never find branch
 	dec.SetMemAccess(mem)
 	dec.SetInstrDecode(idec.NewDecoder())
@@ -134,14 +134,14 @@ func TestDecoderMemNacc(t *testing.T) {
 	pkt3.CurrISA = ocsd.ISAArm
 	dec.PacketDataIn(ocsd.OpData, 2, pkt3)
 
-	if len(out.elements) == 0 {
+	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Logf("No elements generated (memNacc path)")
 	}
 }
 
 func TestDecoderContProcess(t *testing.T) {
 	config := &Config{}
-	dec, out := setupDecFast(config)
+	dec := setupDecFast(config)
 
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
@@ -161,14 +161,12 @@ func TestDecoderContProcess(t *testing.T) {
 	pkt.Type = PktTrigger
 	dec.PacketDataIn(ocsd.OpData, 0, pkt)
 
-	if out == nil {
-		t.Error()
-	}
+	_ = drainDecodedElements(t, dec)
 }
 
 func TestDecoderBranchVariations(t *testing.T) {
 	config := &Config{}
-	dec, _ := setupDecFast(config)
+	dec := setupDecFast(config)
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
 	syncPkt := &Packet{}
@@ -209,7 +207,7 @@ func TestDecoderBranchVariations(t *testing.T) {
 
 func TestDecoderPHeaderVariations(t *testing.T) {
 	config := &Config{}
-	dec, _ := setupDecFast(config)
+	dec := setupDecFast(config)
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
 	pkt1 := &Packet{}
@@ -247,7 +245,7 @@ func TestDecoderPHeaderVariations(t *testing.T) {
 
 func TestDecoderAtomUsage(t *testing.T) {
 	config := &Config{}
-	dec, out := setupDecFast(config)
+	dec := setupDecFast(config)
 	mem := &mockMemAcc{failAfter: 10, hitAfter: 0, instrType: ocsd.InstrBr}
 	dec.SetMemAccess(mem)
 	dec.SetInstrDecode(idec.NewDecoder()) // conditional branch consumes atoms!
@@ -274,18 +272,19 @@ func TestDecoderAtomUsage(t *testing.T) {
 	pkt3.Addr = 0x2000
 	dec.PacketDataIn(ocsd.OpData, 2, pkt3)
 
-	for _, e := range out.elements {
+	elems := drainDecodedElements(t, dec)
+	for _, e := range elems {
 		t.Logf("Generated Element: %v", e.ElemType)
 	}
 
-	if len(out.elements) < 1 { // Allow at least 1 for now (IDSync)
-		t.Errorf("Expected at least one element, got %d", len(out.elements))
+	if len(elems) < 1 { // Allow at least 1 for now (IDSync)
+		t.Errorf("Expected at least one element, got %d", len(elems))
 	}
 }
 
 func TestDecoderAllPackets(t *testing.T) {
 	config := &Config{}
-	dec, _ := setupDecFast(config)
+	dec := setupDecFast(config)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -331,12 +330,10 @@ func TestDecoderAllPackets(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 }
 
-func setupDecFast(config *Config) (*PktDecode, *testTrcElemIn) {
+func setupDecFast(config *Config) *PktDecode {
 	dec, err := NewConfiguredPktDecode(0, config, &mockMemAcc{failAfter: -1}, idec.NewDecoder())
 	if err != nil {
 		panic(err)
 	}
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
-	return dec, out
+	return dec
 }

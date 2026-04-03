@@ -7,7 +7,7 @@ import (
 )
 
 func TestDecodePacketPreservesWaitISyncWithoutOutput(t *testing.T) {
-	dec, _ := setupDecFast(&Config{})
+	dec := setupDecFast(&Config{})
 	dec.currState = waitISync
 	dec.waitISync = true
 
@@ -29,8 +29,7 @@ func TestDecodePacketPreservesWaitISyncWithoutOutput(t *testing.T) {
 }
 
 func TestOnFlushCommitsPendingElements(t *testing.T) {
-	dec, out := setupDecFast(&Config{})
-	out.elements = nil
+	dec := setupDecFast(&Config{})
 	dec.currState = decodePkts
 
 	elem := dec.outputElemList.NextElem(7)
@@ -41,11 +40,12 @@ func TestOnFlushCommitsPendingElements(t *testing.T) {
 	if resp != ocsd.RespCont {
 		t.Fatalf("expected RespCont, got %v", resp)
 	}
-	if len(out.elements) != 1 {
-		t.Fatalf("expected 1 flushed element, got %d", len(out.elements))
+	elems := drainDecodedElements(t, dec)
+	if len(elems) != 1 {
+		t.Fatalf("expected 1 flushed element, got %d", len(elems))
 	}
-	if out.elements[0].ElemType != ocsd.GenElemInstrRange {
-		t.Fatalf("expected flushed element to be an instruction range, got %v", out.elements[0].ElemType)
+	if elems[0].ElemType != ocsd.GenElemInstrRange {
+		t.Fatalf("expected flushed element to be an instruction range, got %v", elems[0].ElemType)
 	}
 	if dec.currState != decodePkts {
 		t.Fatalf("expected flush to return decoder to decodePkts, got %v", dec.currState)
