@@ -619,12 +619,6 @@ func bindTreeTraceElemSink(tree *dcdtree.DecodeTree, sink ocsd.GenElemProcessor)
 			setter.SetTraceElemOut(sink)
 			return
 		}
-		switch dec := elem.Iterator.(type) {
-		case *itm.PktDecode:
-			dec.TraceElemOut = sink
-		case *ptm.PktDecode:
-			dec.TraceElemOut = sink
-		}
 	})
 }
 

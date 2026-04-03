@@ -28,7 +28,7 @@ type stateFn func() (stateFn, ocsd.DatapathResp, bool)
 // PktDecode decodes ITM packets into generic ITM-SW trace packets.
 type PktDecode struct {
 	Name         string
-	TraceElemOut ocsd.GenElemProcessor
+	traceElemOut ocsd.GenElemProcessor
 	MemAccess    common.TargetMemAccess
 	InstrDecode  common.InstrDecode
 	IndexCurrPkt ocsd.TrcIndex
@@ -80,12 +80,12 @@ func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) e
 		d.pendingElements = append(d.pendingElements, e)
 		return nil
 	}
-	if d.TraceElemOut == nil {
+	if d.traceElemOut == nil {
 		e := traceElemEvent{d.IndexCurrPkt, traceID, cloneQueuedElem(elem)}
 		d.pendingElements = append(d.pendingElements, e)
 		return nil
 	}
-	err := d.TraceElemOut.TraceElemIn(d.IndexCurrPkt, traceID, elem)
+	err := d.traceElemOut.TraceElemIn(d.IndexCurrPkt, traceID, elem)
 	if ocsd.IsDataContErr(err) {
 		return nil
 	}
@@ -97,12 +97,12 @@ func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) e
 
 // OutputTraceElementIdx sends an element at an explicit index.
 func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
-	if d.TraceElemOut == nil {
+	if d.traceElemOut == nil {
 		e := traceElemEvent{idx, traceID, cloneQueuedElem(elem)}
 		d.pendingElements = append(d.pendingElements, e)
 		return nil
 	}
-	err := d.TraceElemOut.TraceElemIn(idx, traceID, elem)
+	err := d.traceElemOut.TraceElemIn(idx, traceID, elem)
 	if ocsd.IsDataContErr(err) {
 		return nil
 	}
@@ -162,7 +162,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 			resp = d.ProcessPacket()
 			d.collectElements = false
 			// Drain queued elements only when using legacy push sink wiring.
-			if ocsd.DataRespIsCont(resp) && d.TraceElemOut != nil {
+			if ocsd.DataRespIsCont(resp) && d.traceElemOut != nil {
 				err = nil
 				for {
 					_, _, _, nextErr := d.NextElement()
@@ -322,8 +322,8 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 	}
 	e := d.pendingElements[0]
 	d.pendingElements = d.pendingElements[1:]
-	if d.TraceElemOut != nil {
-		err := d.TraceElemOut.TraceElemIn(e.index, e.traceID, &e.elem)
+	if d.traceElemOut != nil {
+		err := d.traceElemOut.TraceElemIn(e.index, e.traceID, &e.elem)
 		if ocsd.IsDataContErr(err) {
 			return e.index, e.traceID, e.elem, nil
 		}
@@ -348,6 +348,11 @@ func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
 	e.Index = idx
 	e.TraceID = traceID
 	return &e, nil
+}
+
+// SetTraceElemOut attaches a transitional push sink for compatibility wiring.
+func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
+	d.traceElemOut = out
 }
 
 // putBackElement unreads an element to the front of the pending queue.

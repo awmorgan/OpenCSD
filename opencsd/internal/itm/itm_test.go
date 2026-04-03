@@ -2,6 +2,7 @@ package itm
 
 import (
 	"errors"
+	"io"
 	"testing"
 
 	"opencsd/internal/ocsd"
@@ -98,8 +99,7 @@ func TestITMEndToEndDecode(t *testing.T) {
 		cfg := &Config{}
 		cfg.SetTraceID(0x11)
 
-		outReceiver := &testTrcElemIn{}
-		proc, _, err := NewPipeline(0, cfg, outReceiver, nil, nil)
+		proc, dec, err := NewPipeline(0, cfg, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("NewPipeline failed: %v", err)
 		}
@@ -107,7 +107,19 @@ func TestITMEndToEndDecode(t *testing.T) {
 		proc.TraceDataIn(ocsd.OpData, 0, stream)
 		proc.TraceDataIn(ocsd.OpFlush, 0, nil)
 		proc.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(len(stream)), nil)
-		return outReceiver.elements
+
+		elems := make([]ocsd.TraceElement, 0)
+		for {
+			elem, nextErr := dec.Next()
+			if errors.Is(nextErr, io.EOF) {
+				break
+			}
+			if nextErr != nil {
+				t.Fatalf("decoder next failed: %v", nextErr)
+			}
+			elems = append(elems, *elem)
+		}
+		return elems
 	}
 
 	t.Run("SWITAndDWT", func(t *testing.T) {

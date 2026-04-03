@@ -82,7 +82,7 @@ func (a *PtmAtoms) clearAll() {
 
 type PktDecode struct {
 	Name         string
-	TraceElemOut ocsd.GenElemProcessor // Deprecated: retained temporarily for test compatibility.
+	traceElemOut ocsd.GenElemProcessor
 	MemAccess    common.TargetMemAccess
 	InstrDecode  common.InstrDecode
 	IndexCurrPkt ocsd.TrcIndex
@@ -135,12 +135,12 @@ func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) e
 		d.pendingElements = append(d.pendingElements, e)
 		return nil
 	}
-	if d.TraceElemOut == nil {
+	if d.traceElemOut == nil {
 		e := traceElemEvent{d.IndexCurrPkt, traceID, cloneQueuedElem(elem)}
 		d.pendingElements = append(d.pendingElements, e)
 		return nil
 	}
-	err := d.TraceElemOut.TraceElemIn(d.IndexCurrPkt, traceID, elem)
+	err := d.traceElemOut.TraceElemIn(d.IndexCurrPkt, traceID, elem)
 	if ocsd.IsDataContErr(err) {
 		return nil
 	}
@@ -157,8 +157,8 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 	}
 	e := d.pendingElements[0]
 	d.pendingElements = d.pendingElements[1:]
-	if d.TraceElemOut != nil {
-		err := d.TraceElemOut.TraceElemIn(e.index, e.traceID, &e.elem)
+	if d.traceElemOut != nil {
+		err := d.traceElemOut.TraceElemIn(e.index, e.traceID, &e.elem)
 		if ocsd.IsDataContErr(err) {
 			return e.index, e.traceID, e.elem, nil
 		}
@@ -179,6 +179,10 @@ func (d *PktDecode) putBackElement(index ocsd.TrcIndex, traceID uint8, elem ocsd
 	d.pendingElements = append([]traceElemEvent{e}, d.pendingElements...)
 }
 
+func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
+	d.traceElemOut = out
+}
+
 func cloneQueuedElem(elem *ocsd.TraceElement) ocsd.TraceElement {
 	clone := *elem
 	if elem.PtrExtendedData != nil {
@@ -194,12 +198,12 @@ func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem
 		d.pendingElements = append(d.pendingElements, e)
 		return nil
 	}
-	if d.TraceElemOut == nil {
+	if d.traceElemOut == nil {
 		e := traceElemEvent{idx, traceID, cloneQueuedElem(elem)}
 		d.pendingElements = append(d.pendingElements, e)
 		return nil
 	}
-	err := d.TraceElemOut.TraceElemIn(idx, traceID, elem)
+	err := d.traceElemOut.TraceElemIn(idx, traceID, elem)
 	if ocsd.IsDataContErr(err) {
 		return nil
 	}
@@ -250,7 +254,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 			resp = d.ProcessPacket()
 			d.collectElements = false
 			// Drain queued elements only when using legacy push sink wiring.
-			if ocsd.DataRespIsCont(resp) && d.TraceElemOut != nil {
+			if ocsd.DataRespIsCont(resp) && d.traceElemOut != nil {
 				err = nil
 				for {
 					_, _, _, nextErr := d.NextElement()
