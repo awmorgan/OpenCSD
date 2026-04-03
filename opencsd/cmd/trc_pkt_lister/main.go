@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"opencsd/internal/common"
@@ -99,6 +100,17 @@ func (g *filteredGenElemPrinter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID u
 type genericRawPrinter struct {
 	writer io.Writer
 	id     uint8
+}
+
+type synchronizedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (w *synchronizedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.w.Write(p)
 }
 
 func (p *genericRawPrinter) SetMute(bool) {}
@@ -202,6 +214,8 @@ func rotateSourceNames(sourceNames []string, first string) []string {
 }
 
 func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sourceNames []string) error {
+	streamOut := &synchronizedWriter{w: out}
+
 	builder := snapshot.NewDecodeTreeBuilder(reader)
 	packetProcOnly := !opts.decode
 	tree, err := builder.Build(opts.srcName, packetProcOnly)
@@ -213,7 +227,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 		return errors.New("trace packet lister: no supported protocols found")
 	}
 
-	if err := configureFrameDemux(tree, out, opts); err != nil {
+	if err := configureFrameDemux(tree, streamOut, opts); err != nil {
 		return err
 	}
 	if err := applyAdditionalFlags(tree, opts.additionalFlags); err != nil {
@@ -257,7 +271,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 		}
 	}
 
-	genPrinter := printers.NewGenericElementPrinter(out)
+	genPrinter := printers.NewGenericElementPrinter(streamOut)
 	genAdapter := &filteredGenElemPrinter{
 		printer:      genPrinter,
 		allSourceIDs: opts.allSourceIDs,
@@ -266,11 +280,10 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 
 	printersAttached := 0
 	if !opts.decodeOnly {
-		printersAttached = attachPacketPrinters(out, tree, opts)
+		printersAttached = attachPacketPrinters(streamOut, tree, opts)
 	}
 
 	if opts.decode {
-		tree.SetGenTraceElemOutI(genAdapter)
 		fmt.Fprintln(out, "Trace Packet Lister : Set trace element decode printer")
 		if opts.testWaits > 0 {
 			genPrinter.SetTestWaits(opts.testWaits)
@@ -279,7 +292,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 			genPrinter.SetMute(true)
 			genPrinter.SetCollectStats()
 		}
-		printMappedRanges(out, mapped)
+		printMappedRanges(streamOut, mapped)
 	}
 
 	if !opts.decode && printersAttached == 0 {
@@ -288,7 +301,12 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 	}
 
 	if !opts.multiSession {
-		return processInputFile(out, tree, builder.BufferFileName(), genPrinter, opts)
+		var pullAdapter *common.PushToPullAdapter
+		if opts.decode {
+			pullAdapter = common.NewPushToPullAdapter()
+			tree.SetGenTraceElemOutI(pullAdapter)
+		}
+		return processInputFile(streamOut, tree, builder.BufferFileName(), pullAdapter, genAdapter, genPrinter, opts)
 	}
 
 	total := len(sourceNames)
@@ -300,7 +318,12 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 			break
 		}
 		binFile := filepath.Join(reader.SnapshotPath, srcTree.BufferInfo.DataFileName)
-		if err := processInputFile(out, tree, binFile, genPrinter, opts); err != nil {
+		var pullAdapter *common.PushToPullAdapter
+		if opts.decode {
+			pullAdapter = common.NewPushToPullAdapter()
+			tree.SetGenTraceElemOutI(pullAdapter)
+		}
+		if err := processInputFile(streamOut, tree, binFile, pullAdapter, genAdapter, genPrinter, opts); err != nil {
 			fmt.Fprintf(out, "Trace Packet Lister : ERROR : Multi-session decode for buffer %s failed. Aborting.\n\n", sourceName)
 			return err
 		}
@@ -323,7 +346,64 @@ func framedTailError(traceIndex uint32, pendingLen, align int) error {
 	)
 }
 
-func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, genPrinter *printers.GenericElementPrinter, opts options) error {
+func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, adapter *common.PushToPullAdapter, genAdapter *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
+	if adapter == nil || genAdapter == nil {
+		return processInputFileProducer(out, tree, fileName, genPrinter, opts)
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		err := processInputFileProducer(out, tree, fileName, genPrinter, opts)
+		adapter.CloseWithError(err)
+		errCh <- err
+	}()
+
+	for {
+		elem, err := adapter.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			adapter.CloseWithError(err)
+			<-errCh
+			return err
+		}
+
+		ackNeeded := true
+		err = genAdapter.TraceElemIn(elem.Index, elem.TraceID, elem)
+		if ocsd.IsDataContErr(err) {
+			adapter.Ack()
+			ackNeeded = false
+			continue
+		}
+		if ocsd.IsDataWaitErr(err) {
+			if genPrinter.NeedAckWait() {
+				genPrinter.AckWait()
+			}
+			adapter.Ack()
+			ackNeeded = false
+			continue
+		}
+		if err != nil {
+			if ackNeeded {
+				adapter.Ack()
+			}
+			adapter.CloseWithError(err)
+			<-errCh
+			return fmt.Errorf("trace packet lister: generic element processing error: %w", err)
+		}
+		if ackNeeded {
+			adapter.Ack()
+		}
+	}
+
+	if err := <-errCh; err != nil {
+		return err
+	}
+	return nil
+}
+
+func processInputFileProducer(out io.Writer, tree *dcdtree.DecodeTree, fileName string, genPrinter *printers.GenericElementPrinter, opts options) error {
 	file, err := os.Open(fileName)
 	if err != nil {
 		return fmt.Errorf("trace packet lister: error: unable to open trace buffer %s: %w", fileName, err)
@@ -371,9 +451,6 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 			}
 
 			if ocsd.DataRespIsWait(dataPathResp) {
-				if genPrinter.NeedAckWait() {
-					genPrinter.AckWait()
-				}
 				var dpErr error
 				_, dpErr = tree.TraceDataIn(ocsd.OpFlush, 0, nil)
 				dataPathResp = ocsd.DataRespFromErr(dpErr)

@@ -9,50 +9,114 @@ import (
 
 // PushToPullAdapter bridges the push-based generic element sink to a pull-based iterator.
 type PushToPullAdapter struct {
-	mu    sync.Mutex
-	queue []*ocsd.TraceElement
+	mu        sync.Mutex
+	cond      *sync.Cond
+	current   *ocsd.TraceElement
+	delivered bool
+	closed    bool
+	closeErr  error
 }
 
 // NewPushToPullAdapter creates an empty push-to-pull bridge.
 func NewPushToPullAdapter() *PushToPullAdapter {
-	return &PushToPullAdapter{
-		queue: make([]*ocsd.TraceElement, 0, 16),
-	}
+	adapter := &PushToPullAdapter{}
+	adapter.cond = sync.NewCond(&adapter.mu)
+	return adapter
 }
 
-// TraceElemIn appends a copy of the incoming element to the internal queue.
+// TraceElemIn hands a copy of the incoming element to the iterator consumer.
 func (a *PushToPullAdapter) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
-	_ = indexSOP
-	_ = trcChanID
-
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	a.queue = append(a.queue, cloneTraceElement(elem))
+	for a.current != nil && !a.closed {
+		a.cond.Wait()
+	}
+	if a.closed {
+		return a.streamErr()
+	}
+
+	a.current = cloneTraceElement(indexSOP, trcChanID, elem)
+	a.delivered = false
+	a.cond.Signal()
+
+	for a.current != nil && !a.closed {
+		a.cond.Wait()
+	}
+	if a.closed {
+		return a.streamErr()
+	}
 	return nil
 }
 
-// Next dequeues the next available trace element, or returns io.EOF if the queue is empty.
+// Next returns the next available trace element, blocking until one is available or the stream closes.
 func (a *PushToPullAdapter) Next() (*ocsd.TraceElement, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	if len(a.queue) == 0 {
-		return nil, io.EOF
+	for a.current != nil && a.delivered && !a.closed {
+		a.cond.Wait()
 	}
 
-	elem := a.queue[0]
-	a.queue[0] = nil
-	a.queue = a.queue[1:]
-	return elem, nil
+	for a.current == nil && !a.closed {
+		a.cond.Wait()
+	}
+
+	if a.current == nil {
+		return nil, a.streamErr()
+	}
+
+	a.delivered = true
+	return a.current, nil
 }
 
-func cloneTraceElement(elem *ocsd.TraceElement) *ocsd.TraceElement {
+// Ack marks the current delivered element as fully processed so the producer can continue.
+func (a *PushToPullAdapter) Ack() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.current == nil || !a.delivered {
+		return
+	}
+
+	a.current = nil
+	a.delivered = false
+	a.cond.Signal()
+}
+
+// Close marks the stream complete.
+func (a *PushToPullAdapter) Close() {
+	a.CloseWithError(nil)
+}
+
+// CloseWithError marks the stream complete and causes Next to return err once in-flight work completes.
+func (a *PushToPullAdapter) CloseWithError(err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.closed {
+		return
+	}
+	a.closed = true
+	a.closeErr = err
+	a.cond.Broadcast()
+}
+
+func (a *PushToPullAdapter) streamErr() error {
+	if a.closeErr != nil {
+		return a.closeErr
+	}
+	return io.EOF
+}
+
+func cloneTraceElement(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) *ocsd.TraceElement {
 	if elem == nil {
 		return nil
 	}
 
 	clone := *elem
+	clone.Index = indexSOP
+	clone.TraceID = trcChanID
 	if elem.PtrExtendedData != nil {
 		clone.PtrExtendedData = append([]byte(nil), elem.PtrExtendedData...)
 	}

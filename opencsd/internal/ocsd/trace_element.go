@@ -112,6 +112,8 @@ type SWTItmInfo struct {
 
 // TraceElement corresponds to OcsdTraceElement
 type TraceElement struct {
+	Index            TrcIndex
+	TraceID          uint8
 	ElemType         GenElemType
 	ISA              ISA
 	StartAddr        VAddr
