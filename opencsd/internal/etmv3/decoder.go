@@ -315,8 +315,6 @@ func (d *PktDecode) configureDecoder() {
 	if d.sink == nil {
 		d.sink = &pktDecodeSink{decoder: d}
 	}
-
-	d.outputElemList.SetSendIf(d.sink)
 }
 
 func (d *PktDecode) resetDecoder() {
@@ -382,16 +380,11 @@ func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 		return resp
 	}
 
-	if d.outputElemList.NumElem() == 0 {
-		d.currState = d.nextDecodeState()
-		return resp
+	for _, dr := range d.outputElemList.Drain() {
+		elem := cloneQueuedElem(&dr.Elem)
+		_ = d.sink.TraceElemIn(dr.Index, d.csID, &elem)
 	}
-
-	d.currState = sendPkts
-	resp = ocsd.DataRespFromErr(d.outputElemList.SendElements())
-	if ocsd.DataRespIsCont(resp) {
-		d.currState = d.nextDecodeState()
-	}
+	d.currState = d.nextDecodeState()
 	return resp
 }
 
@@ -412,11 +405,11 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	elem.Payload.UnsyncEOTInfo = ocsd.UnsyncEOT
 	d.outputElemList.CommitAllPendElem()
 
-	d.currState = sendPkts
-	resp = ocsd.DataRespFromErr(d.outputElemList.SendElements())
-	if ocsd.DataRespIsCont(resp) {
-		d.currState = decodePkts
+	for _, dr := range d.outputElemList.Drain() {
+		elem := cloneQueuedElem(&dr.Elem)
+		_ = d.sink.TraceElemIn(dr.Index, d.csID, &elem)
 	}
+	d.currState = decodePkts
 
 	return resp
 }
@@ -486,11 +479,11 @@ func (d *PktDecode) handleDecodePkts() (decoderState, ocsd.DatapathResp, bool) {
 }
 
 func (d *PktDecode) handleSendPkts() (decoderState, ocsd.DatapathResp, bool) {
-	resp := ocsd.DataRespFromErr(d.outputElemList.SendElements())
-	if ocsd.DataRespIsCont(resp) {
-		return d.nextDecodeState(), resp, true
+	for _, dr := range d.outputElemList.Drain() {
+		elem := cloneQueuedElem(&dr.Elem)
+		_ = d.sink.TraceElemIn(dr.Index, d.csID, &elem)
 	}
-	return sendPkts, resp, true
+	return d.nextDecodeState(), ocsd.RespCont, true
 }
 
 // nextSendOrDecodeState returns sendPkts if there are elements to send, otherwise the next decode state.
@@ -567,7 +560,11 @@ func (d *PktDecode) sendUnsyncPacket() ocsd.DatapathResp {
 
 	elem.SetType(ocsd.GenElemNoSync)
 	elem.Payload.UnsyncEOTInfo = ocsd.UnsyncInfo(d.unsyncInfo)
-	return ocsd.DataRespFromErr(d.outputElemList.SendElements())
+	for _, dr := range d.outputElemList.Drain() {
+		e := cloneQueuedElem(&dr.Elem)
+		_ = d.sink.TraceElemIn(dr.Index, d.csID, &e)
+	}
+	return ocsd.RespCont
 }
 
 func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {

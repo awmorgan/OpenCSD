@@ -38,6 +38,16 @@ type elemSlot struct {
 	pktIndex ocsd.TrcIndex
 }
 
+// DrainedElement is the transport value returned by ElemList.Drain() and
+// ElemStack.Drain(). It carries a value copy of the element together with the
+// packet byte-index at which the element was originally produced, preserving
+// the historical index rather than the index of the packet that triggered the
+// drain (e.g. a Commit packet).
+type DrainedElement struct {
+	Index ocsd.TrcIndex
+	Elem  ocsd.TraceElement
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ElemList
 // ─────────────────────────────────────────────────────────────────────────────
@@ -164,6 +174,31 @@ func (l *ElemList) SendElements() error {
 	return outErr
 }
 
+// Drain returns a value-copy of every committed (non-pending) element, each
+// paired with its original packet index, and removes them from the list.
+// Pending elements (the last numPend slots) are preserved unchanged.
+func (l *ElemList) Drain() []DrainedElement {
+	committed := len(l.elems) - l.numPend
+	if committed <= 0 {
+		return nil
+	}
+	out := make([]DrainedElement, committed)
+	for i := range committed {
+		out[i] = DrainedElement{Index: l.elems[i].pktIndex, Elem: *l.elems[i].elem}
+		putPoolElem(l.elems[i].elem)
+		l.elems[i].elem = nil // release GC root after pool return
+	}
+	// Shift any pending slots to the front.
+	copy(l.elems, l.elems[committed:])
+	// Nil-zero the now-duplicate tail entries to release GC roots.
+	tail := len(l.elems) - committed
+	for i := tail; i < len(l.elems); i++ {
+		l.elems[i].elem = nil
+	}
+	l.elems = l.elems[:l.numPend]
+	return out
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ElemStack
 // ─────────────────────────────────────────────────────────────────────────────
@@ -212,9 +247,6 @@ func (s *ElemStack) CurrElem() *ocsd.TraceElement {
 // ResetElemStack resets the stack, preserving persistent context data from
 // the current element into position 0.
 func (s *ElemStack) ResetElemStack() error {
-	if s.sendIf == nil {
-		return ocsd.ErrNotInit
-	}
 	s.resetIndexes()
 	return nil
 }
@@ -312,4 +344,20 @@ func (s *ElemStack) SendElements() error {
 		s.resetIndexes()
 	}
 	return outErr
+}
+
+// Drain returns a value-copy of every element queued for sending, each paired
+// with its original packet index, and resets the stack (calling resetIndexes,
+// which preserves persistent arch context). Returns nil if nothing is queued.
+func (s *ElemStack) Drain() []DrainedElement {
+	if s.elemToSend == 0 {
+		return nil
+	}
+	out := make([]DrainedElement, s.elemToSend)
+	for i := 0; i < s.elemToSend; i++ {
+		slot := s.elems[s.sendElemIdx+i]
+		out[i] = DrainedElement{Index: slot.pktIndex, Elem: *slot.elem}
+	}
+	s.resetIndexes()
+	return out
 }

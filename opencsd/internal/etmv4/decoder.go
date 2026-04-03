@@ -425,7 +425,6 @@ func (d *PktDecode) configureDecoder() {
 	if d.sink == nil {
 		d.sink = &pktDecodeSink{decoder: d}
 	}
-	d.outElem.SetSendIf(d.sink)
 	if d.config != nil {
 		d.outElem.SetCSID(d.config.TraceID())
 	}
@@ -446,7 +445,6 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 	d.maxSpecDepth = int(d.config.MaxSpecDepth())
 	d.configureDecoder()
 	d.outElem.SetCSID(d.config.TraceID())
-	d.outElem.SetSendIf(d.sink)
 
 	// Match C++ decoder behavior: enable the return stack only when configured.
 	if d.config.EnabledRetStack() {
@@ -563,7 +561,10 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	if err != nil {
 		resp = ocsd.RespFatalInvalidData
 	} else {
-		resp = ocsd.DataRespFromErr(d.outElem.SendElements())
+		for _, dr := range d.outElem.Drain() {
+			elem := cloneQueuedElem(&dr.Elem)
+			_ = d.sink.TraceElemIn(dr.Index, d.config.TraceID(), &elem)
+		}
 	}
 	return resp
 }
@@ -578,7 +579,11 @@ func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 	if d.currState == resolveElem {
 		return d.resolveElements()
 	}
-	return ocsd.DataRespFromErr(d.outElem.SendElements())
+	for _, dr := range d.outElem.Drain() {
+		elem := cloneQueuedElem(&dr.Elem)
+		_ = d.sink.TraceElemIn(dr.Index, d.config.TraceID(), &elem)
+	}
+	return ocsd.RespCont
 }
 
 func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
@@ -613,9 +618,12 @@ func (d *PktDecode) handleNoSync() (ocsd.DatapathResp, bool) {
 		err = d.outElem.AddElemType(d.IndexCurrPkt, ocsd.GenElemNoSync)
 		if err == nil {
 			d.outElem.CurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
-			resp := ocsd.DataRespFromErr(d.outElem.SendElements())
+			for _, dr := range d.outElem.Drain() {
+				elem := cloneQueuedElem(&dr.Elem)
+				_ = d.sink.TraceElemIn(dr.Index, d.config.TraceID(), &elem)
+			}
 			d.currState = waitSync
-			return resp, false // continue to waitSync
+			return ocsd.RespCont, false // continue to waitSync
 		}
 	}
 	return ocsd.RespFatalSysErr, true
@@ -675,7 +683,10 @@ func (d *PktDecode) resolveElements() ocsd.DatapathResp {
 
 	for !complete {
 		if d.outElem.NumElemToSend() > 0 {
-			resp = ocsd.DataRespFromErr(d.outElem.SendElements())
+			for _, dr := range d.outElem.Drain() {
+				elem := cloneQueuedElem(&dr.Elem)
+				_ = d.sink.TraceElemIn(dr.Index, d.config.TraceID(), &elem)
+			}
 		} else if d.isElemForRes() {
 			err := error(nil)
 			if d.elemRes.P0Commit != 0 {
@@ -2053,7 +2064,6 @@ func (d *PktDecode) resetDecoderState() {
 		if d.config != nil {
 			d.outElem.SetCSID(d.config.TraceID())
 		}
-		d.outElem.SetSendIf(d.sink)
 	}
 
 	d.returnStack = *common.NewAddrReturnStack()
@@ -2085,7 +2095,11 @@ func (d *PktDecode) emitNoSyncAtUnsyncIdx() ocsd.DatapathResp {
 		return ocsd.RespFatalSysErr
 	}
 	d.outElem.CurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
-	return ocsd.DataRespFromErr(d.outElem.SendElements())
+	for _, dr := range d.outElem.Drain() {
+		elem := cloneQueuedElem(&dr.Elem)
+		_ = d.sink.TraceElemIn(dr.Index, d.config.TraceID(), &elem)
+	}
+	return ocsd.RespCont
 }
 
 // ========================
