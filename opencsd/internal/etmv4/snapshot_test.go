@@ -369,7 +369,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		if dec == nil {
 			err = tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, applier)
 		} else {
-			err = tree.AddWiredDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec, dec.SetTraceElemOut)
+			err = tree.AddDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec)
 			if err == nil {
 				err = tree.AddPullDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, dec)
 			}
@@ -445,7 +445,6 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 
 	var out bytes.Buffer
 	printer := printers.NewGenericElementPrinter(&out)
-	tree.SetGenTraceElemOutI(printer)
 	if !opts.suppressRawPackets {
 		tree.ForEachElement(func(csID uint8, elem *dcdtree.DecodeTreeElement) {
 			proc, ok := elem.DataIn.(*etmv4.Processor)
@@ -454,6 +453,9 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 			}
 			proc.SetPktRawMonitor(&etmv4RawPacketPrinter{writer: &out, traceID: csID})
 		})
+	}
+	if err := drainAndPrintElements(tree, printer); err != nil {
+		return nil, err
 	}
 
 	binFile := filepath.Join(snapshotDir, sourceTree.BufferInfo.DataFileName)
@@ -480,6 +482,9 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 				}
 				traceIndex += consumed
 				payload = payload[consumed:]
+				if err := drainAndPrintElements(tree, printer); err != nil {
+					return nil, err
+				}
 			}
 
 			remaining = remaining[payloadLen:]
@@ -504,6 +509,9 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 			}
 			traceIndex += consumed
 			pending = pending[consumed:]
+			if err := drainAndPrintElements(tree, printer); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		remaining := traceData
@@ -518,6 +526,9 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 			}
 			traceIndex += consumed
 			remaining = remaining[consumed:]
+			if err := drainAndPrintElements(tree, printer); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -526,12 +537,33 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 	if ocsd.DataRespIsFatal(resp) {
 		return nil, fmt.Errorf("fatal datapath response on EOT")
 	}
+	if err := drainAndPrintElements(tree, printer); err != nil {
+		return nil, err
+	}
 
 	if opts.useCallbackMemAcc && callbackReads == 0 {
 		return nil, fmt.Errorf("callback memory accessor was not exercised")
 	}
 
 	return out.Bytes(), nil
+}
+
+func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericElementPrinter) error {
+	if tree == nil || printer == nil {
+		return nil
+	}
+	for {
+		elem, err := tree.Next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if printErr := printer.TraceElemIn(elem.Index, elem.TraceID, elem); printErr != nil && !ocsd.IsDataWaitErr(printErr) {
+			return printErr
+		}
+	}
 }
 
 func sanitizePPL(s string, traceIDs []string, includeGenElems bool) string {
@@ -587,11 +619,17 @@ func sanitizePPL(s string, traceIDs []string, includeGenElems bool) string {
 		return strings.Join(out, "\n")
 	}
 
-	out := make([]string, 0, len(parsed))
+	byID := make(map[string][]string, len(idSet))
 	for _, entry := range parsed {
 		if _, ok := idSet[entry.id]; ok {
-			out = append(out, entry.line)
+			byID[entry.id] = append(byID[entry.id], entry.line)
 		}
+	}
+
+	out := make([]string, 0, len(parsed))
+	for _, rawID := range traceIDs {
+		id := strings.ToLower(strings.TrimSpace(rawID))
+		out = append(out, byID[id]...)
 	}
 
 	return strings.Join(out, "\n")
@@ -602,7 +640,13 @@ func normalizeSnapshotLine(line string, includeGenElems bool) string {
 		if !includeGenElems {
 			return ""
 		}
+		if strings.Contains(line, "OCSD_GEN_TRC_ELEM_NO_SYNC") {
+			return ""
+		}
 		return line
+	}
+	if includeGenElems {
+		return ""
 	}
 
 	left, right, ok := strings.Cut(line, "\t")

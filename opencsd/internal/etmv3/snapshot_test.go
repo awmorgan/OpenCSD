@@ -2,6 +2,7 @@ package etmv3_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -271,7 +272,7 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			return nil, fmt.Errorf("create ETMv3 pipeline for %s failed: %v", srcDevName, err)
 		}
 
-		if err := tree.AddWiredDecoder(traceID, ocsd.BuiltinDcdETMV3, ocsd.ProtocolETMV3, proc, dec, dec.SetTraceElemOut); err != nil {
+		if err := tree.AddDecoder(traceID, ocsd.BuiltinDcdETMV3, ocsd.ProtocolETMV3, proc, dec); err != nil {
 			return nil, fmt.Errorf("attach ETMv3 decoder for %s failed: %v", srcDevName, err)
 		}
 		if err := tree.AddPullDecoder(traceID, ocsd.BuiltinDcdETMV3, ocsd.ProtocolETMV3, dec); err != nil {
@@ -311,7 +312,6 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	var out bytes.Buffer
 	// Attach generic element printer.
 	printer := printers.NewGenericElementPrinter(&out)
-	tree.SetGenTraceElemOutI(printer)
 
 	// Attach raw packet monitor to each ETMv3 decoder.
 	tree.ForEachElement(func(csID uint8, elem *dcdtree.DecodeTreeElement) {
@@ -321,6 +321,9 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		}
 		proc.SetPktRawMonitor(&etmv3RawPacketPrinter{writer: &out, traceID: csID})
 	})
+	if err := drainAndPrintElements(tree, printer); err != nil {
+		return nil, err
+	}
 
 	// Read and feed trace data.
 	binFile := filepath.Join(snapshotDir, sourceTree.BufferInfo.DataFileName)
@@ -350,6 +353,9 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			}
 			traceIndex += consumed
 			pending = pending[consumed:]
+			if err := drainAndPrintElements(tree, printer); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		remaining := traceData
@@ -364,6 +370,9 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			}
 			traceIndex += consumed
 			remaining = remaining[consumed:]
+			if err := drainAndPrintElements(tree, printer); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -372,6 +381,27 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	if ocsd.DataRespIsFatal(resp) {
 		return nil, fmt.Errorf("fatal datapath response on EOT")
 	}
+	if err := drainAndPrintElements(tree, printer); err != nil {
+		return nil, err
+	}
 
 	return out.Bytes(), nil
+}
+
+func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericElementPrinter) error {
+	if tree == nil || printer == nil {
+		return nil
+	}
+	for {
+		elem, err := tree.Next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if printErr := printer.TraceElemIn(elem.Index, elem.TraceID, elem); printErr != nil && !ocsd.IsDataWaitErr(printErr) {
+			return printErr
+		}
+	}
 }
