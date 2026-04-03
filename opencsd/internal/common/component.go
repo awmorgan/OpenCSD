@@ -25,9 +25,3 @@ type TrcPktIndexer[Pt any] interface {
 type FlagApplier interface {
 	ApplyFlags(flags uint32) error
 }
-
-// TraceElementOutputter provides methods to send trace elements downstream.
-type TraceElementOutputter interface {
-	OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error
-	OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error
-}

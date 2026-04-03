@@ -22,9 +22,46 @@ type SequencedTraceIterator interface {
 	NextSequenced() (uint64, *ocsd.TraceElement, error)
 }
 
+type pktDecodeSink struct {
+	decoder *PktDecode
+}
+
+func (s *pktDecodeSink) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
+	if s == nil || s.decoder == nil || elem == nil {
+		return nil
+	}
+	d := s.decoder
+	if d.traceElemOut != nil {
+		if elem.ElemType != ocsd.GenElemEOTrace && indexSOP != 0 {
+			d.lastElemIndex = indexSOP
+			d.sawActivity = true
+		}
+		return d.traceElemOut.TraceElemIn(indexSOP, trcChanID, elem)
+	}
+	queueIndex := indexSOP
+	if queueIndex == 0 && elem.ElemType == ocsd.GenElemEOTrace {
+		if !d.sawActivity && d.lastPacketIndex == 0 && d.lastElemIndex == 0 {
+			return nil
+		}
+		switch {
+		case d.lastElemIndex != 0:
+			queueIndex = d.lastElemIndex + 1
+		case d.lastPacketIndex != 0:
+			queueIndex = d.lastPacketIndex
+		}
+	} else if queueIndex != 0 {
+		d.lastElemIndex = queueIndex
+		d.sawActivity = true
+	}
+	e := traceElemEvent{seq: queuedTraceElemSeq.Add(1), index: queueIndex, traceID: trcChanID, elem: cloneTraceElement(elem)}
+	d.pendingElements = append(d.pendingElements, e)
+	return nil
+}
+
 type PktDecode struct {
 	inner           *etmv4.PktDecode
 	traceElemOut    ocsd.GenElemProcessor
+	sink            *pktDecodeSink
 	pendingElements []traceElemEvent
 	lastPacketIndex ocsd.TrcIndex
 	lastElemIndex   ocsd.TrcIndex
@@ -40,7 +77,8 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 		return nil, err
 	}
 	decoder := &PktDecode{inner: inner}
-	inner.SetTraceElemOut(decoder)
+	decoder.sink = &pktDecodeSink{decoder: decoder}
+	inner.SetTraceElemOut(decoder.sink)
 	return decoder, nil
 }
 
@@ -100,37 +138,6 @@ func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
 		return
 	}
 	d.traceElemOut = out
-}
-
-func (d *PktDecode) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
-	if elem == nil {
-		return nil
-	}
-	if d.traceElemOut != nil {
-		if elem.ElemType != ocsd.GenElemEOTrace && indexSOP != 0 {
-			d.lastElemIndex = indexSOP
-			d.sawActivity = true
-		}
-		return d.traceElemOut.TraceElemIn(indexSOP, trcChanID, elem)
-	}
-	queueIndex := indexSOP
-	if queueIndex == 0 && elem.ElemType == ocsd.GenElemEOTrace {
-		if !d.sawActivity && d.lastPacketIndex == 0 && d.lastElemIndex == 0 {
-			return nil
-		}
-		switch {
-		case d.lastElemIndex != 0:
-			queueIndex = d.lastElemIndex + 1
-		case d.lastPacketIndex != 0:
-			queueIndex = d.lastPacketIndex
-		}
-	} else if queueIndex != 0 {
-		d.lastElemIndex = queueIndex
-		d.sawActivity = true
-	}
-	e := traceElemEvent{seq: queuedTraceElemSeq.Add(1), index: queueIndex, traceID: trcChanID, elem: cloneTraceElement(elem)}
-	d.pendingElements = append(d.pendingElements, e)
-	return nil
 }
 
 func (d *PktDecode) TracePacketData(indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket) error {

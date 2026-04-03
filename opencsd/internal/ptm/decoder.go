@@ -82,7 +82,7 @@ func (a *PtmAtoms) clearAll() {
 
 type PktDecode struct {
 	Name         string
-	TraceElemOut ocsd.GenElemProcessor
+	TraceElemOut ocsd.GenElemProcessor // Deprecated: retained temporarily for test compatibility.
 	MemAccess    common.TargetMemAccess
 	InstrDecode  common.InstrDecode
 	IndexCurrPkt ocsd.TrcIndex
