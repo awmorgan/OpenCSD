@@ -3,8 +3,35 @@ package etmv3
 import (
 	"testing"
 
+	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
+
+func buildDecInDecodePktsPull(t *testing.T, config *Config) *PktDecode {
+	t.Helper()
+	dec, err := NewConfiguredPktDecode(0, config, &mockMemAcc{failAfter: -1}, idec.NewDecoder())
+	if err != nil {
+		t.Fatalf("NewConfiguredPktDecode failed: %v", err)
+	}
+
+	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+
+	asyncPkt := &Packet{}
+	asyncPkt.ResetState()
+	asyncPkt.Type = PktASync
+	dec.PacketDataIn(ocsd.OpData, 0, asyncPkt)
+
+	isyncPkt := &Packet{}
+	isyncPkt.ResetState()
+	isyncPkt.Type = PktISync
+	isyncPkt.Addr = 0x1000
+	isyncPkt.CurrISA = ocsd.ISAArm
+	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
+	dec.PacketDataIn(ocsd.OpData, 1, isyncPkt)
+
+	_ = drainDecodedElements(t, dec)
+	return dec
+}
 
 func TestDecodePacketPreservesWaitISyncWithoutOutput(t *testing.T) {
 	dec := setupDecFast(&Config{})
@@ -53,8 +80,7 @@ func TestOnFlushCommitsPendingElements(t *testing.T) {
 }
 
 func TestProcessBranchAddrContextWithoutException(t *testing.T) {
-	dec, out := buildDecInDecodePkts(&Config{})
-	out.elements = nil
+	dec := buildDecInDecodePktsPull(t, &Config{})
 
 	pkt := &Packet{}
 	pkt.ResetState()
@@ -74,23 +100,24 @@ func TestProcessBranchAddrContextWithoutException(t *testing.T) {
 		t.Fatalf("unexpected fatal response: %v", resp)
 	}
 
-	if len(out.elements) != 1 {
-		t.Fatalf("expected one context element, got %d", len(out.elements))
+	elems := drainDecodedElements(t, dec)
+	if len(elems) != 1 {
+		t.Fatalf("expected one context element, got %d", len(elems))
 	}
-	if out.elements[0].ElemType != ocsd.GenElemPeContext {
-		t.Fatalf("expected GenElemPeContext, got %v", out.elements[0].ElemType)
+	if elems[0].ElemType != ocsd.GenElemPeContext {
+		t.Fatalf("expected GenElemPeContext, got %v", elems[0].ElemType)
 	}
-	if out.elements[0].Context.ContextID != 0x44 {
-		t.Fatalf("expected ContextID 0x44, got 0x%X", out.elements[0].Context.ContextID)
+	if elems[0].Context.ContextID != 0x44 {
+		t.Fatalf("expected ContextID 0x44, got 0x%X", elems[0].Context.ContextID)
 	}
-	if out.elements[0].Context.VMID != 0x7 {
-		t.Fatalf("expected VMID 0x7, got 0x%X", out.elements[0].Context.VMID)
+	if elems[0].Context.VMID != 0x7 {
+		t.Fatalf("expected VMID 0x7, got 0x%X", elems[0].Context.VMID)
 	}
-	if out.elements[0].Context.SecurityLevel != ocsd.SecNonsecure {
-		t.Fatalf("expected non-secure context, got %v", out.elements[0].Context.SecurityLevel)
+	if elems[0].Context.SecurityLevel != ocsd.SecNonsecure {
+		t.Fatalf("expected non-secure context, got %v", elems[0].Context.SecurityLevel)
 	}
-	if out.elements[0].Context.ExceptionLevel != ocsd.EL2 {
-		t.Fatalf("expected EL2 context, got %v", out.elements[0].Context.ExceptionLevel)
+	if elems[0].Context.ExceptionLevel != ocsd.EL2 {
+		t.Fatalf("expected EL2 context, got %v", elems[0].Context.ExceptionLevel)
 	}
 	if dec.codeFollower.InstrInfo.ISA != ocsd.ISAThumb2 {
 		t.Fatalf("expected code follower ISA to track branch ISA, got %v", dec.codeFollower.InstrInfo.ISA)
@@ -98,8 +125,7 @@ func TestProcessBranchAddrContextWithoutException(t *testing.T) {
 }
 
 func TestPendingNaccEmittedAfterCommit(t *testing.T) {
-	dec, out := buildDecInDecodePkts(&Config{})
-	out.elements = nil
+	dec := buildDecInDecodePktsPull(t, &Config{})
 
 	elem := dec.outputElemList.NextElem(3)
 	elem.SetType(ocsd.GenElemInstrRange)
@@ -118,20 +144,21 @@ func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 		t.Fatalf("unexpected fatal response: %v", resp)
 	}
 
-	if len(out.elements) != 3 {
-		t.Fatalf("expected range, nacc, and trigger elements, got %d", len(out.elements))
+	elems := drainDecodedElements(t, dec)
+	if len(elems) != 3 {
+		t.Fatalf("expected range, nacc, and trigger elements, got %d", len(elems))
 	}
-	if out.elements[0].ElemType != ocsd.GenElemInstrRange {
-		t.Fatalf("expected first element to be GenElemInstrRange, got %v", out.elements[0].ElemType)
+	if elems[0].ElemType != ocsd.GenElemInstrRange {
+		t.Fatalf("expected first element to be GenElemInstrRange, got %v", elems[0].ElemType)
 	}
-	if out.elements[1].ElemType != ocsd.GenElemAddrNacc {
-		t.Fatalf("expected second element to be GenElemAddrNacc, got %v", out.elements[1].ElemType)
+	if elems[1].ElemType != ocsd.GenElemAddrNacc {
+		t.Fatalf("expected second element to be GenElemAddrNacc, got %v", elems[1].ElemType)
 	}
-	if out.elements[1].StartAddr != 0x3300 {
-		t.Fatalf("expected NACC address 0x3300, got 0x%X", out.elements[1].StartAddr)
+	if elems[1].StartAddr != 0x3300 {
+		t.Fatalf("expected NACC address 0x3300, got 0x%X", elems[1].StartAddr)
 	}
-	if out.elements[2].ElemType != ocsd.GenElemEvent {
-		t.Fatalf("expected third element to be GenElemEvent, got %v", out.elements[2].ElemType)
+	if elems[2].ElemType != ocsd.GenElemEvent {
+		t.Fatalf("expected third element to be GenElemEvent, got %v", elems[2].ElemType)
 	}
 	if dec.pendingNacc {
 		t.Fatal("expected pending NACC state to be cleared after emission")
@@ -139,8 +166,7 @@ func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 }
 
 func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
-	dec, out := buildDecInDecodePkts(&Config{})
-	out.elements = nil
+	dec := buildDecInDecodePktsPull(t, &Config{})
 
 	elem := dec.outputElemList.NextElem(5)
 	elem.SetType(ocsd.GenElemInstrRange)
@@ -166,8 +192,9 @@ func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 		t.Fatalf("unexpected fatal response from flush: %v", resp)
 	}
 
-	if len(out.elements) != 0 {
-		t.Fatalf("expected cancel to suppress speculative range and NACC, got %v", out.elements)
+	elems := drainDecodedElements(t, dec)
+	if len(elems) != 0 {
+		t.Fatalf("expected cancel to suppress speculative range and NACC, got %v", elems)
 	}
 	if dec.pendingNacc {
 		t.Fatal("expected pending NACC state to be cleared by exception cancel")
@@ -178,8 +205,7 @@ func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 }
 
 func TestProcessPHdrUsesPacketISA(t *testing.T) {
-	dec, out := buildDecInDecodePkts(&Config{})
-	out.elements = nil
+	dec := buildDecInDecodePktsPull(t, &Config{})
 	dec.codeFollower.Isa = ocsd.ISAArm
 	dec.codeFollower.InstrInfo.ISA = ocsd.ISAArm
 
@@ -204,7 +230,8 @@ func TestProcessPHdrUsesPacketISA(t *testing.T) {
 		t.Fatalf("unexpected fatal response: %v", resp)
 	}
 
-	for _, elem := range out.elements {
+	elems := drainDecodedElements(t, dec)
+	for _, elem := range elems {
 		if elem.ElemType == ocsd.GenElemInstrRange {
 			if elem.ISA != ocsd.ISAThumb2 {
 				t.Fatalf("expected instruction range ISA %v, got %v", ocsd.ISAThumb2, elem.ISA)
