@@ -23,12 +23,11 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
 }
 
 // NewConfiguredPktDecodeWithDeps creates an STM decoder and injects dependencies.
-func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
+func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
 	dec, err := NewConfiguredPktDecode(instID, cfg)
 	if err != nil {
 		return nil, err
 	}
-	dec.SetTraceElemOut(out)
 	dec.MemAccess = mem
 	dec.InstrDecode = instr
 	return dec, nil
@@ -49,12 +48,12 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, error
 }
 
 // NewConfiguredPipelineWithDeps creates and wires an STM processor/decoder pair with dependencies.
-func NewConfiguredPipelineWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*PktProc, *PktDecode, error) {
+func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktProc, *PktDecode, error) {
 	proc, err := NewConfiguredPktProc(instID, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, out, mem, instr)
+	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr)
 	if err != nil {
 		return nil, nil, err
 	}

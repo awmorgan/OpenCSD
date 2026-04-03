@@ -83,13 +83,12 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 }
 
 // NewConfiguredPktDecodeWithDeps creates an ETE decoder and injects dependencies.
-func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
+func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
 	_ = instID
 	decoder, err := NewPktDecode(cfg)
 	if err != nil {
 		return nil, err
 	}
-	decoder.SetTraceElemOut(out)
 	decoder.inner.MemAccess = mem
 	decoder.inner.InstrDecode = instr
 	return decoder, nil
@@ -111,14 +110,14 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*etmv4.Processor, *PktDecod
 }
 
 // NewConfiguredPipelineWithDeps creates and wires an ETE processor/decoder pair with dependencies.
-func NewConfiguredPipelineWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*etmv4.Processor, *PktDecode, error) {
+func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*etmv4.Processor, *PktDecode, error) {
 	if cfg == nil {
 		return nil, nil, fmt.Errorf("%w: ETE config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
 
 	proc := NewProcessor(cfg)
 
-	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, out, mem, instr)
+	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -267,7 +267,7 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		}
 
 		traceID := cfg.TraceID()
-		proc, dec, err := etmv3.NewConfiguredPipelineWithDeps(int(traceID), cfg, nil, memIf, instr)
+		proc, dec, err := etmv3.NewConfiguredPipelineWithDeps(int(traceID), cfg, memIf, instr)
 		if err != nil {
 			return nil, fmt.Errorf("create ETMv3 pipeline for %s failed: %v", srcDevName, err)
 		}

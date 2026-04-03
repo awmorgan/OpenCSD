@@ -357,7 +357,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 			applier = packetProc
 			// 'dec' remains nil
 		} else {
-			proc, dec, err = etmv4.NewConfiguredPipelineWithDeps(int(cfg.TraceID()), cfg, nil, memIf, instr)
+			proc, dec, err = etmv4.NewConfiguredPipelineWithDeps(int(cfg.TraceID()), cfg, memIf, instr)
 			applier = dec
 		}
 

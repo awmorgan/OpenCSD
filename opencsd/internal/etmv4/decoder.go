@@ -2197,12 +2197,11 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
 }
 
 // NewConfiguredPktDecodeWithDeps creates an ETMv4 decoder and injects dependencies.
-func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
+func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
 	decoder, err := NewConfiguredPktDecode(instID, cfg)
 	if err != nil {
 		return nil, err
 	}
-	decoder.SetTraceElemOut(out)
 	decoder.MemAccess = mem
 	decoder.InstrDecode = instr
 	return decoder, nil
@@ -2223,12 +2222,12 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, err
 }
 
 // NewConfiguredPipelineWithDeps creates and wires an ETMv4 processor/decoder pair with dependencies.
-func NewConfiguredPipelineWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*Processor, *PktDecode, error) {
+func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*Processor, *PktDecode, error) {
 	proc, err := NewConfiguredProcessor(cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, out, mem, instr)
+	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr)
 	if err != nil {
 		return nil, nil, err
 	}

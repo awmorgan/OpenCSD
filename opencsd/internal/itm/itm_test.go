@@ -90,7 +90,7 @@ func TestITMEndToEndDecode(t *testing.T) {
 		cfg := &Config{}
 		cfg.SetTraceID(0x11)
 
-		proc, dec, err := NewPipeline(0, cfg, nil, nil, nil)
+		proc, dec, err := NewPipeline(0, cfg, nil, nil)
 		if err != nil {
 			t.Fatalf("NewPipeline failed: %v", err)
 		}
@@ -191,7 +191,7 @@ func TestITMTypedConstructors(t *testing.T) {
 		cfg := &Config{}
 		cfg.SetTraceID(0x21)
 
-		proc, dec, err := NewPipeline(3, cfg, nil, nil, nil)
+		proc, dec, err := NewPipeline(3, cfg, nil, nil)
 		if err != nil {
 			t.Fatalf("NewPipeline failed: %v", err)
 		}
@@ -216,7 +216,7 @@ func TestITMTypedConstructors(t *testing.T) {
 		cfg := &Config{}
 		cfg.SetTraceID(0x24)
 
-		proc, dec, err := NewPipeline(5, cfg, nil, nil, nil)
+		proc, dec, err := NewPipeline(5, cfg, nil, nil)
 		if err != nil {
 			t.Fatalf("NewPipeline with deps failed: %v", err)
 		}
@@ -229,7 +229,7 @@ func TestITMTypedConstructors(t *testing.T) {
 	})
 
 	t.Run("RejectNilConfig", func(t *testing.T) {
-		if proc, dec, err := NewPipeline(0, nil, nil, nil, nil); proc != nil || dec != nil || !errors.Is(err, ocsd.ErrInvalidParamVal) {
+		if proc, dec, err := NewPipeline(0, nil, nil, nil); proc != nil || dec != nil || !errors.Is(err, ocsd.ErrInvalidParamVal) {
 			t.Fatalf("expected nil-config pipeline constructor to fail with ErrInvalidParamVal, got proc=%v dec=%v err=%v", proc, dec, err)
 		}
 	})

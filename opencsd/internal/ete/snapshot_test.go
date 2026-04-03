@@ -221,7 +221,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 			continue
 		}
 
-		proc, dec, err := ete.NewConfiguredPipelineWithDeps(int(traceID), cfg, nil, memIf, instr)
+		proc, dec, err := ete.NewConfiguredPipelineWithDeps(int(traceID), cfg, memIf, instr)
 		if err != nil {
 			return nil, fmt.Errorf("create ETE pipeline for %s failed: %v", srcDevName, err)
 		}
