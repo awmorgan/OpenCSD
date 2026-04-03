@@ -3,6 +3,7 @@ package ptm
 import (
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -10,13 +11,20 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-type testTrcElemIn struct {
-	elements []ocsd.TraceElement
-}
-
-func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
-	t.elements = append(t.elements, *elem)
-	return nil
+func drainDecodedElements(t *testing.T, dec *PktDecode) []ocsd.TraceElement {
+	t.Helper()
+	elems := make([]ocsd.TraceElement, 0)
+	for {
+		elem, err := dec.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("decoder next failed: %v", err)
+		}
+		elems = append(elems, *elem)
+	}
+	return elems
 }
 
 type rawPktCapture struct {
@@ -551,8 +559,6 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	mem := &mockMemAcc{}
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -594,7 +600,7 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	pkt4.Atom.Num = 3
 	dec.PacketDataIn(ocsd.OpData, 3, pkt4)
 
-	if len(out.elements) == 0 {
+	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements from atom processing")
 	}
 }
@@ -606,8 +612,6 @@ func TestDecoderWPUpdate(t *testing.T) {
 	mem := &mockMemAcc{}
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -627,7 +631,7 @@ func TestDecoderWPUpdate(t *testing.T) {
 	pkt2.AddrVal = 0x2000 // matches start addr-> currOpAddress == nextAddrMatch on first iter
 	dec.PacketDataIn(ocsd.OpData, 1, pkt2)
 
-	if len(out.elements) == 0 {
+	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements from WP update")
 	}
 }
@@ -639,8 +643,6 @@ func TestDecoderBranchWithAtomRange(t *testing.T) {
 	mem := &mockMemAcc{}
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -675,7 +677,7 @@ func TestDecoderBranchWithAtomRange(t *testing.T) {
 	pkt3.CycleCount = 10
 	dec.PacketDataIn(ocsd.OpData, 2, pkt3)
 
-	if len(out.elements) == 0 {
+	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements")
 	}
 }
@@ -687,8 +689,6 @@ func TestDecoderMemNacc(t *testing.T) {
 	mem := &mockMemAcc{failAfter: 1, hitAfter: -1} // fail on 2nd read, never branch
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -718,7 +718,7 @@ func TestDecoderMemNacc(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpData, 2, pkt3)
 
 	// Check that we got nacc element
-	if len(out.elements) == 0 {
+	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Logf("No elements generated (memNacc path)")
 	}
 }
@@ -730,8 +730,6 @@ func TestDecoderMemNaccSecure(t *testing.T) {
 	mem := &mockMemAcc{failAfter: 1, hitAfter: -1}
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -763,8 +761,6 @@ func TestDecoderIndirectBranch(t *testing.T) {
 	mem := &mockMemAcc{hitAfter: 0, isIndirect: true}
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -794,8 +790,6 @@ func TestDecoderLinkBranch(t *testing.T) {
 	mem := &mockMemAcc{hitAfter: 0, isLink: true}
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -819,8 +813,6 @@ func TestDecoderLinkBranch(t *testing.T) {
 func TestDecoderContProcess(t *testing.T) {
 	config := NewConfig()
 	dec := mustNewPktDecode(t, config)
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	// Exercise onFlush when not in cont state
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
@@ -1096,7 +1088,7 @@ func syncDec(dec *PktDecode, addr ocsd.VAddr) {
 }
 
 // newTestDec creates a PktDecode with mockMemAcc and real InstrDecode attached.
-func newTestDec(hitAfter int) (*PktDecode, *testTrcElemIn) {
+func newTestDec(hitAfter int) *PktDecode {
 	config := NewConfig()
 	dec, err := NewPktDecode(config)
 	if err != nil {
@@ -1104,9 +1096,7 @@ func newTestDec(hitAfter int) (*PktDecode, *testTrcElemIn) {
 	}
 	dec.MemAccess = &mockMemAcc{hitAfter: hitAfter}
 	dec.InstrDecode = idec.NewDecoder()
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
-	return dec, out
+	return dec
 }
 
 // TestAtomDataMethods exercises all atomData struct methods directly.
@@ -1146,7 +1136,7 @@ func TestAtomDataMethods(t *testing.T) {
 // TestDecoderAtomMultiStep exercises traceInstrToWP walking multiple InstrOther
 // instructions before hitting a waypoint (hitAfter:2 -> 2 non-WP, then WP).
 func TestDecoderAtomMultiStep(t *testing.T) {
-	dec, out := newTestDec(2)
+	dec := newTestDec(2)
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	syncDec(dec, 0x1000)
 
@@ -1159,7 +1149,7 @@ func TestDecoderAtomMultiStep(t *testing.T) {
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("multiStep atom failed: %v", resp)
 	}
-	if len(out.elements) == 0 {
+	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements from multi-step atom")
 	}
 }
@@ -1172,8 +1162,6 @@ func TestDecoderAtomRange_NoWPFound(t *testing.T) {
 	dec := mustNewPktDecode(t, config)
 	dec.MemAccess = &mockMemAcc{failAfter: 2, hitAfter: -1} // fail after 2 reads, never branch
 	dec.InstrDecode = idec.NewDecoder()
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	syncDec(dec, 0x2000)
@@ -1190,7 +1178,7 @@ func TestDecoderAtomRange_NoWPFound(t *testing.T) {
 // TestDecoderProcessBranch_ExceptionCCValid exercises processBranch with exception
 // present and CCValid set (both the exception emission and the CC path).
 func TestDecoderProcessBranch_ExceptionCCValid(t *testing.T) {
-	dec, out := newTestDec(0)
+	dec := newTestDec(0)
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	syncDec(dec, 0x5000)
 
@@ -1205,7 +1193,7 @@ func TestDecoderProcessBranch_ExceptionCCValid(t *testing.T) {
 	pkt.CycleCount = 7
 	dec.PacketDataIn(ocsd.OpData, 2, pkt)
 
-	if len(out.elements) == 0 {
+	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected elements from branch with exception")
 	}
 }
@@ -1213,7 +1201,7 @@ func TestDecoderProcessBranch_ExceptionCCValid(t *testing.T) {
 // TestDecoderProcessWPUpdate_traceToAddrIncl validates processWPUpdate calls
 // processAtomRange with traceToAddrIncl where currOpAddress matches nextAddrMatch.
 func TestDecoderProcessWPUpdate_traceToAddrIncl(t *testing.T) {
-	dec, out := newTestDec(5) // won't hit InstrBr before address match
+	dec := newTestDec(5) // won't hit InstrBr before address match
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	syncDec(dec, 0x3000)
 
@@ -1224,14 +1212,14 @@ func TestDecoderProcessWPUpdate_traceToAddrIncl(t *testing.T) {
 	pkt.AddrVal = 0x3000
 	dec.PacketDataIn(ocsd.OpData, 2, pkt)
 
-	if len(out.elements) == 0 {
+	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected elements from WP update")
 	}
 }
 
 // TestDecoderProcessAtom_MultiAtomLoop exercises processAtom's loop over multiple atoms.
 func TestDecoderProcessAtom_MultiAtomLoop(t *testing.T) {
-	dec, out := newTestDec(0)
+	dec := newTestDec(0)
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	syncDec(dec, 0x4000)
 
@@ -1242,7 +1230,7 @@ func TestDecoderProcessAtom_MultiAtomLoop(t *testing.T) {
 	pkt.Atom.Num = 4
 	dec.PacketDataIn(ocsd.OpData, 2, pkt)
 
-	if len(out.elements) == 0 {
+	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements from multi-atom loop")
 	}
 }
@@ -1254,8 +1242,6 @@ func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	dec := mustNewPktDecode(t, config)
 	dec.MemAccess = &mockMemAcc{failAfter: 1, hitAfter: -1}
 	dec.InstrDecode = idec.NewDecoder()
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
@@ -1292,13 +1278,13 @@ func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 }
 
 // TestDecoderContProcess_AllStates exercises all four contProcess state branches.
-// contProcess is called via onFlush; since testTrcElemIn always returns RespCont,
-// the decoder won't naturally enter continuation states, so we test each code path
+// contProcess is called via onFlush; tests use pull-draining and explicitly
+// drive packets for each continuation path, so each code path is exercised.
 // by issuing packets then flushing.
 func TestDecoderContProcess_AllStates(t *testing.T) {
 	// decodeContAtom: Atom packets processed at decodePkts then flush
 	{
-		dec, _ := newTestDec(0)
+		dec := newTestDec(0)
 		dec.PacketDataIn(ocsd.OpReset, 0, nil)
 		syncDec(dec, 0x1000)
 		pkt := &Packet{}
@@ -1312,7 +1298,7 @@ func TestDecoderContProcess_AllStates(t *testing.T) {
 
 	// decodeContWPUp: WP update then flush
 	{
-		dec, _ := newTestDec(0)
+		dec := newTestDec(0)
 		dec.PacketDataIn(ocsd.OpReset, 0, nil)
 		syncDec(dec, 0x1000)
 		pkt := &Packet{}
@@ -1325,7 +1311,7 @@ func TestDecoderContProcess_AllStates(t *testing.T) {
 
 	// decodeContBranch: branch then flush
 	{
-		dec, _ := newTestDec(0)
+		dec := newTestDec(0)
 		dec.PacketDataIn(ocsd.OpReset, 0, nil)
 		syncDec(dec, 0x1000)
 		pkt := &Packet{}
@@ -1339,7 +1325,7 @@ func TestDecoderContProcess_AllStates(t *testing.T) {
 
 	// decodeContISync: ISync with UpdatedC context -> iSyncPeCtxt=true -> outputs both TraceOn and PeContext
 	{
-		dec, _ := newTestDec(0)
+		dec := newTestDec(0)
 		dec.PacketDataIn(ocsd.OpReset, 0, nil)
 		// First sync
 		syncDec(dec, 0x1000)
@@ -1360,7 +1346,7 @@ func TestDecoderContProcess_AllStates(t *testing.T) {
 // TestDecoderDecodePacket_RemainingBranches covers ISyncDebugExit, PktAtom with valid
 // pe state (N atom), PktTimestamp with CCValid, and ignored packet types.
 func TestDecoderDecodePacket_RemainingBranches(t *testing.T) {
-	dec, _ := newTestDec(0)
+	dec := newTestDec(0)
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
 	// ISyncDebugExit exercises the TraceOnExDebug path in processIsync
@@ -1415,8 +1401,6 @@ func TestDecoderIndirectBranch_ActiveRetStack(t *testing.T) {
 	dec := mustNewPktDecode(t, config)
 	dec.MemAccess = &mockMemAcc{hitAfter: 0, isIndirect: true, isLink: true}
 	dec.InstrDecode = idec.NewDecoder()
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	syncDec(dec, 0x1000)
@@ -1443,7 +1427,7 @@ func TestDecoderIndirectBranch_ActiveRetStack(t *testing.T) {
 
 // TestDecoderISyncPeriodic_WithVMIDUpdate exercises ISyncPeriodic with UpdatedV=true.
 func TestDecoderISyncPeriodic_WithVMIDUpdate(t *testing.T) {
-	dec, _ := newTestDec(0)
+	dec := newTestDec(0)
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	syncDec(dec, 0xC000)
 
@@ -1461,7 +1445,7 @@ func TestDecoderISyncPeriodic_WithVMIDUpdate(t *testing.T) {
 // TestDecoderWaitISync_NonISyncPacket exercises the decodeWaitISync state where
 // a non-ISync packet is silently dropped (hits the else bPktDone=true branch).
 func TestDecoderWaitISync_NonISyncPacket(t *testing.T) {
-	dec, _ := newTestDec(0)
+	dec := newTestDec(0)
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
 	// ASync -> state becomes decodeWaitISync
@@ -1487,7 +1471,7 @@ func TestDecoderWaitISync_NonISyncPacket(t *testing.T) {
 
 // TestDecoderISyncOverflow exercises ISyncTraceRestartAfterOverflow -> TraceOnOverflow.
 func TestDecoderISyncOverflow(t *testing.T) {
-	dec, _ := newTestDec(0)
+	dec := newTestDec(0)
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 
 	pkt := &Packet{}
@@ -1506,7 +1490,7 @@ func TestDecoderISyncOverflow(t *testing.T) {
 // TestDecoderBranchNoException_ValidPeState exercises processBranch without exception
 // and with valid pe state -> calls processAtomRange.
 func TestDecoderBranchNoException_ValidPeState(t *testing.T) {
-	dec, out := newTestDec(0)
+	dec := newTestDec(0)
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	syncDec(dec, 0xF000)
 
@@ -1517,7 +1501,7 @@ func TestDecoderBranchNoException_ValidPeState(t *testing.T) {
 	pkt.CurrISA = ocsd.ISAArm
 	dec.PacketDataIn(ocsd.OpData, 2, pkt)
 
-	if len(out.elements) == 0 {
+	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected elements from branch without exception")
 	}
 }
