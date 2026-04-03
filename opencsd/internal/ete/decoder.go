@@ -2,33 +2,63 @@ package ete
 
 import (
 	"fmt"
+	"io"
 	"opencsd/internal/common"
 	"opencsd/internal/etmv4"
 	"opencsd/internal/ocsd"
+	"sync/atomic"
 )
 
-func NewPktDecode(cfg *Config) (*etmv4.PktDecode, error) {
+type traceElemEvent struct {
+	seq     uint64
+	index   ocsd.TrcIndex
+	traceID uint8
+	elem    ocsd.TraceElement
+}
+
+var queuedTraceElemSeq atomic.Uint64
+
+type SequencedTraceIterator interface {
+	NextSequenced() (uint64, *ocsd.TraceElement, error)
+}
+
+type PktDecode struct {
+	inner           *etmv4.PktDecode
+	traceElemOut    ocsd.GenElemProcessor
+	pendingElements []traceElemEvent
+	lastPacketIndex ocsd.TrcIndex
+	lastElemIndex   ocsd.TrcIndex
+	sawActivity     bool
+}
+
+func NewPktDecode(cfg *Config) (*PktDecode, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("%w: ETE config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
-	return etmv4.NewPktDecode(cfg.ToETMv4Config())
+	inner, err := etmv4.NewPktDecode(cfg.ToETMv4Config())
+	if err != nil {
+		return nil, err
+	}
+	decoder := &PktDecode{inner: inner}
+	inner.SetTraceElemOut(decoder)
+	return decoder, nil
 }
 
 // NewConfiguredPktDecodeWithDeps creates an ETE decoder and injects dependencies.
-func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*etmv4.PktDecode, error) {
+func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
 	_ = instID
 	decoder, err := NewPktDecode(cfg)
 	if err != nil {
 		return nil, err
 	}
 	decoder.SetTraceElemOut(out)
-	decoder.MemAccess = mem
-	decoder.InstrDecode = instr
+	decoder.inner.MemAccess = mem
+	decoder.inner.InstrDecode = instr
 	return decoder, nil
 }
 
 // NewConfiguredPipeline creates and wires a typed ETE processor/decoder pair.
-func NewConfiguredPipeline(instID int, cfg *Config) (*etmv4.Processor, *etmv4.PktDecode, error) {
+func NewConfiguredPipeline(instID int, cfg *Config) (*etmv4.Processor, *PktDecode, error) {
 	if cfg == nil {
 		return nil, nil, fmt.Errorf("%w: ETE config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
@@ -43,7 +73,7 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*etmv4.Processor, *etmv4.Pk
 }
 
 // NewConfiguredPipelineWithDeps creates and wires an ETE processor/decoder pair with dependencies.
-func NewConfiguredPipelineWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*etmv4.Processor, *etmv4.PktDecode, error) {
+func NewConfiguredPipelineWithDeps(instID int, cfg *Config, out ocsd.GenElemProcessor, mem common.TargetMemAccess, instr common.InstrDecode) (*etmv4.Processor, *PktDecode, error) {
 	if cfg == nil {
 		return nil, nil, fmt.Errorf("%w: ETE config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
@@ -56,4 +86,94 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, out ocsd.GenElemProc
 	}
 	proc.SetPktOut(decoder)
 	return proc, decoder, nil
+}
+
+func (d *PktDecode) ApplyFlags(flags uint32) error {
+	if d == nil || d.inner == nil {
+		return ocsd.ErrNotInit
+	}
+	return d.inner.ApplyFlags(flags)
+}
+
+func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
+	if d == nil {
+		return
+	}
+	d.traceElemOut = out
+}
+
+func (d *PktDecode) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
+	if elem == nil {
+		return nil
+	}
+	if d.traceElemOut != nil {
+		if elem.ElemType != ocsd.GenElemEOTrace && indexSOP != 0 {
+			d.lastElemIndex = indexSOP
+			d.sawActivity = true
+		}
+		return d.traceElemOut.TraceElemIn(indexSOP, trcChanID, elem)
+	}
+	queueIndex := indexSOP
+	if queueIndex == 0 && elem.ElemType == ocsd.GenElemEOTrace {
+		if !d.sawActivity && d.lastPacketIndex == 0 && d.lastElemIndex == 0 {
+			return nil
+		}
+		switch {
+		case d.lastElemIndex != 0:
+			queueIndex = d.lastElemIndex + 1
+		case d.lastPacketIndex != 0:
+			queueIndex = d.lastPacketIndex
+		}
+	} else if queueIndex != 0 {
+		d.lastElemIndex = queueIndex
+		d.sawActivity = true
+	}
+	e := traceElemEvent{seq: queuedTraceElemSeq.Add(1), index: queueIndex, traceID: trcChanID, elem: cloneTraceElement(elem)}
+	d.pendingElements = append(d.pendingElements, e)
+	return nil
+}
+
+func (d *PktDecode) TracePacketData(indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket) error {
+	d.lastPacketIndex = indexSOP
+	if indexSOP != 0 {
+		d.sawActivity = true
+	}
+	return d.inner.TracePacketData(indexSOP, pkt)
+}
+
+func (d *PktDecode) TracePacketEOT() error {
+	return d.inner.TracePacketEOT()
+}
+
+func (d *PktDecode) TracePacketFlush() error {
+	return d.inner.TracePacketFlush()
+}
+
+func (d *PktDecode) TracePacketReset(indexSOP ocsd.TrcIndex) error {
+	return d.inner.TracePacketReset(indexSOP)
+}
+
+func (d *PktDecode) NextSequenced() (uint64, *ocsd.TraceElement, error) {
+	if len(d.pendingElements) == 0 {
+		return 0, nil, io.EOF
+	}
+	e := d.pendingElements[0]
+	d.pendingElements = d.pendingElements[1:]
+	elem := e.elem
+	elem.Index = e.index
+	elem.TraceID = e.traceID
+	return e.seq, &elem, nil
+}
+
+func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
+	_, elem, err := d.NextSequenced()
+	return elem, err
+}
+
+func cloneTraceElement(elem *ocsd.TraceElement) ocsd.TraceElement {
+	clone := *elem
+	if elem.PtrExtendedData != nil {
+		clone.PtrExtendedData = append([]byte(nil), elem.PtrExtendedData...)
+	}
+	return clone
 }

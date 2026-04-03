@@ -2,6 +2,7 @@ package stm_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -155,7 +156,7 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 			return nil, fmt.Errorf("create STM pipeline for %s failed: %v", srcDevName, err)
 		}
 
-		if err := tree.AddWiredDecoder(traceID, ocsd.BuiltinDcdSTM, ocsd.ProtocolSTM, proc, dec, dec.SetTraceElemOut); err != nil {
+		if err := tree.AddDecoder(traceID, ocsd.BuiltinDcdSTM, ocsd.ProtocolSTM, proc, dec); err != nil {
 			return nil, fmt.Errorf("attach STM processor for %s failed: %v", srcDevName, err)
 		}
 		if err := tree.AddPullDecoder(traceID, ocsd.BuiltinDcdSTM, ocsd.ProtocolSTM, dec); err != nil {
@@ -170,7 +171,6 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 
 	var out bytes.Buffer
 	printer := printers.NewGenericElementPrinter(&out)
-	tree.SetGenTraceElemOutI(printer)
 	tree.ForEachElement(func(csID uint8, elem *dcdtree.DecodeTreeElement) {
 		proc, ok := elem.DataIn.(*stm.PktProc)
 		if !ok || proc == nil {
@@ -178,6 +178,9 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 		}
 		proc.SetPktRawMonitor(&stmRawPacketPrinter{writer: &out, traceID: csID})
 	})
+	if err := drainAndPrintElements(tree, printer); err != nil {
+		return nil, err
+	}
 
 	binFile := filepath.Join(snapshotDir, sourceTree.BufferInfo.DataFileName)
 	traceData, err := os.ReadFile(binFile)
@@ -199,11 +202,15 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 			}
 			traceIndex += consumed
 			pending = pending[consumed:]
+			if err := drainAndPrintElements(tree, printer); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		remaining := traceData
 		for len(remaining) > 0 {
-			consumed, err := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
+			sendLen := min(len(remaining), 256)
+			consumed, err := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining[:sendLen])
 			resp := ocsd.DataRespFromErr(err)
 			if ocsd.DataRespIsFatal(resp) {
 				break
@@ -213,6 +220,9 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 			}
 			traceIndex += consumed
 			remaining = remaining[consumed:]
+			if err := drainAndPrintElements(tree, printer); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -221,8 +231,29 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 	if ocsd.DataRespIsFatal(resp) {
 		return nil, fmt.Errorf("fatal datapath response on EOT")
 	}
+	if err := drainAndPrintElements(tree, printer); err != nil {
+		return nil, err
+	}
 
 	return out.Bytes(), nil
+}
+
+func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericElementPrinter) error {
+	if tree == nil || printer == nil {
+		return nil
+	}
+	for {
+		elem, err := tree.Next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if printErr := printer.TraceElemIn(elem.Index, elem.TraceID, elem); printErr != nil && !ocsd.IsDataWaitErr(printErr) {
+			return printErr
+		}
+	}
 }
 
 func sanitizePPL(s string, traceIDs []string) string {
@@ -299,14 +330,5 @@ func normalizeSnapshotLine(line string) string {
 		}
 		return elem
 	}
-
-	_, right, ok := strings.Cut(line, "\t")
-	if !ok {
-		return ""
-	}
-	packetType := testutil.ExtractPacketType(strings.TrimSpace(right))
-	if packetType == "" || packetType == "NOTSYNC" || packetType == "INCOMPLETE_EOT" {
-		return ""
-	}
-	return packetType
+	return ""
 }

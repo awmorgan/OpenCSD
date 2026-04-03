@@ -2,11 +2,11 @@ package ptm_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -178,7 +178,7 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			return nil, fmt.Errorf("create PTM pipeline for %s failed: %v", srcDevName, err)
 		}
 
-		if err := tree.AddWiredDecoder(traceID, ocsd.BuiltinDcdPTM, ocsd.ProtocolPTM, proc, dec, func(out ocsd.GenElemProcessor) { dec.TraceElemOut = out }); err != nil {
+		if err := tree.AddDecoder(traceID, ocsd.BuiltinDcdPTM, ocsd.ProtocolPTM, proc, dec); err != nil {
 			return nil, fmt.Errorf("attach PTM decoder for %s failed: %v", srcDevName, err)
 		}
 		if err := tree.AddPullDecoder(traceID, ocsd.BuiltinDcdPTM, ocsd.ProtocolPTM, dec); err != nil {
@@ -219,7 +219,6 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 
 	var out bytes.Buffer
 	printer := printers.NewGenericElementPrinter(&out)
-	tree.SetGenTraceElemOutI(printer)
 	tree.ForEachElement(func(csID uint8, elem *dcdtree.DecodeTreeElement) {
 		proc, ok := elem.DataIn.(*ptm.PktProc)
 		if !ok || proc == nil {
@@ -227,6 +226,9 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		}
 		proc.SetPktRawMonitor(&ptmRawPacketPrinter{writer: &out, traceID: csID})
 	})
+	if err := drainAndPrintElements(tree, printer); err != nil {
+		return nil, err
+	}
 
 	binFile := filepath.Join(snapshotDir, sourceTree.BufferInfo.DataFileName)
 	traceData, err := os.ReadFile(binFile)
@@ -238,7 +240,7 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	if srcIsFrame {
 		pending := traceData
 		for len(pending) >= frameAlignment {
-			sendLen := len(pending) - (len(pending) % frameAlignment)
+			sendLen := frameAlignment
 			consumed, err := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
 			resp := ocsd.DataRespFromErr(err)
 			if ocsd.DataRespIsFatal(resp) {
@@ -249,11 +251,15 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			}
 			traceIndex += consumed
 			pending = pending[consumed:]
+			if err := drainAndPrintElements(tree, printer); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		remaining := traceData
 		for len(remaining) > 0 {
-			consumed, err := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
+			sendLen := min(len(remaining), 256)
+			consumed, err := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining[:sendLen])
 			resp := ocsd.DataRespFromErr(err)
 			if ocsd.DataRespIsFatal(resp) {
 				return nil, fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
@@ -263,6 +269,9 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			}
 			traceIndex += consumed
 			remaining = remaining[consumed:]
+			if err := drainAndPrintElements(tree, printer); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -271,8 +280,29 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	if ocsd.DataRespIsFatal(resp) {
 		return nil, fmt.Errorf("fatal datapath response on EOT")
 	}
+	if err := drainAndPrintElements(tree, printer); err != nil {
+		return nil, err
+	}
 
 	return out.Bytes(), nil
+}
+
+func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericElementPrinter) error {
+	if tree == nil || printer == nil {
+		return nil
+	}
+	for {
+		elem, err := tree.Next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if printErr := printer.TraceElemIn(elem.Index, elem.TraceID, elem); printErr != nil && !ocsd.IsDataWaitErr(printErr) {
+			return printErr
+		}
+	}
 }
 
 func sanitizePPL(s string, traceIDs []string) string {
@@ -311,6 +341,9 @@ func sanitizePPL(s string, traceIDs []string) string {
 			if normalized == "" {
 				continue
 			}
+			if !strings.Contains(normalized, "OCSD_GEN_TRC_ELEM_") {
+				continue
+			}
 
 			idVal, ok := testutil.ExtractLineID(idxLine)
 			if !ok {
@@ -328,10 +361,10 @@ func sanitizePPL(s string, traceIDs []string) string {
 		return strings.Join(out, "\n")
 	}
 
-	out := make([]string, 0, len(parsed))
+	byID := make(map[string][]string, len(idSet))
 	for _, entry := range parsed {
 		if _, ok := idSet[entry.id]; ok {
-			out = append(out, entry.line)
+			byID[entry.id] = append(byID[entry.id], entry.line)
 		}
 	}
 
@@ -339,23 +372,23 @@ func sanitizePPL(s string, traceIDs []string) string {
 	// while packets use ID:0. If filtering by trace ID 0 would remove all generic lines,
 	// keep ID:2 generic lines as part of the PTM stream.
 	if _, hasZero := idSet["0"]; hasZero {
-		hasGeneric := false
-		hasKeptGeneric := false
-		for _, entry := range parsed {
-			if strings.Contains(entry.line, "OCSD_GEN_TRC_ELEM_") {
-				hasGeneric = true
-				if slices.Contains(out, entry.line) {
-					hasKeptGeneric = true
-				}
-			}
-		}
-		if hasGeneric && !hasKeptGeneric {
+		if len(byID["0"]) == 0 {
+			fallback := make([]string, 0)
 			for _, entry := range parsed {
-				if entry.id == "2" && strings.Contains(entry.line, "OCSD_GEN_TRC_ELEM_") {
-					out = append(out, entry.line)
+				if entry.id == "2" {
+					fallback = append(fallback, entry.line)
 				}
 			}
+			if len(fallback) > 0 {
+				byID["0"] = append(byID["0"], fallback...)
+			}
 		}
+	}
+
+	out := make([]string, 0, len(parsed))
+	for _, rawID := range traceIDs {
+		id := strings.ToLower(strings.TrimSpace(rawID))
+		out = append(out, byID[id]...)
 	}
 
 	return strings.Join(out, "\n")

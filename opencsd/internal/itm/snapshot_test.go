@@ -2,6 +2,7 @@ package itm_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -183,7 +184,7 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			return nil, fmt.Errorf("create ITM pipeline for %s failed: %v", srcDevName, err)
 		}
 
-		if err := tree.AddWiredDecoder(traceID, ocsd.BuiltinDcdITM, ocsd.ProtocolITM, proc, dec, func(out ocsd.GenElemProcessor) { dec.TraceElemOut = out }); err != nil {
+		if err := tree.AddDecoder(traceID, ocsd.BuiltinDcdITM, ocsd.ProtocolITM, proc, dec); err != nil {
 			return nil, fmt.Errorf("attach ITM decoder for %s failed: %v", srcDevName, err)
 		}
 		if err := tree.AddPullDecoder(traceID, ocsd.BuiltinDcdITM, ocsd.ProtocolITM, dec); err != nil {
@@ -198,7 +199,6 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 
 	var out bytes.Buffer
 	printer := printers.NewGenericElementPrinter(&out)
-	tree.SetGenTraceElemOutI(printer)
 	tree.ForEachElement(func(csID uint8, elem *dcdtree.DecodeTreeElement) {
 		proc, ok := elem.DataIn.(*itm.PktProc)
 		if !ok || proc == nil {
@@ -206,6 +206,9 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		}
 		proc.SetPktRawMonitor(&itmRawPacketPrinter{writer: &out, traceID: csID})
 	})
+	if err := drainAndPrintElements(tree, printer); err != nil {
+		return nil, err
+	}
 
 	binFile := filepath.Join(snapshotDir, sourceTree.BufferInfo.DataFileName)
 	traceData, err := os.ReadFile(binFile)
@@ -227,6 +230,9 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			}
 			traceIndex += consumed
 			pending = pending[consumed:]
+			if err := drainAndPrintElements(tree, printer); err != nil {
+				return nil, err
+			}
 		}
 
 		if len(pending) > 0 {
@@ -238,11 +244,15 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			if consumed > 0 {
 				traceIndex += consumed
 			}
+			if err := drainAndPrintElements(tree, printer); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		remaining := traceData
 		for len(remaining) > 0 {
-			consumed, err := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
+			sendLen := min(len(remaining), 256)
+			consumed, err := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining[:sendLen])
 			resp := ocsd.DataRespFromErr(err)
 			if ocsd.DataRespIsFatal(resp) {
 				return nil, fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
@@ -252,6 +262,9 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			}
 			traceIndex += consumed
 			remaining = remaining[consumed:]
+			if err := drainAndPrintElements(tree, printer); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -260,8 +273,29 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	if ocsd.DataRespIsFatal(resp) {
 		return nil, fmt.Errorf("fatal datapath response on EOT")
 	}
+	if err := drainAndPrintElements(tree, printer); err != nil {
+		return nil, err
+	}
 
 	return out.Bytes(), nil
+}
+
+func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericElementPrinter) error {
+	if tree == nil || printer == nil {
+		return nil
+	}
+	for {
+		elem, err := tree.Next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if printErr := printer.TraceElemIn(elem.Index, elem.TraceID, elem); printErr != nil && !ocsd.IsDataWaitErr(printErr) {
+			return printErr
+		}
+	}
 }
 
 func sanitizePPL(s string, traceIDs []string, keepGenElems bool) string {

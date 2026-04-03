@@ -226,7 +226,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 			return nil, fmt.Errorf("create ETE pipeline for %s failed: %v", srcDevName, err)
 		}
 
-		if err := tree.AddWiredDecoder(traceID, ocsd.BuiltinDcdETE, ocsd.ProtocolETE, proc, dec, dec.SetTraceElemOut); err != nil {
+		if err := tree.AddDecoder(traceID, ocsd.BuiltinDcdETE, ocsd.ProtocolETE, proc, dec); err != nil {
 			if errors.Is(err, ocsd.ErrAttachTooMany) {
 				continue
 			}
@@ -273,7 +273,6 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 
 	var out bytes.Buffer
 	printer := printers.NewGenericElementPrinter(&out)
-	tree.SetGenTraceElemOutI(printer)
 	tree.ForEachElement(func(csID uint8, elem *dcdtree.DecodeTreeElement) {
 		proc, ok := elem.DataIn.(*etmv4.Processor)
 		if !ok || proc == nil {
@@ -281,6 +280,9 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 		}
 		proc.SetPktRawMonitor(&eteRawPacketPrinter{writer: &out, traceID: csID})
 	})
+	if err := drainAndPrintElements(tree, printer); err != nil {
+		return nil, err
+	}
 
 	buffers := eteSnapshotBuffers(reader.ParsedTrace, bufferName, opts.multiSession)
 	if len(buffers) == 0 {
@@ -297,12 +299,15 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 		if err != nil {
 			return nil, fmt.Errorf("read trace buffer %s: %w", binFile, err)
 		}
-		if err := decodeETETraceBuffer(tree, traceData, srcIsFrame, frameAlignment); err != nil {
+		if err := decodeETETraceBuffer(tree, traceData, srcIsFrame, frameAlignment, printer); err != nil {
 			return nil, err
 		}
 		if opts.multiSession && i+1 < len(buffers) {
 			if _, err2 := tree.TraceDataIn(ocsd.OpReset, 0, nil); err2 != nil {
 				return nil, fmt.Errorf("OpReset after buffer %s: %w", bufInfo.BufferName, err2)
+			}
+			if err := drainAndPrintElements(tree, printer); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -395,6 +400,9 @@ var iPacketTokenRE = regexp.MustCompile(`\bI_[A-Z0-9_]+\b`)
 
 func normalizeSnapshotLine(line string, keepGenElems bool) string {
 	if strings.Contains(line, "OCSD_GEN_TRC_ELEM_") {
+		if strings.Contains(line, "OCSD_GEN_TRC_ELEM_EO_TRACE(") {
+			return ""
+		}
 		if keepGenElems {
 			return line
 		}
@@ -528,12 +536,77 @@ func firstDiff(gotLines, wantLines []string) (line int, gotLine, wantLine string
 	return 0, "", ""
 }
 
-func decodeETETraceBuffer(tree *dcdtree.DecodeTree, traceData []byte, srcIsFrame bool, alignment int) error {
+func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericElementPrinter) error {
+	if tree == nil || printer == nil {
+		return nil
+	}
+	type drainedElem struct {
+		seq  int
+		qseq uint64
+		elem ocsd.TraceElement
+	}
+	drained := make([]drainedElem, 0)
+	tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
+		if elem == nil || elem.Iterator == nil {
+			return
+		}
+		iter, ok := elem.Iterator.(ete.SequencedTraceIterator)
+		if !ok {
+			return
+		}
+		for {
+			qseq, trcElem, nextErr := iter.NextSequenced()
+			if errors.Is(nextErr, io.EOF) {
+				break
+			}
+			if nextErr != nil {
+				drained = append(drained, drainedElem{seq: -1, elem: ocsd.TraceElement{Index: 0}})
+				return
+			}
+			copyElem := *trcElem
+			drained = append(drained, drainedElem{seq: len(drained), qseq: qseq, elem: copyElem})
+		}
+	})
+	if len(drained) > 0 && drained[0].seq == -1 {
+		return io.ErrUnexpectedEOF
+	}
+	sort.SliceStable(drained, func(i, j int) bool {
+		if drained[i].elem.Index != drained[j].elem.Index {
+			return drained[i].elem.Index < drained[j].elem.Index
+		}
+		if drained[i].qseq != drained[j].qseq {
+			return drained[i].qseq < drained[j].qseq
+		}
+		return drained[i].seq < drained[j].seq
+	})
+	maxEOIndex := ocsd.TrcIndex(0)
+	eoCount := 0
+	for i := range drained {
+		if drained[i].elem.ElemType == ocsd.GenElemEOTrace {
+			eoCount++
+			if drained[i].elem.Index > maxEOIndex {
+				maxEOIndex = drained[i].elem.Index
+			}
+		}
+	}
+	for i := range drained {
+		elem := &drained[i].elem
+		if eoCount > 1 && elem.ElemType == ocsd.GenElemEOTrace && elem.Index != maxEOIndex {
+			continue
+		}
+		if printErr := printer.TraceElemIn(elem.Index, elem.TraceID, elem); printErr != nil && !ocsd.IsDataWaitErr(printErr) {
+			return printErr
+		}
+	}
+	return nil
+}
+
+func decodeETETraceBuffer(tree *dcdtree.DecodeTree, traceData []byte, srcIsFrame bool, alignment int, printer *printers.GenericElementPrinter) error {
 	var traceIndex uint32
 	if srcIsFrame {
 		pending := traceData
 		for len(pending) >= alignment {
-			sendLen := len(pending) - (len(pending) % alignment)
+			sendLen := alignment
 			consumed, err := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
 			resp := ocsd.DataRespFromErr(err)
 			if ocsd.DataRespIsFatal(resp) {
@@ -544,11 +617,15 @@ func decodeETETraceBuffer(tree *dcdtree.DecodeTree, traceData []byte, srcIsFrame
 			}
 			traceIndex += consumed
 			pending = pending[consumed:]
+			if err := drainAndPrintElements(tree, printer); err != nil {
+				return err
+			}
 		}
 	} else {
 		remaining := traceData
 		for len(remaining) > 0 {
-			consumed, err := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
+			sendLen := min(len(remaining), 256)
+			consumed, err := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining[:sendLen])
 			resp := ocsd.DataRespFromErr(err)
 			if ocsd.DataRespIsFatal(resp) {
 				return fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
@@ -558,12 +635,18 @@ func decodeETETraceBuffer(tree *dcdtree.DecodeTree, traceData []byte, srcIsFrame
 			}
 			traceIndex += consumed
 			remaining = remaining[consumed:]
+			if err := drainAndPrintElements(tree, printer); err != nil {
+				return err
+			}
 		}
 	}
 	_, err := tree.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(traceIndex), nil)
 	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		return fmt.Errorf("fatal datapath response on EOT")
+	}
+	if err := drainAndPrintElements(tree, printer); err != nil {
+		return err
 	}
 	return nil
 }

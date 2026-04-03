@@ -80,16 +80,24 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 
 // OutputTraceElement queues an element for pull-based consumption using IndexCurrPkt.
 func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error {
-	e := traceElemEvent{d.IndexCurrPkt, traceID, *elem}
+	e := traceElemEvent{d.IndexCurrPkt, traceID, cloneQueuedElem(elem)}
 	d.pendingElements = append(d.pendingElements, e)
 	return nil
 }
 
 // OutputTraceElementIdx queues an element at an explicit index.
 func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
-	e := traceElemEvent{idx, traceID, *elem}
+	e := traceElemEvent{idx, traceID, cloneQueuedElem(elem)}
 	d.pendingElements = append(d.pendingElements, e)
 	return nil
+}
+
+func cloneQueuedElem(elem *ocsd.TraceElement) ocsd.TraceElement {
+	clone := *elem
+	if elem.PtrExtendedData != nil {
+		clone.PtrExtendedData = append([]byte(nil), elem.PtrExtendedData...)
+	}
+	return clone
 }
 
 // AccessMemory reads target memory via the attached TargetMemAccess interface.

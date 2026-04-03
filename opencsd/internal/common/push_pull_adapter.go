@@ -70,6 +70,26 @@ func (a *PushToPullAdapter) Next() (*ocsd.TraceElement, error) {
 	return a.current, nil
 }
 
+// TryNext returns the next available trace element without blocking.
+// It returns io.EOF when no element is currently queued.
+func (a *PushToPullAdapter) TryNext() (*ocsd.TraceElement, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.current == nil {
+		if a.closed {
+			return nil, a.streamErr()
+		}
+		return nil, io.EOF
+	}
+	if a.delivered {
+		return nil, io.EOF
+	}
+
+	a.delivered = true
+	return a.current, nil
+}
+
 // Ack marks the current delivered element as fully processed so the producer can continue.
 func (a *PushToPullAdapter) Ack() {
 	a.mu.Lock()

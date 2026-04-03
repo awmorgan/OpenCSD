@@ -351,6 +351,10 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 		return processInputFileProducer(out, tree, fileName, genPrinter, opts)
 	}
 
+	if err := drainBootstrapElements(adapter, genAdapter, genPrinter); err != nil {
+		return err
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
 		err := processInputFileProducer(out, tree, fileName, genPrinter, opts)
@@ -401,6 +405,47 @@ func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, 
 		return err
 	}
 	return nil
+}
+
+func drainBootstrapElements(adapter *common.PushToPullAdapter, genAdapter *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter) error {
+	if adapter == nil || genAdapter == nil {
+		return nil
+	}
+
+	for {
+		elem, err := adapter.TryNext()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		ackNeeded := true
+		err = genAdapter.TraceElemIn(elem.Index, elem.TraceID, elem)
+		if ocsd.IsDataContErr(err) {
+			adapter.Ack()
+			ackNeeded = false
+			continue
+		}
+		if ocsd.IsDataWaitErr(err) {
+			if genPrinter.NeedAckWait() {
+				genPrinter.AckWait()
+			}
+			adapter.Ack()
+			ackNeeded = false
+			continue
+		}
+		if err != nil {
+			if ackNeeded {
+				adapter.Ack()
+			}
+			return fmt.Errorf("trace packet lister: generic element bootstrap processing error: %w", err)
+		}
+		if ackNeeded {
+			adapter.Ack()
+		}
+	}
 }
 
 func processInputFileProducer(out io.Writer, tree *dcdtree.DecodeTree, fileName string, genPrinter *printers.GenericElementPrinter, opts options) error {

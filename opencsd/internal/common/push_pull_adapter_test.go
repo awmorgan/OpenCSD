@@ -132,3 +132,45 @@ func TestPushToPullAdapterNextWaitsForProducer(t *testing.T) {
 		t.Fatalf("Next() error after close = %v, want io.EOF", err)
 	}
 }
+
+func TestPushToPullAdapterTryNext(t *testing.T) {
+	adapter := NewPushToPullAdapter()
+
+	if elem, err := adapter.TryNext(); !errors.Is(err, io.EOF) || elem != nil {
+		t.Fatalf("TryNext() empty = (%#v, %v), want (nil, io.EOF)", elem, err)
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- adapter.TraceElemIn(7, 0x33, ocsd.NewTraceElementWithType(ocsd.GenElemTraceOn))
+	}()
+
+	var got *ocsd.TraceElement
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		var err error
+		got, err = adapter.TryNext()
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, io.EOF) {
+			t.Fatalf("TryNext() unexpected error = %v", err)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if got == nil {
+		t.Fatal("TryNext() never observed queued element")
+	}
+	if got.Index != 7 || got.TraceID != 0x33 {
+		t.Fatalf("TryNext() metadata = (%d, %#x), want (7, 0x33)", got.Index, got.TraceID)
+	}
+	adapter.Ack()
+	if err := <-errCh; err != nil {
+		t.Fatalf("TraceElemIn() error = %v", err)
+	}
+
+	if elem, err := adapter.TryNext(); !errors.Is(err, io.EOF) || elem != nil {
+		t.Fatalf("TryNext() drained = (%#v, %v), want (nil, io.EOF)", elem, err)
+	}
+	adapter.Close()
+}

@@ -76,12 +76,14 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 // OutputTraceElement sends an element using IndexCurrPkt (or queues if in collect mode).
 func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error {
 	if d.collectElements {
-		e := traceElemEvent{d.IndexCurrPkt, traceID, *elem}
+		e := traceElemEvent{d.IndexCurrPkt, traceID, cloneQueuedElem(elem)}
 		d.pendingElements = append(d.pendingElements, e)
 		return nil
 	}
 	if d.TraceElemOut == nil {
-		return ocsd.ErrNotInit
+		e := traceElemEvent{d.IndexCurrPkt, traceID, cloneQueuedElem(elem)}
+		d.pendingElements = append(d.pendingElements, e)
+		return nil
 	}
 	err := d.TraceElemOut.TraceElemIn(d.IndexCurrPkt, traceID, elem)
 	if ocsd.IsDataContErr(err) {
@@ -96,7 +98,9 @@ func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) e
 // OutputTraceElementIdx sends an element at an explicit index.
 func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
 	if d.TraceElemOut == nil {
-		return ocsd.ErrNotInit
+		e := traceElemEvent{idx, traceID, cloneQueuedElem(elem)}
+		d.pendingElements = append(d.pendingElements, e)
+		return nil
 	}
 	err := d.TraceElemOut.TraceElemIn(idx, traceID, elem)
 	if ocsd.IsDataContErr(err) {
@@ -350,6 +354,14 @@ func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
 func (d *PktDecode) putBackElement(index ocsd.TrcIndex, traceID uint8, elem ocsd.TraceElement) {
 	e := traceElemEvent{index, traceID, elem}
 	d.pendingElements = append([]traceElemEvent{e}, d.pendingElements...)
+}
+
+func cloneQueuedElem(elem *ocsd.TraceElement) ocsd.TraceElement {
+	clone := *elem
+	if elem.PtrExtendedData != nil {
+		clone.PtrExtendedData = append([]byte(nil), elem.PtrExtendedData...)
+	}
+	return clone
 }
 
 func (d *PktDecode) decodePacket() ocsd.DatapathResp {
