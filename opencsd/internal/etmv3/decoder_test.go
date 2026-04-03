@@ -287,9 +287,6 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 	dec.SetMemAccess(mem)
 	dec.SetInstrDecode(idec.NewDecoder())
 
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
-
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	asyncPkt := &Packet{Type: PktASync}
 	dec.PacketDataIn(ocsd.OpData, 0, asyncPkt)
@@ -302,7 +299,7 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
 	dec.PacketDataIn(ocsd.OpData, 1, isyncPkt)
 
-	n0 := len(out.elements)
+	_ = drainDecodedElements(t, dec)
 
 	phdrPkt := &Packet{}
 	phdrPkt.ResetState()
@@ -320,12 +317,13 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpData, 3, trigPkt)
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
-	if len(out.elements) == n0 {
+	elems := drainDecodedElements(t, dec)
+	if len(elems) == 0 {
 		t.Logf("InstrType from follower: %v", dec.codeFollower.InstrInfo.Type)
 		t.Logf("InstrOpcode from follower: %x", dec.codeFollower.InstrInfo.Opcode)
 		t.Error("expected InstrRange element from E-atom processing")
 	}
-	for _, e := range out.elements[n0:] {
+	for _, e := range elems {
 		if e.ElemType == ocsd.GenElemInstrRange {
 			if e.StartAddr != 0x1000 {
 				t.Errorf("expected StartAddr=0x1000, got 0x%X", e.StartAddr)
@@ -337,7 +335,7 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 			return
 		}
 	}
-	t.Logf("elements after n0: %v", elemTypes(out)[n0:])
+	t.Logf("elements after decode: %v", len(elems))
 	t.Error("expected InstrRange element in output")
 }
 
@@ -349,8 +347,6 @@ func TestProcessPHdr_NAtom_InstrOther(t *testing.T) {
 	// Setup memory mock with hitAfter to avoid infinite loop
 	dec.SetMemAccess(&mockMemAcc{failAfter: -1, hitAfter: 5, instrType: ocsd.InstrBr})
 	dec.SetInstrDecode(idec.NewDecoder())
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	asyncPkt := &Packet{Type: PktASync}
@@ -364,6 +360,8 @@ func TestProcessPHdr_NAtom_InstrOther(t *testing.T) {
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
 	dec.PacketDataIn(ocsd.OpData, 1, isyncPkt)
 
+	_ = drainDecodedElements(t, dec)
+
 	phdrPkt := &Packet{}
 	phdrPkt.ResetState()
 	phdrPkt.Type = PktPHdr
@@ -374,6 +372,7 @@ func TestProcessPHdr_NAtom_InstrOther(t *testing.T) {
 
 	// No panic and decoder is still functional
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
+	_ = drainDecodedElements(t, dec)
 }
 
 // TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr: IndirectBr branch → setNeedAddr(true).
@@ -386,9 +385,6 @@ func TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr(t *testing.T) {
 	dec.SetMemAccess(mem)
 	dec.SetInstrDecode(idec.NewDecoder())
 
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
-
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	asyncPkt := &Packet{Type: PktASync}
 	dec.PacketDataIn(ocsd.OpData, 0, asyncPkt)
@@ -400,6 +396,8 @@ func TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr(t *testing.T) {
 	isyncPkt.CurrISA = ocsd.ISAArm
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
 	dec.PacketDataIn(ocsd.OpData, 1, isyncPkt)
+
+	_ = drainDecodedElements(t, dec)
 
 	phdrPkt := &Packet{}
 	phdrPkt.ResetState()
@@ -416,13 +414,13 @@ func TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr(t *testing.T) {
 	trigPkt.Type = PktTrigger
 	dec.PacketDataIn(ocsd.OpData, 3, trigPkt)
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
+	_ = drainDecodedElements(t, dec)
 
 	if !dec.NeedAddr {
 		t.Logf("InstrType from follower: %v", dec.codeFollower.InstrInfo.Type)
 		t.Logf("InstrOpcode from follower: %x", dec.codeFollower.InstrInfo.Opcode)
 		t.Error("expected needAddr=true after IndirectBr E-atom")
 	}
-	_ = out
 }
 
 // TestProcessPHdr_CCFmt3_WithAtoms: cycle-accurate fmt3 with CC and atoms.
@@ -436,9 +434,6 @@ func TestProcessPHdr_CCFmt3_WithAtoms(t *testing.T) {
 	dec.SetMemAccess(mem)
 	dec.SetInstrDecode(idec.NewDecoder())
 
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
-
 	dec.PacketDataIn(ocsd.OpReset, 0, nil)
 	asyncPkt := &Packet{Type: PktASync}
 	dec.PacketDataIn(ocsd.OpData, 0, asyncPkt)
@@ -451,7 +446,7 @@ func TestProcessPHdr_CCFmt3_WithAtoms(t *testing.T) {
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
 	dec.PacketDataIn(ocsd.OpData, 1, isyncPkt)
 
-	n0 := len(out.elements)
+	_ = drainDecodedElements(t, dec)
 
 	phdrPkt := &Packet{}
 	phdrPkt.ResetState()
@@ -470,14 +465,15 @@ func TestProcessPHdr_CCFmt3_WithAtoms(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
 	// Should emit element with CycleCount set
+	elems := drainDecodedElements(t, dec)
 	found := false
-	for _, e := range out.elements[n0:] {
+	for _, e := range elems {
 		if e.ElemType == ocsd.GenElemInstrRange && e.CycleCount == 5 {
 			found = true
 		}
 	}
 	if !found {
-		t.Logf("elements: %v", elemTypes(out)[n0:])
+		t.Logf("elements: %d", len(elems))
 		t.Error("expected InstrRange with CycleCount=5 from fmt3 CC PHdr")
 	}
 }
@@ -487,8 +483,7 @@ func TestProcessPHdr_CCOnly_ZeroAtoms(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlCycleAcc
 
-	dec, out := buildDecInDecodePkts(config)
-	n0 := len(out.elements)
+	dec := buildDecInDecodePktsPull(t, config)
 
 	phdrPkt := &Packet{}
 	phdrPkt.ResetState()
@@ -500,7 +495,7 @@ func TestProcessPHdr_CCOnly_ZeroAtoms(t *testing.T) {
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
 	hasCCElem := false
-	for _, e := range out.elements[n0:] {
+	for _, e := range drainDecodedElements(t, dec) {
 		if e.ElemType == ocsd.GenElemCycleCount && e.CycleCount == 99 {
 			hasCCElem = true
 		}
