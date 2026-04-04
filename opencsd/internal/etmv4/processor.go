@@ -284,6 +284,14 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				case PktCcntF2:
 					p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
 					p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
+				case PktCcntF1:
+					if pkt.Valid.CycleCount {
+						p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
+						p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
+					} else {
+						p.currPacket.CycleCount = 0
+						p.currPacket.Valid.CCExactMatch = false
+					}
 				case PktMispredict, PktCancelF2, PktCancelF3:
 					p.currPacket.Atom = pkt.Atom
 					p.currPacket.CancelElements = pkt.CancelElements
@@ -490,6 +498,10 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		return decodeCycleCntF2Packet(data, offset)
 	}
 
+	if header == 0x0E || header == 0x0F {
+		return decodeCycleCntF1Packet(data, offset)
+	}
+
 	if header >= 0x10 && header <= 0x1F {
 		return decodeCycleCntF3Packet(header), 1, nil
 	}
@@ -596,6 +608,9 @@ func (p *Processor) canUseStatelessDecodeResult(pktType PktType) bool {
 		return p.config.EnabledDataTrace()
 	case PktCcntF2:
 		// F2 commit element decode depends on max-spec depth when CommitOpt1 is disabled.
+		return p.config.CommitOpt1()
+	case PktCcntF1:
+		// F1 commit element decode depends on CommitOpt1 mode.
 		return p.config.CommitOpt1()
 	case PktQ:
 		return p.config.HasQElem()
@@ -811,6 +826,30 @@ func decodeCycleCntF2Packet(data []byte, offset int) (Packet, int, error) {
 	pkt := Packet{Type: PktCcntF2}
 	pkt.CycleCount = uint32(data[offset+1] & 0xF)
 	return pkt, 2, nil
+}
+
+func decodeCycleCntF1Packet(data []byte, offset int) (Packet, int, error) {
+	if offset >= len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	header := data[offset]
+	pkt := Packet{Type: PktCcntF1}
+
+	if (header & 0x1) == 0x1 {
+		// CommitOpt1 mode: no count field.
+		pkt.Valid.CycleCount = false
+		pkt.CycleCount = 0
+		return pkt, 1, nil
+	}
+
+	count, n, ok := decodeContField32(data, offset+1, 3)
+	if !ok {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	pkt.CycleCount = count
+	pkt.Valid.CycleCount = true
+	return pkt, 1 + n, nil
 }
 
 func decodeSimpleSpecResPacket(header uint8) (Packet, bool) {

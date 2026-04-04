@@ -277,6 +277,45 @@ func TestDecodeNextPacketCycleCntF2IncompleteFallsBack(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketCycleCntF1WithCount(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x0E, 0x05}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktCcntF1 {
+		t.Fatalf("expected PktCcntF1, got %v", pkt.Type)
+	}
+	if !pkt.Valid.CycleCount || pkt.CycleCount != 0x5 {
+		t.Fatalf("unexpected F1 cycle count decode: valid=%v count=%d", pkt.Valid.CycleCount, pkt.CycleCount)
+	}
+}
+
+func TestDecodeNextPacketCycleCntF1NoCount(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x0F}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktCcntF1 {
+		t.Fatalf("expected PktCcntF1, got %v", pkt.Type)
+	}
+	if pkt.Valid.CycleCount || pkt.CycleCount != 0 {
+		t.Fatalf("unexpected F1 no-count decode: valid=%v count=%d", pkt.Valid.CycleCount, pkt.CycleCount)
+	}
+}
+
+func TestDecodeNextPacketCycleCntF1IncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x0E}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for incomplete F1 packet, got %v", err)
+	}
+}
+
 func TestProcessDataFastPathCycleCntF3CommitOpt0(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
@@ -378,6 +417,75 @@ func TestProcessDataCycleCntF2FallsBackWhenCommitOpt1Off(t *testing.T) {
 	// Legacy path should be used here and include commit elements.
 	if !out.last.Valid.CommitElem {
 		t.Fatalf("expected commit elements from legacy F2 path when CommitOpt1 is off")
+	}
+}
+
+func TestProcessDataFastPathCycleCntF1CommitOpt1WithCount(t *testing.T) {
+	p := NewProcessor(&Config{RegIdr0: (1 << 29) | (1 << 7)})
+	p.isSync = true
+	p.currPacket.CCThreshold = 7
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x0E, 0x02})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktCcntF1 {
+		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	}
+	if out.last.CycleCount != 9 {
+		t.Fatalf("expected cycle count 9, got %d", out.last.CycleCount)
+	}
+	if out.last.Valid.CCExactMatch {
+		t.Fatalf("did not expect CCExactMatch for threshold 7 and count 9")
+	}
+}
+
+func TestProcessDataFastPathCycleCntF1CommitOpt1NoCount(t *testing.T) {
+	p := NewProcessor(&Config{RegIdr0: (1 << 29) | (1 << 7)})
+	p.isSync = true
+	p.currPacket.CCThreshold = 7
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x0F})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktCcntF1 {
+		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	}
+	if out.last.CycleCount != 0 || out.last.Valid.CCExactMatch {
+		t.Fatalf("expected zero cycle and no exact match for no-count F1, got count=%d exact=%v", out.last.CycleCount, out.last.Valid.CCExactMatch)
+	}
+}
+
+func TestProcessDataCycleCntF1FallsBackWhenCommitOpt1Off(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	p.currPacket.CCThreshold = 0
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x0E, 0x02, 0x03})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktCcntF1 {
+		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	}
+	if !out.last.Valid.CommitElem {
+		t.Fatalf("expected commit elements from legacy F1 path when CommitOpt1 is off")
 	}
 }
 
