@@ -248,6 +248,67 @@ func TestDecodeNextPacketEvent(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketTraceInfoInfoOnly(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x01, 0x01, 0x43}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktTraceInfo {
+		t.Fatalf("expected PktTraceInfo, got %v", pkt.Type)
+	}
+	if !pkt.Valid.TInfo {
+		t.Fatalf("expected trace info valid flag")
+	}
+	if pkt.TraceInfo.Val != 0x43 {
+		t.Fatalf("expected trace info value 0x43, got 0x%X", pkt.TraceInfo.Val)
+	}
+	if !pkt.TraceInfo.CCEnabled {
+		t.Fatalf("expected CCEnabled set")
+	}
+	if pkt.TraceInfo.CondEnabled != 1 {
+		t.Fatalf("expected CondEnabled=1, got %d", pkt.TraceInfo.CondEnabled)
+	}
+	if !pkt.TraceInfo.InTransState {
+		t.Fatalf("expected InTransState set")
+	}
+}
+
+func TestDecodeNextPacketTraceInfoMultipleSections(t *testing.T) {
+	data := []byte{0x01, 0x0F, 0x01, 0x02, 0x03, 0x04}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != len(data) {
+		t.Fatalf("expected %d bytes consumed, got %d", len(data), consumed)
+	}
+	if pkt.Type != PktTraceInfo {
+		t.Fatalf("expected PktTraceInfo, got %v", pkt.Type)
+	}
+	if pkt.TraceInfo.Val != 0x1 {
+		t.Fatalf("expected info value 0x1, got 0x%X", pkt.TraceInfo.Val)
+	}
+	if pkt.P0Key != 0x2 {
+		t.Fatalf("expected P0Key 0x2, got 0x%X", pkt.P0Key)
+	}
+	if pkt.CurrSpecDepth != 0x3 || !pkt.Valid.SpecDepthValid || !pkt.TraceInfo.SpecFieldPresent {
+		t.Fatalf("unexpected spec section decode: depth=0x%X valid=%v present=%v", pkt.CurrSpecDepth, pkt.Valid.SpecDepthValid, pkt.TraceInfo.SpecFieldPresent)
+	}
+	if pkt.CCThreshold != 0x4 || !pkt.Valid.CCThreshold {
+		t.Fatalf("unexpected cycle threshold decode: threshold=0x%X valid=%v", pkt.CCThreshold, pkt.Valid.CCThreshold)
+	}
+}
+
+func TestDecodeNextPacketTraceInfoIncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x01, 0x01}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for incomplete trace info, got %v", err)
+	}
+}
+
 func TestDecodeNextPacketLongAddr64IS0(t *testing.T) {
 	data := []byte{0x9D, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 	pkt, consumed, err := decodeNextPacket(data, 0)

@@ -252,6 +252,19 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				switch pkt.Type {
 				case PktAtomF1, PktAtomF2, PktAtomF3, PktAtomF4, PktAtomF5, PktAtomF6:
 					p.currPacket.Atom = pkt.Atom
+				case PktTraceInfo:
+					p.currPacket.ClearTraceInfo()
+					p.currPacket.TraceInfo = pkt.TraceInfo
+					p.currPacket.P0Key = pkt.P0Key
+					p.currPacket.CurrSpecDepth = pkt.CurrSpecDepth
+					p.currPacket.CCThreshold = pkt.CCThreshold
+					p.currPacket.Valid.TInfo = pkt.Valid.TInfo
+					p.currPacket.Valid.SpecDepthValid = pkt.Valid.SpecDepthValid
+					p.currPacket.Valid.CCThreshold = pkt.Valid.CCThreshold
+					if !p.firstTraceInfo {
+						p.currPacket.TraceInfo.InitialTInfo = true
+						p.firstTraceInfo = true
+					}
 				case PktTimestamp:
 					p.currPacket.Timestamp = pkt.Timestamp
 					p.currPacket.TSBitsChanged = pkt.TSBitsChanged
@@ -353,6 +366,10 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		return decodeExtensionPacket(data, offset)
 	}
 
+	if header == 0x01 {
+		return decodeTraceInfoPacket(data, offset)
+	}
+
 	if pkt, consumed, ok := decodeSimpleNoPayloadPacket(header); ok {
 		return pkt, consumed, nil
 	}
@@ -407,6 +424,83 @@ func decodeExceptionPacket(data []byte, offset int) (Packet, int, error) {
 	pkt.ExceptionInfo.ExceptionType |= (uint16(byte2) & 0x1F) << 5
 	pkt.ExceptionInfo.MFaultPending = ((byte2 >> 5) & 0x1) != 0
 	return pkt, 3, nil
+}
+
+func decodeTraceInfoPacket(data []byte, offset int) (Packet, int, error) {
+	if offset+2 > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	idx := offset + 1
+	firstCtrl := data[idx]
+	for {
+		if idx >= len(data) {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		b := data[idx]
+		idx++
+		if (b & 0x80) == 0 {
+			break
+		}
+	}
+
+	pkt := Packet{Type: PktTraceInfo}
+	presSect := firstCtrl & uint8(TInfoAllSect)
+
+	if presSect&uint8(TInfoInfoSect) != 0 {
+		fieldVal, n, ok := decodeContField32(data, idx, 5)
+		if !ok {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		idx += n
+		pkt.TraceInfo.Val = uint16(fieldVal)
+		pkt.TraceInfo.CCEnabled = (fieldVal & 0x1) != 0
+		pkt.TraceInfo.CondEnabled = uint8((fieldVal >> 1) & 0x7)
+		pkt.TraceInfo.P0Load = (fieldVal & (1 << 4)) != 0
+		pkt.TraceInfo.P0Store = (fieldVal & (1 << 5)) != 0
+		pkt.TraceInfo.InTransState = (fieldVal & (1 << 6)) != 0
+		pkt.Valid.TInfo = true
+	}
+
+	if presSect&uint8(TInfoKeySect) != 0 {
+		fieldVal, n, ok := decodeContField32(data, idx, 5)
+		if !ok {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		idx += n
+		pkt.P0Key = fieldVal
+	}
+
+	if presSect&uint8(TInfoSpecSect) != 0 {
+		fieldVal, n, ok := decodeContField32(data, idx, 5)
+		if !ok {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		idx += n
+		pkt.CurrSpecDepth = fieldVal
+		pkt.TraceInfo.SpecFieldPresent = true
+		pkt.Valid.SpecDepthValid = true
+	}
+
+	if presSect&uint8(TInfoCyctSect) != 0 {
+		fieldVal, n, ok := decodeContField32(data, idx, 5)
+		if !ok {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		idx += n
+		pkt.CCThreshold = fieldVal
+		pkt.Valid.CCThreshold = true
+	}
+
+	if presSect&uint8(TInfoWndwSect) != 0 {
+		_, n, ok := decodeContField32(data, idx, 5)
+		if !ok {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		idx += n
+	}
+
+	return pkt, idx - offset, nil
 }
 
 func decodeExtensionPacket(data []byte, offset int) (Packet, int, error) {
