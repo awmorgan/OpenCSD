@@ -299,6 +299,10 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 					p.currPacket.CommitElements = pkt.CommitElements
 				case PktCancelF1, PktCancelF1Mispred:
 					p.currPacket.CancelElements = pkt.CancelElements
+				case PktCondIF2:
+					p.currPacket.CondInstr.CondCKey = pkt.CondInstr.CondCKey
+				case PktCondResF3:
+					p.currPacket.CondResult.F3Tokens = pkt.CondResult.F3Tokens
 				case ETE_PktITE:
 					p.currPacket.ITEPkt = pkt.ITEPkt
 				case PktAddrL_32IS0, PktAddrL_32IS1, ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1:
@@ -498,6 +502,14 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		return pkt, 1, nil
 	}
 
+	if header >= 0x40 && header <= 0x42 {
+		return decodeCondIF2Packet(header), 1, nil
+	}
+
+	if header >= 0x50 && header <= 0x5F {
+		return decodeCondResF3Packet(data, offset)
+	}
+
 	if header == uint8(PktCommit) || header == uint8(PktCancelF1) || header == uint8(PktCancelF1Mispred) {
 		return decodeVariableSpecResPacket(data, offset)
 	}
@@ -601,6 +613,8 @@ func (p *Processor) canUseStatelessDecodeResult(pktType PktType) bool {
 	case ETE_PktITE:
 		return p.config.MajVersion() >= 0x5 && p.config.MinVersion() >= 0x3
 	case PktCondFlush:
+		return p.config.HasCondTrace() && p.config.EnabledCondITrace() != CondTrDis
+	case PktCondIF2, PktCondResF3:
 		return p.config.HasCondTrace() && p.config.EnabledCondITrace() != CondTrDis
 	case PktIgnore:
 		return p.config.FullVersion() >= 0x43
@@ -928,6 +942,23 @@ func decodeVariableSpecResPacket(data []byte, offset int) (Packet, int, error) {
 	default:
 		return Packet{}, 0, errDecodeNotImplemented
 	}
+}
+
+func decodeCondIF2Packet(header uint8) Packet {
+	pkt := Packet{Type: PktCondIF2}
+	pkt.CondInstr.CondCKey = uint32(header & 0x3)
+	return pkt
+}
+
+func decodeCondResF3Packet(data []byte, offset int) (Packet, int, error) {
+	if offset+2 > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	pkt := Packet{Type: PktCondResF3}
+	f3Tokens := uint16(data[offset+1])
+	f3Tokens |= (uint16(data[offset]) & 0xF) << 8
+	pkt.CondResult.F3Tokens = f3Tokens
+	return pkt, 2, nil
 }
 
 func decodeTimestampPacket(data []byte, offset int) (Packet, int, error) {
