@@ -479,6 +479,13 @@ func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketReservedHeaderError(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x14}, 0)
+	if !errors.Is(err, ocsd.ErrInvalidPcktHdr) {
+		t.Fatalf("expected ErrInvalidPcktHdr, got %v", err)
+	}
+}
+
 func TestDecodeNextPacketSWIT(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x19, 0xAB}, 0)
 	if err != nil {
@@ -580,6 +587,13 @@ func TestDecodeNextPacketITMAsyncTooShortForLegacyPatternFallsBack(t *testing.T)
 	_, _, err := decodeNextPacket([]byte{0x00, 0x00, 0x80}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
 		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
+	}
+}
+
+func TestDecodeNextPacketITMAsyncMalformedError(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x00, 0x00, 0x00, 0x00, 0x01, 0x80}, 0)
+	if !errors.Is(err, ocsd.ErrBadPacketSeq) {
+		t.Fatalf("expected ErrBadPacketSeq, got %v", err)
 	}
 }
 

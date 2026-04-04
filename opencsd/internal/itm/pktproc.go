@@ -476,8 +476,13 @@ func (p *PktProc) stateHdr(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool)
 			p.currPacket = pkt
 			p.procState = procSendPkt
 			return p.stateSendPkt(index)
-		case errors.Is(err, errDecodeNotImplemented):
+		case errors.Is(err, errDecodeNotImplemented),
+			errors.Is(err, ocsd.ErrBadPacketSeq),
+			errors.Is(err, ocsd.ErrInvalidPcktHdr):
 			// Fall back to the legacy state machine while migration is in progress.
+			// The legacy path owns byte consumption for error cases; handling them here
+			// would retry the same header indefinitely when the stateless decoder fails
+			// before consuming input.
 		default:
 			return ocsd.RespFatalInvalidData, err, true
 		}
@@ -736,7 +741,7 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		}
 		for i := offset + 1; i < offset+5; i++ {
 			if data[i] != 0x00 {
-				return Packet{}, 0, errDecodeNotImplemented
+				return Packet{}, 0, fmt.Errorf("%w: Async Packet: unexpected none zero value", ocsd.ErrBadPacketSeq)
 			}
 		}
 		for i := offset + 5; i < len(data); i++ {
@@ -744,7 +749,7 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 				return Packet{Type: PktAsync}, i - offset + 1, nil
 			}
 			if data[i] != 0x00 {
-				return Packet{}, 0, errDecodeNotImplemented
+				return Packet{}, 0, fmt.Errorf("%w: Async Packet: unexpected none zero value", ocsd.ErrBadPacketSeq)
 			}
 		}
 		return Packet{}, 0, errDecodeNotImplemented
@@ -803,7 +808,7 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		pkt.SetValue(value, uint8(payloadBytes))
 		return pkt, 1 + payloadBytes, nil
 	}
-	return Packet{}, 0, errDecodeNotImplemented
+	return Packet{}, 0, fmt.Errorf("%w: reserved packet header", ocsd.ErrInvalidPcktHdr)
 }
 
 func decodeContField32NoOverflow(data []byte, start int, limit int) (uint32, int, bool) {
