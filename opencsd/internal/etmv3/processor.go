@@ -322,17 +322,17 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 			pkt, consumed, err := decodeNextPacket(dataBlock, p.bytesProcessed)
 			switch {
 			case err == nil:
-				fastPkt := p.currPacket
-				fastPkt.Clear()
-				fastPkt.Type = pkt.Type
-				fastPkt.Err = pkt.Err
+				p.currPacket.Clear()
+				p.currPacket.Type = pkt.Type
+				p.currPacket.Err = pkt.Err
 				switch pkt.Type {
 				case PktVMID:
-					fastPkt.Context.VMID = pkt.Context.VMID
-					fastPkt.Context.UpdatedV = pkt.Context.UpdatedV
+					p.currPacket.Context.VMID = pkt.Context.VMID
+					p.currPacket.Context.UpdatedV = pkt.Context.UpdatedV
 				case PktTimestamp:
-					fastPkt.UpdateTimestamp(pkt.Timestamp, pkt.TsUpdateBits)
+					p.currPacket.UpdateTimestamp(pkt.Timestamp, pkt.TsUpdateBits)
 				}
+				fastPkt := p.currPacket
 				resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+consumed])
 				p.bytesProcessed += consumed
 				continue
@@ -431,19 +431,42 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		return Packet{Type: PktExceptionEntry}, 1, nil
 	default:
 		if (header & 0xFB) == 0x42 {
-			if offset+2 > len(data) {
-				return Packet{}, 0, errDecodeNotImplemented
-			}
-			tsByte := data[offset+1]
-			if (tsByte & 0x80) != 0 {
-				return Packet{}, 0, errDecodeNotImplemented
-			}
-			pkt := Packet{Type: PktTimestamp}
-			pkt.Timestamp = uint64(tsByte & 0x7F)
-			pkt.TsUpdateBits = 7
-			return pkt, 2, nil
+			return decodeTimestampPacket(data, offset)
 		}
 		return Packet{}, 0, errDecodeNotImplemented
+	}
+}
+
+func decodeTimestampPacket(data []byte, offset int) (Packet, int, error) {
+	if offset+2 > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	const maxUnambiguousTsBytes = 6
+	idx := offset + 1
+	var value uint64
+	consumedTsBytes := 0
+
+	for {
+		if idx >= len(data) {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		if consumedTsBytes >= maxUnambiguousTsBytes {
+			// 7+ byte timestamps require config-aware limits (TSPkt64) in legacy decode.
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+
+		b := data[idx]
+		value |= uint64(b&0x7F) << (consumedTsBytes * 7)
+		consumedTsBytes++
+		idx++
+
+		if (b & 0x80) == 0 {
+			pkt := Packet{Type: PktTimestamp}
+			pkt.Timestamp = value
+			pkt.TsUpdateBits = uint8(consumedTsBytes * 7)
+			return pkt, 1 + consumedTsBytes, nil
+		}
 	}
 }
 
