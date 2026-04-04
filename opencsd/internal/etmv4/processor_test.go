@@ -368,6 +368,9 @@ func TestProcessDataFastPathTimestampAcrossBlocks(t *testing.T) {
 	if out.count != 0 {
 		t.Fatalf("did not expect output packet from incomplete timestamp")
 	}
+	if p.processState != ProcHdr {
+		t.Fatalf("expected incomplete synced packet to stay out of legacy ProcData state, got %v", p.processState)
+	}
 
 	consumed, err = p.processData(1, []byte{0x2A})
 	if err != nil {
@@ -381,6 +384,37 @@ func TestProcessDataFastPathTimestampAcrossBlocks(t *testing.T) {
 	}
 	if out.last.Timestamp != 0x2A || !out.last.Valid.Timestamp {
 		t.Fatalf("unexpected timestamp payload after reassembly: ts=0x%X valid=%v", out.last.Timestamp, out.last.Valid.Timestamp)
+	}
+}
+
+func TestTraceDataEOTIncompleteBufferedPacketKeepsHeaderType(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x9A})
+	if err != nil {
+		t.Fatalf("unexpected error buffering incomplete packet: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if p.currPacket.Type != PktAddrL_32IS0 {
+		t.Fatalf("expected buffered packet type PktAddrL_32IS0, got %v", p.currPacket.Type)
+	}
+
+	if err := p.TraceDataEOT(); err != nil {
+		t.Fatalf("unexpected EOT error: %v", err)
+	}
+	if out.count != 1 {
+		t.Fatalf("expected one emitted incomplete packet, got %d", out.count)
+	}
+	if out.last.Type != PktAddrL_32IS0 {
+		t.Fatalf("expected incomplete packet type PktAddrL_32IS0, got %v", out.last.Type)
+	}
+	if !errors.Is(out.last.Err, errIncompleteEOT) {
+		t.Fatalf("expected errIncompleteEOT, got %v", out.last.Err)
 	}
 }
 

@@ -163,75 +163,141 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 			break
 		}
 
-		if p.processState == ProcHdr && p.isSync && consumed < len(dataBlock) {
-			packetIndex := p.blockIndex + ocsd.TrcIndex(consumed)
-			pkt, bytesConsumed, err := decodeNextPacketWithConfigFn(p.config, dataBlock, consumed)
-			switch {
-			case err == nil:
-				p.packetIndex = packetIndex
-				p.applyDecodedPacket(pkt)
-				p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
-				consumed += bytesConsumed
-				p.blockBytesProcessed = consumed
-				resp = p.emitCurrentPacket()
-				continue
-			case errors.Is(err, errDecodeNeedMoreData):
-				// Packet spans block boundary; ProcData loop will accumulate remaining bytes.
-			case errors.Is(err, errDecodeNotImplemented):
-				// Fall back to the legacy state loop while migration is in progress.
-			default:
-				return uint32(consumed), err
-			}
-		}
-
-		switch p.processState {
-		case ProcHdr:
-			if consumed >= len(dataBlock) {
-				break
-			}
-			p.packetIndex = p.blockIndex + ocsd.TrcIndex(consumed)
-			if p.isSync {
-				p.currPacket.Type = packetTypeForHeader(p.config, dataBlock[consumed])
-			} else {
-				p.currPacket.Type = PktNotSync
-			}
-			p.processState = ProcData
-			fallthrough
-
-		case ProcData:
-			for consumed < len(dataBlock) && p.processState == ProcData {
-				nextByte := dataBlock[consumed]
-				p.currPacketData = append(p.currPacketData, nextByte)
-				consumed++
-				p.blockBytesProcessed = consumed
-				if p.isSync {
-					pkt, bytesConsumed, err := decodeNextPacketWithConfigFn(p.config, p.currPacketData, 0)
-					if err != nil {
-						if !errors.Is(err, errDecodeNeedMoreData) {
-							return uint32(consumed), err
-						}
-					} else if bytesConsumed == len(p.currPacketData) {
-						p.applyDecodedPacket(pkt)
-						resp = p.emitCurrentPacket()
-					}
-				} else {
-					if p.processUnsyncedByte(nextByte) {
-						resp = p.emitCurrentPacket()
-					}
-				}
-			}
-
-		case SendUnsynced:
+		if p.processState == SendUnsynced {
 			resp = p.outputUnsyncedRawPacket()
 			if p.updateOnUnsyncPktIdx != 0 {
 				p.packetIndex = p.updateOnUnsyncPktIdx
 				p.updateOnUnsyncPktIdx = 0
 			}
 			p.processState = ProcData
+			continue
+		}
+
+		if p.isSync {
+			var handled bool
+			var err error
+			resp, consumed, handled, err = p.processSyncedDataBlock(dataBlock, consumed)
+			if err != nil {
+				return uint32(consumed), err
+			}
+			if handled {
+				p.blockBytesProcessed = consumed
+				continue
+			}
+		}
+
+		var err error
+		resp, consumed, err = p.processLegacyDataBlock(dataBlock, consumed)
+		if err != nil {
+			return uint32(consumed), err
 		}
 	}
 
 	return uint32(consumed), ocsd.DataErrFromResp(resp, nil)
+}
+
+func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd.DatapathResp, int, bool, error) {
+	resp := ocsd.RespCont
+
+	if !p.isSync || p.processState == SendUnsynced {
+		return resp, consumed, false, nil
+	}
+
+	if len(p.currPacketData) == 0 {
+		packetIndex := p.blockIndex + ocsd.TrcIndex(consumed)
+		pkt, bytesConsumed, err := decodeNextPacketWithConfigFn(p.config, dataBlock, consumed)
+		switch {
+		case err == nil:
+			p.packetIndex = packetIndex
+			p.applyDecodedPacket(pkt)
+			p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
+			consumed += bytesConsumed
+			p.blockBytesProcessed = consumed
+			resp = p.emitCurrentPacket()
+			return resp, consumed, true, nil
+		case errors.Is(err, errDecodeNeedMoreData):
+			p.packetIndex = packetIndex
+			p.currPacket.Type = packetTypeForHeader(p.config, dataBlock[consumed])
+			p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:]...)
+			return resp, len(dataBlock), true, nil
+		case errors.Is(err, errDecodeNotImplemented):
+			return resp, consumed, false, nil
+		default:
+			return resp, consumed, true, err
+		}
+	}
+
+	packetIndex := p.packetIndex
+	for consumed < len(dataBlock) {
+		nextByte := dataBlock[consumed]
+		p.currPacketData = append(p.currPacketData, nextByte)
+		consumed++
+		p.blockBytesProcessed = consumed
+
+		pkt, bytesConsumed, err := decodeNextPacketWithConfigFn(p.config, p.currPacketData, 0)
+		switch {
+		case err == nil:
+			if bytesConsumed != len(p.currPacketData) {
+				return resp, consumed, true, fmt.Errorf("decodeNextPacket consumed %d of %d buffered bytes", bytesConsumed, len(p.currPacketData))
+			}
+			p.packetIndex = packetIndex
+			p.applyDecodedPacket(pkt)
+			resp = p.emitCurrentPacket()
+			return resp, consumed, true, nil
+		case errors.Is(err, errDecodeNeedMoreData):
+			continue
+		case errors.Is(err, errDecodeNotImplemented):
+			return resp, consumed, false, nil
+		default:
+			return resp, consumed, true, err
+		}
+	}
+
+	return resp, consumed, true, nil
+}
+
+func (p *Processor) processLegacyDataBlock(dataBlock []byte, consumed int) (ocsd.DatapathResp, int, error) {
+	resp := ocsd.RespCont
+
+	switch p.processState {
+	case ProcHdr:
+		if consumed >= len(dataBlock) {
+			return resp, consumed, nil
+		}
+		p.packetIndex = p.blockIndex + ocsd.TrcIndex(consumed)
+		if p.isSync {
+			p.currPacket.Type = packetTypeForHeader(p.config, dataBlock[consumed])
+		} else {
+			p.currPacket.Type = PktNotSync
+		}
+		p.processState = ProcData
+		fallthrough
+
+	case ProcData:
+		for consumed < len(dataBlock) && p.processState == ProcData {
+			nextByte := dataBlock[consumed]
+			p.currPacketData = append(p.currPacketData, nextByte)
+			consumed++
+			p.blockBytesProcessed = consumed
+			if p.isSync {
+				pkt, bytesConsumed, err := decodeNextPacketWithConfigFn(p.config, p.currPacketData, 0)
+				if err != nil {
+					if !errors.Is(err, errDecodeNeedMoreData) {
+						return resp, consumed, err
+					}
+				} else if bytesConsumed == len(p.currPacketData) {
+					p.applyDecodedPacket(pkt)
+					resp = p.emitCurrentPacket()
+				}
+			} else {
+				if p.processUnsyncedByte(nextByte) {
+					resp = p.emitCurrentPacket()
+				}
+			}
+		}
+	}
+
+	return resp, consumed, nil
 }
 
 func packetTypeForHeader(config Config, header uint8) PktType {
