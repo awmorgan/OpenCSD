@@ -7,6 +7,25 @@ import (
 	"opencsd/internal/ocsd"
 )
 
+type capturePktOut struct {
+	count int
+	last  TracePacket
+}
+
+func (c *capturePktOut) TracePacketData(_ ocsd.TrcIndex, pkt *TracePacket) error {
+	c.count++
+	if pkt != nil {
+		c.last = *pkt
+	}
+	return nil
+}
+
+func (c *capturePktOut) TracePacketEOT() error { return nil }
+
+func (c *capturePktOut) TracePacketFlush() error { return nil }
+
+func (c *capturePktOut) TracePacketReset(_ ocsd.TrcIndex) error { return nil }
+
 func TestProcessorResetPacketStateClearsConditionalState(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.currPacketData = []byte{0xAA, 0xBB}
@@ -216,6 +235,78 @@ func TestDecodeNextPacketTimestampIncompleteFallsBack(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x02}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
 		t.Fatalf("expected errDecodeNotImplemented for incomplete timestamp, got %v", err)
+	}
+}
+
+func TestDecodeNextPacketCycleCntF3(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x1B}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktCcntF3 {
+		t.Fatalf("expected PktCcntF3, got %v", pkt.Type)
+	}
+	if pkt.CommitElements != 3 || pkt.CycleCount != 3 {
+		t.Fatalf("unexpected F3 decode values: commit=%d cycle=%d", pkt.CommitElements, pkt.CycleCount)
+	}
+}
+
+func TestProcessDataFastPathCycleCntF3CommitOpt0(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	p.currPacket.CCThreshold = 10
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x1B})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if out.count != 1 {
+		t.Fatalf("expected one output packet, got %d", out.count)
+	}
+	if out.last.Type != PktCcntF3 {
+		t.Fatalf("expected output type PktCcntF3, got %v", out.last.Type)
+	}
+	if out.last.CycleCount != 13 {
+		t.Fatalf("expected cycle count 13, got %d", out.last.CycleCount)
+	}
+	if !out.last.Valid.CommitElem || out.last.CommitElements != 3 {
+		t.Fatalf("unexpected commit elem decode: valid=%v value=%d", out.last.Valid.CommitElem, out.last.CommitElements)
+	}
+	if out.last.Valid.CCExactMatch {
+		t.Fatalf("did not expect CCExactMatch for threshold 10 and count 13")
+	}
+}
+
+func TestProcessDataFastPathCycleCntF3CommitOpt1(t *testing.T) {
+	p := NewProcessor(&Config{RegIdr0: (1 << 29) | (1 << 7)})
+	p.isSync = true
+	p.currPacket.CCThreshold = 5
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x10})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if out.count != 1 {
+		t.Fatalf("expected one output packet, got %d", out.count)
+	}
+	if out.last.CycleCount != 5 || !out.last.Valid.CCExactMatch {
+		t.Fatalf("expected exact CC match at threshold, got count=%d exact=%v", out.last.CycleCount, out.last.Valid.CCExactMatch)
+	}
+	if out.last.Valid.CommitElem {
+		t.Fatalf("did not expect commit elements when CommitOpt1 is enabled")
 	}
 }
 

@@ -274,6 +274,13 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 					p.currPacket.CycleCount = pkt.CycleCount
 					p.currPacket.Valid.Timestamp = pkt.Valid.Timestamp
 					p.currPacket.Valid.CycleCount = pkt.Valid.CycleCount
+				case PktCcntF3:
+					if !p.config.CommitOpt1() {
+						p.currPacket.CommitElements = pkt.CommitElements
+						p.currPacket.Valid.CommitElem = true
+					}
+					p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
+					p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
 				case ETE_PktITE:
 					p.currPacket.ITEPkt = pkt.ITEPkt
 				case PktAddrL_32IS0, PktAddrL_32IS1, ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1:
@@ -467,6 +474,10 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 
 	if header == 0x01 {
 		return decodeTraceInfoPacket(data, offset)
+	}
+
+	if header >= 0x10 && header <= 0x1F {
+		return decodeCycleCntF3Packet(header), 1, nil
 	}
 
 	if pkt, consumed, ok := decodeSimpleNoPayloadPacket(header); ok {
@@ -766,6 +777,13 @@ func decodeSimpleNoPayloadPacket(header uint8) (Packet, int, bool) {
 		return Packet{Type: PktEvent, EventVal: header & 0xF}, 1, true
 	}
 	return Packet{}, 0, false
+}
+
+func decodeCycleCntF3Packet(header uint8) Packet {
+	pkt := Packet{Type: PktCcntF3}
+	pkt.CommitElements = uint32((header>>2)&0x3) + 1
+	pkt.CycleCount = uint32(header & 0x3)
+	return pkt
 }
 
 func decodeTimestampPacket(data []byte, offset int) (Packet, int, error) {
