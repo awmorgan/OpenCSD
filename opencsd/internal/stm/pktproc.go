@@ -1545,7 +1545,7 @@ func decodeNextPacket(data []byte, nibbleOffset int) (Packet, int, error) {
 				return pkt, 5, nil
 			case 0x8: // FREQ — 11 nibbles total
 				var value uint32
-				for i := 0; i < 8; i++ {
+				for i := range 8 {
 					n, ok := getNibble(data, nibbleOffset+3+i)
 					if !ok {
 						return Packet{}, 0, errDecodeNotImplemented
