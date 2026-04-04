@@ -299,11 +299,17 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 					p.currPacket.CommitElements = pkt.CommitElements
 				case PktCancelF1, PktCancelF1Mispred:
 					p.currPacket.CancelElements = pkt.CancelElements
+				case PktCondIF1:
+					p.currPacket.CondInstr.CondCKey = pkt.CondInstr.CondCKey
+					p.currPacket.CondInstr.CondKeySet = pkt.CondInstr.CondKeySet
 				case PktCondIF2:
 					p.currPacket.CondInstr.CondCKey = pkt.CondInstr.CondCKey
+					p.currPacket.CondInstr.CondKeySet = pkt.CondInstr.CondKeySet
 				case PktCondIF3:
 					p.currPacket.CondInstr.NumCElem = pkt.CondInstr.NumCElem
 					p.currPacket.CondInstr.F3FinalElem = pkt.CondInstr.F3FinalElem
+				case PktCondResF1:
+					p.currPacket.CondResult = pkt.CondResult
 				case PktCondResF2:
 					p.currPacket.CondResult.F2KeyIncr = pkt.CondResult.F2KeyIncr
 					p.currPacket.CondResult.Res0 = pkt.CondResult.Res0
@@ -514,6 +520,14 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		return decodeCondIF2Packet(header), 1, nil
 	}
 
+	if header == 0x6C {
+		return decodeCondIF1Packet(data, offset)
+	}
+
+	if (header >= 0x68 && header <= 0x6B) || (header >= 0x6E && header <= 0x6F) {
+		return decodeCondResF1Packet(data, offset)
+	}
+
 	if header == 0x6D {
 		return decodeCondIF3Packet(data, offset)
 	}
@@ -634,7 +648,7 @@ func (p *Processor) canUseStatelessDecodeResult(pktType PktType) bool {
 		return p.config.MajVersion() >= 0x5 && p.config.MinVersion() >= 0x3
 	case PktCondFlush:
 		return p.config.HasCondTrace() && p.config.EnabledCondITrace() != CondTrDis
-	case PktCondIF2, PktCondIF3, PktCondResF2, PktCondResF3, PktCondResF4:
+	case PktCondIF1, PktCondIF2, PktCondIF3, PktCondResF1, PktCondResF2, PktCondResF3, PktCondResF4:
 		return p.config.HasCondTrace() && p.config.EnabledCondITrace() != CondTrDis
 	case PktIgnore:
 		return p.config.FullVersion() >= 0x43
@@ -970,6 +984,17 @@ func decodeCondIF2Packet(header uint8) Packet {
 	return pkt
 }
 
+func decodeCondIF1Packet(data []byte, offset int) (Packet, int, error) {
+	fieldVal, n, ok := decodeContField32(data, offset+1, 5)
+	if !ok {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	pkt := Packet{Type: PktCondIF1}
+	pkt.CondInstr.CondCKey = fieldVal
+	pkt.CondInstr.CondKeySet = true
+	return pkt, 1 + n, nil
+}
+
 func decodeCondIF3Packet(data []byte, offset int) (Packet, int, error) {
 	if offset+2 > len(data) {
 		return Packet{}, 0, errDecodeNotImplemented
@@ -996,6 +1021,73 @@ func decodeCondResF4Packet(header uint8) (Packet, int, error) {
 	pkt := Packet{Type: PktCondResF4}
 	pkt.CondResult.Res0 = header & 0x3
 	return pkt, 1, nil
+}
+
+func decodeCondResF1Packet(data []byte, offset int) (Packet, int, error) {
+	if offset < 0 || offset >= len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	header := data[offset]
+	pkt := Packet{Type: PktCondResF1}
+
+	ci0 := header & 0x1
+	ci1 := (header >> 1) & 0x1
+
+	idx := offset + 1
+	key0, res0, n0, ok := decodeCondResultField(data, idx)
+	if !ok {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	pkt.CondResult.CondRKey0 = key0
+	pkt.CondResult.Res0 = res0
+	pkt.CondResult.CI0 = ci0 != 0
+	pkt.CondResult.KeyRes0Set = true
+	idx += n0
+
+	// For headers 0x6E/0x6F only one result field is present.
+	if (header & 0xFC) != 0x6C {
+		key1, res1, n1, ok := decodeCondResultField(data, idx)
+		if !ok {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		pkt.CondResult.CondRKey1 = key1
+		pkt.CondResult.Res1 = res1
+		pkt.CondResult.CI1 = ci1 != 0
+		pkt.CondResult.KeyRes1Set = true
+		idx += n1
+	}
+
+	return pkt, idx - offset, nil
+}
+
+func decodeCondResultField(data []byte, stIdx int) (key uint32, result uint8, consumed int, ok bool) {
+	if stIdx < 0 || stIdx >= len(data) {
+		return 0, 0, 0, false
+	}
+
+	idx := 0
+	incr := 0
+	for idx < 6 {
+		if stIdx+idx >= len(data) {
+			return 0, 0, 0, false
+		}
+		byteVal := data[stIdx+idx]
+		if idx == 0 {
+			result = byteVal & 0xF
+			key = uint32((byteVal >> 4) & 0x7)
+			incr = 3
+		} else {
+			key |= uint32(byteVal&0x7F) << incr
+			incr += 7
+		}
+		idx++
+		if (byteVal & 0x80) == 0 {
+			return key, result, idx, true
+		}
+	}
+
+	return 0, 0, 0, false
 }
 
 func decodeCondResF3Packet(data []byte, offset int) (Packet, int, error) {

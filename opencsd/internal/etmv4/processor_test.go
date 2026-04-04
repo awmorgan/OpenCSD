@@ -648,6 +648,56 @@ func TestDecodeNextPacketCondResF2AndF4(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketCondIF1(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x6C, 0x8A, 0x01}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 || pkt.Type != PktCondIF1 {
+		t.Fatalf("unexpected CondIF1 decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if !pkt.CondInstr.CondKeySet || pkt.CondInstr.CondCKey != 0x8A {
+		t.Fatalf("unexpected CondIF1 payload: keySet=%v key=%d", pkt.CondInstr.CondKeySet, pkt.CondInstr.CondCKey)
+	}
+}
+
+func TestDecodeNextPacketCondResF1(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x68, 0x5A, 0x34}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 || pkt.Type != PktCondResF1 {
+		t.Fatalf("unexpected CondResF1 decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if !pkt.CondResult.KeyRes0Set || !pkt.CondResult.KeyRes1Set {
+		t.Fatalf("expected both key/result pairs set: %+v", pkt.CondResult)
+	}
+	if pkt.CondResult.CondRKey0 != 0x5 || pkt.CondResult.Res0 != 0xA {
+		t.Fatalf("unexpected first key/result: key=%d res=%d", pkt.CondResult.CondRKey0, pkt.CondResult.Res0)
+	}
+	if pkt.CondResult.CondRKey1 != 0x3 || pkt.CondResult.Res1 != 0x4 {
+		t.Fatalf("unexpected second key/result: key=%d res=%d", pkt.CondResult.CondRKey1, pkt.CondResult.Res1)
+	}
+
+	pkt, consumed, err = decodeNextPacket([]byte{0x6E, 0xDA, 0x01}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 || pkt.Type != PktCondResF1 {
+		t.Fatalf("unexpected single-part CondResF1 decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if !pkt.CondResult.KeyRes0Set || pkt.CondResult.KeyRes1Set {
+		t.Fatalf("expected only first key/result set: %+v", pkt.CondResult)
+	}
+}
+
+func TestDecodeNextPacketCondResF1IncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x68, 0x5A}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for incomplete CondResF1 packet, got %v", err)
+	}
+}
+
 func TestProcessDataFastPathSpecResVariablePackets(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
@@ -736,6 +786,28 @@ func TestProcessDataFastPathConditionalPackets(t *testing.T) {
 	}
 	if out.last.CondResult.Res0 != 0x2 {
 		t.Fatalf("unexpected CondResF4 output payload: res=%d", out.last.CondResult.Res0)
+	}
+
+	consumed, err = p.processData(7, []byte{0x6C, 0x8A, 0x01})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 || out.count != 6 || out.last.Type != PktCondIF1 {
+		t.Fatalf("unexpected CondIF1 output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	}
+	if !out.last.CondInstr.CondKeySet || out.last.CondInstr.CondCKey != 0x8A {
+		t.Fatalf("unexpected CondIF1 output payload: keySet=%v key=%d", out.last.CondInstr.CondKeySet, out.last.CondInstr.CondCKey)
+	}
+
+	consumed, err = p.processData(10, []byte{0x68, 0x5A, 0x34})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 || out.count != 7 || out.last.Type != PktCondResF1 {
+		t.Fatalf("unexpected CondResF1 output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	}
+	if !out.last.CondResult.KeyRes0Set || !out.last.CondResult.KeyRes1Set {
+		t.Fatalf("expected CondResF1 output key/result pairs set: %+v", out.last.CondResult)
 	}
 }
 
