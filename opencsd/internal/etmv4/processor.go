@@ -202,9 +202,14 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				consumed++
 				p.blockBytesProcessed = consumed
 				if p.isSync {
-					err := p.tryStatelessDecodeCurrentPacketData()
+					pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, p.currPacketData, 0)
 					if err != nil {
-						return uint32(consumed), err
+						if !errors.Is(err, errDecodeNotImplemented) {
+							return uint32(consumed), err
+						}
+					} else if bytesConsumed == len(p.currPacketData) {
+						p.applyDecodedPacket(pkt)
+						p.processState = SendPkt
 					}
 				} else {
 					p.processUnsyncedByte(nextByte)
@@ -642,29 +647,6 @@ func (p *Processor) applyDecodedPacket(pkt Packet) {
 			p.currPacket.VAddr = 0
 		}
 	}
-}
-
-func (p *Processor) tryStatelessDecodeCurrentPacketData() error {
-	if len(p.currPacketData) == 0 {
-		return nil
-	}
-
-	pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, p.currPacketData, 0)
-
-	if err != nil {
-		if errors.Is(err, errDecodeNotImplemented) {
-			return nil
-		}
-		return err
-	}
-
-	if bytesConsumed != len(p.currPacketData) {
-		return nil
-	}
-
-	p.applyDecodedPacket(pkt)
-	p.processState = SendPkt
-	return nil
 }
 
 // decodeNextPacket decodes a single packet starting at offset without using Processor state.
