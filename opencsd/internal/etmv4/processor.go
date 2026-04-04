@@ -336,6 +336,10 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	}
 
 	header := data[offset]
+	if header == 0x00 {
+		return decodeExtensionPacket(data, offset)
+	}
+
 	if pkt, consumed, ok := decodeSimpleNoPayloadPacket(header); ok {
 		return pkt, consumed, nil
 	}
@@ -355,6 +359,35 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 
 	pkt := Packet{Type: atomType, Atom: atom}
 	return pkt, 1, nil
+}
+
+func decodeExtensionPacket(data []byte, offset int) (Packet, int, error) {
+	if offset+1 >= len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	subType := data[offset+1]
+	switch subType {
+	case 0x03:
+		return Packet{Type: PktDiscard}, 2, nil
+	case 0x05:
+		return Packet{Type: PktOverflow}, 2, nil
+	case 0x00:
+		if offset+12 > len(data) {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		for i := offset + 2; i < offset+11; i++ {
+			if data[i] != 0x00 {
+				return Packet{Type: PktAsync, Err: ocsd.ErrBadPacketSeq}, 12, nil
+			}
+		}
+		if data[offset+11] != 0x80 {
+			return Packet{Type: PktAsync, Err: ocsd.ErrBadPacketSeq}, 12, nil
+		}
+		return Packet{Type: PktAsync}, 12, nil
+	default:
+		return Packet{}, 0, errDecodeNotImplemented
+	}
 }
 
 func decodeSimpleNoPayloadPacket(header uint8) (Packet, int, bool) {

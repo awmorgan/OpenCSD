@@ -3,6 +3,8 @@ package etmv4
 import (
 	"errors"
 	"testing"
+
+	"opencsd/internal/ocsd"
 )
 
 func TestProcessorResetPacketStateClearsConditionalState(t *testing.T) {
@@ -235,5 +237,72 @@ func TestDecodeNextPacketLongAddr64IS1(t *testing.T) {
 	}
 	if pkt.VAddrValidBits != 64 || pkt.VAddrPktBits != 64 || pkt.VAddrISA != 1 {
 		t.Fatalf("unexpected address metadata: valid=%d pkt=%d isa=%d", pkt.VAddrValidBits, pkt.VAddrPktBits, pkt.VAddrISA)
+	}
+}
+
+func TestDecodeNextPacketExtensionDiscard(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x00, 0x03}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktDiscard {
+		t.Fatalf("expected PktDiscard, got %v", pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketExtensionOverflow(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x00, 0x05}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktOverflow {
+		t.Fatalf("expected PktOverflow, got %v", pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketExtensionAsync(t *testing.T) {
+	data := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 12 {
+		t.Fatalf("expected 12 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktAsync {
+		t.Fatalf("expected PktAsync, got %v", pkt.Type)
+	}
+	if pkt.Err != nil {
+		t.Fatalf("expected no packet error for well-formed async, got %v", pkt.Err)
+	}
+}
+
+func TestDecodeNextPacketExtensionAsyncMalformed(t *testing.T) {
+	data := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x80}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 12 {
+		t.Fatalf("expected 12 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktAsync {
+		t.Fatalf("expected PktAsync, got %v", pkt.Type)
+	}
+	if !errors.Is(pkt.Err, ocsd.ErrBadPacketSeq) {
+		t.Fatalf("expected ErrBadPacketSeq, got %v", pkt.Err)
+	}
+}
+
+func TestDecodeNextPacketExtensionIncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x00}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for incomplete extension, got %v", err)
 	}
 }
