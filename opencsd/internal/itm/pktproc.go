@@ -844,7 +844,7 @@ func decodeContField64NoOverflow(data []byte, start int, limit int) (uint64, int
 	}
 
 	var value uint64
-	for i := 0; i < limit; i++ {
+	for i := range limit {
 		idx := start + i
 		if idx >= len(data) {
 			return 0, 0, false
