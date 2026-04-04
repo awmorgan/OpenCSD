@@ -661,38 +661,12 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 
 func (p *Processor) canUseStatelessDecodeResult(pktType PktType) bool {
 	switch pktType {
-	case PktFuncRet:
-		return p.config.CoreProf == ocsd.ProfileCortexM && ocsd.IsV8Arch(p.config.ArchVer) && p.config.FullVersion() >= 0x42
-	case PktExceptRtn:
-		return p.config.MajVersion() < 0x5
-	case ETE_PktTransSt, ETE_PktTransCommit:
-		return p.config.MajVersion() >= 0x5
-	case ETE_PktITE:
-		return p.config.MajVersion() >= 0x5 && p.config.MinVersion() >= 0x3
-	case PktCondFlush:
-		return p.config.HasCondTrace() && p.config.EnabledCondITrace() != CondTrDis
-	case PktCondIF1, PktCondIF2, PktCondIF3, PktCondResF1, PktCondResF2, PktCondResF3, PktCondResF4:
-		return p.config.HasCondTrace() && p.config.EnabledCondITrace() != CondTrDis
-	case PktIgnore:
-		return p.config.FullVersion() >= 0x43
-	case ETE_PktTSMarker:
-		return p.config.FullVersion() >= 0x46
-	case ETE_PktSrcAddrMatch:
-		return p.config.FullVersion() >= 0x50
-	case ETE_PktSrcAddrS_IS0, ETE_PktSrcAddrS_IS1:
-		return p.config.FullVersion() >= 0x50
-	case ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1, ETE_PktSrcAddrL_64IS0, ETE_PktSrcAddrL_64IS1:
-		return p.config.FullVersion() >= 0x50
-	case PktNumDsMkr, PktUnnumDsMkr:
-		return p.config.EnabledDataTrace()
 	case PktCcntF2:
 		// F2 commit element decode depends on max-spec depth when CommitOpt1 is disabled.
 		return p.config.CommitOpt1()
 	case PktCcntF1:
 		// F1 commit element decode depends on CommitOpt1 mode.
 		return p.config.CommitOpt1()
-	case PktQ:
-		return p.config.HasQElem()
 	default:
 		return true
 	}
