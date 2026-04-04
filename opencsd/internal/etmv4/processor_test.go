@@ -1750,6 +1750,51 @@ func TestDecodeNextPacketContextWithIDsFallsBack(t *testing.T) {
 	}
 }
 
+func TestDecodeContextPacketWithConfigIncludesIDs(t *testing.T) {
+	config := Config{RegIdr2: (0x4 << 5) | (0x1 << 10)}
+	data := []byte{0x81, 0xD9, 0xAB, 0x44, 0x33, 0x22, 0x11}
+	pkt, consumed, err := decodeContextPacketWithConfig(config, data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != len(data) {
+		t.Fatalf("expected %d bytes consumed, got %d", len(data), consumed)
+	}
+	if pkt.Type != PktCtxt || !pkt.Valid.Context || !pkt.Context.Updated {
+		t.Fatalf("unexpected context packet decode: %+v", pkt.Context)
+	}
+	if !pkt.Context.UpdatedV || pkt.Context.VMID != 0xAB {
+		t.Fatalf("unexpected VMID decode: updated=%v vmid=0x%X", pkt.Context.UpdatedV, pkt.Context.VMID)
+	}
+	if !pkt.Context.UpdatedC || pkt.Context.CtxtID != 0x11223344 {
+		t.Fatalf("unexpected CtxtID decode: updated=%v ctxt=0x%X", pkt.Context.UpdatedC, pkt.Context.CtxtID)
+	}
+}
+
+func TestDecodeAddrContextPacketWithConfigIncludesIDs(t *testing.T) {
+	config := Config{RegIdr2: (0x4 << 5) | (0x1 << 10)}
+	data := []byte{0x82, 0x04, 0x00, 0x34, 0x12, 0xC1, 0x7E, 0xDD, 0xCC, 0xBB, 0xAA}
+	pkt, consumed, err := decodeAddrContextPacketWithConfig(config, data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != len(data) {
+		t.Fatalf("expected %d bytes consumed, got %d", len(data), consumed)
+	}
+	if pkt.Type != PktAddrCtxtL_32IS0 {
+		t.Fatalf("expected PktAddrCtxtL_32IS0, got %v", pkt.Type)
+	}
+	if pkt.VAddr != 0x12340010 {
+		t.Fatalf("unexpected address decode: 0x%X", pkt.VAddr)
+	}
+	if !pkt.Valid.Context || !pkt.Context.UpdatedV || !pkt.Context.UpdatedC {
+		t.Fatalf("unexpected context flags: %+v", pkt.Context)
+	}
+	if pkt.Context.VMID != 0x7E || pkt.Context.CtxtID != 0xAABBCCDD {
+		t.Fatalf("unexpected context IDs: vmid=0x%X ctxt=0x%X", pkt.Context.VMID, pkt.Context.CtxtID)
+	}
+}
+
 func TestDecodeNextPacketDataSyncMarkers(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x23}, 0)
 	if err != nil {
@@ -1799,6 +1844,32 @@ func TestProcessDataFastPathContextNoIDUpdatePreservesIDs(t *testing.T) {
 	}
 }
 
+func TestProcessDataFastPathContextWithIDs(t *testing.T) {
+	config := &Config{RegIdr2: (0x4 << 5) | (0x1 << 10)}
+	p := NewProcessor(config)
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	data := []byte{0x81, 0xD9, 0xAB, 0x44, 0x33, 0x22, 0x11}
+	consumed, err := p.processData(0, data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != uint32(len(data)) {
+		t.Fatalf("expected %d bytes consumed, got %d", len(data), consumed)
+	}
+	if out.count != 1 || out.last.Type != PktCtxt {
+		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	}
+	if !out.last.Valid.Context || !out.last.Context.UpdatedV || !out.last.Context.UpdatedC {
+		t.Fatalf("unexpected context flags in output: %+v", out.last.Context)
+	}
+	if out.last.Context.VMID != 0xAB || out.last.Context.CtxtID != 0x11223344 {
+		t.Fatalf("unexpected context IDs in output: vmid=0x%X ctxt=0x%X", out.last.Context.VMID, out.last.Context.CtxtID)
+	}
+}
+
 func TestProcessDataFastPathDataSyncMarkerSetsDsmVal(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: 0x18, RegConfigr: 0x2 | (1 << 16)})
 	p.isSync = true
@@ -1836,5 +1907,38 @@ func TestProcessDataFastPathAddrContext32PreservesUpperIn64BitContext(t *testing
 	}
 	if p.currPacket.Context.VMID != 0xAA {
 		t.Fatalf("expected VMID preserved, got 0x%X", p.currPacket.Context.VMID)
+	}
+}
+
+func TestProcessDataFastPathAddrContextWithIDs(t *testing.T) {
+	config := &Config{RegIdr2: (0x4 << 5) | (0x1 << 10)}
+	p := NewProcessor(config)
+	p.isSync = true
+	p.currPacket.VAddr = 0x11223344AABBCCDD
+	p.currPacket.VAddrValidBits = 64
+	p.currPacket.Valid.Context = true
+	p.currPacket.Context.SF = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	data := []byte{0x82, 0x04, 0x00, 0x34, 0x12, 0xC1, 0x7E, 0xDD, 0xCC, 0xBB, 0xAA}
+	consumed, err := p.processData(0, data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != uint32(len(data)) {
+		t.Fatalf("expected %d bytes consumed, got %d", len(data), consumed)
+	}
+	if out.count != 1 || out.last.Type != PktAddrCtxtL_32IS0 {
+		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	}
+	if out.last.VAddr != 0x1122334412340010 {
+		t.Fatalf("expected merged address 0x1122334412340010, got 0x%X", out.last.VAddr)
+	}
+	if !out.last.Valid.Context || !out.last.Context.UpdatedV || !out.last.Context.UpdatedC {
+		t.Fatalf("unexpected context flags in output: %+v", out.last.Context)
+	}
+	if out.last.Context.VMID != 0x7E || out.last.Context.CtxtID != 0xAABBCCDD {
+		t.Fatalf("unexpected context IDs in output: vmid=0x%X ctxt=0x%X", out.last.Context.VMID, out.last.Context.CtxtID)
 	}
 }
