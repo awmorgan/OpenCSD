@@ -281,6 +281,9 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 					}
 					p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
 					p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
+				case PktCcntF2:
+					p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
+					p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
 				case PktMispredict, PktCancelF2, PktCancelF3:
 					p.currPacket.Atom = pkt.Atom
 					p.currPacket.CancelElements = pkt.CancelElements
@@ -483,6 +486,10 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		return pkt, 1, nil
 	}
 
+	if header == 0x0C || header == 0x0D {
+		return decodeCycleCntF2Packet(data, offset)
+	}
+
 	if header >= 0x10 && header <= 0x1F {
 		return decodeCycleCntF3Packet(header), 1, nil
 	}
@@ -587,6 +594,9 @@ func (p *Processor) canUseStatelessDecodeResult(pktType PktType) bool {
 		return p.config.FullVersion() >= 0x50
 	case PktNumDsMkr, PktUnnumDsMkr:
 		return p.config.EnabledDataTrace()
+	case PktCcntF2:
+		// F2 commit element decode depends on max-spec depth when CommitOpt1 is disabled.
+		return p.config.CommitOpt1()
 	case PktQ:
 		return p.config.HasQElem()
 	default:
@@ -791,6 +801,16 @@ func decodeCycleCntF3Packet(header uint8) Packet {
 	pkt.CommitElements = uint32((header>>2)&0x3) + 1
 	pkt.CycleCount = uint32(header & 0x3)
 	return pkt
+}
+
+func decodeCycleCntF2Packet(data []byte, offset int) (Packet, int, error) {
+	if offset+2 > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	pkt := Packet{Type: PktCcntF2}
+	pkt.CycleCount = uint32(data[offset+1] & 0xF)
+	return pkt, 2, nil
 }
 
 func decodeSimpleSpecResPacket(header uint8) (Packet, bool) {

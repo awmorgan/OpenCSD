@@ -254,6 +254,29 @@ func TestDecodeNextPacketCycleCntF3(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketCycleCntF2(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x0C, 0xA5}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktCcntF2 {
+		t.Fatalf("expected PktCcntF2, got %v", pkt.Type)
+	}
+	if pkt.CycleCount != 0x5 {
+		t.Fatalf("expected low-nibble cycle count 0x5, got 0x%X", pkt.CycleCount)
+	}
+}
+
+func TestDecodeNextPacketCycleCntF2IncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x0C}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for incomplete F2 packet, got %v", err)
+	}
+}
+
 func TestProcessDataFastPathCycleCntF3CommitOpt0(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
@@ -307,6 +330,54 @@ func TestProcessDataFastPathCycleCntF3CommitOpt1(t *testing.T) {
 	}
 	if out.last.Valid.CommitElem {
 		t.Fatalf("did not expect commit elements when CommitOpt1 is enabled")
+	}
+}
+
+func TestProcessDataFastPathCycleCntF2CommitOpt1(t *testing.T) {
+	p := NewProcessor(&Config{RegIdr0: (1 << 29) | (1 << 7)})
+	p.isSync = true
+	p.currPacket.CCThreshold = 9
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x0C, 0xA5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktCcntF2 {
+		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	}
+	if out.last.CycleCount != 14 {
+		t.Fatalf("expected cycle count 14, got %d", out.last.CycleCount)
+	}
+	if out.last.Valid.CCExactMatch {
+		t.Fatalf("did not expect CCExactMatch for threshold 9 and count 14")
+	}
+}
+
+func TestProcessDataCycleCntF2FallsBackWhenCommitOpt1Off(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	p.currPacket.CCThreshold = 0
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x0C, 0xA5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktCcntF2 {
+		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	}
+	// Legacy path should be used here and include commit elements.
+	if !out.last.Valid.CommitElem {
+		t.Fatalf("expected commit elements from legacy F2 path when CommitOpt1 is off")
 	}
 }
 
