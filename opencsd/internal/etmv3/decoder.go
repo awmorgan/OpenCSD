@@ -207,6 +207,12 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 			d.collectElements = true
 			resp = d.ProcessPacket()
 			d.collectElements = false
+
+			for _, dr := range d.outputElemList.Drain() {
+				elem := cloneQueuedElem(&dr.Elem)
+				_ = d.sink.TraceElemIn(dr.Index, d.csID, &elem)
+			}
+
 			// Drain queued elements only when using legacy push sink wiring.
 			if ocsd.DataRespIsCont(resp) && d.traceElemOut != nil {
 				packetErr = nil

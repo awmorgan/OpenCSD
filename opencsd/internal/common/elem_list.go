@@ -61,7 +61,6 @@ type ElemList struct {
 	elems   []elemSlot
 	numPend int
 	csID    uint8
-	sendIf  ocsd.GenElemProcessor
 }
 
 // NewElemList creates a new, empty ElemList.
@@ -69,10 +68,6 @@ func NewElemList() *ElemList {
 	return &ElemList{
 		elems: make([]elemSlot, 0, 16),
 	}
-}
-
-func (l *ElemList) SetSendIf(sendIf ocsd.GenElemProcessor) {
-	l.sendIf = sendIf
 }
 
 func (l *ElemList) SetCSID(csID uint8) {
@@ -148,32 +143,6 @@ func (l *ElemList) ElemToSend() bool {
 	return len(l.elems)-l.numPend > 0
 }
 
-// SendElements dispatches committed (non-pending) elements to the registered
-// receiver, removing each from the slice after dispatch.
-func (l *ElemList) SendElements() error {
-	if l.sendIf == nil {
-		return ocsd.ErrNotInit
-	}
-	out := l.sendIf
-	if out == nil {
-		return ocsd.ErrNotInit
-	}
-	var outErr error
-	for l.ElemToSend() && ocsd.IsDataContErr(outErr) {
-		slot := l.elems[0]
-		err := out.TraceElemIn(slot.pktIndex, l.csID, slot.elem)
-		if ocsd.IsDataWaitErr(err) {
-			outErr = ocsd.ErrWait
-		} else {
-			outErr = err
-		}
-		l.elems[0].elem = nil // nil-zero before reslice to release GC root
-		l.elems = l.elems[1:]
-		putPoolElem(slot.elem)
-	}
-	return outErr
-}
-
 // Drain returns a value-copy of every committed (non-pending) element, each
 // paired with its original packet index, and removes them from the list.
 // Pending elements (the last numPend slots) are preserved unchanged.
@@ -212,7 +181,6 @@ type ElemStack struct {
 	elemToSend  int
 	sendElemIdx int
 	csID        uint8
-	sendIf      ocsd.GenElemProcessor
 }
 
 // NewElemStack creates a new, empty ElemStack.
@@ -220,10 +188,6 @@ func NewElemStack() *ElemStack {
 	return &ElemStack{
 		elems: make([]elemSlot, 0, 4),
 	}
-}
-
-func (s *ElemStack) SetSendIf(sendIf ocsd.GenElemProcessor) {
-	s.sendIf = sendIf
 }
 
 func (s *ElemStack) SetCSID(csID uint8) {
@@ -317,33 +281,6 @@ func (s *ElemStack) AddElemType(trcPktIdx ocsd.TrcIndex, elemType ocsd.GenElemTy
 // NumElemToSend returns the number of elements pending dispatch.
 func (s *ElemStack) NumElemToSend() int {
 	return s.elemToSend
-}
-
-// SendElements dispatches all queued elements to the registered receiver.
-func (s *ElemStack) SendElements() error {
-	if s.sendIf == nil {
-		return ocsd.ErrNotInit
-	}
-	out := s.sendIf
-	if out == nil {
-		return ocsd.ErrNotInit
-	}
-	var outErr error
-	for s.elemToSend > 0 && ocsd.IsDataContErr(outErr) {
-		slot := s.elems[s.sendElemIdx]
-		err := out.TraceElemIn(slot.pktIndex, s.csID, slot.elem)
-		if ocsd.IsDataWaitErr(err) {
-			outErr = ocsd.ErrWait
-		} else {
-			outErr = err
-		}
-		s.elemToSend--
-		s.sendElemIdx++
-	}
-	if s.elemToSend == 0 {
-		s.resetIndexes()
-	}
-	return outErr
 }
 
 // Drain returns a value-copy of every element queued for sending, each paired

@@ -6,20 +6,8 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-type dummySendIf struct {
-	sentCount int
-}
-
-func (d *dummySendIf) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
-	d.sentCount++
-	return nil
-}
-
 func TestGenElemList(t *testing.T) {
 	list := NewElemList()
-	dummy := &dummySendIf{}
-
-	list.SetSendIf(dummy)
 	list.SetCSID(10)
 
 	// Test array growth and insertion
@@ -41,10 +29,10 @@ func TestGenElemList(t *testing.T) {
 		t.Errorf("Pending logic failed")
 	}
 
-	// Send elements (should send 0, leave 5 pending)
-	list.SendElements()
-	if dummy.sentCount != 0 {
-		t.Errorf("Expected 0 sent elements, got %d", dummy.sentCount)
+	// Drain committed elements (should drain 0, leave 5 pending)
+	drained := list.Drain()
+	if len(drained) != 0 {
+		t.Errorf("Expected 0 drained elements, got %d", len(drained))
 	}
 
 	// Pending logic
@@ -69,9 +57,6 @@ func TestGenElemList(t *testing.T) {
 
 func TestGenElemListPendLastPartialWindow(t *testing.T) {
 	list := NewElemList()
-	dummy := &dummySendIf{}
-
-	list.SetSendIf(dummy)
 	list.SetCSID(12)
 
 	for i := range 3 {
@@ -87,9 +72,9 @@ func TestGenElemListPendLastPartialWindow(t *testing.T) {
 		t.Fatal("expected committed elements to remain sendable")
 	}
 
-	list.SendElements()
-	if dummy.sentCount != 2 {
-		t.Fatalf("expected 2 sent elements, got %d", dummy.sentCount)
+	drained := list.Drain()
+	if len(drained) != 2 {
+		t.Fatalf("expected 2 drained elements, got %d", len(drained))
 	}
 	if list.NumElem() != 1 || list.NumPendElem() != 1 {
 		t.Fatalf("expected 1 pending element left, got num=%d pend=%d", list.NumElem(), list.NumPendElem())
@@ -99,16 +84,10 @@ func TestGenElemListPendLastPartialWindow(t *testing.T) {
 	if list.NumElem() != 0 || list.NumPendElem() != 0 {
 		t.Fatalf("expected empty list after cancel, got num=%d pend=%d", list.NumElem(), list.NumPendElem())
 	}
-	if dummy.sentCount != 2 {
-		t.Fatalf("expected cancel to avoid extra sends, got %d", dummy.sentCount)
-	}
 }
 
 func TestGenElemStack(t *testing.T) {
 	stack := NewElemStack()
-	dummy := &dummySendIf{}
-
-	stack.SetSendIf(dummy)
 	stack.SetCSID(11)
 
 	// Add elems to grow array
@@ -130,9 +109,9 @@ func TestGenElemStack(t *testing.T) {
 		t.Errorf("Expected 7 elements after AddElemType")
 	}
 
-	stack.SendElements()
-	if dummy.sentCount != 7 {
-		t.Errorf("Expected 7 sent elements, got %d", dummy.sentCount)
+	drained := stack.Drain()
+	if len(drained) != 7 {
+		t.Errorf("Expected 7 drained elements, got %d", len(drained))
 	}
 
 	if stack.NumElemToSend() != 0 {
