@@ -496,8 +496,8 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 }
 
 // decodeNextPacket decodes a single packet starting at offset without using Processor state.
-// During migration this only handles atom packet families and returns errDecodeNotImplemented
-// for all other headers.
+// It returns errDecodeNotImplemented for packet forms that still require legacy,
+// config-aware, or cross-block parsing.
 func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	if offset < 0 || offset >= len(data) {
 		return Packet{}, 0, fmt.Errorf("offset %d out of range", offset)
@@ -628,11 +628,15 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	}
 
 	atomType, atom, ok := decodeAtomPacket(header)
-	if !ok {
-		return Packet{}, 0, errDecodeNotImplemented
+	if ok {
+		pkt := Packet{Type: atomType, Atom: atom}
+		return pkt, 1, nil
 	}
 
-	pkt := Packet{Type: atomType, Atom: atom}
+	// Any synchronized but otherwise-unclaimed header is architecturally reserved.
+	pkt := Packet{Type: PktReserved}
+	pkt.Err = errReservedHeader
+	pkt.ErrHdrVal = header
 	return pkt, 1, nil
 }
 

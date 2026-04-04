@@ -142,6 +142,25 @@ func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketReservedHeader(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x08}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktReserved {
+		t.Fatalf("expected PktReserved, got %v", pkt.Type)
+	}
+	if !errors.Is(pkt.Err, errReservedHeader) {
+		t.Fatalf("expected errReservedHeader, got %v", pkt.Err)
+	}
+	if pkt.ErrHdrVal != 0x08 {
+		t.Fatalf("expected header value 0x08, got 0x%X", pkt.ErrHdrVal)
+	}
+}
+
 func TestDecodeNextPacketExceptionTwoByte(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x06, 0x2A}, 0)
 	if err != nil {
@@ -837,6 +856,33 @@ func TestProcessDataConditionalPacketsFallbackWhenCondTraceDisabled(t *testing.T
 	}
 	if !errors.Is(out.last.Err, errReservedCfg) {
 		t.Fatalf("expected reserved-cfg error for CondIF1 fallback, got %v", out.last.Err)
+	}
+}
+
+func TestProcessDataFastPathReservedHeader(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x08})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if out.count != 1 {
+		t.Fatalf("expected one output packet, got %d", out.count)
+	}
+	if out.last.Type != PktReserved {
+		t.Fatalf("expected PktReserved output, got %v", out.last.Type)
+	}
+	if !errors.Is(out.last.Err, errReservedHeader) {
+		t.Fatalf("expected errReservedHeader output, got %v", out.last.Err)
+	}
+	if out.last.ErrHdrVal != 0x08 {
+		t.Fatalf("expected output header value 0x08, got 0x%X", out.last.ErrHdrVal)
 	}
 }
 
