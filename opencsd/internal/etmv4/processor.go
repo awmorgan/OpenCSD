@@ -61,6 +61,11 @@ const (
 	decodePktASync
 )
 
+// Packet is a compatibility alias used by the stateless decoder API.
+type Packet = TracePacket
+
+var errDecodeNotImplemented = errors.New("decodeNextPacket: packet type not implemented")
+
 // tableEntry maps a header byte to a packet type and handler.
 type tableEntry struct {
 	pktType PktType
@@ -235,6 +240,29 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 			break
 		}
 
+		if p.processState == ProcHdr && p.isSync && consumed < len(dataBlock) {
+			packetIndex := p.blockIndex + ocsd.TrcIndex(consumed)
+			pkt, bytesConsumed, err := decodeNextPacket(dataBlock, consumed)
+			switch {
+			case err == nil:
+				p.packetIndex = packetIndex
+				p.currPacket.Type = pkt.Type
+				p.currPacket.Err = pkt.Err
+				p.currPacket.ErrHdrVal = pkt.ErrHdrVal
+				p.currPacket.Atom = pkt.Atom
+				p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
+				consumed += bytesConsumed
+				p.blockBytesProcessed = consumed
+				resp = p.outputPacket()
+				p.resetPacketState()
+				continue
+			case errors.Is(err, errDecodeNotImplemented):
+				// Fall back to the legacy state machine while migration is in progress.
+			default:
+				return uint32(consumed), err
+			}
+		}
+
 		switch p.processState {
 		case ProcHdr:
 			if consumed >= len(dataBlock) {
@@ -280,6 +308,62 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 	}
 
 	return uint32(consumed), ocsd.DataErrFromResp(resp, nil)
+}
+
+// decodeNextPacket decodes a single packet starting at offset without using Processor state.
+// During migration this only handles atom packet families and returns errDecodeNotImplemented
+// for all other headers.
+func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
+	if offset < 0 || offset >= len(data) {
+		return Packet{}, 0, fmt.Errorf("offset %d out of range", offset)
+	}
+
+	header := data[offset]
+	atomType, atom, ok := decodeAtomPacket(header)
+	if !ok {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	pkt := Packet{Type: atomType, Atom: atom}
+	return pkt, 1, nil
+}
+
+func decodeAtomPacket(header uint8) (PktType, ocsd.PktAtom, bool) {
+	var f4Patterns = [4]uint32{0xE, 0x0, 0xA, 0x5}
+
+	switch {
+	case header >= 0xF6 && header <= 0xF7:
+		return PktAtomF1, ocsd.PktAtom{EnBits: uint32(header & 0x1), Num: 1}, true
+	case header >= 0xD8 && header <= 0xDB:
+		return PktAtomF2, ocsd.PktAtom{EnBits: uint32(header & 0x3), Num: 2}, true
+	case header >= 0xF8:
+		return PktAtomF3, ocsd.PktAtom{EnBits: uint32(header & 0x7), Num: 3}, true
+	case header >= 0xDC && header <= 0xDF:
+		return PktAtomF4, ocsd.PktAtom{EnBits: f4Patterns[header&0x3], Num: 4}, true
+	case (header >= 0xD5 && header <= 0xD7) || header == 0xF5:
+		pattIdx := ((header & 0x20) >> 3) | (header & 0x3)
+		switch pattIdx {
+		case 5:
+			return PktAtomF5, ocsd.PktAtom{EnBits: 0x1E, Num: 5}, true
+		case 1:
+			return PktAtomF5, ocsd.PktAtom{EnBits: 0x00, Num: 5}, true
+		case 2:
+			return PktAtomF5, ocsd.PktAtom{EnBits: 0x0A, Num: 5}, true
+		case 3:
+			return PktAtomF5, ocsd.PktAtom{EnBits: 0x15, Num: 5}, true
+		default:
+			return 0, ocsd.PktAtom{}, false
+		}
+	case (header >= 0xC0 && header <= 0xD4) || (header >= 0xE0 && header <= 0xF4):
+		pattCount := uint32(header&0x1F) + 3
+		pattern := (uint32(1) << pattCount) - 1
+		if (header & 0x20) == 0x00 {
+			pattern |= uint32(1) << pattCount
+		}
+		return PktAtomF6, ocsd.PktAtom{EnBits: pattern, Num: uint8(pattCount + 1)}, true
+	default:
+		return 0, ocsd.PktAtom{}, false
+	}
 }
 
 func (p *Processor) onEOT() ocsd.DatapathResp {

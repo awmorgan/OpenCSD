@@ -1,6 +1,9 @@
 package etmv4
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestProcessorResetPacketStateClearsConditionalState(t *testing.T) {
 	p := NewProcessor(&Config{})
@@ -73,5 +76,47 @@ func TestProcessorExtractCondResultMasksResultNibble(t *testing.T) {
 	}
 	if key != 0xD {
 		t.Fatalf("expected conditional key 0xD, got 0x%X", key)
+	}
+}
+
+func TestDecodeNextPacketAtomF1(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0xF7}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktAtomF1 {
+		t.Fatalf("expected PktAtomF1, got %v", pkt.Type)
+	}
+	if pkt.Atom.Num != 1 || pkt.Atom.EnBits != 0x1 {
+		t.Fatalf("unexpected atom decode: %+v", pkt.Atom)
+	}
+}
+
+func TestDecodeNextPacketAtomF6(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0xC0}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktAtomF6 {
+		t.Fatalf("expected PktAtomF6, got %v", pkt.Type)
+	}
+	if pkt.Atom.Num != 4 {
+		t.Fatalf("expected 4 atoms, got %d", pkt.Atom.Num)
+	}
+	if got := pkt.Atom.EnBits & 0xF; got != 0xF {
+		t.Fatalf("expected low atom bits 0xF, got 0x%X", got)
+	}
+}
+
+func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x02}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
 	}
 }
