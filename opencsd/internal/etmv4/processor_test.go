@@ -902,6 +902,38 @@ func TestProcessDataFastPathSpecResVariablePackets(t *testing.T) {
 	}
 }
 
+func TestProcessDataFastPathSpecResVariableAcrossBlocks(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x2D})
+	if err != nil {
+		t.Fatalf("unexpected error on first block: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected first block fully consumed, got %d", consumed)
+	}
+	if out.count != 0 {
+		t.Fatalf("did not expect output packet from incomplete commit packet")
+	}
+
+	consumed, err = p.processData(1, []byte{0x07})
+	if err != nil {
+		t.Fatalf("unexpected error on second block: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected second block consumed bytes 1, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktCommit {
+		t.Fatalf("unexpected output packet after commit reassembly: count=%d type=%v", out.count, out.last.Type)
+	}
+	if out.last.CommitElements != 7 {
+		t.Fatalf("unexpected commit elements after reassembly: %d", out.last.CommitElements)
+	}
+}
+
 func TestProcessDataFastPathConditionalPackets(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: 0x40, RegConfigr: 1 << 8})
 	p.isSync = true
@@ -983,6 +1015,63 @@ func TestProcessDataFastPathConditionalPackets(t *testing.T) {
 	}
 	if !out.last.CondResult.KeyRes0Set || !out.last.CondResult.KeyRes1Set {
 		t.Fatalf("expected CondResF1 output key/result pairs set: %+v", out.last.CondResult)
+	}
+}
+
+func TestProcessDataFastPathConditionalAcrossBlocks(t *testing.T) {
+	p := NewProcessor(&Config{RegIdr0: 0x40, RegConfigr: 1 << 8})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x6C})
+	if err != nil {
+		t.Fatalf("unexpected error on first block: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected first block fully consumed, got %d", consumed)
+	}
+	if out.count != 0 {
+		t.Fatalf("did not expect output packet from incomplete CondIF1 packet")
+	}
+
+	consumed, err = p.processData(1, []byte{0x8A, 0x01})
+	if err != nil {
+		t.Fatalf("unexpected error on second block: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected second block consumed bytes 2, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktCondIF1 {
+		t.Fatalf("unexpected CondIF1 packet after reassembly: count=%d type=%v", out.count, out.last.Type)
+	}
+	if !out.last.CondInstr.CondKeySet || out.last.CondInstr.CondCKey != 0x8A {
+		t.Fatalf("unexpected CondIF1 payload after reassembly: keySet=%v key=%d", out.last.CondInstr.CondKeySet, out.last.CondInstr.CondCKey)
+	}
+
+	consumed, err = p.processData(3, []byte{0x68, 0x5A})
+	if err != nil {
+		t.Fatalf("unexpected error on third block: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected third block consumed bytes 2, got %d", consumed)
+	}
+	if out.count != 1 {
+		t.Fatalf("did not expect output packet from incomplete CondResF1 packet")
+	}
+
+	consumed, err = p.processData(5, []byte{0x34})
+	if err != nil {
+		t.Fatalf("unexpected error on fourth block: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected fourth block consumed bytes 1, got %d", consumed)
+	}
+	if out.count != 2 || out.last.Type != PktCondResF1 {
+		t.Fatalf("unexpected CondResF1 packet after reassembly: count=%d type=%v", out.count, out.last.Type)
+	}
+	if !out.last.CondResult.KeyRes0Set || !out.last.CondResult.KeyRes1Set {
+		t.Fatalf("expected CondResF1 key/result pairs after reassembly: %+v", out.last.CondResult)
 	}
 }
 

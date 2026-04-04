@@ -724,6 +724,16 @@ func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
 		pkt, bytesConsumed, err = decodeTraceInfoPacket(p.currPacketData, 0)
 	case header == 0x02 || header == 0x03:
 		pkt, bytesConsumed, err = decodeTimestampPacket(p.currPacketData, 0)
+	case header == uint8(PktCommit) || header == uint8(PktCancelF1) || header == uint8(PktCancelF1Mispred):
+		pkt, bytesConsumed, err = decodeVariableSpecResPacket(p.currPacketData, 0)
+	case header == 0x6C:
+		pkt, bytesConsumed, err = decodeCondIF1Packet(p.currPacketData, 0)
+	case header == 0x6D:
+		pkt, bytesConsumed, err = decodeCondIF3Packet(p.currPacketData, 0)
+	case (header >= 0x68 && header <= 0x6B) || (header >= 0x6E && header <= 0x6F):
+		pkt, bytesConsumed, err = decodeCondResF1Packet(p.currPacketData, 0)
+	case header >= 0x50 && header <= 0x5F:
+		pkt, bytesConsumed, err = decodeCondResF3Packet(p.currPacketData, 0)
 	case header == uint8(PktAddrS_IS0) || header == uint8(PktAddrS_IS1) ||
 		header == uint8(ETE_PktSrcAddrS_IS0) || header == uint8(ETE_PktSrcAddrS_IS1):
 		pkt, bytesConsumed, err = decodeShortAddrPacket(p.currPacketData, 0)
@@ -785,6 +795,20 @@ func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
 		p.currPacket.CycleCount = pkt.CycleCount
 		p.currPacket.Valid.Timestamp = pkt.Valid.Timestamp
 		p.currPacket.Valid.CycleCount = pkt.Valid.CycleCount
+	case PktCommit:
+		p.currPacket.CommitElements = pkt.CommitElements
+	case PktCancelF1, PktCancelF1Mispred:
+		p.currPacket.CancelElements = pkt.CancelElements
+	case PktCondIF1:
+		p.currPacket.CondInstr.CondCKey = pkt.CondInstr.CondCKey
+		p.currPacket.CondInstr.CondKeySet = pkt.CondInstr.CondKeySet
+	case PktCondIF3:
+		p.currPacket.CondInstr.NumCElem = pkt.CondInstr.NumCElem
+		p.currPacket.CondInstr.F3FinalElem = pkt.CondInstr.F3FinalElem
+	case PktCondResF1:
+		p.currPacket.CondResult = pkt.CondResult
+	case PktCondResF3:
+		p.currPacket.CondResult.F3Tokens = pkt.CondResult.F3Tokens
 	case PktAddrL_32IS0, PktAddrL_32IS1, ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1:
 		p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
 		if p.currPacket.VAddrValidBits < 32 {
