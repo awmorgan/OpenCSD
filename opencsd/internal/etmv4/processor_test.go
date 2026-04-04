@@ -115,8 +115,56 @@ func TestDecodeNextPacketAtomF6(t *testing.T) {
 }
 
 func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
-	_, _, err := decodeNextPacket([]byte{0x02}, 0)
+	_, _, err := decodeNextPacket([]byte{0x04}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
 		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
+	}
+}
+
+func TestDecodeNextPacketTimestampNoCycleCount(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x02, 0x2A}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktTimestamp {
+		t.Fatalf("expected PktTimestamp, got %v", pkt.Type)
+	}
+	if !pkt.Valid.Timestamp {
+		t.Fatalf("expected timestamp valid flag")
+	}
+	if pkt.Timestamp != 0x2A {
+		t.Fatalf("expected timestamp 0x2A, got 0x%X", pkt.Timestamp)
+	}
+	if pkt.Valid.CycleCount {
+		t.Fatalf("did not expect cycle count for 0x02 header")
+	}
+}
+
+func TestDecodeNextPacketTimestampWithCycleCount(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x03, 0x01, 0x05}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktTimestamp {
+		t.Fatalf("expected PktTimestamp, got %v", pkt.Type)
+	}
+	if pkt.Timestamp != 0x1 {
+		t.Fatalf("expected timestamp 0x1, got 0x%X", pkt.Timestamp)
+	}
+	if !pkt.Valid.CycleCount || pkt.CycleCount != 0x5 {
+		t.Fatalf("expected cycle count 0x5 with valid flag, got count=0x%X valid=%v", pkt.CycleCount, pkt.Valid.CycleCount)
+	}
+}
+
+func TestDecodeNextPacketTimestampIncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x02}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for incomplete timestamp, got %v", err)
 	}
 }

@@ -249,7 +249,16 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				p.currPacket.Type = pkt.Type
 				p.currPacket.Err = pkt.Err
 				p.currPacket.ErrHdrVal = pkt.ErrHdrVal
-				p.currPacket.Atom = pkt.Atom
+				switch pkt.Type {
+				case PktAtomF1, PktAtomF2, PktAtomF3, PktAtomF4, PktAtomF5, PktAtomF6:
+					p.currPacket.Atom = pkt.Atom
+				case PktTimestamp:
+					p.currPacket.Timestamp = pkt.Timestamp
+					p.currPacket.TSBitsChanged = pkt.TSBitsChanged
+					p.currPacket.CycleCount = pkt.CycleCount
+					p.currPacket.Valid.Timestamp = pkt.Valid.Timestamp
+					p.currPacket.Valid.CycleCount = pkt.Valid.CycleCount
+				}
 				p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
 				consumed += bytesConsumed
 				p.blockBytesProcessed = consumed
@@ -319,6 +328,10 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	}
 
 	header := data[offset]
+	if header == 0x02 || header == 0x03 {
+		return decodeTimestampPacket(data, offset)
+	}
+
 	atomType, atom, ok := decodeAtomPacket(header)
 	if !ok {
 		return Packet{}, 0, errDecodeNotImplemented
@@ -326,6 +339,102 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 
 	pkt := Packet{Type: atomType, Atom: atom}
 	return pkt, 1, nil
+}
+
+func decodeTimestampPacket(data []byte, offset int) (Packet, int, error) {
+	if offset+1 >= len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	tsVal, tsBytes, ok := decodeTSField64(data, offset+1)
+	if !ok {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	pkt := Packet{Type: PktTimestamp}
+	pkt.Timestamp = tsVal
+	tsBits := tsBytes * 7
+	if tsBytes >= 9 {
+		tsBits = 64
+	}
+	pkt.TSBitsChanged = uint8(tsBits)
+	pkt.Valid.Timestamp = true
+
+	consumed := 1 + tsBytes
+	if (data[offset] & 0x1) != 0 {
+		cc, ccBytes, ok := decodeContField32(data, offset+consumed, 3)
+		if !ok {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		pkt.CycleCount = cc
+		pkt.Valid.CycleCount = true
+		consumed += ccBytes
+	}
+
+	return pkt, consumed, nil
+}
+
+func decodeTSField64(data []byte, stIdx int) (uint64, int, bool) {
+	const maxByteIdx = 8
+	if stIdx < 0 || stIdx >= len(data) {
+		return 0, 0, false
+	}
+
+	idx := 0
+	lastByte := false
+	var value uint64
+	for !lastByte {
+		if stIdx+idx >= len(data) {
+			return 0, 0, false
+		}
+		byteVal := data[stIdx+idx]
+		byteValMask := uint8(0x7F)
+		if idx == maxByteIdx {
+			byteValMask = 0xFF
+			lastByte = true
+		} else {
+			lastByte = (byteVal & 0x80) == 0
+		}
+		value |= uint64(byteVal&byteValMask) << (idx * 7)
+		idx++
+	}
+	return value, idx, true
+}
+
+func decodeContField32(data []byte, stIdx int, byteLimit int) (uint32, int, bool) {
+	if stIdx < 0 || stIdx >= len(data) || byteLimit <= 0 {
+		return 0, 0, false
+	}
+
+	var value uint32
+	idx := 0
+	for idx < byteLimit {
+		if stIdx+idx >= len(data) {
+			return 0, 0, false
+		}
+		byteVal := data[stIdx+idx]
+		shift := idx * 7
+		if shift >= 32 {
+			return 0, 0, false
+		}
+		part := uint32(byteVal & 0x7F)
+		if shift > 25 {
+			maxPart := uint32((uint64(1) << uint(32-shift)) - 1)
+			if part > maxPart {
+				return 0, 0, false
+			}
+		}
+		if idx == byteLimit-1 && (byteVal&0x80) != 0 {
+			return 0, 0, false
+		}
+		value |= part << shift
+		idx++
+		if (byteVal & 0x80) == 0 {
+			return value, idx, true
+		}
+	}
+
+	return 0, 0, false
 }
 
 func decodeAtomPacket(header uint8) (PktType, ocsd.PktAtom, bool) {
