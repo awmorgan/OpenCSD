@@ -243,10 +243,15 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 		if p.processState == ProcHdr && p.isSync && consumed < len(dataBlock) {
 			packetIndex := p.blockIndex + ocsd.TrcIndex(consumed)
 			header := dataBlock[consumed]
-			if p.iTable[header].action == decodePktInvalidCfg {
+			switch p.iTable[header].action {
+			case decodePktReserved, decodePktInvalidCfg:
 				p.packetIndex = packetIndex
 				p.currPacket.Type = p.iTable[header].pktType
-				p.currPacket.Err = errReservedCfg
+				if p.iTable[header].action == decodePktReserved {
+					p.currPacket.Err = errReservedHeader
+				} else {
+					p.currPacket.Err = errReservedCfg
+				}
 				p.currPacket.ErrHdrVal = header
 				p.currPacketData = append(p.currPacketData[:0], header)
 				consumed++
