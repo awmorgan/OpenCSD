@@ -811,6 +811,35 @@ func TestProcessDataFastPathConditionalPackets(t *testing.T) {
 	}
 }
 
+func TestProcessDataConditionalPacketsFallbackWhenCondTraceDisabled(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x42})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 || out.count != 1 || out.last.Type != PktCondIF2 {
+		t.Fatalf("unexpected CondIF2 fallback output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	}
+	if !errors.Is(out.last.Err, errReservedCfg) {
+		t.Fatalf("expected reserved-cfg error for CondIF2 fallback, got %v", out.last.Err)
+	}
+
+	consumed, err = p.processData(1, []byte{0x6C})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 || out.count != 2 || out.last.Type != PktCondIF1 {
+		t.Fatalf("unexpected CondIF1 fallback output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	}
+	if !errors.Is(out.last.Err, errReservedCfg) {
+		t.Fatalf("expected reserved-cfg error for CondIF1 fallback, got %v", out.last.Err)
+	}
+}
+
 func TestDecodeNextPacketTraceOn(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x04}, 0)
 	if err != nil {
