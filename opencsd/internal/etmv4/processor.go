@@ -99,7 +99,6 @@ type Processor struct {
 
 	// header byte lookup table
 	iTable [256]tableEntry
-
 }
 
 func (p *Processor) ApplyFlags(flags uint32) error { return nil }
@@ -2109,6 +2108,7 @@ func (p *Processor) markMalformedCurrentPacket(malformedType PktType) {
 	p.currPacket.Err = fmt.Errorf("%w: malformed %s", ocsd.ErrBadPacketSeq, malformedType.String())
 	p.processState = SendPkt
 }
+
 // updateShortAddress updates a VAddr with a short address value (clears lower bits, sets new ones).
 func (p *Processor) updateShortAddress(existing ocsd.VAddr, existingValidBits uint8, addrVal uint32, bits int) (ocsd.VAddr, uint8) {
 	if bits <= 0 || bits > ocsd.MaxVABitsize {
@@ -2127,6 +2127,7 @@ func (p *Processor) updateShortAddress(existing ocsd.VAddr, existingValidBits ui
 	}
 	return updated, updatedValidBits
 }
+
 // buildIPacketTable initialises p.iTable for header byte dispatch.
 // Ported from TrcPktProcEtmV4I::BuildIPacketTable.
 func (p *Processor) buildIPacketTable() {
