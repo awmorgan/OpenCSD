@@ -117,9 +117,57 @@ func TestDecodeNextPacketAtomF6(t *testing.T) {
 }
 
 func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
-	_, _, err := decodeNextPacket([]byte{0x06}, 0)
+	_, _, err := decodeNextPacket([]byte{0x01}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
 		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
+	}
+}
+
+func TestDecodeNextPacketExceptionTwoByte(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x06, 0x2A}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktExcept {
+		t.Fatalf("expected PktExcept, got %v", pkt.Type)
+	}
+	if pkt.ExceptionInfo.ExceptionType != 0x15 {
+		t.Fatalf("expected exception type 0x15, got 0x%X", pkt.ExceptionInfo.ExceptionType)
+	}
+	if pkt.ExceptionInfo.AddrInterp != 0 {
+		t.Fatalf("expected addr interp 0, got %d", pkt.ExceptionInfo.AddrInterp)
+	}
+	if pkt.ExceptionInfo.MFaultPending {
+		t.Fatalf("did not expect MFaultPending for 2-byte exception")
+	}
+}
+
+func TestDecodeNextPacketExceptionThreeByte(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x06, 0x83, 0x25}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktExcept {
+		t.Fatalf("expected PktExcept, got %v", pkt.Type)
+	}
+	if pkt.ExceptionInfo.ExceptionType != 0xA1 {
+		t.Fatalf("expected exception type 0xA1, got 0x%X", pkt.ExceptionInfo.ExceptionType)
+	}
+	if !pkt.ExceptionInfo.MFaultPending {
+		t.Fatalf("expected MFaultPending for 3-byte exception")
+	}
+}
+
+func TestDecodeNextPacketExceptionAmbiguousEteSizedFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x06, 0x00}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for ambiguous ETE exception, got %v", err)
 	}
 }
 

@@ -266,6 +266,19 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 					p.currPacket.VAddrPktBits = pkt.VAddrPktBits
 					p.currPacket.VAddrISA = pkt.VAddrISA
 					p.currPacket.PushVAddr()
+				case PktExcept:
+					p.currPacket.ExceptionInfo = pkt.ExceptionInfo
+					p.currPacket.ExceptionInfo.MType = p.config.CoreProf == ocsd.ProfileCortexM
+					if p.config.MajVersion() >= 0x5 {
+						switch p.currPacket.ExceptionInfo.ExceptionType {
+						case 0x18:
+							p.currPacket.Type = ETE_PktTransFail
+							p.currPacket.VAddr = 0
+						case 0x0:
+							p.currPacket.Type = ETE_PktPeReset
+							p.currPacket.VAddr = 0
+						}
+					}
 				}
 				p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
 				consumed += bytesConsumed
@@ -352,6 +365,10 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		return decodeTimestampPacket(data, offset)
 	}
 
+	if header == 0x06 {
+		return decodeExceptionPacket(data, offset)
+	}
+
 	atomType, atom, ok := decodeAtomPacket(header)
 	if !ok {
 		return Packet{}, 0, errDecodeNotImplemented
@@ -359,6 +376,37 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 
 	pkt := Packet{Type: atomType, Atom: atom}
 	return pkt, 1, nil
+}
+
+func decodeExceptionPacket(data []byte, offset int) (Packet, int, error) {
+	if offset+2 > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	byte1 := data[offset+1]
+	excepType := uint16((byte1 >> 1) & 0x1F)
+	addrInterp := (byte1&0x40)>>5 | (byte1 & 0x1)
+
+	pkt := Packet{Type: PktExcept}
+	pkt.ExceptionInfo.ExceptionType = excepType
+	pkt.ExceptionInfo.AddrInterp = addrInterp
+
+	if (byte1 & 0x80) == 0 {
+		// Exception types 0x0 and 0x18 require config-aware sizing in ETE mode.
+		if excepType == 0x0 || excepType == 0x18 {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		return pkt, 2, nil
+	}
+
+	if offset+3 > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	byte2 := data[offset+2]
+	pkt.ExceptionInfo.ExceptionType |= (uint16(byte2) & 0x1F) << 5
+	pkt.ExceptionInfo.MFaultPending = ((byte2 >> 5) & 0x1) != 0
+	return pkt, 3, nil
 }
 
 func decodeExtensionPacket(data []byte, offset int) (Packet, int, error) {
