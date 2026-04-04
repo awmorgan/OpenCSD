@@ -483,6 +483,20 @@ func TestDecodeNextPacketM8STM(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketMERRSTM(t *testing.T) {
+	data := []byte{0xA2, 0x0B}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktMErr || pkt.Payload.D8 != 0xAB {
+		t.Fatalf("unexpected MERR decode: type=%v payload=0x%X", pkt.Type, pkt.Payload.D8)
+	}
+}
+
 func TestDecodeNextPacketC8STM(t *testing.T) {
 	// Nibble stream: 3 1 2 => C8 with channel 0x12.
 	data := []byte{0x13, 0x02}
@@ -519,6 +533,62 @@ func TestDecodeNextPacketD4STM(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketD8STM(t *testing.T) {
+	data := []byte{0x14, 0x02}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktD8 || pkt.Payload.D8 != 0x12 {
+		t.Fatalf("unexpected D8 decode: type=%v payload=0x%X", pkt.Type, pkt.Payload.D8)
+	}
+}
+
+func TestDecodeNextPacketD16STM(t *testing.T) {
+	data := []byte{0x15, 0x32, 0x04}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 5 {
+		t.Fatalf("expected 5 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktD16 || pkt.Payload.D16 != 0x1234 {
+		t.Fatalf("unexpected D16 decode: type=%v payload=0x%X", pkt.Type, pkt.Payload.D16)
+	}
+}
+
+func TestDecodeNextPacketD32STM(t *testing.T) {
+	data := []byte{0x16, 0x32, 0x54, 0x76, 0x08}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 9 {
+		t.Fatalf("expected 9 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktD32 || pkt.Payload.D32 != 0x12345678 {
+		t.Fatalf("unexpected D32 decode: type=%v payload=0x%X", pkt.Type, pkt.Payload.D32)
+	}
+}
+
+func TestDecodeNextPacketD64STM(t *testing.T) {
+	data := []byte{0x17, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE, 0x00}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 17 {
+		t.Fatalf("expected 17 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktD64 || pkt.Payload.D64 != 0x123456789ABCDEF0 {
+		t.Fatalf("unexpected D64 decode: type=%v payload=0x%X", pkt.Type, pkt.Payload.D64)
+	}
+}
+
 func TestDecodeNextPacketM8IncompleteFallsBackSTM(t *testing.T) {
 	data := []byte{0x01}
 	_, _, err := decodeNextPacket(data, 0)
@@ -542,6 +612,34 @@ func TestDecodeNextPacketVersionSTM(t *testing.T) {
 	}
 	if pkt.Payload.D8 != 3 || pkt.TSType != TSNatBinary {
 		t.Fatalf("unexpected version decode: payload=%d tsType=%v", pkt.Payload.D8, pkt.TSType)
+	}
+}
+
+func TestDecodeNextPacketGERRSTM(t *testing.T) {
+	data := []byte{0x2F, 0xBA}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 4 {
+		t.Fatalf("expected 4 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktGErr || pkt.Payload.D8 != 0xAB {
+		t.Fatalf("unexpected GERR decode: type=%v payload=0x%X", pkt.Type, pkt.Payload.D8)
+	}
+}
+
+func TestDecodeNextPacketC16STM(t *testing.T) {
+	data := []byte{0x3F, 0x21, 0x43}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 6 {
+		t.Fatalf("expected 6 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktC16 || pkt.Channel != 0x1234 {
+		t.Fatalf("unexpected C16 decode: type=%v channel=0x%X", pkt.Type, pkt.Channel)
 	}
 }
 

@@ -490,6 +490,29 @@ func (p *PktProc) stateHdr(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool)
 			case PktD4:
 				p.currPacket.SetPacketType(PktD4, false)
 				p.currPacket.SetD4Payload(pkt.Payload.D8)
+			case PktMErr:
+				p.currPacket.SetPacketType(PktMErr, false)
+				p.currPacket.SetChannel(0, false)
+				p.currPacket.Payload.D8 = pkt.Payload.D8
+			case PktGErr:
+				p.currPacket.SetPacketType(PktGErr, false)
+				p.currPacket.SetMaster(0)
+				p.currPacket.Payload.D8 = pkt.Payload.D8
+			case PktC16:
+				p.currPacket.SetPacketType(PktC16, false)
+				p.currPacket.SetChannel(pkt.Channel, false)
+			case PktD8:
+				p.currPacket.SetPacketType(PktD8, false)
+				p.currPacket.Payload.D8 = pkt.Payload.D8
+			case PktD16:
+				p.currPacket.SetPacketType(PktD16, false)
+				p.currPacket.Payload.D16 = pkt.Payload.D16
+			case PktD32:
+				p.currPacket.SetPacketType(PktD32, false)
+				p.currPacket.Payload.D32 = pkt.Payload.D32
+			case PktD64:
+				p.currPacket.SetPacketType(PktD64, false)
+				p.currPacket.Payload.D64 = pkt.Payload.D64
 			case PktVersion:
 				p.currPacket.SetPacketType(PktVersion, false)
 				p.currPacket.Payload.D8 = pkt.Payload.D8
@@ -1495,6 +1518,65 @@ func decodeNextPacket(data []byte, nibbleOffset int) (Packet, int, error) {
 		pkt.SetPacketType(PktC8, false)
 		pkt.SetChannel(uint16((n1<<4)|n2), true)
 		return pkt, 3, nil
+	case 0x2: // MERR — 3 nibbles total
+		n1, ok1 := getNibble(data, nibbleOffset+1)
+		n2, ok2 := getNibble(data, nibbleOffset+2)
+		if !ok1 || !ok2 {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		var pkt Packet
+		pkt.SetPacketType(PktMErr, false)
+		pkt.Payload.D8 = (n1 << 4) | n2
+		return pkt, 3, nil
+	case 0x4: // D8 — 3 nibbles total
+		n1, ok1 := getNibble(data, nibbleOffset+1)
+		n2, ok2 := getNibble(data, nibbleOffset+2)
+		if !ok1 || !ok2 {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		var pkt Packet
+		pkt.SetPacketType(PktD8, false)
+		pkt.Payload.D8 = (n1 << 4) | n2
+		return pkt, 3, nil
+	case 0x5: // D16 — 5 nibbles total
+		var value uint16
+		for i := 0; i < 4; i++ {
+			n, ok := getNibble(data, nibbleOffset+1+i)
+			if !ok {
+				return Packet{}, 0, errDecodeNotImplemented
+			}
+			value = (value << 4) | uint16(n)
+		}
+		var pkt Packet
+		pkt.SetPacketType(PktD16, false)
+		pkt.Payload.D16 = value
+		return pkt, 5, nil
+	case 0x6: // D32 — 9 nibbles total
+		var value uint32
+		for i := 0; i < 8; i++ {
+			n, ok := getNibble(data, nibbleOffset+1+i)
+			if !ok {
+				return Packet{}, 0, errDecodeNotImplemented
+			}
+			value = (value << 4) | uint32(n)
+		}
+		var pkt Packet
+		pkt.SetPacketType(PktD32, false)
+		pkt.Payload.D32 = value
+		return pkt, 9, nil
+	case 0x7: // D64 — 17 nibbles total
+		var value uint64
+		for i := 0; i < 16; i++ {
+			n, ok := getNibble(data, nibbleOffset+1+i)
+			if !ok {
+				return Packet{}, 0, errDecodeNotImplemented
+			}
+			value = (value << 4) | uint64(n)
+		}
+		var pkt Packet
+		pkt.SetPacketType(PktD64, false)
+		pkt.Payload.D64 = value
+		return pkt, 17, nil
 	case 0xC: // D4 — 2 nibbles total
 		n1, ok := getNibble(data, nibbleOffset+1)
 		if !ok {
@@ -1563,6 +1645,29 @@ func decodeNextPacket(data []byte, nibbleOffset int) (Packet, int, error) {
 			var pkt Packet
 			pkt.SetPacketType(PktFlag, false)
 			return pkt, 2, nil
+		case 0x2: // GERR — 4 nibbles total
+			n2, ok2 := getNibble(data, nibbleOffset+2)
+			n3, ok3 := getNibble(data, nibbleOffset+3)
+			if !ok2 || !ok3 {
+				return Packet{}, 0, errDecodeNotImplemented
+			}
+			var pkt Packet
+			pkt.SetPacketType(PktGErr, false)
+			pkt.Payload.D8 = (n2 << 4) | n3
+			return pkt, 4, nil
+		case 0x3: // C16 — 6 nibbles total
+			var value uint16
+			for i := 0; i < 4; i++ {
+				n, ok := getNibble(data, nibbleOffset+2+i)
+				if !ok {
+					return Packet{}, 0, errDecodeNotImplemented
+				}
+				value = (value << 4) | uint16(n)
+			}
+			var pkt Packet
+			pkt.SetPacketType(PktC16, false)
+			pkt.SetChannel(value, false)
+			return pkt, 6, nil
 		default:
 			return Packet{}, 0, errDecodeNotImplemented
 		}
