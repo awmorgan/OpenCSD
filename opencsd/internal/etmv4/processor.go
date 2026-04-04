@@ -2106,17 +2106,19 @@ func (p *Processor) processUnsyncedByte(lastByte uint8) bool {
 func (p *Processor) processUnsyncedNotSync(lastByte uint8) {
 	if lastByte == 0x00 {
 		if len(p.currPacketData) > 1 {
-			p.dumpUnsyncedBytes = len(p.currPacketData) - 1
-			p.processState = SendUnsynced
-			p.updateOnUnsyncPktIdx = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
+			p.queueUnsyncedDump(len(p.currPacketData)-1, p.blockIndex+ocsd.TrcIndex(p.blockBytesProcessed)-1)
 		} else {
 			p.packetIndex = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
 		}
 	} else if len(p.currPacketData) >= 8 {
-		p.dumpUnsyncedBytes = len(p.currPacketData)
-		p.processState = SendUnsynced
-		p.updateOnUnsyncPktIdx = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed)
+		p.queueUnsyncedDump(len(p.currPacketData), p.blockIndex+ocsd.TrcIndex(p.blockBytesProcessed))
 	}
+}
+
+func (p *Processor) queueUnsyncedDump(bytes int, updateIdx ocsd.TrcIndex) {
+	p.dumpUnsyncedBytes = bytes
+	p.processState = SendUnsynced
+	p.updateOnUnsyncPktIdx = updateIdx
 }
 
 func (p *Processor) processUnsyncedExtension(lastByte uint8) bool {
@@ -2163,8 +2165,7 @@ func (p *Processor) processUnsyncedASync(lastByte uint8) bool {
 		return true
 	} else if len(p.currPacketData) == 12 {
 		if !p.isSync {
-			p.dumpUnsyncedBytes = 1
-			p.processState = SendUnsynced
+			p.queueUnsyncedDump(1, 0)
 		} else {
 			p.currPacket.Err = ocsd.ErrBadPacketSeq
 			return true
