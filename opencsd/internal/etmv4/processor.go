@@ -209,7 +209,9 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 						}
 					} else if bytesConsumed == len(p.currPacketData) {
 						p.applyDecodedPacket(pkt)
-						p.processState = SendPkt
+						resp = p.outputPacket()
+						p.resetPacketState()
+						p.processState = ProcHdr
 					}
 				} else {
 					p.processUnsyncedByte(nextByte)
