@@ -319,6 +319,65 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 	for ((p.bytesProcessed < dataBlockSize) || (p.bytesProcessed == dataBlockSize && p.processState == sendPkt)) && ocsd.DataRespIsCont(resp) {
 		if p.processState == procHdr && p.streamSync && p.bytesProcessed < dataBlockSize {
 			packetIndex := index + ocsd.TrcIndex(p.bytesProcessed)
+			header := dataBlock[p.bytesProcessed]
+
+			if (header & 0xFB) == 0x42 {
+				pkt, consumed, err := decodeTimestampPacketWithConfig(p.Config, dataBlock, p.bytesProcessed)
+				switch {
+				case err == nil:
+					p.currPacket.Clear()
+					p.currPacket.Type = pkt.Type
+					p.currPacket.Err = pkt.Err
+					p.currPacket.UpdateTimestamp(pkt.Timestamp, pkt.TsUpdateBits)
+					fastPkt := p.currPacket
+					resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+consumed])
+					p.bytesProcessed += consumed
+					continue
+				case errors.Is(err, errDecodeNotImplemented):
+					// Fall back to legacy state-machine decode while migration is in progress.
+				default:
+					return uint32(p.bytesProcessed), err
+				}
+			}
+
+			if header == 0x6E {
+				pkt, consumed, err := decodeContextIDPacketWithConfig(p.Config, dataBlock, p.bytesProcessed)
+				switch {
+				case err == nil:
+					p.currPacket.Clear()
+					p.currPacket.Type = pkt.Type
+					p.currPacket.Err = pkt.Err
+					p.currPacket.Context.CtxtID = pkt.Context.CtxtID
+					p.currPacket.Context.UpdatedC = pkt.Context.UpdatedC
+					fastPkt := p.currPacket
+					resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+consumed])
+					p.bytesProcessed += consumed
+					continue
+				case errors.Is(err, errDecodeNotImplemented):
+					// Fall back to legacy state-machine decode while migration is in progress.
+				default:
+					return uint32(p.bytesProcessed), err
+				}
+			}
+
+			if header == 0x50 && p.Config != nil && p.Config.DataValTrace() {
+				p.currPacket.Clear()
+				p.currPacket.Type = PktStoreFail
+				fastPkt := p.currPacket
+				resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+1])
+				p.bytesProcessed++
+				continue
+			}
+
+			if header == 0x62 && p.Config != nil && p.Config.DataTrace() {
+				p.currPacket.Clear()
+				p.currPacket.Type = PktDataSuppressed
+				fastPkt := p.currPacket
+				resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+1])
+				p.bytesProcessed++
+				continue
+			}
+
 			pkt, consumed, err := decodeNextPacket(dataBlock, p.bytesProcessed)
 			switch {
 			case err == nil:
@@ -468,6 +527,89 @@ func decodeTimestampPacket(data []byte, offset int) (Packet, int, error) {
 			return pkt, 1 + consumedTsBytes, nil
 		}
 	}
+}
+
+func decodeTimestampPacketWithConfig(config *Config, data []byte, offset int) (Packet, int, error) {
+	if offset+2 > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	header := data[offset]
+	if (header & 0xFB) != 0x42 {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	tsMaxBytes := 7
+	lastMask := uint8(0x3F)
+	tsLastIterBits := uint8(6)
+	if config != nil && config.TSPkt64() {
+		tsMaxBytes = 9
+		lastMask = 0xFF
+		tsLastIterBits = 8
+	}
+
+	idx := offset + 1
+	mask := uint8(0x7F)
+	tsIterBits := uint8(7)
+	consumedTsBytes := 0
+	var value uint64
+	var nBits uint8
+
+	for consumedTsBytes < tsMaxBytes {
+		if idx >= len(data) {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		b := data[idx]
+		value |= uint64(b&mask) << (consumedTsBytes * 7)
+		nBits += tsIterBits
+		consumedTsBytes++
+		idx++
+
+		if (b & 0x80) == 0 {
+			pkt := Packet{Type: PktTimestamp}
+			pkt.Timestamp = value
+			pkt.TsUpdateBits = nBits
+			return pkt, 1 + consumedTsBytes, nil
+		}
+
+		if consumedTsBytes == tsMaxBytes-1 {
+			mask = lastMask
+			tsIterBits = tsLastIterBits
+		}
+	}
+
+	return Packet{}, 0, errDecodeNotImplemented
+}
+
+func decodeContextIDPacketWithConfig(config *Config, data []byte, offset int) (Packet, int, error) {
+	if offset < 0 || offset >= len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	if data[offset] != 0x6E {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	if config == nil {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	ctxtBytes := config.CtxtIDBytes()
+	if ctxtBytes < 0 {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	consumed := 1 + ctxtBytes
+	if offset+consumed > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	pkt := Packet{Type: PktContextID}
+	if ctxtBytes > 0 {
+		var cid uint32
+		for i := 0; i < ctxtBytes; i++ {
+			cid |= uint32(data[offset+1+i]) << (i * 8)
+		}
+		pkt.Context.CtxtID = cid
+		pkt.Context.UpdatedC = true
+	}
+	return pkt, consumed, nil
 }
 
 func (p *PktProc) waitForSync(dataBlock []byte) int {

@@ -852,6 +852,42 @@ func TestDecodeNextPacketTimestampLongAmbiguousFallsBack(t *testing.T) {
 	}
 }
 
+func TestDecodeTimestampPacketWithConfigLongTs64(t *testing.T) {
+	config := &Config{RegCCER: ccerTs64Bit}
+	data := []byte{0x42, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x01}
+	pkt, consumed, err := decodeTimestampPacketWithConfig(config, data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != len(data) {
+		t.Fatalf("expected %d bytes consumed, got %d", len(data), consumed)
+	}
+	if pkt.Type != PktTimestamp {
+		t.Fatalf("expected PktTimestamp, got %v", pkt.Type)
+	}
+	if pkt.TsUpdateBits == 0 {
+		t.Fatalf("expected non-zero timestamp update bits")
+	}
+}
+
+func TestDecodeContextIDPacketWithConfig(t *testing.T) {
+	config := &Config{RegCtrl: 3 << 14}
+	data := []byte{0x6E, 0x11, 0x22, 0x33, 0x44}
+	pkt, consumed, err := decodeContextIDPacketWithConfig(config, data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != len(data) {
+		t.Fatalf("expected %d bytes consumed, got %d", len(data), consumed)
+	}
+	if pkt.Type != PktContextID {
+		t.Fatalf("expected PktContextID, got %v", pkt.Type)
+	}
+	if !pkt.Context.UpdatedC || pkt.Context.CtxtID != 0x44332211 {
+		t.Fatalf("unexpected context ID decode: updated=%v ctxt=0x%X", pkt.Context.UpdatedC, pkt.Context.CtxtID)
+	}
+}
+
 func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x08}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
@@ -877,5 +913,71 @@ func TestDecodeNextPacketASyncIncompleteFallsBack(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x00, 0x00}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
 		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
+	}
+}
+
+func TestProcessDataFastPathTimestampLongTs64(t *testing.T) {
+	config := &Config{RegCCER: ccerTs64Bit}
+	proc, sink := newSyncedProc(config)
+	data := []byte{0x42, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x01}
+	consumed, err := proc.ProcessData(6, data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != uint32(len(data)) {
+		t.Fatalf("expected %d bytes consumed, got %d", len(data), consumed)
+	}
+	if len(sink.packets) == 0 {
+		t.Fatalf("expected output packet")
+	}
+	pkt := sink.packets[len(sink.packets)-1]
+	if pkt.Type != PktTimestamp {
+		t.Fatalf("expected PktTimestamp, got %v", pkt.Type)
+	}
+}
+
+func TestProcessDataFastPathContextID(t *testing.T) {
+	config := &Config{RegCtrl: 2 << 14}
+	proc, sink := newSyncedProc(config)
+	consumed, err := proc.ProcessData(6, []byte{0x6E, 0x11, 0x22})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
+	}
+	if len(sink.packets) == 0 {
+		t.Fatalf("expected output packet")
+	}
+	pkt := sink.packets[len(sink.packets)-1]
+	if pkt.Type != PktContextID || pkt.Context.CtxtID != 0x2211 || !pkt.Context.UpdatedC {
+		t.Fatalf("unexpected context packet output: type=%v ctxt=0x%X updated=%v", pkt.Type, pkt.Context.CtxtID, pkt.Context.UpdatedC)
+	}
+}
+
+func TestProcessDataFastPathStoreFailAndDataSuppressed(t *testing.T) {
+	config := &Config{RegCtrl: ctrlDataVal | ctrlDataAddr}
+	proc, sink := newSyncedProc(config)
+
+	consumed, err := proc.ProcessData(6, []byte{0x50})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed for store-fail, got %d", consumed)
+	}
+	if len(sink.packets) == 0 || sink.packets[len(sink.packets)-1].Type != PktStoreFail {
+		t.Fatalf("expected PktStoreFail output")
+	}
+
+	consumed, err = proc.ProcessData(7, []byte{0x62})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed for data-suppressed, got %d", consumed)
+	}
+	if sink.packets[len(sink.packets)-1].Type != PktDataSuppressed {
+		t.Fatalf("expected PktDataSuppressed output")
 	}
 }
