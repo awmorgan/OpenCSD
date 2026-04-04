@@ -12,7 +12,6 @@ type ProcessState int
 const (
 	ProcHdr ProcessState = iota
 	ProcData
-	SendPkt
 	SendUnsynced
 )
 
@@ -157,7 +156,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 	consumed := 0
 
 	for ocsd.DataRespIsCont(resp) {
-		if consumed >= len(dataBlock) && p.processState != SendPkt {
+		if consumed >= len(dataBlock) {
 			break
 		}
 
@@ -214,14 +213,13 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 						p.processState = ProcHdr
 					}
 				} else {
-					p.processUnsyncedByte(nextByte)
+					if p.processUnsyncedByte(nextByte) {
+						resp = p.outputPacket()
+						p.resetPacketState()
+						p.processState = ProcHdr
+					}
 				}
 			}
-
-		case SendPkt:
-			resp = p.outputPacket()
-			p.resetPacketState()
-			p.processState = ProcHdr
 
 		case SendUnsynced:
 			resp = p.outputUnsyncedRawPacket()
@@ -2092,16 +2090,16 @@ func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
 // Packet handlers
 // ============================
 
-func (p *Processor) processUnsyncedByte(lastByte uint8) {
+func (p *Processor) processUnsyncedByte(lastByte uint8) bool {
 	switch p.currPacket.Type {
 	case PktAsync:
-		p.processUnsyncedASync(lastByte)
+		return p.processUnsyncedASync(lastByte)
 	default:
 		if !p.isSync && len(p.currPacketData) > 0 && p.currPacketData[0] == 0x00 && len(p.currPacketData) <= 2 {
-			p.processUnsyncedExtension(lastByte)
-			return
+			return p.processUnsyncedExtension(lastByte)
 		}
 		p.processUnsyncedNotSync(lastByte)
+		return false
 	}
 }
 
@@ -2121,54 +2119,59 @@ func (p *Processor) processUnsyncedNotSync(lastByte uint8) {
 	}
 }
 
-func (p *Processor) processUnsyncedExtension(lastByte uint8) {
+func (p *Processor) processUnsyncedExtension(lastByte uint8) bool {
 	if len(p.currPacketData) == 1 {
 		p.packetIndex = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
-		return
+		return false
 	}
 
 	if len(p.currPacketData) == 2 {
 		if !p.isSync && lastByte != 0x00 {
 			p.currPacket.Type = PktNotSync
-			return
+			return false
 		}
 		switch lastByte {
 		case 0x03:
 			p.currPacket.Type = PktDiscard
-			p.processState = SendPkt
+			return true
 		case 0x05:
 			p.currPacket.Type = PktOverflow
-			p.processState = SendPkt
+			return true
 		case 0x00:
 			p.currPacket.Type = PktAsync
+			return false
 		default:
 			p.currPacket.Err = ocsd.ErrBadPacketSeq
-			p.processState = SendPkt
+			return true
 		}
 	}
+
+	return false
 }
 
-func (p *Processor) processUnsyncedASync(lastByte uint8) {
+func (p *Processor) processUnsyncedASync(lastByte uint8) bool {
 	if lastByte != 0x00 {
 		if !p.isSync && len(p.currPacketData) != 12 {
 			p.currPacket.Type = PktNotSync
-			return
+			return false
 		}
-		p.processState = SendPkt
 		if len(p.currPacketData) != 12 || lastByte != 0x80 {
 			p.currPacket.Err = ocsd.ErrBadPacketSeq
 		} else {
 			p.isSync = true
 		}
+		return true
 	} else if len(p.currPacketData) == 12 {
 		if !p.isSync {
 			p.dumpUnsyncedBytes = 1
 			p.processState = SendUnsynced
 		} else {
 			p.currPacket.Err = ocsd.ErrBadPacketSeq
-			p.processState = SendPkt
+			return true
 		}
 	}
+
+	return false
 }
 func (p *Processor) update32BitAddress(currAddr ocsd.VAddr, newVal32 uint32) ocsd.VAddr {
 	if p.currPacket.Valid.Context && p.currPacket.Context.SF {
@@ -2180,11 +2183,10 @@ func (p *Processor) update32BitAddress(currAddr ocsd.VAddr, newVal32 uint32) ocs
 }
 
 func (p *Processor) markMalformedCurrentPacket(malformedType PktType) {
-	if p.processState == SendPkt && errors.Is(p.currPacket.Err, ocsd.ErrBadPacketSeq) {
+	if errors.Is(p.currPacket.Err, ocsd.ErrBadPacketSeq) {
 		return
 	}
 	p.currPacket.Err = fmt.Errorf("%w: malformed %s", ocsd.ErrBadPacketSeq, malformedType.String())
-	p.processState = SendPkt
 }
 
 // updateShortAddress updates a VAddr with a short address value (clears lower bits, sets new ones).
