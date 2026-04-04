@@ -271,6 +271,19 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 					p.currPacket.CycleCount = pkt.CycleCount
 					p.currPacket.Valid.Timestamp = pkt.Valid.Timestamp
 					p.currPacket.Valid.CycleCount = pkt.Valid.CycleCount
+				case PktAddrL_32IS0, PktAddrL_32IS1:
+					p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
+					if p.currPacket.VAddrValidBits < 32 {
+						p.currPacket.VAddrValidBits = 32
+					}
+					p.currPacket.VAddrPktBits = pkt.VAddrPktBits
+					p.currPacket.VAddrISA = pkt.VAddrISA
+					p.currPacket.PushVAddr()
+				case PktAddrMatch:
+					p.currPacket.AddrExactMatchIdx = pkt.AddrExactMatchIdx
+					p.currPacket.Valid.ExactMatchIdxValid = pkt.Valid.ExactMatchIdxValid
+					p.currPacket.PopVAddrIdx(p.currPacket.AddrExactMatchIdx)
+					p.currPacket.PushVAddr()
 				case PktEvent:
 					p.currPacket.EventVal = pkt.EventVal
 				case PktAddrL_64IS0, PktAddrL_64IS1:
@@ -372,6 +385,17 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 
 	if pkt, consumed, ok := decodeSimpleNoPayloadPacket(header); ok {
 		return pkt, consumed, nil
+	}
+
+	if header >= uint8(PktAddrMatch) && header <= uint8(PktAddrMatch)+2 {
+		pkt := Packet{Type: PktAddrMatch}
+		pkt.AddrExactMatchIdx = header & 0x3
+		pkt.Valid.ExactMatchIdxValid = true
+		return pkt, 1, nil
+	}
+
+	if header == uint8(PktAddrL_32IS0) || header == uint8(PktAddrL_32IS1) {
+		return decodeLongAddr32Packet(data, offset)
 	}
 
 	if header == uint8(PktAddrL_64IS0) || header == uint8(PktAddrL_64IS1) {
@@ -597,6 +621,48 @@ func decodeLongAddr64Packet(data []byte, offset int) (Packet, int, error) {
 		VAddrISA:       is,
 	}
 	return pkt, 9, nil
+}
+
+func decodeLongAddr32Packet(data []byte, offset int) (Packet, int, error) {
+	if offset+5 > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	header := data[offset]
+	is := uint8(0)
+	pktType := PktAddrL_32IS0
+	if header == uint8(PktAddrL_32IS1) {
+		is = 1
+		pktType = PktAddrL_32IS1
+	}
+
+	value := decodeLongAddr32Value(data[offset+1:offset+5], is)
+	pkt := Packet{
+		Type:           pktType,
+		VAddr:          ocsd.VAddr(value),
+		VAddrValidBits: 32,
+		VAddrPktBits:   32,
+		VAddrISA:       is,
+	}
+	return pkt, 5, nil
+}
+
+func decodeLongAddr32Value(addrBytes []byte, is uint8) uint32 {
+	if len(addrBytes) < 4 {
+		return 0
+	}
+
+	var value uint32
+	if is == 0 {
+		value |= uint32(addrBytes[0]&0x7F) << 2
+		value |= uint32(addrBytes[1]&0x7F) << 9
+	} else {
+		value |= uint32(addrBytes[0]&0x7F) << 1
+		value |= uint32(addrBytes[1]) << 8
+	}
+	value |= uint32(addrBytes[2]) << 16
+	value |= uint32(addrBytes[3]) << 24
+	return value
 }
 
 func decodeLongAddr64Value(addrBytes []byte, is uint8) uint64 {

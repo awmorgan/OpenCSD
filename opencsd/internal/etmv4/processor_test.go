@@ -248,6 +248,25 @@ func TestDecodeNextPacketEvent(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketAddrMatch(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x91}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktAddrMatch {
+		t.Fatalf("expected PktAddrMatch, got %v", pkt.Type)
+	}
+	if pkt.AddrExactMatchIdx != 0x1 {
+		t.Fatalf("expected address match idx 1, got %d", pkt.AddrExactMatchIdx)
+	}
+	if !pkt.Valid.ExactMatchIdxValid {
+		t.Fatalf("expected exact-match valid flag set")
+	}
+}
+
 func TestDecodeNextPacketTraceInfoInfoOnly(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x01, 0x01, 0x43}, 0)
 	if err != nil {
@@ -345,6 +364,46 @@ func TestDecodeNextPacketLongAddr64IS1(t *testing.T) {
 		t.Fatalf("expected address 0x4, got 0x%X", pkt.VAddr)
 	}
 	if pkt.VAddrValidBits != 64 || pkt.VAddrPktBits != 64 || pkt.VAddrISA != 1 {
+		t.Fatalf("unexpected address metadata: valid=%d pkt=%d isa=%d", pkt.VAddrValidBits, pkt.VAddrPktBits, pkt.VAddrISA)
+	}
+}
+
+func TestDecodeNextPacketLongAddr32IS0(t *testing.T) {
+	data := []byte{0x9A, 0x04, 0x00, 0x34, 0x12}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 5 {
+		t.Fatalf("expected 5 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktAddrL_32IS0 {
+		t.Fatalf("expected PktAddrL_32IS0, got %v", pkt.Type)
+	}
+	if pkt.VAddr != 0x12340010 {
+		t.Fatalf("expected address 0x12340010, got 0x%X", pkt.VAddr)
+	}
+	if pkt.VAddrValidBits != 32 || pkt.VAddrPktBits != 32 || pkt.VAddrISA != 0 {
+		t.Fatalf("unexpected address metadata: valid=%d pkt=%d isa=%d", pkt.VAddrValidBits, pkt.VAddrPktBits, pkt.VAddrISA)
+	}
+}
+
+func TestDecodeNextPacketLongAddr32IS1(t *testing.T) {
+	data := []byte{0x9B, 0x02, 0x01, 0x34, 0x12}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 5 {
+		t.Fatalf("expected 5 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktAddrL_32IS1 {
+		t.Fatalf("expected PktAddrL_32IS1, got %v", pkt.Type)
+	}
+	if pkt.VAddr != 0x12340104 {
+		t.Fatalf("expected address 0x12340104, got 0x%X", pkt.VAddr)
+	}
+	if pkt.VAddrValidBits != 32 || pkt.VAddrPktBits != 32 || pkt.VAddrISA != 1 {
 		t.Fatalf("unexpected address metadata: valid=%d pkt=%d isa=%d", pkt.VAddrValidBits, pkt.VAddrPktBits, pkt.VAddrISA)
 	}
 }
