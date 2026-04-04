@@ -468,6 +468,11 @@ func (p *PktProc) stateHdr(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool)
 					return ocsd.RespFatalInvalidData, io.ErrUnexpectedEOF, true
 				}
 			}
+			if pkt.Type == PktTSGlobal1 && consumed == 5 && len(p.packetData) >= 5 {
+				// Keep compatibility with legacy decode path, which masks src bits in the
+				// final continuation byte before raw packet monitoring/output.
+				p.packetData[4] &= 0x1F
+			}
 			p.currPacket = pkt
 			p.procState = procSendPkt
 			return p.stateSendPkt(index)
@@ -726,7 +731,15 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	}
 	header := data[offset]
 	if header == 0x00 {
-		for i := offset + 1; i < len(data); i++ {
+		if offset+6 > len(data) {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		for i := offset + 1; i < offset+5; i++ {
+			if data[i] != 0x00 {
+				return Packet{}, 0, errDecodeNotImplemented
+			}
+		}
+		for i := offset + 5; i < len(data); i++ {
 			if data[i] == 0x80 {
 				return Packet{Type: PktAsync}, i - offset + 1, nil
 			}
@@ -738,6 +751,15 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	}
 	if header == 0x70 {
 		return Packet{Type: PktOverflow}, 1, nil
+	}
+	if (header & 0xDF) == 0x94 {
+		if (header & 0x20) == 0x00 {
+			return decodeGlobalTS1Packet(data, offset)
+		}
+		return decodeGlobalTS2Packet(data, offset)
+	}
+	if (header & 0x0B) == 0x08 {
+		return decodeExtensionPacket(data, offset)
 	}
 	if (header&0x0F) == 0x00 && (header&0xF0) != 0x00 && (header&0xF0) != 0x70 {
 		pkt := Packet{Type: PktTSLocal}
@@ -814,6 +836,99 @@ func decodeContField32NoOverflow(data []byte, start int, limit int) (uint32, int
 	}
 
 	return 0, 0, false
+}
+
+func decodeContField64NoOverflow(data []byte, start int, limit int) (uint64, int, bool) {
+	if start < 0 || start >= len(data) || limit <= 0 {
+		return 0, 0, false
+	}
+
+	var value uint64
+	for i := 0; i < limit; i++ {
+		idx := start + i
+		if idx >= len(data) {
+			return 0, 0, false
+		}
+		b := data[idx]
+		shift := i * 7
+		if shift >= 64 {
+			return 0, 0, false
+		}
+		part := uint64(b & 0x7F)
+		if shift > 57 {
+			maxPart := (uint64(1) << uint(64-shift)) - 1
+			if part > maxPart {
+				return 0, 0, false
+			}
+		}
+		value |= part << shift
+		if (b & 0x80) == 0 {
+			return value, i + 1, true
+		}
+	}
+
+	return 0, 0, false
+}
+
+func decodeGlobalTS1Packet(data []byte, offset int) (Packet, int, error) {
+	value, n, ok := decodeContField32NoOverflow(data, offset+1, 4)
+	if !ok {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	pkt := Packet{Type: PktTSGlobal1}
+	if n == 4 {
+		last := data[offset+4]
+		pkt.SrcID = (last >> 5) & 0x3
+		masked := make([]byte, n)
+		copy(masked, data[offset+1:offset+1+n])
+		masked[n-1] &= 0x1F
+		value, _, ok = decodeContField32NoOverflow(masked, 0, n)
+		if !ok {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+	}
+	pkt.SetValue(value, uint8(n))
+	return pkt, 1 + n, nil
+}
+
+func decodeGlobalTS2Packet(data []byte, offset int) (Packet, int, error) {
+	v64, n, ok := decodeContField64NoOverflow(data, offset+1, 6)
+	if !ok {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	pkt := Packet{Type: PktTSGlobal2}
+	if n <= 4 {
+		pkt.SetValue(uint32(v64), uint8(n))
+	} else {
+		pkt.SetExtValue(v64)
+	}
+	return pkt, 1 + n, nil
+}
+
+func decodeExtensionPacket(data []byte, offset int) (Packet, int, error) {
+	header := data[offset]
+	pkt := Packet{Type: PktExtension}
+
+	payloadLen := 0
+	value := uint32((header >> 4) & 0x7)
+	if (header & 0x80) != 0 {
+		contValue, n, ok := decodeContField32NoOverflow(data, offset+1, 4)
+		if !ok {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		payloadLen = n
+		value |= contValue << 3
+	}
+
+	bitLength := []uint8{2, 9, 16, 23, 31}
+	pkt.SrcID = bitLength[payloadLen]
+	if (header & 0x4) != 0 {
+		pkt.SrcID |= 0x80
+	}
+	pkt.SetValue(value, 4)
+	return pkt, 1 + payloadLen, nil
 }
 
 func itmGetPacketBufRef() *[]byte {

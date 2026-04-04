@@ -575,3 +575,77 @@ func TestDecodeNextPacketITMAsyncIncompleteFallsBack(t *testing.T) {
 		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
 	}
 }
+
+func TestDecodeNextPacketITMAsyncTooShortForLegacyPatternFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x00, 0x00, 0x80}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
+	}
+}
+
+func TestDecodeNextPacketITMGlobalTS1(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x94, 0x7A}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktTSGlobal1 {
+		t.Fatalf("expected PktTSGlobal1, got %v", pkt.Type)
+	}
+	if pkt.Value != 0x7A || pkt.ValSz != 1 {
+		t.Fatalf("unexpected GTS1 decode: value=0x%X size=%d", pkt.Value, pkt.ValSz)
+	}
+}
+
+func TestDecodeNextPacketITMGlobalTS2Extended(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0xB4, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 7 {
+		t.Fatalf("expected 7 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktTSGlobal2 {
+		t.Fatalf("expected PktTSGlobal2, got %v", pkt.Type)
+	}
+	if pkt.ValSz != 5 || pkt.ExtValue() == 0 {
+		t.Fatalf("expected non-zero extended GTS2 value, got size=%d ext=0x%X", pkt.ValSz, pkt.ExtValue())
+	}
+}
+
+func TestDecodeNextPacketITMExtensionNoCont(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x08}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktExtension {
+		t.Fatalf("expected PktExtension, got %v", pkt.Type)
+	}
+	if pkt.SrcID != 2 || pkt.Value != 0 || pkt.ValSz != 4 {
+		t.Fatalf("unexpected extension decode: src=0x%X value=0x%X size=%d", pkt.SrcID, pkt.Value, pkt.ValSz)
+	}
+}
+
+func TestDecodeNextPacketITMExtensionWithCont(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x8C, 0x02}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktExtension {
+		t.Fatalf("expected PktExtension, got %v", pkt.Type)
+	}
+	if pkt.SrcID != 0x89 {
+		t.Fatalf("expected src id 0x89, got 0x%X", pkt.SrcID)
+	}
+	if pkt.Value != 0x10 || pkt.ValSz != 4 {
+		t.Fatalf("unexpected extension continuation decode: value=0x%X size=%d", pkt.Value, pkt.ValSz)
+	}
+}
