@@ -35,24 +35,7 @@ type decodeAction int
 
 const (
 	decodeNotSync decodeAction = iota
-	decodePktReserved
 	decodePktExtension
-	decodePktTraceInfo
-	decodePktTimestamp
-	decodePktNoPayload
-	decodePktException
-	decodePktInvalidCfg
-	decodePktITE
-	decodePktCycleCntF123
-	decodePktSpeclRes
-	decodePktCondInstr
-	decodePktCondResult
-	decodePktContext
-	decodePktAddrCtxt
-	decodePktShortAddr
-	decodePktLongAddr
-	decodePktQ
-	decodeAtom
 	decodePktASync
 )
 
@@ -60,12 +43,6 @@ const (
 type Packet = TracePacket
 
 var errDecodeNotImplemented = errors.New("decodeNextPacket: packet type not implemented")
-
-// tableEntry maps a header byte to a packet type and handler.
-type tableEntry struct {
-	pktType PktType
-	action  decodeAction
-}
 
 // Processor parses byte streams for ETMv4 packets.
 // Ported from TrcPktProcEtmV4I.
@@ -96,9 +73,6 @@ type Processor struct {
 	dumpUnsyncedBytes int
 
 	isInit bool // initialized
-
-	// header byte lookup table
-	iTable [256]tableEntry
 }
 
 func (p *Processor) ApplyFlags(flags uint32) error { return nil }
@@ -112,7 +86,6 @@ func NewProcessor(config *Config) *Processor {
 		config:       *config,
 		processState: ProcHdr,
 	}
-	p.buildIPacketTable()
 	p.currPacket.ProtocolVersion = config.FullVersion()
 	p.isInit = true
 	return p
@@ -200,25 +173,6 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 
 		if p.processState == ProcHdr && p.isSync && consumed < len(dataBlock) {
 			packetIndex := p.blockIndex + ocsd.TrcIndex(consumed)
-			header := dataBlock[consumed]
-			switch p.iTable[header].action {
-			case decodePktReserved, decodePktInvalidCfg:
-				p.packetIndex = packetIndex
-				p.currPacket.Type = p.iTable[header].pktType
-				if p.iTable[header].action == decodePktReserved {
-					p.currPacket.Err = errReservedHeader
-				} else {
-					p.currPacket.Err = errReservedCfg
-				}
-				p.currPacket.ErrHdrVal = header
-				p.currPacketData = append(p.currPacketData[:0], header)
-				consumed++
-				p.blockBytesProcessed = consumed
-				resp = p.outputPacket()
-				p.resetPacketState()
-				continue
-			}
-
 			pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, dataBlock, consumed)
 			switch {
 			case err == nil:
@@ -244,9 +198,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 			}
 			p.packetIndex = p.blockIndex + ocsd.TrcIndex(consumed)
 			if p.isSync {
-				nextByte := dataBlock[consumed]
-				p.currDecode = p.iTable[nextByte].action
-				p.currPacket.Type = p.iTable[nextByte].pktType
+				p.currPacket.Type = packetTypeForHeader(p.config, dataBlock[consumed])
 			} else {
 				p.currDecode = decodeNotSync
 				p.currPacket.Type = PktNotSync
@@ -349,12 +301,141 @@ func statelessProcDataManagedHeaderMaxLen(header uint8) (int, bool) {
 	}
 }
 
+func packetTypeForHeader(config Config, header uint8) PktType {
+	switch {
+	case header == 0x00:
+		return PktExtension
+	case header == 0x01:
+		return PktTraceInfo
+	case header == 0x02 || header == 0x03:
+		return PktTimestamp
+	case header == 0x04:
+		return PktTraceOn
+	case header == 0x05:
+		return PktFuncRet
+	case header == 0x06:
+		return PktExcept
+	case header == 0x07:
+		return PktExceptRtn
+	case header == uint8(ETE_PktITE) && config.MajVersion() >= 0x5 && config.MinVersion() >= 0x3:
+		return ETE_PktITE
+	case header == 0x0A && config.MajVersion() >= 0x5:
+		return ETE_PktTransSt
+	case header == 0x0B && config.MajVersion() >= 0x5:
+		return ETE_PktTransCommit
+	case header >= 0x0C && header <= 0x0D:
+		return PktCcntF2
+	case header >= 0x0E && header <= 0x0F:
+		return PktCcntF1
+	case header >= 0x10 && header <= 0x1F:
+		return PktCcntF3
+	case header >= 0x20 && header <= 0x27:
+		return PktNumDsMkr
+	case header >= 0x28 && header <= 0x2C:
+		return PktUnnumDsMkr
+	case header == 0x2D:
+		return PktCommit
+	case header == 0x2E:
+		return PktCancelF1
+	case header == 0x2F:
+		return PktCancelF1Mispred
+	case header >= 0x30 && header <= 0x33:
+		return PktMispredict
+	case header >= 0x34 && header <= 0x37:
+		return PktCancelF2
+	case header >= 0x38 && header <= 0x3F:
+		return PktCancelF3
+	case header >= 0x40 && header <= 0x42:
+		return PktCondIF2
+	case header == 0x43:
+		return PktCondFlush
+	case header >= 0x44 && header <= 0x46:
+		return PktCondResF4
+	case (header >= 0x48 && header <= 0x4A) || (header >= 0x4C && header <= 0x4E):
+		return PktCondResF2
+	case header >= 0x50 && header <= 0x5F:
+		return PktCondResF3
+	case header >= 0x68 && header <= 0x6B:
+		return PktCondResF1
+	case header == 0x6C:
+		return PktCondIF1
+	case header == 0x6D:
+		return PktCondIF3
+	case header >= 0x6E && header <= 0x6F:
+		return PktCondResF1
+	case header == 0x70 && config.FullVersion() >= 0x43:
+		return PktIgnore
+	case header >= 0x71 && header <= 0x7F:
+		return PktEvent
+	case header == 0x80 || header == 0x81:
+		return PktCtxt
+	case header == uint8(PktAddrCtxtL_32IS0):
+		return PktAddrCtxtL_32IS0
+	case header == uint8(PktAddrCtxtL_32IS1):
+		return PktAddrCtxtL_32IS1
+	case header == uint8(PktAddrCtxtL_64IS0):
+		return PktAddrCtxtL_64IS0
+	case header == uint8(PktAddrCtxtL_64IS1):
+		return PktAddrCtxtL_64IS1
+	case header == 0x88 && config.FullVersion() >= 0x46:
+		return ETE_PktTSMarker
+	case header >= uint8(PktAddrMatch) && header <= uint8(PktAddrMatch)+2:
+		return PktAddrMatch
+	case header == uint8(PktAddrS_IS0):
+		return PktAddrS_IS0
+	case header == uint8(PktAddrS_IS1):
+		return PktAddrS_IS1
+	case header == uint8(PktAddrL_32IS0):
+		return PktAddrL_32IS0
+	case header == uint8(PktAddrL_32IS1):
+		return PktAddrL_32IS1
+	case header == uint8(PktAddrL_64IS0):
+		return PktAddrL_64IS0
+	case header == uint8(PktAddrL_64IS1):
+		return PktAddrL_64IS1
+	case (header & 0xF0) == 0xA0:
+		return PktQ
+	case config.FullVersion() >= 0x50 && header >= uint8(ETE_PktSrcAddrMatch) && header <= uint8(ETE_PktSrcAddrMatch)+2:
+		return ETE_PktSrcAddrMatch
+	case config.FullVersion() >= 0x50 && header == uint8(ETE_PktSrcAddrS_IS0):
+		return ETE_PktSrcAddrS_IS0
+	case config.FullVersion() >= 0x50 && header == uint8(ETE_PktSrcAddrS_IS1):
+		return ETE_PktSrcAddrS_IS1
+	case config.FullVersion() >= 0x50 && header == uint8(ETE_PktSrcAddrL_32IS0):
+		return ETE_PktSrcAddrL_32IS0
+	case config.FullVersion() >= 0x50 && header == uint8(ETE_PktSrcAddrL_32IS1):
+		return ETE_PktSrcAddrL_32IS1
+	case config.FullVersion() >= 0x50 && header == uint8(ETE_PktSrcAddrL_64IS0):
+		return ETE_PktSrcAddrL_64IS0
+	case config.FullVersion() >= 0x50 && header == uint8(ETE_PktSrcAddrL_64IS1):
+		return ETE_PktSrcAddrL_64IS1
+	case (header >= 0xC0 && header <= 0xD4) || (header >= 0xE0 && header <= 0xF4):
+		return PktAtomF6
+	case (header >= 0xD5 && header <= 0xD7) || header == 0xF5:
+		return PktAtomF5
+	case header >= 0xD8 && header <= 0xDB:
+		return PktAtomF2
+	case header >= 0xDC && header <= 0xDF:
+		return PktAtomF4
+	case header >= 0xF6 && header <= 0xF7:
+		return PktAtomF1
+	case header >= 0xF8:
+		return PktAtomF3
+	default:
+		return PktReserved
+	}
+}
+
 func decodeNextPacketWithConfig(config Config, data []byte, offset int) (Packet, int, error) {
 	if offset < 0 || offset >= len(data) {
 		return Packet{}, 0, fmt.Errorf("offset %d out of range", offset)
 	}
 
 	header := data[offset]
+	if pkt, override := decodeConfigHeaderOverride(config, header); override {
+		return pkt, 1, nil
+	}
+
 	switch {
 	case header == 0x81:
 		return decodeContextPacketWithConfig(config, data, offset)
@@ -370,6 +451,92 @@ func decodeNextPacketWithConfig(config Config, data []byte, offset int) (Packet,
 	default:
 		return decodeNextPacket(data, offset)
 	}
+}
+
+func decodeConfigHeaderOverride(config Config, header uint8) (Packet, bool) {
+	reservedHeaderPkt := func(pktType PktType) Packet {
+		return Packet{Type: pktType, Err: errReservedHeader, ErrHdrVal: header}
+	}
+	reservedCfgPkt := func(pktType PktType) Packet {
+		return Packet{Type: pktType, Err: errReservedCfg, ErrHdrVal: header}
+	}
+
+	if header == 0x05 {
+		v8mFuncRetValid := config.CoreProf == ocsd.ProfileCortexM && ocsd.IsV8Arch(config.ArchVer) && config.FullVersion() >= 0x42
+		if !v8mFuncRetValid {
+			return reservedHeaderPkt(PktFuncRet), true
+		}
+	}
+
+	if header == 0x07 && config.MajVersion() >= 0x5 {
+		return reservedCfgPkt(PktExceptRtn), true
+	}
+
+	if header == uint8(ETE_PktITE) {
+		if config.MajVersion() < 0x5 || config.MinVersion() < 0x3 {
+			return reservedHeaderPkt(PktReserved), true
+		}
+	}
+
+	if (header == 0x0A || header == 0x0B) && config.MajVersion() < 0x5 {
+		return reservedHeaderPkt(PktReserved), true
+	}
+
+	if header >= 0x20 && header <= 0x27 && !config.EnabledDataTrace() {
+		return reservedCfgPkt(PktNumDsMkr), true
+	}
+	if header >= 0x28 && header <= 0x2C && !config.EnabledDataTrace() {
+		return reservedCfgPkt(PktUnnumDsMkr), true
+	}
+
+	condValid := config.HasCondTrace() && config.EnabledCondITrace() != CondTrDis
+	if !condValid {
+		switch {
+		case header >= 0x40 && header <= 0x42:
+			return reservedCfgPkt(PktCondIF2), true
+		case header == 0x43:
+			return reservedCfgPkt(PktCondFlush), true
+		case header >= 0x44 && header <= 0x46:
+			return reservedCfgPkt(PktCondResF4), true
+		case (header >= 0x48 && header <= 0x4A) || (header >= 0x4C && header <= 0x4E):
+			return reservedCfgPkt(PktCondResF2), true
+		case header >= 0x50 && header <= 0x5F:
+			return reservedCfgPkt(PktCondResF3), true
+		case header >= 0x68 && header <= 0x6B:
+			return reservedCfgPkt(PktCondResF1), true
+		case header == 0x6C:
+			return reservedCfgPkt(PktCondIF1), true
+		case header == 0x6D:
+			return reservedCfgPkt(PktCondIF3), true
+		case header >= 0x6E && header <= 0x6F:
+			return reservedCfgPkt(PktCondResF1), true
+		}
+	}
+
+	if (header & 0xF0) == 0xA0 {
+		qType := header & 0xF
+		if !config.HasQElem() {
+			return reservedHeaderPkt(PktQ), true
+		}
+		switch qType {
+		case 0x3, 0x4, 0x7, 0x8, 0x9, 0xD, 0xE:
+			return reservedHeaderPkt(PktQ), true
+		}
+	}
+
+	if header == 0x70 && config.FullVersion() < 0x43 {
+		return reservedHeaderPkt(PktReserved), true
+	}
+
+	if header == 0x88 && config.FullVersion() < 0x46 {
+		return reservedHeaderPkt(PktReserved), true
+	}
+
+	if header >= 0xB0 && header <= 0xB9 && config.FullVersion() < 0x50 {
+		return reservedHeaderPkt(PktReserved), true
+	}
+
+	return Packet{}, false
 }
 
 func (p *Processor) applyDecodedContext(ctx Context) {
@@ -2038,7 +2205,7 @@ func (p *Processor) iNotSync(lastByte uint8) {
 		} else {
 			p.packetIndex = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
 		}
-		p.currDecode = p.iTable[lastByte].action
+		p.currDecode = decodePktExtension
 	} else if len(p.currPacketData) >= 8 {
 		p.dumpUnsyncedBytes = len(p.currPacketData)
 		p.processState = SendUnsynced
@@ -2126,346 +2293,4 @@ func (p *Processor) updateShortAddress(existing ocsd.VAddr, existingValidBits ui
 		}
 	}
 	return updated, updatedValidBits
-}
-
-// buildIPacketTable initialises p.iTable for header byte dispatch.
-// Ported from TrcPktProcEtmV4I::BuildIPacketTable.
-func (p *Processor) buildIPacketTable() {
-	// default to reserved
-	for i := range 256 {
-		p.iTable[i].pktType = PktReserved
-		p.iTable[i].action = decodePktReserved
-	}
-
-	p.iTable[0x00].pktType = PktExtension
-	p.iTable[0x00].action = decodePktExtension
-
-	p.iTable[0x01].pktType = PktTraceInfo
-	p.iTable[0x01].action = decodePktTraceInfo
-
-	// timestamp b0000001x
-	p.iTable[0x02].pktType = PktTimestamp
-	p.iTable[0x02].action = decodePktTimestamp
-	p.iTable[0x03].pktType = PktTimestamp
-	p.iTable[0x03].action = decodePktTimestamp
-
-	p.iTable[0x04].pktType = PktTraceOn
-	p.iTable[0x04].action = decodePktNoPayload
-
-	// V8M func return (only valid in certain configs)
-	p.iTable[0x05].pktType = PktFuncRet
-	if p.config.CoreProf == ocsd.ProfileCortexM && ocsd.IsV8Arch(p.config.ArchVer) && p.config.FullVersion() >= 0x42 {
-		p.iTable[0x05].action = decodePktNoPayload
-	}
-
-	p.iTable[0x06].pktType = PktExcept
-	p.iTable[0x06].action = decodePktException
-
-	p.iTable[0x07].pktType = PktExceptRtn
-	if p.config.MajVersion() >= 0x5 {
-		p.iTable[0x07].action = decodePktInvalidCfg
-	} else {
-		p.iTable[0x07].action = decodePktNoPayload
-	}
-
-	// ETE TRANS/ITE packets
-	if p.config.MajVersion() >= 0x5 {
-		p.iTable[0x0A].pktType = ETE_PktTransSt
-		p.iTable[0x0A].action = decodePktNoPayload
-		p.iTable[0x0B].pktType = ETE_PktTransCommit
-		p.iTable[0x0B].action = decodePktNoPayload
-
-		if p.config.MinVersion() >= 0x3 {
-			p.iTable[0x09].pktType = ETE_PktITE
-			p.iTable[0x09].action = decodePktITE
-		}
-	}
-
-	// cycle count F2/F1 - 0x0C-0x0F
-	for i := range 2 {
-		p.iTable[0x0C+i].pktType = PktCcntF2
-		p.iTable[0x0C+i].action = decodePktCycleCntF123
-	}
-	for i := 2; i < 4; i++ {
-		p.iTable[0x0C+i].pktType = PktCcntF1
-		p.iTable[0x0C+i].action = decodePktCycleCntF123
-	}
-
-	// cycle count F3 - 0x10-0x1F
-	for i := range 16 {
-		p.iTable[0x10+i].pktType = PktCcntF3
-		p.iTable[0x10+i].action = decodePktCycleCntF123
-	}
-
-	// NDSM 0x20-0x27
-	for i := range 8 {
-		p.iTable[0x20+i].pktType = PktNumDsMkr
-		if p.config.EnabledDataTrace() {
-			p.iTable[0x20+i].action = decodePktNoPayload
-		} else {
-			p.iTable[0x20+i].action = decodePktInvalidCfg
-		}
-	}
-
-	// UDSM 0x28-0x2C
-	for i := range 5 {
-		p.iTable[0x28+i].pktType = PktUnnumDsMkr
-		if p.config.EnabledDataTrace() {
-			p.iTable[0x28+i].action = decodePktNoPayload
-		} else {
-			p.iTable[0x28+i].action = decodePktInvalidCfg
-		}
-	}
-
-	// commit 0x2D
-	p.iTable[0x2D].pktType = PktCommit
-	p.iTable[0x2D].action = decodePktSpeclRes
-
-	// cancel F1 0x2E-0x2F
-	p.iTable[0x2E].pktType = PktCancelF1
-	p.iTable[0x2E].action = decodePktSpeclRes
-	p.iTable[0x2F].pktType = PktCancelF1Mispred
-	p.iTable[0x2F].action = decodePktSpeclRes
-
-	// mispredict 0x30-0x33
-	for i := range 4 {
-		p.iTable[0x30+i].pktType = PktMispredict
-		p.iTable[0x30+i].action = decodePktSpeclRes
-	}
-
-	// cancel F2 0x34-0x37
-	for i := range 4 {
-		p.iTable[0x34+i].pktType = PktCancelF2
-		p.iTable[0x34+i].action = decodePktSpeclRes
-	}
-
-	// cancel F3 0x38-0x3F
-	for i := range 8 {
-		p.iTable[0x38+i].pktType = PktCancelF3
-		p.iTable[0x38+i].action = decodePktSpeclRes
-	}
-
-	bCondValid := p.config.HasCondTrace() && p.config.EnabledCondITrace() != CondTrDis
-
-	// cond I F2 0x40-0x42
-	for i := range 3 {
-		p.iTable[0x40+i].pktType = PktCondIF2
-		if bCondValid {
-			p.iTable[0x40+i].action = decodePktCondInstr
-		} else {
-			p.iTable[0x40+i].action = decodePktInvalidCfg
-		}
-	}
-
-	// cond flush 0x43
-	p.iTable[0x43].pktType = PktCondFlush
-	if bCondValid {
-		p.iTable[0x43].action = decodePktNoPayload
-	} else {
-		p.iTable[0x43].action = decodePktInvalidCfg
-	}
-
-	// cond res F4 0x44-0x46
-	for i := range 3 {
-		p.iTable[0x44+i].pktType = PktCondResF4
-		if bCondValid {
-			p.iTable[0x44+i].action = decodePktCondResult
-		} else {
-			p.iTable[0x44+i].action = decodePktInvalidCfg
-		}
-	}
-
-	// cond res F2 0x48-0x4A, 0x4C-0x4E
-	for i := range 3 {
-		p.iTable[0x48+i].pktType = PktCondResF2
-		if bCondValid {
-			p.iTable[0x48+i].action = decodePktCondResult
-		} else {
-			p.iTable[0x48+i].action = decodePktInvalidCfg
-		}
-	}
-	for i := range 3 {
-		p.iTable[0x4C+i].pktType = PktCondResF2
-		if bCondValid {
-			p.iTable[0x4C+i].action = decodePktCondResult
-		} else {
-			p.iTable[0x4C+i].action = decodePktInvalidCfg
-		}
-	}
-
-	// cond res F3 0x50-0x5F
-	for i := range 16 {
-		p.iTable[0x50+i].pktType = PktCondResF3
-		if bCondValid {
-			p.iTable[0x50+i].action = decodePktCondResult
-		} else {
-			p.iTable[0x50+i].action = decodePktInvalidCfg
-		}
-	}
-
-	// cond res F1 0x68-0x6B
-	for i := range 4 {
-		p.iTable[0x68+i].pktType = PktCondResF1
-		if bCondValid {
-			p.iTable[0x68+i].action = decodePktCondResult
-		} else {
-			p.iTable[0x68+i].action = decodePktInvalidCfg
-		}
-	}
-
-	// cond I F1 0x6C
-	p.iTable[0x6C].pktType = PktCondIF1
-	if bCondValid {
-		p.iTable[0x6C].action = decodePktCondInstr
-	} else {
-		p.iTable[0x6C].action = decodePktInvalidCfg
-	}
-
-	// cond I F3 0x6D
-	p.iTable[0x6D].pktType = PktCondIF3
-	if bCondValid {
-		p.iTable[0x6D].action = decodePktCondInstr
-	} else {
-		p.iTable[0x6D].action = decodePktInvalidCfg
-	}
-
-	// cond res F1 extra 0x6E-0x6F
-	for i := range 2 {
-		p.iTable[0x6E+i].pktType = PktCondResF1
-		if bCondValid {
-			p.iTable[0x6E+i].action = decodePktCondResult
-		} else {
-			p.iTable[0x6E+i].action = decodePktInvalidCfg
-		}
-	}
-
-	// ignore packet (ETM 4.3+) 0x70
-	if p.config.FullVersion() >= 0x43 {
-		p.iTable[0x70].pktType = PktIgnore
-		p.iTable[0x70].action = decodePktNoPayload
-	}
-
-	// event trace 0x71-0x7F
-	for i := range 15 {
-		p.iTable[0x71+i].pktType = PktEvent
-		p.iTable[0x71+i].action = decodePktNoPayload
-	}
-
-	// context 0x80-0x81
-	for i := range 2 {
-		p.iTable[0x80+i].pktType = PktCtxt
-		p.iTable[0x80+i].action = decodePktContext
-	}
-
-	// addr with ctx 0x82-0x86
-	p.iTable[0x82].pktType = PktAddrCtxtL_32IS0
-	p.iTable[0x82].action = decodePktAddrCtxt
-	p.iTable[0x83].pktType = PktAddrCtxtL_32IS1
-	p.iTable[0x83].action = decodePktAddrCtxt
-	p.iTable[0x85].pktType = PktAddrCtxtL_64IS0
-	p.iTable[0x85].action = decodePktAddrCtxt
-	p.iTable[0x86].pktType = PktAddrCtxtL_64IS1
-	p.iTable[0x86].action = decodePktAddrCtxt
-
-	// ETE TS marker 0x88
-	if p.config.FullVersion() >= 0x46 {
-		p.iTable[0x88].pktType = ETE_PktTSMarker
-		p.iTable[0x88].action = decodePktNoPayload
-	}
-
-	// exact match addr 0x90-0x92
-	for i := range 3 {
-		p.iTable[0x90+i].pktType = PktAddrMatch
-		p.iTable[0x90+i].action = decodePktNoPayload
-	}
-
-	// short addr 0x95-0x96
-	p.iTable[0x95].pktType = PktAddrS_IS0
-	p.iTable[0x95].action = decodePktShortAddr
-	p.iTable[0x96].pktType = PktAddrS_IS1
-	p.iTable[0x96].action = decodePktShortAddr
-
-	// long addr 32 0x9A-0x9B
-	p.iTable[0x9A].pktType = PktAddrL_32IS0
-	p.iTable[0x9A].action = decodePktLongAddr
-	p.iTable[0x9B].pktType = PktAddrL_32IS1
-	p.iTable[0x9B].action = decodePktLongAddr
-
-	// long addr 64 0x9D-0x9E
-	p.iTable[0x9D].pktType = PktAddrL_64IS0
-	p.iTable[0x9D].action = decodePktLongAddr
-	p.iTable[0x9E].pktType = PktAddrL_64IS1
-	p.iTable[0x9E].action = decodePktLongAddr
-
-	// Q packets 0xA0-0xAF
-	for i := range 16 {
-		p.iTable[0xA0+i].pktType = PktQ
-		switch i {
-		case 0x3, 0x4, 0x7, 0x8, 0x9, 0xD, 0xE:
-			// leave as reserved
-		default:
-			if p.config.HasQElem() {
-				p.iTable[0xA0+i].action = decodePktQ
-			}
-		}
-	}
-
-	// ETE source address packets 0xB0-0xB9
-	if p.config.FullVersion() >= 0x50 {
-		for i := range 3 {
-			p.iTable[0xB0+i].pktType = ETE_PktSrcAddrMatch
-			p.iTable[0xB0+i].action = decodePktNoPayload
-		}
-		p.iTable[0xB4].pktType = ETE_PktSrcAddrS_IS0
-		p.iTable[0xB4].action = decodePktShortAddr
-		p.iTable[0xB5].pktType = ETE_PktSrcAddrS_IS1
-		p.iTable[0xB5].action = decodePktShortAddr
-		p.iTable[0xB6].pktType = ETE_PktSrcAddrL_32IS0
-		p.iTable[0xB6].action = decodePktLongAddr
-		p.iTable[0xB7].pktType = ETE_PktSrcAddrL_32IS1
-		p.iTable[0xB7].action = decodePktLongAddr
-		p.iTable[0xB8].pktType = ETE_PktSrcAddrL_64IS0
-		p.iTable[0xB8].action = decodePktLongAddr
-		p.iTable[0xB9].pktType = ETE_PktSrcAddrL_64IS1
-		p.iTable[0xB9].action = decodePktLongAddr
-	}
-
-	// atoms F6 0xC0-0xD4
-	for i := 0xC0; i <= 0xD4; i++ {
-		p.iTable[i].pktType = PktAtomF6
-		p.iTable[i].action = decodeAtom
-	}
-	// atoms F5 0xD5-0xD7
-	for i := 0xD5; i <= 0xD7; i++ {
-		p.iTable[i].pktType = PktAtomF5
-		p.iTable[i].action = decodeAtom
-	}
-	// atoms F2 0xD8-0xDB
-	for i := 0xD8; i <= 0xDB; i++ {
-		p.iTable[i].pktType = PktAtomF2
-		p.iTable[i].action = decodeAtom
-	}
-	// atoms F4 0xDC-0xDF
-	for i := 0xDC; i <= 0xDF; i++ {
-		p.iTable[i].pktType = PktAtomF4
-		p.iTable[i].action = decodeAtom
-	}
-	// atoms F6 0xE0-0xF4
-	for i := 0xE0; i <= 0xF4; i++ {
-		p.iTable[i].pktType = PktAtomF6
-		p.iTable[i].action = decodeAtom
-	}
-	// atom F5 0xF5
-	p.iTable[0xF5].pktType = PktAtomF5
-	p.iTable[0xF5].action = decodeAtom
-	// atoms F1 0xF6-0xF7
-	for i := 0xF6; i <= 0xF7; i++ {
-		p.iTable[i].pktType = PktAtomF1
-		p.iTable[i].action = decodeAtom
-	}
-	// atoms F3 0xF8-0xFF
-	for i := 0xF8; i <= 0xFF; i++ {
-		p.iTable[i].pktType = PktAtomF3
-		p.iTable[i].action = decodeAtom
-	}
 }
