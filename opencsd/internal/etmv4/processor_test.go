@@ -521,6 +521,53 @@ func TestDecodeNextPacketLongAddr32IS1(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketAddrContext32NoIDs(t *testing.T) {
+	data := []byte{0x82, 0x04, 0x00, 0x34, 0x12, 0x19}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 6 {
+		t.Fatalf("expected 6 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktAddrCtxtL_32IS0 {
+		t.Fatalf("expected PktAddrCtxtL_32IS0, got %v", pkt.Type)
+	}
+	if pkt.VAddr != 0x12340010 || pkt.VAddrPktBits != 32 || pkt.VAddrISA != 0 {
+		t.Fatalf("unexpected address decode: addr=0x%X bits=%d isa=%d", pkt.VAddr, pkt.VAddrPktBits, pkt.VAddrISA)
+	}
+	if !pkt.Valid.Context || !pkt.Context.Updated || pkt.Context.EL != 0x1 || !pkt.Context.NSE || !pkt.Context.SF || pkt.Context.NS {
+		t.Fatalf("unexpected context decode: %+v", pkt.Context)
+	}
+}
+
+func TestDecodeNextPacketAddrContext64NoIDs(t *testing.T) {
+	data := []byte{0x86, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 10 {
+		t.Fatalf("expected 10 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktAddrCtxtL_64IS1 {
+		t.Fatalf("expected PktAddrCtxtL_64IS1, got %v", pkt.Type)
+	}
+	if pkt.VAddr != 0x4 || pkt.VAddrPktBits != 64 || pkt.VAddrISA != 1 {
+		t.Fatalf("unexpected address decode: addr=0x%X bits=%d isa=%d", pkt.VAddr, pkt.VAddrPktBits, pkt.VAddrISA)
+	}
+	if !pkt.Valid.Context || !pkt.Context.Updated || pkt.Context.EL != 0x1 {
+		t.Fatalf("unexpected context decode: %+v", pkt.Context)
+	}
+}
+
+func TestDecodeNextPacketAddrContextWithIDsFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x82, 0x04, 0x00, 0x34, 0x12, 0x40}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for config-sized addr+context payload, got %v", err)
+	}
+}
+
 func TestDecodeNextPacketEteSrcLongAddr32IS1(t *testing.T) {
 	data := []byte{0xB7, 0x02, 0x01, 0x34, 0x12}
 	pkt, consumed, err := decodeNextPacket(data, 0)
@@ -903,5 +950,136 @@ func TestDecodeNextPacketQLongAddrIncompleteFallsBack(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0xAB, 0x02, 0x01, 0x34}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
 		t.Fatalf("expected errDecodeNotImplemented for incomplete Q long address, got %v", err)
+	}
+}
+
+func TestDecodeNextPacketContextNoUpdate(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x80}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktCtxt {
+		t.Fatalf("expected PktCtxt, got %v", pkt.Type)
+	}
+	if pkt.Valid.Context {
+		t.Fatalf("did not expect context valid for no-update packet")
+	}
+}
+
+func TestDecodeNextPacketContextInfoNoIDs(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x81, 0x19}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktCtxt {
+		t.Fatalf("expected PktCtxt, got %v", pkt.Type)
+	}
+	if !pkt.Valid.Context || !pkt.Context.Updated {
+		t.Fatalf("expected updated valid context packet")
+	}
+	if pkt.Context.EL != 0x1 || !pkt.Context.NSE || !pkt.Context.SF || pkt.Context.NS {
+		t.Fatalf("unexpected context decode: %+v", pkt.Context)
+	}
+}
+
+func TestDecodeNextPacketContextWithIDsFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x81, 0x40}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for config-sized context payload, got %v", err)
+	}
+}
+
+func TestDecodeNextPacketDataSyncMarkers(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x23}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktNumDsMkr || pkt.DsmVal != 0x3 {
+		t.Fatalf("unexpected numbered DSM decode: type=%v dsm=%d", pkt.Type, pkt.DsmVal)
+	}
+
+	pkt, consumed, err = decodeNextPacket([]byte{0x2A}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktUnnumDsMkr || pkt.DsmVal != 0x2 {
+		t.Fatalf("unexpected unnumbered DSM decode: type=%v dsm=%d", pkt.Type, pkt.DsmVal)
+	}
+}
+
+func TestProcessDataFastPathContextNoIDUpdatePreservesIDs(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	p.currPacket.Context.VMID = 0xAA
+	p.currPacket.Context.CtxtID = 0xBBCC
+
+	consumed, err := p.processData(0, []byte{0x81, 0x31})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	// Packet output resets Updated/Valid flags, but context values persist across packets.
+	if p.currPacket.Context.Updated {
+		t.Fatalf("expected Updated cleared after packet reset")
+	}
+	if p.currPacket.Context.EL != 0x1 || !p.currPacket.Context.SF || !p.currPacket.Context.NS {
+		t.Fatalf("expected context info fields updated, got %+v", p.currPacket.Context)
+	}
+	if p.currPacket.Context.VMID != 0xAA || p.currPacket.Context.CtxtID != 0xBBCC {
+		t.Fatalf("expected VMID/CtxtID to be preserved, got vmid=0x%X ctxt=0x%X", p.currPacket.Context.VMID, p.currPacket.Context.CtxtID)
+	}
+}
+
+func TestProcessDataFastPathDataSyncMarkerSetsDsmVal(t *testing.T) {
+	p := NewProcessor(&Config{RegIdr0: 0x18, RegConfigr: 0x2 | (1 << 16)})
+	p.isSync = true
+
+	consumed, err := p.processData(0, []byte{0x23})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if p.currPacket.DsmVal != 0x3 {
+		t.Fatalf("expected DsmVal 3, got %d", p.currPacket.DsmVal)
+	}
+}
+
+func TestProcessDataFastPathAddrContext32PreservesUpperIn64BitContext(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	p.currPacket.VAddr = 0x11223344AABBCCDD
+	p.currPacket.VAddrValidBits = 64
+	p.currPacket.Valid.Context = true
+	p.currPacket.Context.SF = true
+	p.currPacket.Context.VMID = 0xAA
+
+	consumed, err := p.processData(0, []byte{0x82, 0x04, 0x00, 0x34, 0x12, 0x01})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 6 {
+		t.Fatalf("expected 6 bytes consumed, got %d", consumed)
+	}
+	if p.currPacket.VAddr != 0x1122334412340010 {
+		t.Fatalf("expected merged address 0x1122334412340010, got 0x%X", p.currPacket.VAddr)
+	}
+	if p.currPacket.Context.VMID != 0xAA {
+		t.Fatalf("expected VMID preserved, got 0x%X", p.currPacket.Context.VMID)
 	}
 }

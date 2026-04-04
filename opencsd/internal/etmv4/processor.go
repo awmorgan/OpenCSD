@@ -296,6 +296,40 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 					p.currPacket.VAddrPktBits = pkt.VAddrPktBits
 					p.currPacket.VAddrISA = pkt.VAddrISA
 					p.currPacket.PushVAddr()
+				case PktAddrCtxtL_32IS0, PktAddrCtxtL_32IS1:
+					p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
+					if p.currPacket.VAddrValidBits < 32 {
+						p.currPacket.VAddrValidBits = 32
+					}
+					p.currPacket.VAddrPktBits = pkt.VAddrPktBits
+					p.currPacket.VAddrISA = pkt.VAddrISA
+					p.currPacket.PushVAddr()
+					if pkt.Valid.Context {
+						p.currPacket.Context.Updated = pkt.Context.Updated
+						p.currPacket.Context.EL = pkt.Context.EL
+						p.currPacket.Context.SF = pkt.Context.SF
+						p.currPacket.Context.NS = pkt.Context.NS
+						p.currPacket.Context.NSE = pkt.Context.NSE
+						p.currPacket.Context.UpdatedV = pkt.Context.UpdatedV
+						p.currPacket.Context.UpdatedC = pkt.Context.UpdatedC
+						p.currPacket.Valid.Context = true
+					}
+				case PktAddrCtxtL_64IS0, PktAddrCtxtL_64IS1:
+					p.currPacket.VAddr = pkt.VAddr
+					p.currPacket.VAddrValidBits = pkt.VAddrValidBits
+					p.currPacket.VAddrPktBits = pkt.VAddrPktBits
+					p.currPacket.VAddrISA = pkt.VAddrISA
+					p.currPacket.PushVAddr()
+					if pkt.Valid.Context {
+						p.currPacket.Context.Updated = pkt.Context.Updated
+						p.currPacket.Context.EL = pkt.Context.EL
+						p.currPacket.Context.SF = pkt.Context.SF
+						p.currPacket.Context.NS = pkt.Context.NS
+						p.currPacket.Context.NSE = pkt.Context.NSE
+						p.currPacket.Context.UpdatedV = pkt.Context.UpdatedV
+						p.currPacket.Context.UpdatedC = pkt.Context.UpdatedC
+						p.currPacket.Valid.Context = true
+					}
 				case PktQ:
 					p.currPacket.QPkt = pkt.QPkt
 					if pkt.Valid.ExactMatchIdxValid {
@@ -317,6 +351,25 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 						p.currPacket.VAddrISA = pkt.VAddrISA
 						p.currPacket.Valid.VAddrValid = true
 					}
+				case PktCtxt:
+					if pkt.Valid.Context {
+						p.currPacket.Context.Updated = pkt.Context.Updated
+						p.currPacket.Context.EL = pkt.Context.EL
+						p.currPacket.Context.SF = pkt.Context.SF
+						p.currPacket.Context.NS = pkt.Context.NS
+						p.currPacket.Context.NSE = pkt.Context.NSE
+						p.currPacket.Context.UpdatedV = pkt.Context.UpdatedV
+						p.currPacket.Context.UpdatedC = pkt.Context.UpdatedC
+						if pkt.Context.UpdatedV {
+							p.currPacket.Context.VMID = pkt.Context.VMID
+						}
+						if pkt.Context.UpdatedC {
+							p.currPacket.Context.CtxtID = pkt.Context.CtxtID
+						}
+						p.currPacket.Valid.Context = true
+					}
+				case PktNumDsMkr, PktUnnumDsMkr:
+					p.currPacket.DsmVal = pkt.DsmVal
 				case PktEvent:
 					p.currPacket.EventVal = pkt.EventVal
 				case PktAddrL_64IS0, PktAddrL_64IS1, ETE_PktSrcAddrL_64IS0, ETE_PktSrcAddrL_64IS1:
@@ -420,6 +473,10 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		return pkt, consumed, nil
 	}
 
+	if header == 0x80 || header == 0x81 {
+		return decodeContextPacket(data, offset)
+	}
+
 	if header >= uint8(PktAddrMatch) && header <= uint8(PktAddrMatch)+2 {
 		pkt := Packet{Type: PktAddrMatch}
 		pkt.AddrExactMatchIdx = header & 0x3
@@ -436,6 +493,11 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 
 	if header == uint8(PktAddrS_IS0) || header == uint8(PktAddrS_IS1) {
 		return decodeShortAddrPacket(data, offset)
+	}
+
+	if header == uint8(PktAddrCtxtL_32IS0) || header == uint8(PktAddrCtxtL_32IS1) ||
+		header == uint8(PktAddrCtxtL_64IS0) || header == uint8(PktAddrCtxtL_64IS1) {
+		return decodeAddrContextPacket(data, offset)
 	}
 
 	if header == uint8(ETE_PktSrcAddrS_IS0) || header == uint8(ETE_PktSrcAddrS_IS1) {
@@ -505,6 +567,8 @@ func (p *Processor) canUseStatelessDecodeResult(pktType PktType) bool {
 		return p.config.FullVersion() >= 0x50
 	case ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1, ETE_PktSrcAddrL_64IS0, ETE_PktSrcAddrL_64IS1:
 		return p.config.FullVersion() >= 0x50
+	case PktNumDsMkr, PktUnnumDsMkr:
+		return p.config.EnabledDataTrace()
 	case PktQ:
 		return p.config.HasQElem()
 	default:
@@ -685,6 +749,12 @@ func decodeSimpleNoPayloadPacket(header uint8) (Packet, int, bool) {
 	}
 	if header == 0x43 {
 		return Packet{Type: PktCondFlush}, 1, true
+	}
+	if header >= 0x20 && header <= 0x27 {
+		return Packet{Type: PktNumDsMkr, DsmVal: header & 0x7}, 1, true
+	}
+	if header >= 0x28 && header <= 0x2C {
+		return Packet{Type: PktUnnumDsMkr, DsmVal: header & 0x7}, 1, true
 	}
 	if header == 0x70 {
 		return Packet{Type: PktIgnore}, 1, true
@@ -975,6 +1045,90 @@ func decodeQPacket(data []byte, offset int) (Packet, int, error) {
 	default:
 		return Packet{}, 0, errDecodeNotImplemented
 	}
+}
+
+func decodeContextPacket(data []byte, offset int) (Packet, int, error) {
+	header := data[offset]
+
+	if header == 0x80 {
+		return Packet{Type: PktCtxt}, 1, nil
+	}
+
+	if offset+2 > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	info := data[offset+1]
+	if (info & 0xC0) != 0 {
+		// VMID/CtxtID payload sizes depend on runtime config; use legacy parser.
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	pkt := Packet{Type: PktCtxt}
+	pkt.Context.Updated = true
+	pkt.Context.EL = info & 0x3
+	pkt.Context.NSE = ((info >> 3) & 0x1) != 0
+	pkt.Context.SF = ((info >> 4) & 0x1) != 0
+	pkt.Context.NS = ((info >> 5) & 0x1) != 0
+	pkt.Valid.Context = true
+
+	return pkt, 2, nil
+}
+
+func decodeAddrContextPacket(data []byte, offset int) (Packet, int, error) {
+	header := data[offset]
+	is := uint8(0)
+	addrBytes := 4
+	pktType := PktAddrCtxtL_32IS0
+
+	switch header {
+	case uint8(PktAddrCtxtL_32IS0):
+		pktType = PktAddrCtxtL_32IS0
+	case uint8(PktAddrCtxtL_32IS1):
+		pktType = PktAddrCtxtL_32IS1
+		is = 1
+	case uint8(PktAddrCtxtL_64IS0):
+		pktType = PktAddrCtxtL_64IS0
+		addrBytes = 8
+	case uint8(PktAddrCtxtL_64IS1):
+		pktType = PktAddrCtxtL_64IS1
+		is = 1
+		addrBytes = 8
+	default:
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	minLen := 1 + addrBytes + 1
+	if offset+minLen > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	info := data[offset+1+addrBytes]
+	if (info & 0xC0) != 0 {
+		// VMID/CtxtID payload sizes depend on runtime config; use legacy parser.
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	pkt := Packet{Type: pktType}
+	if addrBytes == 8 {
+		pkt.VAddr = ocsd.VAddr(decodeLongAddr64Value(data[offset+1:offset+9], is))
+		pkt.VAddrValidBits = 64
+		pkt.VAddrPktBits = 64
+	} else {
+		pkt.VAddr = ocsd.VAddr(decodeLongAddr32Value(data[offset+1:offset+5], is))
+		pkt.VAddrValidBits = 32
+		pkt.VAddrPktBits = 32
+	}
+	pkt.VAddrISA = is
+
+	pkt.Context.Updated = true
+	pkt.Context.EL = info & 0x3
+	pkt.Context.NSE = ((info >> 3) & 0x1) != 0
+	pkt.Context.SF = ((info >> 4) & 0x1) != 0
+	pkt.Context.NS = ((info >> 5) & 0x1) != 0
+	pkt.Valid.Context = true
+
+	return pkt, minLen, nil
 }
 
 func decodeLongAddr64Value(addrBytes []byte, is uint8) uint64 {
