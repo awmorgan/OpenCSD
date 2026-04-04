@@ -352,6 +352,65 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				}
 			}
 
+			if header == 0x0C || header == 0x0D {
+				pkt, bytesConsumed, err := decodeCycleCntF2PacketWithConfig(p.config, dataBlock, consumed)
+				switch {
+				case err == nil:
+					p.packetIndex = packetIndex
+					p.currPacket.Type = pkt.Type
+					p.currPacket.Err = pkt.Err
+					p.currPacket.ErrHdrVal = pkt.ErrHdrVal
+					p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
+					p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
+					if pkt.Valid.CommitElem {
+						p.currPacket.CommitElements = pkt.CommitElements
+						p.currPacket.Valid.CommitElem = true
+					}
+					p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
+					consumed += bytesConsumed
+					p.blockBytesProcessed = consumed
+					resp = p.outputPacket()
+					p.resetPacketState()
+					continue
+				case errors.Is(err, errDecodeNotImplemented):
+					// Fall back to the legacy state machine while migration is in progress.
+				default:
+					return uint32(consumed), err
+				}
+			}
+
+			if header == 0x0E || header == 0x0F {
+				pkt, bytesConsumed, err := decodeCycleCntF1PacketWithConfig(p.config, dataBlock, consumed)
+				switch {
+				case err == nil:
+					p.packetIndex = packetIndex
+					p.currPacket.Type = pkt.Type
+					p.currPacket.Err = pkt.Err
+					p.currPacket.ErrHdrVal = pkt.ErrHdrVal
+					if pkt.Valid.CycleCount {
+						p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
+						p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
+					} else {
+						p.currPacket.CycleCount = 0
+						p.currPacket.Valid.CCExactMatch = false
+					}
+					if pkt.Valid.CommitElem {
+						p.currPacket.CommitElements = pkt.CommitElements
+						p.currPacket.Valid.CommitElem = true
+					}
+					p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
+					consumed += bytesConsumed
+					p.blockBytesProcessed = consumed
+					resp = p.outputPacket()
+					p.resetPacketState()
+					continue
+				case errors.Is(err, errDecodeNotImplemented):
+					// Fall back to the legacy state machine while migration is in progress.
+				default:
+					return uint32(consumed), err
+				}
+			}
+
 			pkt, bytesConsumed, err := decodeNextPacket(dataBlock, consumed)
 			switch {
 			case err == nil:
@@ -763,16 +822,8 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 }
 
 func (p *Processor) canUseStatelessDecodeResult(pktType PktType) bool {
-	switch pktType {
-	case PktCcntF2:
-		// F2 commit element decode depends on max-spec depth when CommitOpt1 is disabled.
-		return p.config.CommitOpt1()
-	case PktCcntF1:
-		// F1 commit element decode depends on CommitOpt1 mode.
-		return p.config.CommitOpt1()
-	default:
-		return true
-	}
+	_ = pktType
+	return true
 }
 
 func decodeITEPacket(data []byte, offset int) (Packet, int, error) {
@@ -984,6 +1035,25 @@ func decodeCycleCntF2Packet(data []byte, offset int) (Packet, int, error) {
 	return pkt, 2, nil
 }
 
+func decodeCycleCntF2PacketWithConfig(config Config, data []byte, offset int) (Packet, int, error) {
+	pkt, consumed, err := decodeCycleCntF2Packet(data, offset)
+	if err != nil {
+		return Packet{}, 0, err
+	}
+
+	if !config.CommitOpt1() {
+		commitOffset := 1
+		if (data[offset] & 0x1) == 0x1 {
+			commitOffset = int(config.MaxSpecDepth()) - 15
+		}
+		commitElements := int((data[offset+1]>>4)&0xF) + commitOffset
+		pkt.CommitElements = uint32(commitElements)
+		pkt.Valid.CommitElem = true
+	}
+
+	return pkt, consumed, nil
+}
+
 func decodeCycleCntF1Packet(data []byte, offset int) (Packet, int, error) {
 	if offset >= len(data) {
 		return Packet{}, 0, errDecodeNotImplemented
@@ -1006,6 +1076,44 @@ func decodeCycleCntF1Packet(data []byte, offset int) (Packet, int, error) {
 	pkt.CycleCount = count
 	pkt.Valid.CycleCount = true
 	return pkt, 1 + n, nil
+}
+
+func decodeCycleCntF1PacketWithConfig(config Config, data []byte, offset int) (Packet, int, error) {
+	if offset >= len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	header := data[offset]
+	pkt := Packet{Type: PktCcntF1}
+
+	if config.CommitOpt1() {
+		return decodeCycleCntF1Packet(data, offset)
+	}
+
+	idx := offset + 1
+	commit, n, ok := decodeContField32(data, idx, 5)
+	if !ok {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	idx += n
+	pkt.CommitElements = commit
+	pkt.Valid.CommitElem = true
+
+	if (header & 0x1) == 0x1 {
+		pkt.Valid.CycleCount = false
+		pkt.CycleCount = 0
+		return pkt, idx - offset, nil
+	}
+
+	count, n, ok := decodeContField32(data, idx, 3)
+	if !ok {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	idx += n
+	pkt.CycleCount = count
+	pkt.Valid.CycleCount = true
+
+	return pkt, idx - offset, nil
 }
 
 func decodeSimpleSpecResPacket(header uint8) (Packet, bool) {

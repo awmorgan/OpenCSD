@@ -296,6 +296,23 @@ func TestDecodeNextPacketCycleCntF2IncompleteFallsBack(t *testing.T) {
 	}
 }
 
+func TestDecodeCycleCntF2PacketWithConfigCommitOpt0(t *testing.T) {
+	config := Config{}
+	pkt, consumed, err := decodeCycleCntF2PacketWithConfig(config, []byte{0x0C, 0xA5}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 || pkt.Type != PktCcntF2 {
+		t.Fatalf("unexpected decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if pkt.CycleCount != 0x5 {
+		t.Fatalf("expected cycle count 0x5, got 0x%X", pkt.CycleCount)
+	}
+	if !pkt.Valid.CommitElem || pkt.CommitElements != 11 {
+		t.Fatalf("expected commit elements 11 with valid flag, got valid=%v value=%d", pkt.Valid.CommitElem, pkt.CommitElements)
+	}
+}
+
 func TestDecodeNextPacketCycleCntF1WithCount(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x0E, 0x05}, 0)
 	if err != nil {
@@ -332,6 +349,40 @@ func TestDecodeNextPacketCycleCntF1IncompleteFallsBack(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x0E}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
 		t.Fatalf("expected errDecodeNotImplemented for incomplete F1 packet, got %v", err)
+	}
+}
+
+func TestDecodeCycleCntF1PacketWithConfigCommitOpt0WithCount(t *testing.T) {
+	config := Config{}
+	pkt, consumed, err := decodeCycleCntF1PacketWithConfig(config, []byte{0x0E, 0x02, 0x03}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 || pkt.Type != PktCcntF1 {
+		t.Fatalf("unexpected decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if !pkt.Valid.CommitElem || pkt.CommitElements != 2 {
+		t.Fatalf("expected commit elements 2 with valid flag, got valid=%v value=%d", pkt.Valid.CommitElem, pkt.CommitElements)
+	}
+	if !pkt.Valid.CycleCount || pkt.CycleCount != 3 {
+		t.Fatalf("expected cycle count 3 with valid flag, got valid=%v value=%d", pkt.Valid.CycleCount, pkt.CycleCount)
+	}
+}
+
+func TestDecodeCycleCntF1PacketWithConfigCommitOpt0NoCount(t *testing.T) {
+	config := Config{}
+	pkt, consumed, err := decodeCycleCntF1PacketWithConfig(config, []byte{0x0F, 0x02}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 || pkt.Type != PktCcntF1 {
+		t.Fatalf("unexpected decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if !pkt.Valid.CommitElem || pkt.CommitElements != 2 {
+		t.Fatalf("expected commit elements 2 with valid flag, got valid=%v value=%d", pkt.Valid.CommitElem, pkt.CommitElements)
+	}
+	if pkt.Valid.CycleCount || pkt.CycleCount != 0 {
+		t.Fatalf("expected no cycle count for F1 no-count form, got valid=%v value=%d", pkt.Valid.CycleCount, pkt.CycleCount)
 	}
 }
 
@@ -416,7 +467,7 @@ func TestProcessDataFastPathCycleCntF2CommitOpt1(t *testing.T) {
 	}
 }
 
-func TestProcessDataCycleCntF2FallsBackWhenCommitOpt1Off(t *testing.T) {
+func TestProcessDataCycleCntF2CommitOpt1Off(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
 	p.currPacket.CCThreshold = 0
@@ -433,9 +484,11 @@ func TestProcessDataCycleCntF2FallsBackWhenCommitOpt1Off(t *testing.T) {
 	if out.count != 1 || out.last.Type != PktCcntF2 {
 		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
 	}
-	// Legacy path should be used here and include commit elements.
 	if !out.last.Valid.CommitElem {
-		t.Fatalf("expected commit elements from legacy F2 path when CommitOpt1 is off")
+		t.Fatalf("expected commit elements for F2 when CommitOpt1 is off")
+	}
+	if out.last.CommitElements != 11 {
+		t.Fatalf("expected commit elements 11, got %d", out.last.CommitElements)
 	}
 }
 
@@ -486,7 +539,7 @@ func TestProcessDataFastPathCycleCntF1CommitOpt1NoCount(t *testing.T) {
 	}
 }
 
-func TestProcessDataCycleCntF1FallsBackWhenCommitOpt1Off(t *testing.T) {
+func TestProcessDataCycleCntF1CommitOpt1Off(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
 	p.currPacket.CCThreshold = 0
@@ -504,7 +557,10 @@ func TestProcessDataCycleCntF1FallsBackWhenCommitOpt1Off(t *testing.T) {
 		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
 	}
 	if !out.last.Valid.CommitElem {
-		t.Fatalf("expected commit elements from legacy F1 path when CommitOpt1 is off")
+		t.Fatalf("expected commit elements for F1 when CommitOpt1 is off")
+	}
+	if out.last.CommitElements != 2 {
+		t.Fatalf("expected commit elements 2, got %d", out.last.CommitElements)
 	}
 }
 
