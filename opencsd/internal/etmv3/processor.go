@@ -603,7 +603,7 @@ func decodeContextIDPacketWithConfig(config *Config, data []byte, offset int) (P
 	pkt := Packet{Type: PktContextID}
 	if ctxtBytes > 0 {
 		var cid uint32
-		for i := 0; i < ctxtBytes; i++ {
+		for i := range ctxtBytes {
 			cid |= uint32(data[offset+1+i]) << (i * 8)
 		}
 		pkt.Context.CtxtID = cid
