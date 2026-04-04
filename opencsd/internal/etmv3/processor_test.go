@@ -790,6 +790,29 @@ func TestDecodeNextPacketExceptionEntry(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketVMID(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x3C, 0x55}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktVMID {
+		t.Fatalf("expected PktVMID, got %v", pkt.Type)
+	}
+	if pkt.Context.VMID != 0x55 || !pkt.Context.UpdatedV {
+		t.Fatalf("expected VMID=0x55 and UpdatedV=true, got VMID=0x%X UpdatedV=%v", pkt.Context.VMID, pkt.Context.UpdatedV)
+	}
+}
+
+func TestDecodeNextPacketVMIDIncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x3C}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for incomplete VMID, got %v", err)
+	}
+}
+
 func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x08}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {

@@ -326,6 +326,11 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 				fastPkt.Clear()
 				fastPkt.Type = pkt.Type
 				fastPkt.Err = pkt.Err
+				switch pkt.Type {
+				case PktVMID:
+					fastPkt.Context.VMID = pkt.Context.VMID
+					fastPkt.Context.UpdatedV = pkt.Context.UpdatedV
+				}
 				resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+consumed])
 				p.bytesProcessed += consumed
 				continue
@@ -408,6 +413,14 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	switch header {
 	case 0x0C:
 		return Packet{Type: PktTrigger}, 1, nil
+	case 0x3C:
+		if offset+2 > len(data) {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		pkt := Packet{Type: PktVMID}
+		pkt.Context.VMID = data[offset+1]
+		pkt.Context.UpdatedV = true
+		return pkt, 2, nil
 	case 0x66:
 		return Packet{Type: PktIgnore}, 1, nil
 	case 0x76:
