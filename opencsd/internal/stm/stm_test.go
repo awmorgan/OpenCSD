@@ -409,3 +409,58 @@ func TestWaitForSync_WrapAround(t *testing.T) {
 	proc.dataIn = make([]byte, 10)
 	proc.waitForSync(0)
 }
+
+func TestDecodeNextPacketNullSTM(t *testing.T) {
+	// lower nibble 0x0 = NULL opcode
+	data := []byte{0x00}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Errorf("consumed: got %d, want 1", consumed)
+	}
+	if pkt.Type != PktNull {
+		t.Errorf("Type: got %v, want PktNull", pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketNullSTMAtNibbleOffset1(t *testing.T) {
+	// byte 0x0F: lower nibble=0xF (FExt, unused here), upper nibble=0x0 (NULL)
+	// Starting at nibble offset 1 should decode the NULL in the upper half.
+	data := []byte{0x0F}
+	pkt, consumed, err := decodeNextPacket(data, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Errorf("consumed: got %d, want 1", consumed)
+	}
+	if pkt.Type != PktNull {
+		t.Errorf("Type: got %v, want PktNull", pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketFlagSTM(t *testing.T) {
+	// byte 0xEF: lower nibble=0xF (FExt), upper nibble=0xE (op2N Flag)
+	data := []byte{0xEF}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Errorf("consumed: got %d, want 2", consumed)
+	}
+	if pkt.Type != PktFlag {
+		t.Errorf("Type: got %v, want PktFlag", pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketReturnsSentinelForUnmigratedHeaderSTM(t *testing.T) {
+	// lower nibble 0x1 = M8 (has payload bytes), not yet migrated
+	data := []byte{0x01}
+	_, _, err := decodeNextPacket(data, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Errorf("expected errDecodeNotImplemented, got %v", err)
+	}
+}

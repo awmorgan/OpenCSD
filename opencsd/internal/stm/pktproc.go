@@ -75,6 +75,8 @@ const (
 
 type procStateFn func(ocsd.TrcIndex) (ocsd.DatapathResp, error, bool)
 
+var errDecodeNotImplemented = errors.New("decodeNextPacket: packet type not implemented")
+
 type packetEvent struct {
 	index ocsd.TrcIndex
 	pkt   Packet
@@ -465,6 +467,24 @@ func (p *PktProc) stateWaitSync(index ocsd.TrcIndex) (ocsd.DatapathResp, error, 
 
 func (p *PktProc) stateHdr(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool) {
 	p.packetIndex = index + ocsd.TrcIndex(p.dataInUsed)
+	if p.streamSync {
+		nibbleOffset := int(p.dataInUsed) * 2
+		if p.nibble2ndValid {
+			nibbleOffset--
+		}
+		pkt, nibblesConsumed, decErr := decodeNextPacket(p.dataIn, nibbleOffset)
+		if !errors.Is(decErr, errDecodeNotImplemented) {
+			if decErr != nil {
+				return p.handleProcError(decErr)
+			}
+			for range nibblesConsumed {
+				p.readNibble()
+			}
+			p.currPacket.SetPacketType(pkt.Type, false)
+			p.procState = procSendPkt
+			return p.stateSendPkt(index)
+		}
+	}
 	if p.readNibble() {
 		p.procState = procDataState
 		p.currDecode = p.op1N[p.nibble]
@@ -1404,4 +1424,49 @@ func stmPutPacketBufRef(bufRef *[]byte, buf []byte) {
 	}
 	*bufRef = buf[:0]
 	stmPacketDataPool.Put(bufRef)
+}
+
+// getNibble extracts the nibble at position pos (measured in 4-bit units) from data.
+// pos 0 is the lower nibble of data[0], pos 1 is the upper nibble of data[0], etc.
+func getNibble(data []byte, pos int) (byte, bool) {
+	byteIdx := pos / 2
+	if byteIdx >= len(data) {
+		return 0, false
+	}
+	if pos%2 == 0 {
+		return data[byteIdx] & 0xF, true
+	}
+	return (data[byteIdx] >> 4) & 0xF, true
+}
+
+// decodeNextPacket attempts a stateless decode of the next STM packet starting
+// at nibbleOffset (measured in 4-bit nibbles from the beginning of data).
+// Returns the decoded Packet, the number of nibbles consumed, and any error.
+// errDecodeNotImplemented is returned for packet types not yet migrated to this path.
+func decodeNextPacket(data []byte, nibbleOffset int) (Packet, int, error) {
+	n0, ok := getNibble(data, nibbleOffset)
+	if !ok {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	switch n0 {
+	case 0x0: // NULL (no timestamp) — 1 nibble
+		var pkt Packet
+		pkt.SetPacketType(PktNull, false)
+		return pkt, 1, nil
+	case 0xF: // FExt — read second nibble to dispatch op2N
+		n1, ok := getNibble(data, nibbleOffset+1)
+		if !ok {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		switch n1 {
+		case 0xE: // Flag (no timestamp) — 2 nibbles
+			var pkt Packet
+			pkt.SetPacketType(PktFlag, false)
+			return pkt, 2, nil
+		default:
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+	default:
+		return Packet{}, 0, errDecodeNotImplemented
+	}
 }
