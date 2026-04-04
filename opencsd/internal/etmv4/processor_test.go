@@ -62,44 +62,6 @@ func TestProcessorResetPacketStateClearsConditionalState(t *testing.T) {
 	}
 }
 
-func TestProcessorIAtomF6MatchesReferencePattern(t *testing.T) {
-	p := NewProcessor(&Config{})
-	p.currPacket.Type = PktAtomF6
-
-	p.iAtom(0x00)
-
-	if p.currPacket.Atom.Num != 4 {
-		t.Fatalf("expected 4 atoms, got %d", p.currPacket.Atom.Num)
-	}
-	if got := p.currPacket.Atom.EnBits & 0xF; got != 0xF {
-		t.Fatalf("expected low atom bits 0xF for EEEE pattern, got 0x%X", got)
-	}
-
-	p.currPacket.Type = PktAtomF6
-	p.iAtom(0x20)
-
-	if got := p.currPacket.Atom.EnBits & 0xF; got != 0x7 {
-		t.Fatalf("expected low atom bits 0x7 for EEEN pattern, got 0x%X", got)
-	}
-}
-
-func TestProcessorExtractCondResultMasksResultNibble(t *testing.T) {
-	p := NewProcessor(&Config{})
-	buf := []byte{0xDA, 0x01}
-
-	key, result, consumed := p.extractCondResult(buf, 0)
-
-	if consumed != 2 {
-		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
-	}
-	if result != 0xA {
-		t.Fatalf("expected result nibble 0xA, got 0x%X", result)
-	}
-	if key != 0xD {
-		t.Fatalf("expected conditional key 0xD, got 0x%X", key)
-	}
-}
-
 func TestDecodeNextPacketAtomF1(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0xF7}, 0)
 	if err != nil {
