@@ -31,14 +31,6 @@ const (
 	TInfoAll      TInfoSect = 0x3F
 )
 
-type decodeAction int
-
-const (
-	decodeNotSync decodeAction = iota
-	decodePktExtension
-	decodePktASync
-)
-
 // Packet is a compatibility alias used by the stateless decoder API.
 type Packet = TracePacket
 
@@ -60,7 +52,6 @@ type Processor struct {
 	// packet data
 	currPacketData       []byte
 	currPacket           TracePacket
-	currDecode           decodeAction
 	packetIndex          ocsd.TrcIndex
 	blockIndex           ocsd.TrcIndex
 	blockBytesProcessed  int
@@ -200,7 +191,6 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 			if p.isSync {
 				p.currPacket.Type = packetTypeForHeader(p.config, dataBlock[consumed])
 			} else {
-				p.currDecode = decodeNotSync
 				p.currPacket.Type = PktNotSync
 			}
 			p.processState = ProcData
@@ -226,7 +216,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 						continue
 					}
 				} else {
-					p.runDecodeAction(nextByte)
+					p.processUnsyncedByte(nextByte)
 				}
 			}
 
@@ -2132,27 +2122,11 @@ func (p *Processor) resetPacketState() {
 func (p *Processor) resetProcessorState() {
 	p.resetStartState()
 	p.resetPacketState()
-	p.currDecode = decodeNotSync
 	p.packetIndex = 0
 	p.isSync = false
 	p.firstTraceInfo = false
 	p.sentNotsyncPacket = false
 	p.processState = ProcHdr
-}
-
-func (p *Processor) runDecodeAction(lastByte uint8) {
-	// Only three states are reachable when !p.isSync (the only path that calls this):
-	//   decodePktExtension — see iNotSync, which transitions to it on 0x00
-	//   decodePktASync     — set by iPktExtension when subtype is 0x00
-	//   default            — decodeNotSync, handled by iNotSync
-	switch p.currDecode {
-	case decodePktExtension:
-		p.iPktExtension(lastByte)
-	case decodePktASync:
-		p.iPktASync(lastByte)
-	default:
-		p.iNotSync(lastByte)
-	}
 }
 
 func (p *Processor) outputPacket() ocsd.DatapathResp {
@@ -2196,7 +2170,20 @@ func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
 // Packet handlers
 // ============================
 
-func (p *Processor) iNotSync(lastByte uint8) {
+func (p *Processor) processUnsyncedByte(lastByte uint8) {
+	switch p.currPacket.Type {
+	case PktAsync:
+		p.processUnsyncedASync(lastByte)
+	default:
+		if !p.isSync && len(p.currPacketData) > 0 && p.currPacketData[0] == 0x00 && len(p.currPacketData) <= 2 {
+			p.processUnsyncedExtension(lastByte)
+			return
+		}
+		p.processUnsyncedNotSync(lastByte)
+	}
+}
+
+func (p *Processor) processUnsyncedNotSync(lastByte uint8) {
 	if lastByte == 0x00 {
 		if len(p.currPacketData) > 1 {
 			p.dumpUnsyncedBytes = len(p.currPacketData) - 1
@@ -2205,17 +2192,21 @@ func (p *Processor) iNotSync(lastByte uint8) {
 		} else {
 			p.packetIndex = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
 		}
-		p.currDecode = decodePktExtension
 	} else if len(p.currPacketData) >= 8 {
 		p.dumpUnsyncedBytes = len(p.currPacketData)
 		p.processState = SendUnsynced
 		p.updateOnUnsyncPktIdx = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed)
 	}
 }
-func (p *Processor) iPktExtension(lastByte uint8) {
+
+func (p *Processor) processUnsyncedExtension(lastByte uint8) {
+	if len(p.currPacketData) == 1 {
+		p.packetIndex = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
+		return
+	}
+
 	if len(p.currPacketData) == 2 {
 		if !p.isSync && lastByte != 0x00 {
-			p.currDecode = decodeNotSync
 			p.currPacket.Type = PktNotSync
 			return
 		}
@@ -2228,7 +2219,6 @@ func (p *Processor) iPktExtension(lastByte uint8) {
 			p.processState = SendPkt
 		case 0x00:
 			p.currPacket.Type = PktAsync
-			p.currDecode = decodePktASync
 		default:
 			p.currPacket.Err = ocsd.ErrBadPacketSeq
 			p.processState = SendPkt
@@ -2236,10 +2226,9 @@ func (p *Processor) iPktExtension(lastByte uint8) {
 	}
 }
 
-func (p *Processor) iPktASync(lastByte uint8) {
+func (p *Processor) processUnsyncedASync(lastByte uint8) {
 	if lastByte != 0x00 {
 		if !p.isSync && len(p.currPacketData) != 12 {
-			p.currDecode = decodeNotSync
 			p.currPacket.Type = PktNotSync
 			return
 		}
