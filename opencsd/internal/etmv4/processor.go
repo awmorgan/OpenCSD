@@ -724,6 +724,17 @@ func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
 		pkt, bytesConsumed, err = decodeTraceInfoPacket(p.currPacketData, 0)
 	case header == 0x02 || header == 0x03:
 		pkt, bytesConsumed, err = decodeTimestampPacket(p.currPacketData, 0)
+	case header == uint8(PktAddrS_IS0) || header == uint8(PktAddrS_IS1) ||
+		header == uint8(ETE_PktSrcAddrS_IS0) || header == uint8(ETE_PktSrcAddrS_IS1):
+		pkt, bytesConsumed, err = decodeShortAddrPacket(p.currPacketData, 0)
+	case header == uint8(PktAddrL_32IS0) || header == uint8(PktAddrL_32IS1) ||
+		header == uint8(ETE_PktSrcAddrL_32IS0) || header == uint8(ETE_PktSrcAddrL_32IS1):
+		pkt, bytesConsumed, err = decodeLongAddr32Packet(p.currPacketData, 0)
+	case header == uint8(PktAddrL_64IS0) || header == uint8(PktAddrL_64IS1) ||
+		header == uint8(ETE_PktSrcAddrL_64IS0) || header == uint8(ETE_PktSrcAddrL_64IS1):
+		pkt, bytesConsumed, err = decodeLongAddr64Packet(p.currPacketData, 0)
+	case (header & 0xF0) == 0xA0:
+		pkt, bytesConsumed, err = decodeQPacket(p.currPacketData, 0)
 	case header == 0x81:
 		pkt, bytesConsumed, err = decodeContextPacketWithConfig(p.config, p.currPacketData, 0)
 	case header == uint8(PktAddrCtxtL_32IS0) || header == uint8(PktAddrCtxtL_32IS1) ||
@@ -774,6 +785,48 @@ func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
 		p.currPacket.CycleCount = pkt.CycleCount
 		p.currPacket.Valid.Timestamp = pkt.Valid.Timestamp
 		p.currPacket.Valid.CycleCount = pkt.Valid.CycleCount
+	case PktAddrL_32IS0, PktAddrL_32IS1, ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1:
+		p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
+		if p.currPacket.VAddrValidBits < 32 {
+			p.currPacket.VAddrValidBits = 32
+		}
+		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
+		p.currPacket.VAddrISA = pkt.VAddrISA
+		p.currPacket.PushVAddr()
+	case PktAddrL_64IS0, PktAddrL_64IS1, ETE_PktSrcAddrL_64IS0, ETE_PktSrcAddrL_64IS1:
+		p.currPacket.VAddr = pkt.VAddr
+		p.currPacket.VAddrValidBits = pkt.VAddrValidBits
+		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
+		p.currPacket.VAddrISA = pkt.VAddrISA
+		p.currPacket.PushVAddr()
+	case PktAddrS_IS0, PktAddrS_IS1, ETE_PktSrcAddrS_IS0, ETE_PktSrcAddrS_IS1:
+		addr, validBits := p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, uint32(pkt.VAddr), int(pkt.VAddrPktBits))
+		p.currPacket.VAddr = addr
+		p.currPacket.VAddrValidBits = validBits
+		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
+		p.currPacket.VAddrISA = pkt.VAddrISA
+		p.currPacket.PushVAddr()
+	case PktQ:
+		p.currPacket.QPkt = pkt.QPkt
+		if pkt.Valid.ExactMatchIdxValid {
+			p.currPacket.AddrExactMatchIdx = pkt.AddrExactMatchIdx
+			p.currPacket.Valid.ExactMatchIdxValid = true
+		}
+		if pkt.Valid.VAddrValid {
+			if pkt.VAddrPktBits == 32 {
+				p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
+				if p.currPacket.VAddrValidBits < 32 {
+					p.currPacket.VAddrValidBits = 32
+				}
+			} else {
+				addr, validBits := p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, uint32(pkt.VAddr), int(pkt.VAddrPktBits))
+				p.currPacket.VAddr = addr
+				p.currPacket.VAddrValidBits = validBits
+			}
+			p.currPacket.VAddrPktBits = pkt.VAddrPktBits
+			p.currPacket.VAddrISA = pkt.VAddrISA
+			p.currPacket.Valid.VAddrValid = true
+		}
 	case PktCtxt:
 		if pkt.Valid.Context {
 			p.currPacket.Context = pkt.Context

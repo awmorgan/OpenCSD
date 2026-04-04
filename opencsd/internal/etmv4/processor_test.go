@@ -1582,6 +1582,38 @@ func TestProcessDataFastPathShortAddrMergesWithExistingAddress(t *testing.T) {
 	}
 }
 
+func TestProcessDataFastPathShortAddrAcrossBlocks(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x96, 0x81})
+	if err != nil {
+		t.Fatalf("unexpected error on first block: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected first block fully consumed, got %d", consumed)
+	}
+	if out.count != 0 {
+		t.Fatalf("did not expect output packet from incomplete short address")
+	}
+
+	consumed, err = p.processData(2, []byte{0x23})
+	if err != nil {
+		t.Fatalf("unexpected error on second block: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected second block consumed bytes 1, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktAddrS_IS1 {
+		t.Fatalf("unexpected output packet after short-address reassembly: count=%d type=%v", out.count, out.last.Type)
+	}
+	if out.last.VAddr != 0x2302 {
+		t.Fatalf("unexpected short address after reassembly: 0x%X", out.last.VAddr)
+	}
+}
+
 func TestProcessDataFastPathLongAddr32KeepsUpperWhenContext64Bit(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
@@ -1649,6 +1681,38 @@ func TestProcessDataFastPathQLongAddrKeepsUpperWhenContext64Bit(t *testing.T) {
 	}
 	if p.currPacket.QPkt.QType != 0xB || p.currPacket.QPkt.QCount != 0x3 {
 		t.Fatalf("unexpected Q packet metadata: %+v", p.currPacket.QPkt)
+	}
+}
+
+func TestProcessDataFastPathQAcrossBlocks(t *testing.T) {
+	p := NewProcessor(&Config{RegIdr0: 0x1 << 15})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0xA5, 0x15})
+	if err != nil {
+		t.Fatalf("unexpected error on first block: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected first block fully consumed, got %d", consumed)
+	}
+	if out.count != 0 {
+		t.Fatalf("did not expect output packet from incomplete Q packet")
+	}
+
+	consumed, err = p.processData(2, []byte{0x03})
+	if err != nil {
+		t.Fatalf("unexpected error on second block: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected second block consumed bytes 1, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktQ {
+		t.Fatalf("unexpected output packet after Q reassembly: count=%d type=%v", out.count, out.last.Type)
+	}
+	if out.last.QPkt.QType != 0x5 || out.last.QPkt.QCount != 0x3 {
+		t.Fatalf("unexpected Q metadata after reassembly: %+v", out.last.QPkt)
 	}
 }
 
