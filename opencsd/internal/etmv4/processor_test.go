@@ -164,10 +164,19 @@ func TestDecodeNextPacketExceptionThreeByte(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketExceptionAmbiguousEteSizedFallsBack(t *testing.T) {
-	_, _, err := decodeNextPacket([]byte{0x06, 0x00}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for ambiguous ETE exception, got %v", err)
+func TestDecodeNextPacketExceptionAmbiguousEteSizedDefaultsToTwoByte(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x06, 0x00}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktExcept {
+		t.Fatalf("expected PktExcept, got %v", pkt.Type)
+	}
+	if pkt.ExceptionInfo.ExceptionType != 0x0 {
+		t.Fatalf("expected exception type 0x0, got 0x%X", pkt.ExceptionInfo.ExceptionType)
 	}
 }
 

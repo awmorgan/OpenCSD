@@ -823,10 +823,8 @@ func decodeExceptionPacket(data []byte, offset int) (Packet, int, error) {
 	pkt.ExceptionInfo.AddrInterp = addrInterp
 
 	if (byte1 & 0x80) == 0 {
-		// Exception types 0x0 and 0x18 require config-aware sizing in ETE mode.
-		if excepType == 0x0 || excepType == 0x18 {
-			return Packet{}, 0, errDecodeNotImplemented
-		}
+		// Without config context, default to the 2-byte exception form.
+		// Config-aware decode promotes these to ETE-specific 3-byte packets when required.
 		return pkt, 2, nil
 	}
 
