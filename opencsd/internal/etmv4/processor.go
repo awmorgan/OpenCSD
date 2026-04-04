@@ -261,383 +261,11 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				continue
 			}
 
-			if header == 0x81 {
-				pkt, bytesConsumed, err := decodeContextPacketWithConfig(p.config, dataBlock, consumed)
-				switch {
-				case err == nil:
-					p.packetIndex = packetIndex
-					p.currPacket.Type = pkt.Type
-					p.currPacket.Err = pkt.Err
-					p.currPacket.ErrHdrVal = pkt.ErrHdrVal
-					if pkt.Valid.Context {
-						p.currPacket.Context.Updated = pkt.Context.Updated
-						p.currPacket.Context.EL = pkt.Context.EL
-						p.currPacket.Context.SF = pkt.Context.SF
-						p.currPacket.Context.NS = pkt.Context.NS
-						p.currPacket.Context.NSE = pkt.Context.NSE
-						p.currPacket.Context.UpdatedV = pkt.Context.UpdatedV
-						p.currPacket.Context.UpdatedC = pkt.Context.UpdatedC
-						if pkt.Context.UpdatedV {
-							p.currPacket.Context.VMID = pkt.Context.VMID
-						}
-						if pkt.Context.UpdatedC {
-							p.currPacket.Context.CtxtID = pkt.Context.CtxtID
-						}
-						p.currPacket.Valid.Context = true
-					}
-					p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
-					consumed += bytesConsumed
-					p.blockBytesProcessed = consumed
-					resp = p.outputPacket()
-					p.resetPacketState()
-					continue
-				case errors.Is(err, errDecodeNotImplemented):
-					// Fall back to the legacy state machine while migration is in progress.
-				default:
-					return uint32(consumed), err
-				}
-			}
-
-			if header == uint8(PktAddrCtxtL_32IS0) || header == uint8(PktAddrCtxtL_32IS1) ||
-				header == uint8(PktAddrCtxtL_64IS0) || header == uint8(PktAddrCtxtL_64IS1) {
-				pkt, bytesConsumed, err := decodeAddrContextPacketWithConfig(p.config, dataBlock, consumed)
-				switch {
-				case err == nil:
-					p.packetIndex = packetIndex
-					p.currPacket.Type = pkt.Type
-					p.currPacket.Err = pkt.Err
-					p.currPacket.ErrHdrVal = pkt.ErrHdrVal
-					switch pkt.Type {
-					case PktAddrCtxtL_32IS0, PktAddrCtxtL_32IS1:
-						p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
-						if p.currPacket.VAddrValidBits < 32 {
-							p.currPacket.VAddrValidBits = 32
-						}
-						p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-						p.currPacket.VAddrISA = pkt.VAddrISA
-						p.currPacket.PushVAddr()
-					case PktAddrCtxtL_64IS0, PktAddrCtxtL_64IS1:
-						p.currPacket.VAddr = pkt.VAddr
-						p.currPacket.VAddrValidBits = pkt.VAddrValidBits
-						p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-						p.currPacket.VAddrISA = pkt.VAddrISA
-						p.currPacket.PushVAddr()
-					}
-					if pkt.Valid.Context {
-						p.currPacket.Context.Updated = pkt.Context.Updated
-						p.currPacket.Context.EL = pkt.Context.EL
-						p.currPacket.Context.SF = pkt.Context.SF
-						p.currPacket.Context.NS = pkt.Context.NS
-						p.currPacket.Context.NSE = pkt.Context.NSE
-						p.currPacket.Context.UpdatedV = pkt.Context.UpdatedV
-						p.currPacket.Context.UpdatedC = pkt.Context.UpdatedC
-						if pkt.Context.UpdatedV {
-							p.currPacket.Context.VMID = pkt.Context.VMID
-						}
-						if pkt.Context.UpdatedC {
-							p.currPacket.Context.CtxtID = pkt.Context.CtxtID
-						}
-						p.currPacket.Valid.Context = true
-					}
-					p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
-					consumed += bytesConsumed
-					p.blockBytesProcessed = consumed
-					resp = p.outputPacket()
-					p.resetPacketState()
-					continue
-				case errors.Is(err, errDecodeNotImplemented):
-					// Fall back to the legacy state machine while migration is in progress.
-				default:
-					return uint32(consumed), err
-				}
-			}
-
-			if header == 0x0C || header == 0x0D {
-				pkt, bytesConsumed, err := decodeCycleCntF2PacketWithConfig(p.config, dataBlock, consumed)
-				switch {
-				case err == nil:
-					p.packetIndex = packetIndex
-					p.currPacket.Type = pkt.Type
-					p.currPacket.Err = pkt.Err
-					p.currPacket.ErrHdrVal = pkt.ErrHdrVal
-					p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
-					p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
-					if pkt.Valid.CommitElem {
-						p.currPacket.CommitElements = pkt.CommitElements
-						p.currPacket.Valid.CommitElem = true
-					}
-					p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
-					consumed += bytesConsumed
-					p.blockBytesProcessed = consumed
-					resp = p.outputPacket()
-					p.resetPacketState()
-					continue
-				case errors.Is(err, errDecodeNotImplemented):
-					// Fall back to the legacy state machine while migration is in progress.
-				default:
-					return uint32(consumed), err
-				}
-			}
-
-			if header == 0x0E || header == 0x0F {
-				pkt, bytesConsumed, err := decodeCycleCntF1PacketWithConfig(p.config, dataBlock, consumed)
-				switch {
-				case err == nil:
-					p.packetIndex = packetIndex
-					p.currPacket.Type = pkt.Type
-					p.currPacket.Err = pkt.Err
-					p.currPacket.ErrHdrVal = pkt.ErrHdrVal
-					if pkt.Valid.CycleCount {
-						p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
-						p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
-					} else {
-						p.currPacket.CycleCount = 0
-						p.currPacket.Valid.CCExactMatch = false
-					}
-					if pkt.Valid.CommitElem {
-						p.currPacket.CommitElements = pkt.CommitElements
-						p.currPacket.Valid.CommitElem = true
-					}
-					p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
-					consumed += bytesConsumed
-					p.blockBytesProcessed = consumed
-					resp = p.outputPacket()
-					p.resetPacketState()
-					continue
-				case errors.Is(err, errDecodeNotImplemented):
-					// Fall back to the legacy state machine while migration is in progress.
-				default:
-					return uint32(consumed), err
-				}
-			}
-
-			if header == 0x06 {
-				pkt, bytesConsumed, err := decodeExceptionPacketWithConfig(p.config, dataBlock, consumed)
-				switch {
-				case err == nil:
-					p.packetIndex = packetIndex
-					p.currPacket.Type = pkt.Type
-					p.currPacket.Err = pkt.Err
-					p.currPacket.ErrHdrVal = pkt.ErrHdrVal
-					p.currPacket.ExceptionInfo = pkt.ExceptionInfo
-					if pkt.Type == ETE_PktPeReset || pkt.Type == ETE_PktTransFail {
-						p.currPacket.VAddr = 0
-					}
-					p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
-					consumed += bytesConsumed
-					p.blockBytesProcessed = consumed
-					resp = p.outputPacket()
-					p.resetPacketState()
-					continue
-				case errors.Is(err, errDecodeNotImplemented):
-					// Fall back to the legacy state machine while migration is in progress.
-				default:
-					return uint32(consumed), err
-				}
-			}
-
-			pkt, bytesConsumed, err := decodeNextPacket(dataBlock, consumed)
+			pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, dataBlock, consumed)
 			switch {
 			case err == nil:
 				p.packetIndex = packetIndex
-				p.currPacket.Type = pkt.Type
-				p.currPacket.Err = pkt.Err
-				p.currPacket.ErrHdrVal = pkt.ErrHdrVal
-				switch pkt.Type {
-				case PktAtomF1, PktAtomF2, PktAtomF3, PktAtomF4, PktAtomF5, PktAtomF6:
-					p.currPacket.Atom = pkt.Atom
-				case PktTraceInfo:
-					p.currPacket.ClearTraceInfo()
-					p.currPacket.TraceInfo = pkt.TraceInfo
-					p.currPacket.P0Key = pkt.P0Key
-					p.currPacket.CurrSpecDepth = pkt.CurrSpecDepth
-					p.currPacket.CCThreshold = pkt.CCThreshold
-					p.currPacket.Valid.TInfo = pkt.Valid.TInfo
-					p.currPacket.Valid.SpecDepthValid = pkt.Valid.SpecDepthValid
-					p.currPacket.Valid.CCThreshold = pkt.Valid.CCThreshold
-					if !p.firstTraceInfo {
-						p.currPacket.TraceInfo.InitialTInfo = true
-						p.firstTraceInfo = true
-					}
-				case PktTimestamp:
-					p.currPacket.Timestamp = pkt.Timestamp
-					p.currPacket.TSBitsChanged = pkt.TSBitsChanged
-					p.currPacket.CycleCount = pkt.CycleCount
-					p.currPacket.Valid.Timestamp = pkt.Valid.Timestamp
-					p.currPacket.Valid.CycleCount = pkt.Valid.CycleCount
-				case PktCcntF3:
-					if !p.config.CommitOpt1() {
-						p.currPacket.CommitElements = pkt.CommitElements
-						p.currPacket.Valid.CommitElem = true
-					}
-					p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
-					p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
-				case PktCcntF2:
-					p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
-					p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
-				case PktCcntF1:
-					if pkt.Valid.CycleCount {
-						p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
-						p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
-					} else {
-						p.currPacket.CycleCount = 0
-						p.currPacket.Valid.CCExactMatch = false
-					}
-				case PktMispredict, PktCancelF2, PktCancelF3:
-					p.currPacket.Atom = pkt.Atom
-					p.currPacket.CancelElements = pkt.CancelElements
-				case PktCommit:
-					p.currPacket.CommitElements = pkt.CommitElements
-				case PktCancelF1, PktCancelF1Mispred:
-					p.currPacket.CancelElements = pkt.CancelElements
-				case PktCondIF1:
-					p.currPacket.CondInstr.CondCKey = pkt.CondInstr.CondCKey
-					p.currPacket.CondInstr.CondKeySet = pkt.CondInstr.CondKeySet
-				case PktCondIF2:
-					p.currPacket.CondInstr.CondCKey = pkt.CondInstr.CondCKey
-					p.currPacket.CondInstr.CondKeySet = pkt.CondInstr.CondKeySet
-				case PktCondIF3:
-					p.currPacket.CondInstr.NumCElem = pkt.CondInstr.NumCElem
-					p.currPacket.CondInstr.F3FinalElem = pkt.CondInstr.F3FinalElem
-				case PktCondResF1:
-					p.currPacket.CondResult = pkt.CondResult
-				case PktCondResF2:
-					p.currPacket.CondResult.F2KeyIncr = pkt.CondResult.F2KeyIncr
-					p.currPacket.CondResult.Res0 = pkt.CondResult.Res0
-				case PktCondResF4:
-					p.currPacket.CondResult.Res0 = pkt.CondResult.Res0
-				case PktCondResF3:
-					p.currPacket.CondResult.F3Tokens = pkt.CondResult.F3Tokens
-				case ETE_PktITE:
-					p.currPacket.ITEPkt = pkt.ITEPkt
-				case PktAddrL_32IS0, PktAddrL_32IS1, ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1:
-					p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
-					if p.currPacket.VAddrValidBits < 32 {
-						p.currPacket.VAddrValidBits = 32
-					}
-					p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-					p.currPacket.VAddrISA = pkt.VAddrISA
-					p.currPacket.PushVAddr()
-				case PktAddrMatch, ETE_PktSrcAddrMatch:
-					p.currPacket.AddrExactMatchIdx = pkt.AddrExactMatchIdx
-					p.currPacket.Valid.ExactMatchIdxValid = pkt.Valid.ExactMatchIdxValid
-					p.currPacket.PopVAddrIdx(p.currPacket.AddrExactMatchIdx)
-					p.currPacket.PushVAddr()
-				case PktAddrS_IS0, PktAddrS_IS1, ETE_PktSrcAddrS_IS0, ETE_PktSrcAddrS_IS1:
-					addr, validBits := p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, uint32(pkt.VAddr), int(pkt.VAddrPktBits))
-					p.currPacket.VAddr = addr
-					p.currPacket.VAddrValidBits = validBits
-					p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-					p.currPacket.VAddrISA = pkt.VAddrISA
-					p.currPacket.PushVAddr()
-				case PktAddrCtxtL_32IS0, PktAddrCtxtL_32IS1:
-					p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
-					if p.currPacket.VAddrValidBits < 32 {
-						p.currPacket.VAddrValidBits = 32
-					}
-					p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-					p.currPacket.VAddrISA = pkt.VAddrISA
-					p.currPacket.PushVAddr()
-					if pkt.Valid.Context {
-						p.currPacket.Context.Updated = pkt.Context.Updated
-						p.currPacket.Context.EL = pkt.Context.EL
-						p.currPacket.Context.SF = pkt.Context.SF
-						p.currPacket.Context.NS = pkt.Context.NS
-						p.currPacket.Context.NSE = pkt.Context.NSE
-						p.currPacket.Context.UpdatedV = pkt.Context.UpdatedV
-						p.currPacket.Context.UpdatedC = pkt.Context.UpdatedC
-						if pkt.Context.UpdatedV {
-							p.currPacket.Context.VMID = pkt.Context.VMID
-						}
-						if pkt.Context.UpdatedC {
-							p.currPacket.Context.CtxtID = pkt.Context.CtxtID
-						}
-						p.currPacket.Valid.Context = true
-					}
-				case PktAddrCtxtL_64IS0, PktAddrCtxtL_64IS1:
-					p.currPacket.VAddr = pkt.VAddr
-					p.currPacket.VAddrValidBits = pkt.VAddrValidBits
-					p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-					p.currPacket.VAddrISA = pkt.VAddrISA
-					p.currPacket.PushVAddr()
-					if pkt.Valid.Context {
-						p.currPacket.Context.Updated = pkt.Context.Updated
-						p.currPacket.Context.EL = pkt.Context.EL
-						p.currPacket.Context.SF = pkt.Context.SF
-						p.currPacket.Context.NS = pkt.Context.NS
-						p.currPacket.Context.NSE = pkt.Context.NSE
-						p.currPacket.Context.UpdatedV = pkt.Context.UpdatedV
-						p.currPacket.Context.UpdatedC = pkt.Context.UpdatedC
-						if pkt.Context.UpdatedV {
-							p.currPacket.Context.VMID = pkt.Context.VMID
-						}
-						if pkt.Context.UpdatedC {
-							p.currPacket.Context.CtxtID = pkt.Context.CtxtID
-						}
-						p.currPacket.Valid.Context = true
-					}
-				case PktQ:
-					p.currPacket.QPkt = pkt.QPkt
-					if pkt.Valid.ExactMatchIdxValid {
-						p.currPacket.AddrExactMatchIdx = pkt.AddrExactMatchIdx
-						p.currPacket.Valid.ExactMatchIdxValid = true
-					}
-					if pkt.Valid.VAddrValid {
-						if pkt.VAddrPktBits == 32 {
-							p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
-							if p.currPacket.VAddrValidBits < 32 {
-								p.currPacket.VAddrValidBits = 32
-							}
-						} else {
-							addr, validBits := p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, uint32(pkt.VAddr), int(pkt.VAddrPktBits))
-							p.currPacket.VAddr = addr
-							p.currPacket.VAddrValidBits = validBits
-						}
-						p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-						p.currPacket.VAddrISA = pkt.VAddrISA
-						p.currPacket.Valid.VAddrValid = true
-					}
-				case PktCtxt:
-					if pkt.Valid.Context {
-						p.currPacket.Context.Updated = pkt.Context.Updated
-						p.currPacket.Context.EL = pkt.Context.EL
-						p.currPacket.Context.SF = pkt.Context.SF
-						p.currPacket.Context.NS = pkt.Context.NS
-						p.currPacket.Context.NSE = pkt.Context.NSE
-						p.currPacket.Context.UpdatedV = pkt.Context.UpdatedV
-						p.currPacket.Context.UpdatedC = pkt.Context.UpdatedC
-						if pkt.Context.UpdatedV {
-							p.currPacket.Context.VMID = pkt.Context.VMID
-						}
-						if pkt.Context.UpdatedC {
-							p.currPacket.Context.CtxtID = pkt.Context.CtxtID
-						}
-						p.currPacket.Valid.Context = true
-					}
-				case PktNumDsMkr, PktUnnumDsMkr:
-					p.currPacket.DsmVal = pkt.DsmVal
-				case PktEvent:
-					p.currPacket.EventVal = pkt.EventVal
-				case PktAddrL_64IS0, PktAddrL_64IS1, ETE_PktSrcAddrL_64IS0, ETE_PktSrcAddrL_64IS1:
-					p.currPacket.VAddr = pkt.VAddr
-					p.currPacket.VAddrValidBits = pkt.VAddrValidBits
-					p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-					p.currPacket.VAddrISA = pkt.VAddrISA
-					p.currPacket.PushVAddr()
-				case PktExcept:
-					p.currPacket.ExceptionInfo = pkt.ExceptionInfo
-					p.currPacket.ExceptionInfo.MType = p.config.CoreProf == ocsd.ProfileCortexM
-					if p.config.MajVersion() >= 0x5 {
-						switch p.currPacket.ExceptionInfo.ExceptionType {
-						case 0x18:
-							p.currPacket.Type = ETE_PktTransFail
-							p.currPacket.VAddr = 0
-						case 0x0:
-							p.currPacket.Type = ETE_PktPeReset
-							p.currPacket.VAddr = 0
-						}
-					}
-				}
+				p.applyDecodedPacket(pkt)
 				p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
 				consumed += bytesConsumed
 				p.blockBytesProcessed = consumed
@@ -758,75 +386,54 @@ func statelessProcDataManagedHeaderMaxLen(header uint8) (int, bool) {
 	}
 }
 
-func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
-	if len(p.currPacketData) == 0 {
-		return false, nil
+func decodeNextPacketWithConfig(config Config, data []byte, offset int) (Packet, int, error) {
+	if offset < 0 || offset >= len(data) {
+		return Packet{}, 0, fmt.Errorf("offset %d out of range", offset)
 	}
 
-	header := p.currPacketData[0]
-	var (
-		pkt           Packet
-		bytesConsumed int
-		err           error
-	)
-
+	header := data[offset]
 	switch {
-	case header == 0x01:
-		pkt, bytesConsumed, err = decodeTraceInfoPacket(p.currPacketData, 0)
-	case header == 0x02 || header == 0x03:
-		pkt, bytesConsumed, err = decodeTimestampPacket(p.currPacketData, 0)
-	case header == uint8(PktCommit) || header == uint8(PktCancelF1) || header == uint8(PktCancelF1Mispred):
-		pkt, bytesConsumed, err = decodeVariableSpecResPacket(p.currPacketData, 0)
-	case header == 0x6C:
-		pkt, bytesConsumed, err = decodeCondIF1Packet(p.currPacketData, 0)
-	case header == 0x6D:
-		pkt, bytesConsumed, err = decodeCondIF3Packet(p.currPacketData, 0)
-	case (header >= 0x68 && header <= 0x6B) || (header >= 0x6E && header <= 0x6F):
-		pkt, bytesConsumed, err = decodeCondResF1Packet(p.currPacketData, 0)
-	case header >= 0x50 && header <= 0x5F:
-		pkt, bytesConsumed, err = decodeCondResF3Packet(p.currPacketData, 0)
-	case header == uint8(PktAddrS_IS0) || header == uint8(PktAddrS_IS1) ||
-		header == uint8(ETE_PktSrcAddrS_IS0) || header == uint8(ETE_PktSrcAddrS_IS1):
-		pkt, bytesConsumed, err = decodeShortAddrPacket(p.currPacketData, 0)
-	case header == uint8(PktAddrL_32IS0) || header == uint8(PktAddrL_32IS1) ||
-		header == uint8(ETE_PktSrcAddrL_32IS0) || header == uint8(ETE_PktSrcAddrL_32IS1):
-		pkt, bytesConsumed, err = decodeLongAddr32Packet(p.currPacketData, 0)
-	case header == uint8(PktAddrL_64IS0) || header == uint8(PktAddrL_64IS1) ||
-		header == uint8(ETE_PktSrcAddrL_64IS0) || header == uint8(ETE_PktSrcAddrL_64IS1):
-		pkt, bytesConsumed, err = decodeLongAddr64Packet(p.currPacketData, 0)
-	case (header & 0xF0) == 0xA0:
-		pkt, bytesConsumed, err = decodeQPacket(p.currPacketData, 0)
 	case header == 0x81:
-		pkt, bytesConsumed, err = decodeContextPacketWithConfig(p.config, p.currPacketData, 0)
+		return decodeContextPacketWithConfig(config, data, offset)
 	case header == uint8(PktAddrCtxtL_32IS0) || header == uint8(PktAddrCtxtL_32IS1) ||
 		header == uint8(PktAddrCtxtL_64IS0) || header == uint8(PktAddrCtxtL_64IS1):
-		pkt, bytesConsumed, err = decodeAddrContextPacketWithConfig(p.config, p.currPacketData, 0)
+		return decodeAddrContextPacketWithConfig(config, data, offset)
 	case header == 0x0C || header == 0x0D:
-		pkt, bytesConsumed, err = decodeCycleCntF2PacketWithConfig(p.config, p.currPacketData, 0)
+		return decodeCycleCntF2PacketWithConfig(config, data, offset)
 	case header == 0x0E || header == 0x0F:
-		pkt, bytesConsumed, err = decodeCycleCntF1PacketWithConfig(p.config, p.currPacketData, 0)
+		return decodeCycleCntF1PacketWithConfig(config, data, offset)
 	case header == 0x06:
-		pkt, bytesConsumed, err = decodeExceptionPacketWithConfig(p.config, p.currPacketData, 0)
+		return decodeExceptionPacketWithConfig(config, data, offset)
 	default:
-		return false, nil
+		return decodeNextPacket(data, offset)
 	}
+}
 
-	if err != nil {
-		if errors.Is(err, errDecodeNotImplemented) {
-			return false, nil
-		}
-		return false, err
+func (p *Processor) applyDecodedContext(ctx Context) {
+	p.currPacket.Context.Updated = ctx.Updated
+	p.currPacket.Context.EL = ctx.EL
+	p.currPacket.Context.SF = ctx.SF
+	p.currPacket.Context.NS = ctx.NS
+	p.currPacket.Context.NSE = ctx.NSE
+	p.currPacket.Context.UpdatedV = ctx.UpdatedV
+	p.currPacket.Context.UpdatedC = ctx.UpdatedC
+	if ctx.UpdatedV {
+		p.currPacket.Context.VMID = ctx.VMID
 	}
-
-	if bytesConsumed != len(p.currPacketData) {
-		return false, nil
+	if ctx.UpdatedC {
+		p.currPacket.Context.CtxtID = ctx.CtxtID
 	}
+	p.currPacket.Valid.Context = true
+}
 
+func (p *Processor) applyDecodedPacket(pkt Packet) {
 	p.currPacket.Type = pkt.Type
 	p.currPacket.Err = pkt.Err
 	p.currPacket.ErrHdrVal = pkt.ErrHdrVal
 
 	switch pkt.Type {
+	case PktAtomF1, PktAtomF2, PktAtomF3, PktAtomF4, PktAtomF5, PktAtomF6:
+		p.currPacket.Atom = pkt.Atom
 	case PktTraceInfo:
 		p.currPacket.ClearTraceInfo()
 		p.currPacket.TraceInfo = pkt.TraceInfo
@@ -846,11 +453,40 @@ func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
 		p.currPacket.CycleCount = pkt.CycleCount
 		p.currPacket.Valid.Timestamp = pkt.Valid.Timestamp
 		p.currPacket.Valid.CycleCount = pkt.Valid.CycleCount
+	case PktCcntF3:
+		if !p.config.CommitOpt1() {
+			p.currPacket.CommitElements = pkt.CommitElements
+			p.currPacket.Valid.CommitElem = true
+		}
+		p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
+		p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
+	case PktCcntF2:
+		p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
+		p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
+		if pkt.Valid.CommitElem {
+			p.currPacket.CommitElements = pkt.CommitElements
+			p.currPacket.Valid.CommitElem = true
+		}
+	case PktCcntF1:
+		if pkt.Valid.CycleCount {
+			p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
+			p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
+		} else {
+			p.currPacket.CycleCount = 0
+			p.currPacket.Valid.CCExactMatch = false
+		}
+		if pkt.Valid.CommitElem {
+			p.currPacket.CommitElements = pkt.CommitElements
+			p.currPacket.Valid.CommitElem = true
+		}
+	case PktMispredict, PktCancelF2, PktCancelF3:
+		p.currPacket.Atom = pkt.Atom
+		p.currPacket.CancelElements = pkt.CancelElements
 	case PktCommit:
 		p.currPacket.CommitElements = pkt.CommitElements
 	case PktCancelF1, PktCancelF1Mispred:
 		p.currPacket.CancelElements = pkt.CancelElements
-	case PktCondIF1:
+	case PktCondIF1, PktCondIF2:
 		p.currPacket.CondInstr.CondCKey = pkt.CondInstr.CondCKey
 		p.currPacket.CondInstr.CondKeySet = pkt.CondInstr.CondKeySet
 	case PktCondIF3:
@@ -858,13 +494,32 @@ func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
 		p.currPacket.CondInstr.F3FinalElem = pkt.CondInstr.F3FinalElem
 	case PktCondResF1:
 		p.currPacket.CondResult = pkt.CondResult
+	case PktCondResF2:
+		p.currPacket.CondResult.F2KeyIncr = pkt.CondResult.F2KeyIncr
+		p.currPacket.CondResult.Res0 = pkt.CondResult.Res0
+	case PktCondResF4:
+		p.currPacket.CondResult.Res0 = pkt.CondResult.Res0
 	case PktCondResF3:
 		p.currPacket.CondResult.F3Tokens = pkt.CondResult.F3Tokens
+	case ETE_PktITE:
+		p.currPacket.ITEPkt = pkt.ITEPkt
 	case PktAddrL_32IS0, PktAddrL_32IS1, ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1:
 		p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
 		if p.currPacket.VAddrValidBits < 32 {
 			p.currPacket.VAddrValidBits = 32
 		}
+		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
+		p.currPacket.VAddrISA = pkt.VAddrISA
+		p.currPacket.PushVAddr()
+	case PktAddrMatch, ETE_PktSrcAddrMatch:
+		p.currPacket.AddrExactMatchIdx = pkt.AddrExactMatchIdx
+		p.currPacket.Valid.ExactMatchIdxValid = pkt.Valid.ExactMatchIdxValid
+		p.currPacket.PopVAddrIdx(p.currPacket.AddrExactMatchIdx)
+		p.currPacket.PushVAddr()
+	case PktAddrS_IS0, PktAddrS_IS1, ETE_PktSrcAddrS_IS0, ETE_PktSrcAddrS_IS1:
+		addr, validBits := p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, uint32(pkt.VAddr), int(pkt.VAddrPktBits))
+		p.currPacket.VAddr = addr
+		p.currPacket.VAddrValidBits = validBits
 		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
 		p.currPacket.VAddrISA = pkt.VAddrISA
 		p.currPacket.PushVAddr()
@@ -874,13 +529,26 @@ func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
 		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
 		p.currPacket.VAddrISA = pkt.VAddrISA
 		p.currPacket.PushVAddr()
-	case PktAddrS_IS0, PktAddrS_IS1, ETE_PktSrcAddrS_IS0, ETE_PktSrcAddrS_IS1:
-		addr, validBits := p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, uint32(pkt.VAddr), int(pkt.VAddrPktBits))
-		p.currPacket.VAddr = addr
-		p.currPacket.VAddrValidBits = validBits
+	case PktAddrCtxtL_32IS0, PktAddrCtxtL_32IS1:
+		p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
+		if p.currPacket.VAddrValidBits < 32 {
+			p.currPacket.VAddrValidBits = 32
+		}
 		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
 		p.currPacket.VAddrISA = pkt.VAddrISA
 		p.currPacket.PushVAddr()
+		if pkt.Valid.Context {
+			p.applyDecodedContext(pkt.Context)
+		}
+	case PktAddrCtxtL_64IS0, PktAddrCtxtL_64IS1:
+		p.currPacket.VAddr = pkt.VAddr
+		p.currPacket.VAddrValidBits = pkt.VAddrValidBits
+		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
+		p.currPacket.VAddrISA = pkt.VAddrISA
+		p.currPacket.PushVAddr()
+		if pkt.Valid.Context {
+			p.applyDecodedContext(pkt.Context)
+		}
 	case PktQ:
 		p.currPacket.QPkt = pkt.QPkt
 		if pkt.Valid.ExactMatchIdxValid {
@@ -904,57 +572,44 @@ func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
 		}
 	case PktCtxt:
 		if pkt.Valid.Context {
-			p.currPacket.Context = pkt.Context
-			p.currPacket.Valid.Context = true
+			p.applyDecodedContext(pkt.Context)
 		}
-	case PktAddrCtxtL_32IS0, PktAddrCtxtL_32IS1:
-		p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
-		if p.currPacket.VAddrValidBits < 32 {
-			p.currPacket.VAddrValidBits = 32
-		}
-		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-		p.currPacket.VAddrISA = pkt.VAddrISA
-		p.currPacket.PushVAddr()
-		if pkt.Valid.Context {
-			p.currPacket.Context = pkt.Context
-			p.currPacket.Valid.Context = true
-		}
-	case PktAddrCtxtL_64IS0, PktAddrCtxtL_64IS1:
-		p.currPacket.VAddr = pkt.VAddr
-		p.currPacket.VAddrValidBits = pkt.VAddrValidBits
-		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-		p.currPacket.VAddrISA = pkt.VAddrISA
-		p.currPacket.PushVAddr()
-		if pkt.Valid.Context {
-			p.currPacket.Context = pkt.Context
-			p.currPacket.Valid.Context = true
-		}
-	case PktCcntF2:
-		p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
-		p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
-		if pkt.Valid.CommitElem {
-			p.currPacket.CommitElements = pkt.CommitElements
-			p.currPacket.Valid.CommitElem = true
-		}
-	case PktCcntF1:
-		if pkt.Valid.CycleCount {
-			p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
-			p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
-		} else {
-			p.currPacket.CycleCount = 0
-			p.currPacket.Valid.CCExactMatch = false
-		}
-		if pkt.Valid.CommitElem {
-			p.currPacket.CommitElements = pkt.CommitElements
-			p.currPacket.Valid.CommitElem = true
-		}
+	case PktNumDsMkr, PktUnnumDsMkr:
+		p.currPacket.DsmVal = pkt.DsmVal
+	case PktEvent:
+		p.currPacket.EventVal = pkt.EventVal
 	case PktExcept, ETE_PktPeReset, ETE_PktTransFail:
 		p.currPacket.ExceptionInfo = pkt.ExceptionInfo
 		if pkt.Type == ETE_PktPeReset || pkt.Type == ETE_PktTransFail {
 			p.currPacket.VAddr = 0
 		}
 	}
+}
 
+func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
+	if len(p.currPacketData) == 0 {
+		return false, nil
+	}
+
+	header := p.currPacketData[0]
+	if _, managed := statelessProcDataManagedHeaderMaxLen(header); !managed {
+		return false, nil
+	}
+
+	pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, p.currPacketData, 0)
+
+	if err != nil {
+		if errors.Is(err, errDecodeNotImplemented) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	if bytesConsumed != len(p.currPacketData) {
+		return false, nil
+	}
+
+	p.applyDecodedPacket(pkt)
 	p.processState = SendPkt
 	return true, nil
 }

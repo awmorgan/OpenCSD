@@ -248,6 +248,27 @@ func TestDecodeExceptionPacketWithConfigNonEteAllowsTwoByteTypeZero(t *testing.T
 	}
 }
 
+func TestDecodeNextPacketWithConfigDelegatesDefaultPath(t *testing.T) {
+	pkt, consumed, err := decodeNextPacketWithConfig(Config{}, []byte{0xF7}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 || pkt.Type != PktAtomF1 {
+		t.Fatalf("unexpected decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketWithConfigExceptionEteReset(t *testing.T) {
+	config := Config{RegIdr1: 0x0500}
+	pkt, consumed, err := decodeNextPacketWithConfig(config, []byte{0x06, 0x00, 0x00}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 || pkt.Type != ETE_PktPeReset {
+		t.Fatalf("unexpected decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+}
+
 func TestProcessDataFastPathExceptionEteResetAndTransFail(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr1: 0x0500})
 	p.isSync = true
@@ -410,6 +431,19 @@ func TestDecodeCycleCntF2PacketWithConfigCommitOpt0(t *testing.T) {
 	}
 	if !pkt.Valid.CommitElem || pkt.CommitElements != 11 {
 		t.Fatalf("expected commit elements 11 with valid flag, got valid=%v value=%d", pkt.Valid.CommitElem, pkt.CommitElements)
+	}
+}
+
+func TestDecodeNextPacketWithConfigCycleCntF2CommitOpt0(t *testing.T) {
+	pkt, consumed, err := decodeNextPacketWithConfig(Config{}, []byte{0x0C, 0xA5}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 || pkt.Type != PktCcntF2 {
+		t.Fatalf("unexpected decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if !pkt.Valid.CommitElem || pkt.CommitElements != 11 || pkt.CycleCount != 0x5 {
+		t.Fatalf("unexpected cycle-count packet: %+v", pkt)
 	}
 }
 
@@ -2136,6 +2170,36 @@ func TestDecodeAddrContextPacketWithConfigIncludesIDs(t *testing.T) {
 	}
 	if pkt.Context.VMID != 0x7E || pkt.Context.CtxtID != 0xAABBCCDD {
 		t.Fatalf("unexpected context IDs: vmid=0x%X ctxt=0x%X", pkt.Context.VMID, pkt.Context.CtxtID)
+	}
+}
+
+func TestDecodeNextPacketWithConfigContextIncludesIDs(t *testing.T) {
+	config := Config{RegIdr2: (0x4 << 5) | (0x1 << 10)}
+	data := []byte{0x81, 0xD9, 0xAB, 0x44, 0x33, 0x22, 0x11}
+	pkt, consumed, err := decodeNextPacketWithConfig(config, data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != len(data) || pkt.Type != PktCtxt {
+		t.Fatalf("unexpected decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if !pkt.Valid.Context || !pkt.Context.UpdatedV || !pkt.Context.UpdatedC {
+		t.Fatalf("unexpected context flags: %+v", pkt.Context)
+	}
+}
+
+func TestDecodeNextPacketWithConfigAddrContextIncludesIDs(t *testing.T) {
+	config := Config{RegIdr2: (0x4 << 5) | (0x1 << 10)}
+	data := []byte{0x82, 0x04, 0x00, 0x34, 0x12, 0xC1, 0x7E, 0xDD, 0xCC, 0xBB, 0xAA}
+	pkt, consumed, err := decodeNextPacketWithConfig(config, data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != len(data) || pkt.Type != PktAddrCtxtL_32IS0 {
+		t.Fatalf("unexpected decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if pkt.VAddr != 0x12340010 || !pkt.Valid.Context {
+		t.Fatalf("unexpected addr-context packet: %+v", pkt)
 	}
 }
 
