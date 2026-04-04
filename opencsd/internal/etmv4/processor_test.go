@@ -115,7 +115,7 @@ func TestDecodeNextPacketAtomF6(t *testing.T) {
 }
 
 func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
-	_, _, err := decodeNextPacket([]byte{0x04}, 0)
+	_, _, err := decodeNextPacket([]byte{0x06}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
 		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
 	}
@@ -166,5 +166,74 @@ func TestDecodeNextPacketTimestampIncompleteFallsBack(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x02}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
 		t.Fatalf("expected errDecodeNotImplemented for incomplete timestamp, got %v", err)
+	}
+}
+
+func TestDecodeNextPacketTraceOn(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x04}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktTraceOn {
+		t.Fatalf("expected PktTraceOn, got %v", pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketEvent(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x7D}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktEvent {
+		t.Fatalf("expected PktEvent, got %v", pkt.Type)
+	}
+	if pkt.EventVal != 0xD {
+		t.Fatalf("expected event value 0xD, got 0x%X", pkt.EventVal)
+	}
+}
+
+func TestDecodeNextPacketLongAddr64IS0(t *testing.T) {
+	data := []byte{0x9D, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 9 {
+		t.Fatalf("expected 9 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktAddrL_64IS0 {
+		t.Fatalf("expected PktAddrL_64IS0, got %v", pkt.Type)
+	}
+	if pkt.VAddr != 0x10 {
+		t.Fatalf("expected address 0x10, got 0x%X", pkt.VAddr)
+	}
+	if pkt.VAddrValidBits != 64 || pkt.VAddrPktBits != 64 || pkt.VAddrISA != 0 {
+		t.Fatalf("unexpected address metadata: valid=%d pkt=%d isa=%d", pkt.VAddrValidBits, pkt.VAddrPktBits, pkt.VAddrISA)
+	}
+}
+
+func TestDecodeNextPacketLongAddr64IS1(t *testing.T) {
+	data := []byte{0x9E, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 9 {
+		t.Fatalf("expected 9 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktAddrL_64IS1 {
+		t.Fatalf("expected PktAddrL_64IS1, got %v", pkt.Type)
+	}
+	if pkt.VAddr != 0x4 {
+		t.Fatalf("expected address 0x4, got 0x%X", pkt.VAddr)
+	}
+	if pkt.VAddrValidBits != 64 || pkt.VAddrPktBits != 64 || pkt.VAddrISA != 1 {
+		t.Fatalf("unexpected address metadata: valid=%d pkt=%d isa=%d", pkt.VAddrValidBits, pkt.VAddrPktBits, pkt.VAddrISA)
 	}
 }

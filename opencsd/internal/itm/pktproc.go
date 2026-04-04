@@ -34,6 +34,8 @@ const (
 
 type procStateFn func(ocsd.TrcIndex) (ocsd.DatapathResp, error, bool)
 
+var errDecodeNotImplemented = errors.New("decodeNextPacket: packet type not implemented")
+
 type packetEvent struct {
 	index       ocsd.TrcIndex
 	pkt         Packet
@@ -456,6 +458,26 @@ func (p *PktProc) stateWaitSync(index ocsd.TrcIndex) (ocsd.DatapathResp, error, 
 
 func (p *PktProc) stateHdr(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool) {
 	p.packetIndex = index + ocsd.TrcIndex(p.dataInUsed)
+
+	if p.streamSync {
+		pkt, consumed, err := decodeNextPacket(p.dataIn, int(p.dataInUsed))
+		switch {
+		case err == nil:
+			for range consumed {
+				if _, ok := p.readByte(); !ok {
+					return ocsd.RespFatalInvalidData, io.ErrUnexpectedEOF, true
+				}
+			}
+			p.currPacket = pkt
+			p.procState = procSendPkt
+			return p.stateSendPkt(index)
+		case errors.Is(err, errDecodeNotImplemented):
+			// Fall back to the legacy state machine while migration is in progress.
+		default:
+			return ocsd.RespFatalInvalidData, err, true
+		}
+	}
+
 	err := p.ProcessHdr() // sets procState for valid headers.
 	if errResp, loopErr, errHandled := p.handleProcError(err); errHandled {
 		return errResp, loopErr, true
@@ -694,6 +716,18 @@ func (p *PktProc) readContBytes(limit int) bool {
 		bDone = ((b & 0x80) == 0x00)
 	}
 	return bDone
+}
+
+// decodeNextPacket decodes one ITM packet at offset without reading or mutating PktProc state.
+// During migration this handles overflow-only packets and falls back via sentinel for other types.
+func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
+	if offset < 0 || offset >= len(data) {
+		return Packet{}, 0, fmt.Errorf("offset %d out of range", offset)
+	}
+	if data[offset] == 0x70 {
+		return Packet{Type: PktOverflow}, 1, nil
+	}
+	return Packet{}, 0, errDecodeNotImplemented
 }
 
 func itmGetPacketBufRef() *[]byte {

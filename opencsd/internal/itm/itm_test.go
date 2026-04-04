@@ -458,3 +458,23 @@ func TestExtractContVal_SliceUnderflow(t *testing.T) {
 	proc.packetData = []byte{}
 	proc.extractContVal32()
 }
+
+func TestDecodeNextPacketOverflow(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x70}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktOverflow {
+		t.Fatalf("expected PktOverflow, got %v", pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x94}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
+	}
+}

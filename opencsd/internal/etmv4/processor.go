@@ -258,6 +258,14 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 					p.currPacket.CycleCount = pkt.CycleCount
 					p.currPacket.Valid.Timestamp = pkt.Valid.Timestamp
 					p.currPacket.Valid.CycleCount = pkt.Valid.CycleCount
+				case PktEvent:
+					p.currPacket.EventVal = pkt.EventVal
+				case PktAddrL_64IS0, PktAddrL_64IS1:
+					p.currPacket.VAddr = pkt.VAddr
+					p.currPacket.VAddrValidBits = pkt.VAddrValidBits
+					p.currPacket.VAddrPktBits = pkt.VAddrPktBits
+					p.currPacket.VAddrISA = pkt.VAddrISA
+					p.currPacket.PushVAddr()
 				}
 				p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
 				consumed += bytesConsumed
@@ -328,6 +336,14 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	}
 
 	header := data[offset]
+	if pkt, consumed, ok := decodeSimpleNoPayloadPacket(header); ok {
+		return pkt, consumed, nil
+	}
+
+	if header == uint8(PktAddrL_64IS0) || header == uint8(PktAddrL_64IS1) {
+		return decodeLongAddr64Packet(data, offset)
+	}
+
 	if header == 0x02 || header == 0x03 {
 		return decodeTimestampPacket(data, offset)
 	}
@@ -339,6 +355,16 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 
 	pkt := Packet{Type: atomType, Atom: atom}
 	return pkt, 1, nil
+}
+
+func decodeSimpleNoPayloadPacket(header uint8) (Packet, int, bool) {
+	if header == 0x04 {
+		return Packet{Type: PktTraceOn}, 1, true
+	}
+	if header >= 0x71 && header <= 0x7F {
+		return Packet{Type: PktEvent, EventVal: header & 0xF}, 1, true
+	}
+	return Packet{}, 0, false
 }
 
 func decodeTimestampPacket(data []byte, offset int) (Packet, int, error) {
@@ -372,6 +398,52 @@ func decodeTimestampPacket(data []byte, offset int) (Packet, int, error) {
 	}
 
 	return pkt, consumed, nil
+}
+
+func decodeLongAddr64Packet(data []byte, offset int) (Packet, int, error) {
+	if offset+9 > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	header := data[offset]
+	is := uint8(0)
+	pktType := PktAddrL_64IS0
+	if header == uint8(PktAddrL_64IS1) {
+		is = 1
+		pktType = PktAddrL_64IS1
+	}
+
+	value := decodeLongAddr64Value(data[offset+1:offset+9], is)
+	pkt := Packet{
+		Type:           pktType,
+		VAddr:          ocsd.VAddr(value),
+		VAddrValidBits: 64,
+		VAddrPktBits:   64,
+		VAddrISA:       is,
+	}
+	return pkt, 9, nil
+}
+
+func decodeLongAddr64Value(addrBytes []byte, is uint8) uint64 {
+	if len(addrBytes) < 8 {
+		return 0
+	}
+
+	var value uint64
+	if is == 0 {
+		value |= uint64(addrBytes[0]&0x7F) << 2
+		value |= uint64(addrBytes[1]&0x7F) << 9
+	} else {
+		value |= uint64(addrBytes[0]&0x7F) << 1
+		value |= uint64(addrBytes[1]) << 8
+	}
+	value |= uint64(addrBytes[2]) << 16
+	value |= uint64(addrBytes[3]) << 24
+	value |= uint64(addrBytes[4]) << 32
+	value |= uint64(addrBytes[5]) << 40
+	value |= uint64(addrBytes[6]) << 48
+	value |= uint64(addrBytes[7]) << 56
+	return value
 }
 
 func decodeTSField64(data []byte, stIdx int) (uint64, int, bool) {

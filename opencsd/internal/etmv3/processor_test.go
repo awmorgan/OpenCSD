@@ -10,6 +10,7 @@ package etmv3
 //   - onISyncPacket V7M path
 
 import (
+	"errors"
 	"testing"
 
 	"opencsd/internal/ocsd"
@@ -760,5 +761,38 @@ func TestProcessor_Timestamp_MultiByte(t *testing.T) {
 	pkt := sink.packets[len(sink.packets)-1]
 	if pkt.Type != PktTimestamp || pkt.Timestamp == 0 {
 		t.Error("expected non-zero multip-byte timestamp")
+	}
+}
+
+func TestDecodeNextPacketTrigger(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x0C}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktTrigger {
+		t.Fatalf("expected PktTrigger, got %v", pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketExceptionEntry(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x7E}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktExceptionEntry {
+		t.Fatalf("expected PktExceptionEntry, got %v", pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x08}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
 	}
 }

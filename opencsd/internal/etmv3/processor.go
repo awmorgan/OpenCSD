@@ -1,6 +1,7 @@
 package etmv3
 
 import (
+	"errors"
 	"fmt"
 	"opencsd/internal/ocsd"
 )
@@ -14,6 +15,8 @@ const (
 	sendPkt
 	procErr
 )
+
+var errDecodeNotImplemented = errors.New("decodeNextPacket: packet type not implemented")
 
 // PktProc implements the ETMv3 packet processor.
 // Ported from trc_pkt_proc_etmv3_impl.cpp
@@ -314,6 +317,25 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 	dataBlockSize := len(dataBlock)
 
 	for ((p.bytesProcessed < dataBlockSize) || (p.bytesProcessed == dataBlockSize && p.processState == sendPkt)) && ocsd.DataRespIsCont(resp) {
+		if p.processState == procHdr && p.streamSync && p.bytesProcessed < dataBlockSize {
+			packetIndex := index + ocsd.TrcIndex(p.bytesProcessed)
+			pkt, consumed, err := decodeNextPacket(dataBlock, p.bytesProcessed)
+			switch {
+			case err == nil:
+				fastPkt := p.currPacket
+				fastPkt.Clear()
+				fastPkt.Type = pkt.Type
+				fastPkt.Err = pkt.Err
+				resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+consumed])
+				p.bytesProcessed += consumed
+				continue
+			case errors.Is(err, errDecodeNotImplemented):
+				// Fall back to legacy state-machine decode while migration is in progress.
+			default:
+				return uint32(p.bytesProcessed), err
+			}
+		}
+
 		switch p.processState {
 		case waitSync:
 			if !p.bStartOfSync {
@@ -363,6 +385,28 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 		return uint32(p.bytesProcessed), ocsd.ErrWait
 	}
 	return uint32(p.bytesProcessed), ocsd.DataErrFromResp(resp, nil)
+}
+
+// decodeNextPacket decodes one ETMv3 packet at offset without using PktProc state.
+// During migration this only supports a subset of no-payload packet headers.
+func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
+	if offset < 0 || offset >= len(data) {
+		return Packet{}, 0, fmt.Errorf("offset %d out of range", offset)
+	}
+
+	header := data[offset]
+	switch header {
+	case 0x0C:
+		return Packet{Type: PktTrigger}, 1, nil
+	case 0x66:
+		return Packet{Type: PktIgnore}, 1, nil
+	case 0x76:
+		return Packet{Type: PktExceptionExit}, 1, nil
+	case 0x7E:
+		return Packet{Type: PktExceptionEntry}, 1, nil
+	default:
+		return Packet{}, 0, errDecodeNotImplemented
+	}
 }
 
 func (p *PktProc) waitForSync(dataBlock []byte) int {
