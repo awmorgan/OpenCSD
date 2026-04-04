@@ -97,10 +97,10 @@ func TestDecodeNextPacketAtomF6(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketTraceInfoHeaderOnlyFallsBack(t *testing.T) {
+func TestDecodeNextPacketTraceInfoHeaderOnlyNeedsMoreData(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x01}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
+	if !errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected errDecodeNeedMoreData, got %v", err)
 	}
 }
 
@@ -301,13 +301,6 @@ func TestDecodeNextPacketTimestampWithCycleCount(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketTimestampIncompleteFallsBack(t *testing.T) {
-	_, _, err := decodeNextPacket([]byte{0x02}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for incomplete timestamp, got %v", err)
-	}
-}
-
 func TestDecodeNextPacketTimestampIncompleteNeedsMoreData(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x02}, 0)
 	if !errors.Is(err, errDecodeNeedMoreData) {
@@ -379,10 +372,10 @@ func TestDecodeNextPacketCycleCntF2(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketCycleCntF2IncompleteFallsBack(t *testing.T) {
+func TestDecodeNextPacketCycleCntF2IncompleteNeedsMoreData(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x0C}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for incomplete F2 packet, got %v", err)
+	if !errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected errDecodeNeedMoreData for incomplete F2 packet, got %v", err)
 	}
 }
 
@@ -448,10 +441,10 @@ func TestDecodeNextPacketCycleCntF1NoCount(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketCycleCntF1IncompleteFallsBack(t *testing.T) {
+func TestDecodeNextPacketCycleCntF1IncompleteNeedsMoreData(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x0E}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for incomplete F1 packet, got %v", err)
+	if !errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected errDecodeNeedMoreData for incomplete F1 packet, got %v", err)
 	}
 }
 
@@ -749,10 +742,10 @@ func TestDecodeNextPacketSpecResVariablePackets(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketSpecResVariableIncompleteFallsBack(t *testing.T) {
+func TestDecodeNextPacketSpecResVariableIncompleteNeedsMoreData(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x2D}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for incomplete commit packet, got %v", err)
+	if !errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected errDecodeNeedMoreData for incomplete commit packet, got %v", err)
 	}
 }
 
@@ -782,10 +775,10 @@ func TestDecodeNextPacketCondResF3(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketCondResF3IncompleteFallsBack(t *testing.T) {
+func TestDecodeNextPacketCondResF3IncompleteNeedsMoreData(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x50}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for incomplete CondResF3 packet, got %v", err)
+	if !errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected errDecodeNeedMoreData for incomplete CondResF3 packet, got %v", err)
 	}
 }
 
@@ -869,10 +862,10 @@ func TestDecodeNextPacketCondResF1(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketCondResF1IncompleteFallsBack(t *testing.T) {
+func TestDecodeNextPacketCondResF1IncompleteNeedsMoreData(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x68, 0x5A}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for incomplete CondResF1 packet, got %v", err)
+	if !errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected errDecodeNeedMoreData for incomplete CondResF1 packet, got %v", err)
 	}
 }
 
@@ -1377,10 +1370,10 @@ func TestDecodeNextPacketTraceInfoMultipleSections(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketTraceInfoIncompleteFallsBack(t *testing.T) {
+func TestDecodeNextPacketTraceInfoIncompleteNeedsMoreData(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x01, 0x01}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for incomplete trace info, got %v", err)
+	if !errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected errDecodeNeedMoreData for incomplete trace info, got %v", err)
 	}
 }
 
@@ -1643,10 +1636,10 @@ func TestDecodeNextPacketEteSrcShortAddrIS1(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketShortAddrIncompleteFallsBack(t *testing.T) {
+func TestDecodeNextPacketShortAddrIncompleteNeedsMoreData(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x96, 0x80}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for incomplete short address, got %v", err)
+	if !errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected errDecodeNeedMoreData for incomplete short address, got %v", err)
 	}
 }
 
@@ -1870,10 +1863,10 @@ func TestDecodeNextPacketExtensionAsyncMalformed(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketExtensionIncompleteFallsBack(t *testing.T) {
+func TestDecodeNextPacketExtensionIncompleteNeedsMoreData(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x00}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for incomplete extension, got %v", err)
+	if !errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected errDecodeNeedMoreData for incomplete extension, got %v", err)
 	}
 }
 
@@ -1937,10 +1930,10 @@ func TestDecodeNextPacketITE(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketITEIncompleteFallsBack(t *testing.T) {
+func TestDecodeNextPacketITEIncompleteNeedsMoreData(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x09, 0x02}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for incomplete ITE packet, got %v", err)
+	if !errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected errDecodeNeedMoreData for incomplete ITE packet, got %v", err)
 	}
 }
 
@@ -2076,24 +2069,24 @@ func TestProcessDataFastPathQReservedSubtype(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketQCountOnlyIncompleteFallsBack(t *testing.T) {
+func TestDecodeNextPacketQCountOnlyIncompleteNeedsMoreData(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0xAC}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for incomplete Q count packet, got %v", err)
+	if !errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected errDecodeNeedMoreData for incomplete Q count packet, got %v", err)
 	}
 }
 
-func TestDecodeNextPacketQShortAddrIncompleteFallsBack(t *testing.T) {
+func TestDecodeNextPacketQShortAddrIncompleteNeedsMoreData(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0xA6, 0x80}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for incomplete Q short address, got %v", err)
+	if !errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected errDecodeNeedMoreData for incomplete Q short address, got %v", err)
 	}
 }
 
-func TestDecodeNextPacketQLongAddrIncompleteFallsBack(t *testing.T) {
+func TestDecodeNextPacketQLongAddrIncompleteNeedsMoreData(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0xAB, 0x02, 0x01, 0x34}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for incomplete Q long address, got %v", err)
+	if !errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected errDecodeNeedMoreData for incomplete Q long address, got %v", err)
 	}
 }
 
