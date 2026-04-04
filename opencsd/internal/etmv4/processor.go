@@ -830,7 +830,7 @@ func decodeExtensionPacket(data []byte, offset int) (Packet, int, error) {
 		}
 		return Packet{Type: PktAsync}, 12, nil
 	default:
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{Type: PktExtension, Err: ocsd.ErrBadPacketSeq}, 2, nil
 	}
 }
 

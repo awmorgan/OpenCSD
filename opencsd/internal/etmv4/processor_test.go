@@ -1480,6 +1480,46 @@ func TestDecodeNextPacketExtensionIncompleteFallsBack(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketExtensionUnknownSubtypeProducesPacketError(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x00, 0x7A}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktExtension {
+		t.Fatalf("expected PktExtension, got %v", pkt.Type)
+	}
+	if !errors.Is(pkt.Err, ocsd.ErrBadPacketSeq) {
+		t.Fatalf("expected ErrBadPacketSeq, got %v", pkt.Err)
+	}
+}
+
+func TestProcessDataFastPathExtensionUnknownSubtypeProducesPacketError(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x00, 0x7A})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if out.count != 1 {
+		t.Fatalf("expected one output packet, got %d", out.count)
+	}
+	if out.last.Type != PktExtension {
+		t.Fatalf("expected PktExtension output, got %v", out.last.Type)
+	}
+	if !errors.Is(out.last.Err, ocsd.ErrBadPacketSeq) {
+		t.Fatalf("expected ErrBadPacketSeq output, got %v", out.last.Err)
+	}
+}
+
 func TestDecodeNextPacketITE(t *testing.T) {
 	data := []byte{0x09, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
 	pkt, consumed, err := decodeNextPacket(data, 0)
