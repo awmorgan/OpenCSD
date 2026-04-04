@@ -725,8 +725,35 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		return Packet{}, 0, fmt.Errorf("offset %d out of range", offset)
 	}
 	header := data[offset]
+	if header == 0x00 {
+		for i := offset + 1; i < len(data); i++ {
+			if data[i] == 0x80 {
+				return Packet{Type: PktAsync}, i - offset + 1, nil
+			}
+			if data[i] != 0x00 {
+				return Packet{}, 0, errDecodeNotImplemented
+			}
+		}
+		return Packet{}, 0, errDecodeNotImplemented
+	}
 	if header == 0x70 {
 		return Packet{Type: PktOverflow}, 1, nil
+	}
+	if (header&0x0F) == 0x00 && (header&0xF0) != 0x00 && (header&0xF0) != 0x70 {
+		pkt := Packet{Type: PktTSLocal}
+		if (header & 0x80) == 0 {
+			pkt.SrcID = 0
+			pkt.SetValue(uint32((header>>4)&0x7), 1)
+			return pkt, 1, nil
+		}
+
+		pkt.SrcID = (header >> 4) & 0x3
+		value, n, ok := decodeContField32NoOverflow(data, offset+1, 4)
+		if !ok {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		pkt.SetValue(value, uint8(n))
+		return pkt, 1 + n, nil
 	}
 	if (header & 0x03) != 0x00 {
 		payloadBytes := int(header & 0x3)
@@ -755,6 +782,38 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		return pkt, 1 + payloadBytes, nil
 	}
 	return Packet{}, 0, errDecodeNotImplemented
+}
+
+func decodeContField32NoOverflow(data []byte, start int, limit int) (uint32, int, bool) {
+	if start < 0 || start >= len(data) || limit <= 0 {
+		return 0, 0, false
+	}
+
+	var value uint32
+	for i := 0; i < limit; i++ {
+		idx := start + i
+		if idx >= len(data) {
+			return 0, 0, false
+		}
+		b := data[idx]
+		shift := i * 7
+		if shift >= 32 {
+			return 0, 0, false
+		}
+		part := uint32(b & 0x7F)
+		if shift > 25 {
+			maxPart := uint32((uint64(1) << uint(32-shift)) - 1)
+			if part > maxPart {
+				return 0, 0, false
+			}
+		}
+		value |= part << shift
+		if (b & 0x80) == 0 {
+			return value, i + 1, true
+		}
+	}
+
+	return 0, 0, false
 }
 
 func itmGetPacketBufRef() *[]byte {

@@ -523,3 +523,55 @@ func TestDecodeNextPacketStimulusIncompleteFallsBack(t *testing.T) {
 		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
 	}
 }
+
+func TestDecodeNextPacketITMAsync(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 6 {
+		t.Fatalf("expected 6 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktAsync {
+		t.Fatalf("expected PktAsync, got %v", pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketITMLocalTSSync(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x20}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktTSLocal {
+		t.Fatalf("expected PktTSLocal, got %v", pkt.Type)
+	}
+	if pkt.SrcID != 0 || pkt.Value != 0x2 || pkt.ValSz != 1 {
+		t.Fatalf("unexpected local TS decode: src=0x%X value=0x%X size=%d", pkt.SrcID, pkt.Value, pkt.ValSz)
+	}
+}
+
+func TestDecodeNextPacketITMLocalTSCont(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0xD0, 0x01}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktTSLocal {
+		t.Fatalf("expected PktTSLocal, got %v", pkt.Type)
+	}
+	if pkt.SrcID != 0x1 || pkt.Value != 0x1 || pkt.ValSz != 1 {
+		t.Fatalf("unexpected local TS continuation decode: src=0x%X value=0x%X size=%d", pkt.SrcID, pkt.Value, pkt.ValSz)
+	}
+}
+
+func TestDecodeNextPacketITMAsyncIncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x00, 0x00, 0x00}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
+	}
+}
