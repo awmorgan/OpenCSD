@@ -411,6 +411,31 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				}
 			}
 
+			if header == 0x06 {
+				pkt, bytesConsumed, err := decodeExceptionPacketWithConfig(p.config, dataBlock, consumed)
+				switch {
+				case err == nil:
+					p.packetIndex = packetIndex
+					p.currPacket.Type = pkt.Type
+					p.currPacket.Err = pkt.Err
+					p.currPacket.ErrHdrVal = pkt.ErrHdrVal
+					p.currPacket.ExceptionInfo = pkt.ExceptionInfo
+					if pkt.Type == ETE_PktPeReset || pkt.Type == ETE_PktTransFail {
+						p.currPacket.VAddr = 0
+					}
+					p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
+					consumed += bytesConsumed
+					p.blockBytesProcessed = consumed
+					resp = p.outputPacket()
+					p.resetPacketState()
+					continue
+				case errors.Is(err, errDecodeNotImplemented):
+					// Fall back to the legacy state machine while migration is in progress.
+				default:
+					return uint32(consumed), err
+				}
+			}
+
 			pkt, bytesConsumed, err := decodeNextPacket(dataBlock, consumed)
 			switch {
 			case err == nil:
@@ -864,6 +889,53 @@ func decodeExceptionPacket(data []byte, offset int) (Packet, int, error) {
 	pkt.ExceptionInfo.ExceptionType |= (uint16(byte2) & 0x1F) << 5
 	pkt.ExceptionInfo.MFaultPending = ((byte2 >> 5) & 0x1) != 0
 	return pkt, 3, nil
+}
+
+func decodeExceptionPacketWithConfig(config Config, data []byte, offset int) (Packet, int, error) {
+	if offset+2 > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	byte1 := data[offset+1]
+	excepType := uint16((byte1 >> 1) & 0x1F)
+	addrInterp := (byte1&0x40)>>5 | (byte1 & 0x1)
+	hasExtType := (byte1 & 0x80) != 0
+
+	requireThreeBytes := hasExtType
+	if config.MajVersion() >= 0x5 && (excepType == 0x0 || excepType == 0x18) {
+		requireThreeBytes = true
+	}
+
+	pkt := Packet{Type: PktExcept}
+	pkt.ExceptionInfo.ExceptionType = excepType
+	pkt.ExceptionInfo.AddrInterp = addrInterp
+	pkt.ExceptionInfo.MType = config.CoreProf == ocsd.ProfileCortexM
+
+	consumed := 2
+	if requireThreeBytes {
+		if offset+3 > len(data) {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		if hasExtType {
+			byte2 := data[offset+2]
+			pkt.ExceptionInfo.ExceptionType |= (uint16(byte2) & 0x1F) << 5
+			pkt.ExceptionInfo.MFaultPending = ((byte2 >> 5) & 0x1) != 0
+		}
+		consumed = 3
+	}
+
+	if config.MajVersion() >= 0x5 {
+		switch pkt.ExceptionInfo.ExceptionType {
+		case 0x18:
+			pkt.Type = ETE_PktTransFail
+			pkt.VAddr = 0
+		case 0x0:
+			pkt.Type = ETE_PktPeReset
+			pkt.VAddr = 0
+		}
+	}
+
+	return pkt, consumed, nil
 }
 
 func decodeTraceInfoPacket(data []byte, offset int) (Packet, int, error) {

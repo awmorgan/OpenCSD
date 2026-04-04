@@ -209,6 +209,74 @@ func TestDecodeNextPacketExceptionAmbiguousEteSizedFallsBack(t *testing.T) {
 	}
 }
 
+func TestDecodeExceptionPacketWithConfigEteResetAndTransFail(t *testing.T) {
+	config := Config{RegIdr1: 0x0500}
+
+	pkt, consumed, err := decodeExceptionPacketWithConfig(config, []byte{0x06, 0x00, 0x00}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 bytes consumed for ETE reset, got %d", consumed)
+	}
+	if pkt.Type != ETE_PktPeReset {
+		t.Fatalf("expected ETE_PktPeReset, got %v", pkt.Type)
+	}
+
+	pkt, consumed, err = decodeExceptionPacketWithConfig(config, []byte{0x06, 0x30, 0x00}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 bytes consumed for ETE trans-fail, got %d", consumed)
+	}
+	if pkt.Type != ETE_PktTransFail {
+		t.Fatalf("expected ETE_PktTransFail, got %v", pkt.Type)
+	}
+}
+
+func TestDecodeExceptionPacketWithConfigNonEteAllowsTwoByteTypeZero(t *testing.T) {
+	pkt, consumed, err := decodeExceptionPacketWithConfig(Config{}, []byte{0x06, 0x00}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktExcept {
+		t.Fatalf("expected PktExcept, got %v", pkt.Type)
+	}
+}
+
+func TestProcessDataFastPathExceptionEteResetAndTransFail(t *testing.T) {
+	p := NewProcessor(&Config{RegIdr1: 0x0500})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x06, 0x00, 0x00})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != ETE_PktPeReset {
+		t.Fatalf("unexpected first output packet: count=%d type=%v", out.count, out.last.Type)
+	}
+
+	consumed, err = p.processData(3, []byte{0x06, 0x30, 0x00})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
+	}
+	if out.count != 2 || out.last.Type != ETE_PktTransFail {
+		t.Fatalf("unexpected second output packet: count=%d type=%v", out.count, out.last.Type)
+	}
+}
+
 func TestDecodeNextPacketTimestampNoCycleCount(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x02, 0x2A}, 0)
 	if err != nil {
