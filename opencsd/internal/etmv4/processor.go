@@ -301,6 +301,14 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 					p.currPacket.CancelElements = pkt.CancelElements
 				case PktCondIF2:
 					p.currPacket.CondInstr.CondCKey = pkt.CondInstr.CondCKey
+				case PktCondIF3:
+					p.currPacket.CondInstr.NumCElem = pkt.CondInstr.NumCElem
+					p.currPacket.CondInstr.F3FinalElem = pkt.CondInstr.F3FinalElem
+				case PktCondResF2:
+					p.currPacket.CondResult.F2KeyIncr = pkt.CondResult.F2KeyIncr
+					p.currPacket.CondResult.Res0 = pkt.CondResult.Res0
+				case PktCondResF4:
+					p.currPacket.CondResult.Res0 = pkt.CondResult.Res0
 				case PktCondResF3:
 					p.currPacket.CondResult.F3Tokens = pkt.CondResult.F3Tokens
 				case ETE_PktITE:
@@ -506,6 +514,18 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		return decodeCondIF2Packet(header), 1, nil
 	}
 
+	if header == 0x6D {
+		return decodeCondIF3Packet(data, offset)
+	}
+
+	if (header >= 0x48 && header <= 0x4A) || (header >= 0x4C && header <= 0x4E) {
+		return decodeCondResF2Packet(header)
+	}
+
+	if header >= 0x44 && header <= 0x46 {
+		return decodeCondResF4Packet(header)
+	}
+
 	if header >= 0x50 && header <= 0x5F {
 		return decodeCondResF3Packet(data, offset)
 	}
@@ -614,7 +634,7 @@ func (p *Processor) canUseStatelessDecodeResult(pktType PktType) bool {
 		return p.config.MajVersion() >= 0x5 && p.config.MinVersion() >= 0x3
 	case PktCondFlush:
 		return p.config.HasCondTrace() && p.config.EnabledCondITrace() != CondTrDis
-	case PktCondIF2, PktCondResF3:
+	case PktCondIF2, PktCondIF3, PktCondResF2, PktCondResF3, PktCondResF4:
 		return p.config.HasCondTrace() && p.config.EnabledCondITrace() != CondTrDis
 	case PktIgnore:
 		return p.config.FullVersion() >= 0x43
@@ -948,6 +968,34 @@ func decodeCondIF2Packet(header uint8) Packet {
 	pkt := Packet{Type: PktCondIF2}
 	pkt.CondInstr.CondCKey = uint32(header & 0x3)
 	return pkt
+}
+
+func decodeCondIF3Packet(data []byte, offset int) (Packet, int, error) {
+	if offset+2 > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	payload := data[offset+1]
+	pkt := Packet{Type: PktCondIF3}
+	pkt.CondInstr.NumCElem = uint8((payload>>1)&0x3F) + (payload & 0x1)
+	pkt.CondInstr.F3FinalElem = (payload & 0x1) == 0x1
+	return pkt, 2, nil
+}
+
+func decodeCondResF2Packet(header uint8) (Packet, int, error) {
+	pkt := Packet{Type: PktCondResF2}
+	if (header & 0x4) != 0 {
+		pkt.CondResult.F2KeyIncr = 2
+	} else {
+		pkt.CondResult.F2KeyIncr = 1
+	}
+	pkt.CondResult.Res0 = header & 0x3
+	return pkt, 1, nil
+}
+
+func decodeCondResF4Packet(header uint8) (Packet, int, error) {
+	pkt := Packet{Type: PktCondResF4}
+	pkt.CondResult.Res0 = header & 0x3
+	return pkt, 1, nil
 }
 
 func decodeCondResF3Packet(data []byte, offset int) (Packet, int, error) {

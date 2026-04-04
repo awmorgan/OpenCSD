@@ -611,6 +611,43 @@ func TestDecodeNextPacketCondResF3IncompleteFallsBack(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketCondIF3(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x6D, 0x07}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 || pkt.Type != PktCondIF3 {
+		t.Fatalf("unexpected CondIF3 decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if pkt.CondInstr.NumCElem != 4 || !pkt.CondInstr.F3FinalElem {
+		t.Fatalf("unexpected CondIF3 payload: num=%d final=%v", pkt.CondInstr.NumCElem, pkt.CondInstr.F3FinalElem)
+	}
+}
+
+func TestDecodeNextPacketCondResF2AndF4(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x4E}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 || pkt.Type != PktCondResF2 {
+		t.Fatalf("unexpected CondResF2 decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if pkt.CondResult.F2KeyIncr != 2 || pkt.CondResult.Res0 != 0x2 {
+		t.Fatalf("unexpected CondResF2 payload: incr=%d res=%d", pkt.CondResult.F2KeyIncr, pkt.CondResult.Res0)
+	}
+
+	pkt, consumed, err = decodeNextPacket([]byte{0x46}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 || pkt.Type != PktCondResF4 {
+		t.Fatalf("unexpected CondResF4 decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if pkt.CondResult.Res0 != 0x2 {
+		t.Fatalf("unexpected CondResF4 payload: res=%d", pkt.CondResult.Res0)
+	}
+}
+
 func TestProcessDataFastPathSpecResVariablePackets(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
@@ -666,6 +703,39 @@ func TestProcessDataFastPathConditionalPackets(t *testing.T) {
 	}
 	if out.last.CondResult.F3Tokens != 0xABC {
 		t.Fatalf("expected F3Tokens 0xABC, got 0x%X", out.last.CondResult.F3Tokens)
+	}
+
+	consumed, err = p.processData(3, []byte{0x6D, 0x07})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 || out.count != 3 || out.last.Type != PktCondIF3 {
+		t.Fatalf("unexpected CondIF3 output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	}
+	if out.last.CondInstr.NumCElem != 4 || !out.last.CondInstr.F3FinalElem {
+		t.Fatalf("unexpected CondIF3 output payload: num=%d final=%v", out.last.CondInstr.NumCElem, out.last.CondInstr.F3FinalElem)
+	}
+
+	consumed, err = p.processData(5, []byte{0x4E})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 || out.count != 4 || out.last.Type != PktCondResF2 {
+		t.Fatalf("unexpected CondResF2 output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	}
+	if out.last.CondResult.F2KeyIncr != 2 || out.last.CondResult.Res0 != 0x2 {
+		t.Fatalf("unexpected CondResF2 output payload: incr=%d res=%d", out.last.CondResult.F2KeyIncr, out.last.CondResult.Res0)
+	}
+
+	consumed, err = p.processData(6, []byte{0x46})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 || out.count != 5 || out.last.Type != PktCondResF4 {
+		t.Fatalf("unexpected CondResF4 output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	}
+	if out.last.CondResult.Res0 != 0x2 {
+		t.Fatalf("unexpected CondResF4 output payload: res=%d", out.last.CondResult.Res0)
 	}
 }
 
