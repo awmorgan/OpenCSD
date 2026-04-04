@@ -682,6 +682,11 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 					if handled {
 						continue
 					}
+					header := p.currPacketData[0]
+					if maxLen, managed := statelessProcDataManagedHeaderMaxLen(header); managed && len(p.currPacketData) <= maxLen {
+						// Keep accumulating bytes for stateless decode completion.
+						continue
+					}
 				}
 				p.runDecodeAction(nextByte)
 			}
@@ -705,6 +710,52 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 	}
 
 	return uint32(consumed), ocsd.DataErrFromResp(resp, nil)
+}
+
+func statelessProcDataManagedHeaderMaxLen(header uint8) (int, bool) {
+	switch {
+	case header == 0x01:
+		return 31, true // TraceInfo: 1 hdr + up to 6 control bytes + 5x5-byte fields
+	case header == 0x02 || header == 0x03:
+		return 13, true // Timestamp: 1 hdr + 9-byte TS + 3-byte CC
+	case header == uint8(PktCommit) || header == uint8(PktCancelF1) || header == uint8(PktCancelF1Mispred):
+		return 6, true // 1 hdr + 5-byte cont field
+	case header == 0x6C:
+		return 6, true // 1 hdr + 5-byte cont field
+	case header == 0x6D:
+		return 2, true
+	case (header >= 0x68 && header <= 0x6B) || (header >= 0x6E && header <= 0x6F):
+		return 13, true // 1 hdr + two 6-byte cond-result fields
+	case header >= 0x50 && header <= 0x5F:
+		return 2, true
+	case header == uint8(PktAddrS_IS0) || header == uint8(PktAddrS_IS1) ||
+		header == uint8(ETE_PktSrcAddrS_IS0) || header == uint8(ETE_PktSrcAddrS_IS1):
+		return 3, true
+	case header == uint8(PktAddrL_32IS0) || header == uint8(PktAddrL_32IS1) ||
+		header == uint8(ETE_PktSrcAddrL_32IS0) || header == uint8(ETE_PktSrcAddrL_32IS1):
+		return 5, true
+	case header == uint8(PktAddrL_64IS0) || header == uint8(PktAddrL_64IS1) ||
+		header == uint8(ETE_PktSrcAddrL_64IS0) || header == uint8(ETE_PktSrcAddrL_64IS1):
+		return 9, true
+	case (header & 0xF0) == 0xA0:
+		return 11, true // Q packet: worst-case 1 hdr + 5-byte addr/count payload pairs
+	case header == 0x81:
+		return 10, true // 1 hdr + 1 info + 4-byte VMID + 4-byte CtxtID
+	case header == uint8(PktAddrCtxtL_32IS0) || header == uint8(PktAddrCtxtL_32IS1):
+		return 14, true // 1 hdr + 4-byte addr + 1 info + IDs
+	case header == uint8(PktAddrCtxtL_64IS0) || header == uint8(PktAddrCtxtL_64IS1):
+		return 18, true // 1 hdr + 8-byte addr + 1 info + IDs
+	case header == 0x0C || header == 0x0D:
+		return 2, true
+	case header == 0x0E:
+		return 9, true // 1 hdr + 5-byte commit + 3-byte count
+	case header == 0x0F:
+		return 6, true // 1 hdr + 5-byte commit
+	case header == 0x06:
+		return 3, true
+	default:
+		return 0, false
+	}
 }
 
 func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
