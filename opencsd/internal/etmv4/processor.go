@@ -289,13 +289,15 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 					p.currPacket.Valid.ExactMatchIdxValid = pkt.Valid.ExactMatchIdxValid
 					p.currPacket.PopVAddrIdx(p.currPacket.AddrExactMatchIdx)
 					p.currPacket.PushVAddr()
-				case PktAddrS_IS0, PktAddrS_IS1:
+				case PktAddrS_IS0, PktAddrS_IS1, ETE_PktSrcAddrS_IS0, ETE_PktSrcAddrS_IS1:
 					addr, validBits := p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, uint32(pkt.VAddr), int(pkt.VAddrPktBits))
 					p.currPacket.VAddr = addr
 					p.currPacket.VAddrValidBits = validBits
 					p.currPacket.VAddrPktBits = pkt.VAddrPktBits
 					p.currPacket.VAddrISA = pkt.VAddrISA
 					p.currPacket.PushVAddr()
+				case PktQ:
+					p.currPacket.QPkt = pkt.QPkt
 				case PktEvent:
 					p.currPacket.EventVal = pkt.EventVal
 				case PktAddrL_64IS0, PktAddrL_64IS1:
@@ -417,6 +419,14 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		return decodeShortAddrPacket(data, offset)
 	}
 
+	if header == uint8(ETE_PktSrcAddrS_IS0) || header == uint8(ETE_PktSrcAddrS_IS1) {
+		return decodeShortAddrPacket(data, offset)
+	}
+
+	if (header & 0xF0) == 0xA0 {
+		return decodeQPacket(data, offset)
+	}
+
 	if header == uint8(PktAddrL_32IS0) || header == uint8(PktAddrL_32IS1) {
 		return decodeLongAddr32Packet(data, offset)
 	}
@@ -464,6 +474,10 @@ func (p *Processor) canUseStatelessDecodeResult(pktType PktType) bool {
 		return p.config.FullVersion() >= 0x46
 	case ETE_PktSrcAddrMatch:
 		return p.config.FullVersion() >= 0x50
+	case ETE_PktSrcAddrS_IS0, ETE_PktSrcAddrS_IS1:
+		return p.config.FullVersion() >= 0x50
+	case PktQ:
+		return p.config.HasQElem()
 	default:
 		return true
 	}
@@ -762,9 +776,15 @@ func decodeShortAddrPacket(data []byte, offset int) (Packet, int, error) {
 	header := data[offset]
 	is := uint8(0)
 	pktType := PktAddrS_IS0
-	if header == uint8(PktAddrS_IS1) {
+	if header == uint8(PktAddrS_IS1) || header == uint8(ETE_PktSrcAddrS_IS1) {
 		is = 1
 		pktType = PktAddrS_IS1
+	}
+	if header == uint8(ETE_PktSrcAddrS_IS0) {
+		pktType = ETE_PktSrcAddrS_IS0
+	}
+	if header == uint8(ETE_PktSrcAddrS_IS1) {
+		pktType = ETE_PktSrcAddrS_IS1
 	}
 
 	value, bits, payloadConsumed, ok := decodeShortAddrPayload(data, offset+1, is)
@@ -808,6 +828,37 @@ func decodeShortAddrPayload(data []byte, stIdx int, is uint8) (value uint32, bit
 
 	bits += isShift
 	return value, bits, consumed, true
+}
+
+func decodeQPacket(data []byte, offset int) (Packet, int, error) {
+	header := data[offset]
+	qType := header & 0xF
+
+	pkt := Packet{Type: PktQ}
+
+	switch qType {
+	case 0xC:
+		if offset+1 >= len(data) {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		count, n, ok := decodeContField32(data, offset+1, 5)
+		if !ok {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		pkt.QPkt = QPkt{
+			QCount:       count,
+			AddrPresent:  true,
+			AddrMatch:    false,
+			CountPresent: true,
+			QType:        qType,
+		}
+		return pkt, 1 + n, nil
+	case 0xF:
+		pkt.QPkt = QPkt{QType: qType}
+		return pkt, 1, nil
+	default:
+		return Packet{}, 0, errDecodeNotImplemented
+	}
 }
 
 func decodeLongAddr64Value(addrBytes []byte, is uint8) uint64 {

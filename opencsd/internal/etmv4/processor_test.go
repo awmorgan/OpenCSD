@@ -539,6 +539,25 @@ func TestDecodeNextPacketShortAddrIS1TwoByte(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketEteSrcShortAddrIS1(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0xB5, 0x02}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != ETE_PktSrcAddrS_IS1 {
+		t.Fatalf("expected ETE_PktSrcAddrS_IS1, got %v", pkt.Type)
+	}
+	if pkt.VAddr != 0x4 {
+		t.Fatalf("expected short address 0x4, got 0x%X", pkt.VAddr)
+	}
+	if pkt.VAddrPktBits != 8 || pkt.VAddrValidBits != 8 || pkt.VAddrISA != 1 {
+		t.Fatalf("unexpected short address metadata: valid=%d pkt=%d isa=%d", pkt.VAddrValidBits, pkt.VAddrPktBits, pkt.VAddrISA)
+	}
+}
+
 func TestDecodeNextPacketShortAddrIncompleteFallsBack(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x96, 0x80}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
@@ -687,5 +706,47 @@ func TestDecodeNextPacketITEIncompleteFallsBack(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x09, 0x02}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
 		t.Fatalf("expected errDecodeNotImplemented for incomplete ITE packet, got %v", err)
+	}
+}
+
+func TestDecodeNextPacketQCountOnly(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0xAC, 0x2A}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktQ {
+		t.Fatalf("expected PktQ, got %v", pkt.Type)
+	}
+	if pkt.QPkt.QType != 0xC || !pkt.QPkt.CountPresent || pkt.QPkt.QCount != 0x2A {
+		t.Fatalf("unexpected Q packet decode: %+v", pkt.QPkt)
+	}
+}
+
+func TestDecodeNextPacketQTypeF(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0xAF}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktQ {
+		t.Fatalf("expected PktQ, got %v", pkt.Type)
+	}
+	if pkt.QPkt.QType != 0xF {
+		t.Fatalf("expected QType 0xF, got 0x%X", pkt.QPkt.QType)
+	}
+	if pkt.QPkt.CountPresent {
+		t.Fatalf("did not expect count for QType F")
+	}
+}
+
+func TestDecodeNextPacketQCountOnlyIncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0xAC}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for incomplete Q count packet, got %v", err)
 	}
 }
