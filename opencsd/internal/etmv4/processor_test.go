@@ -1561,10 +1561,13 @@ func TestDecodeNextPacketAddrContext64NoIDs(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketAddrContextWithIDsFallsBack(t *testing.T) {
+func TestDecodeNextPacketAddrContextWithIDsNeedsConfigAwareDecode(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x82, 0x04, 0x00, 0x34, 0x12, 0x40}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for config-sized addr+context payload, got %v", err)
+	if err == nil {
+		t.Fatalf("expected hard error for config-sized addr+context payload")
+	}
+	if errors.Is(err, errDecodeNotImplemented) || errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected hard error, got fallback sentinel: %v", err)
 	}
 }
 
@@ -2134,10 +2137,13 @@ func TestDecodeNextPacketContextInfoNoIDs(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketContextWithIDsFallsBack(t *testing.T) {
+func TestDecodeNextPacketContextWithIDsNeedsConfigAwareDecode(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x81, 0x40}, 0)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		t.Fatalf("expected errDecodeNotImplemented for config-sized context payload, got %v", err)
+	if err == nil {
+		t.Fatalf("expected hard error for config-sized context payload")
+	}
+	if errors.Is(err, errDecodeNotImplemented) || errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected hard error, got fallback sentinel: %v", err)
 	}
 }
 

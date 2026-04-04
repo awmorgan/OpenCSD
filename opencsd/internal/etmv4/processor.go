@@ -1622,8 +1622,7 @@ func decodeContextPacket(data []byte, offset int) (Packet, int, error) {
 
 	info := data[offset+1]
 	if (info & 0xC0) != 0 {
-		// VMID/CtxtID payload sizes depend on runtime config; use legacy parser.
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, fmt.Errorf("decodeContextPacket: context IDs require config-aware decode")
 	}
 
 	pkt := Packet{Type: PktCtxt}
@@ -1723,8 +1722,7 @@ func decodeAddrContextPacket(data []byte, offset int) (Packet, int, error) {
 
 	info := data[offset+1+addrBytes]
 	if (info & 0xC0) != 0 {
-		// VMID/CtxtID payload sizes depend on runtime config; use legacy parser.
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, fmt.Errorf("decodeAddrContextPacket: context IDs require config-aware decode")
 	}
 
 	pkt := Packet{Type: pktType}
