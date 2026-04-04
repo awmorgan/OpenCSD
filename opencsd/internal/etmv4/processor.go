@@ -14,7 +14,6 @@ const (
 	ProcData
 	SendPkt
 	SendUnsynced
-	ProcErr
 )
 
 // TInfoSect are flags to indicate processing progress for these sections is complete.
@@ -203,12 +202,9 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				consumed++
 				p.blockBytesProcessed = consumed
 				if p.isSync {
-					handled, err := p.tryStatelessDecodeCurrentPacketData()
+					err := p.tryStatelessDecodeCurrentPacketData()
 					if err != nil {
 						return uint32(consumed), err
-					}
-					if handled {
-						continue
 					}
 				} else {
 					p.processUnsyncedByte(nextByte)
@@ -227,9 +223,6 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				p.updateOnUnsyncPktIdx = 0
 			}
 			p.processState = ProcData
-
-		case ProcErr:
-			return uint32(consumed), ocsd.DataErrFromResp(resp, nil)
 		}
 	}
 
@@ -651,27 +644,27 @@ func (p *Processor) applyDecodedPacket(pkt Packet) {
 	}
 }
 
-func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
+func (p *Processor) tryStatelessDecodeCurrentPacketData() error {
 	if len(p.currPacketData) == 0 {
-		return false, nil
+		return nil
 	}
 
 	pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, p.currPacketData, 0)
 
 	if err != nil {
 		if errors.Is(err, errDecodeNotImplemented) {
-			return false, nil
+			return nil
 		}
-		return false, err
+		return err
 	}
 
 	if bytesConsumed != len(p.currPacketData) {
-		return false, nil
+		return nil
 	}
 
 	p.applyDecodedPacket(pkt)
 	p.processState = SendPkt
-	return true, nil
+	return nil
 }
 
 // decodeNextPacket decodes a single packet starting at offset without using Processor state.
