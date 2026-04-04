@@ -232,6 +232,80 @@ func TestDecodeNextPacketTraceOn(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketFuncRet(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x05}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktFuncRet {
+		t.Fatalf("expected PktFuncRet, got %v", pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketExceptRtn(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x07}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktExceptRtn {
+		t.Fatalf("expected PktExceptRtn, got %v", pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketEteTransPackets(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x0A}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != ETE_PktTransSt {
+		t.Fatalf("expected ETE_PktTransSt, got %v", pkt.Type)
+	}
+
+	pkt, consumed, err = decodeNextPacket([]byte{0x0B}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != ETE_PktTransCommit {
+		t.Fatalf("expected ETE_PktTransCommit, got %v", pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketIgnoreAndTsMarker(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x70}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktIgnore {
+		t.Fatalf("expected PktIgnore, got %v", pkt.Type)
+	}
+
+	pkt, consumed, err = decodeNextPacket([]byte{0x88}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != ETE_PktTSMarker {
+		t.Fatalf("expected ETE_PktTSMarker, got %v", pkt.Type)
+	}
+}
+
 func TestDecodeNextPacketEvent(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x7D}, 0)
 	if err != nil {
@@ -261,6 +335,25 @@ func TestDecodeNextPacketAddrMatch(t *testing.T) {
 	}
 	if pkt.AddrExactMatchIdx != 0x1 {
 		t.Fatalf("expected address match idx 1, got %d", pkt.AddrExactMatchIdx)
+	}
+	if !pkt.Valid.ExactMatchIdxValid {
+		t.Fatalf("expected exact-match valid flag set")
+	}
+}
+
+func TestDecodeNextPacketEteSrcAddrMatch(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0xB2}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != ETE_PktSrcAddrMatch {
+		t.Fatalf("expected ETE_PktSrcAddrMatch, got %v", pkt.Type)
+	}
+	if pkt.AddrExactMatchIdx != 0x2 {
+		t.Fatalf("expected source address match idx 2, got %d", pkt.AddrExactMatchIdx)
 	}
 	if !pkt.Valid.ExactMatchIdxValid {
 		t.Fatalf("expected exact-match valid flag set")
@@ -408,6 +501,101 @@ func TestDecodeNextPacketLongAddr32IS1(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketShortAddrIS0SingleByte(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x95, 0x15}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktAddrS_IS0 {
+		t.Fatalf("expected PktAddrS_IS0, got %v", pkt.Type)
+	}
+	if pkt.VAddr != 0x54 {
+		t.Fatalf("expected short address 0x54, got 0x%X", pkt.VAddr)
+	}
+	if pkt.VAddrPktBits != 9 || pkt.VAddrValidBits != 9 || pkt.VAddrISA != 0 {
+		t.Fatalf("unexpected short address metadata: valid=%d pkt=%d isa=%d", pkt.VAddrValidBits, pkt.VAddrPktBits, pkt.VAddrISA)
+	}
+}
+
+func TestDecodeNextPacketShortAddrIS1TwoByte(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x96, 0x81, 0x23}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktAddrS_IS1 {
+		t.Fatalf("expected PktAddrS_IS1, got %v", pkt.Type)
+	}
+	if pkt.VAddr != 0x2302 {
+		t.Fatalf("expected short address 0x2302, got 0x%X", pkt.VAddr)
+	}
+	if pkt.VAddrPktBits != 16 || pkt.VAddrValidBits != 16 || pkt.VAddrISA != 1 {
+		t.Fatalf("unexpected short address metadata: valid=%d pkt=%d isa=%d", pkt.VAddrValidBits, pkt.VAddrPktBits, pkt.VAddrISA)
+	}
+}
+
+func TestDecodeNextPacketShortAddrIncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x96, 0x80}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for incomplete short address, got %v", err)
+	}
+}
+
+func TestProcessDataFastPathShortAddrMergesWithExistingAddress(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	p.currPacket.VAddr = 0xFFFF0000
+	p.currPacket.VAddrValidBits = 32
+
+	consumed, err := p.processData(0, []byte{0x95, 0x15})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if p.currPacket.VAddr != 0xFFFF0054 {
+		t.Fatalf("expected merged address 0xFFFF0054, got 0x%X", p.currPacket.VAddr)
+	}
+	if p.currPacket.VAddrValidBits != 32 {
+		t.Fatalf("expected valid bits to remain 32, got %d", p.currPacket.VAddrValidBits)
+	}
+	if p.currPacket.VAddrPktBits != 9 || p.currPacket.VAddrISA != 0 {
+		t.Fatalf("unexpected packet metadata: pktBits=%d isa=%d", p.currPacket.VAddrPktBits, p.currPacket.VAddrISA)
+	}
+}
+
+func TestProcessDataFastPathLongAddr32KeepsUpperWhenContext64Bit(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	p.currPacket.VAddr = 0x11223344AABBCCDD
+	p.currPacket.VAddrValidBits = 64
+	p.currPacket.Valid.Context = true
+	p.currPacket.Context.SF = true
+
+	consumed, err := p.processData(0, []byte{0x9A, 0x04, 0x00, 0x34, 0x12})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 5 {
+		t.Fatalf("expected 5 bytes consumed, got %d", consumed)
+	}
+	if p.currPacket.VAddr != 0x1122334412340010 {
+		t.Fatalf("expected merged address 0x1122334412340010, got 0x%X", p.currPacket.VAddr)
+	}
+	if p.currPacket.VAddrValidBits != 64 {
+		t.Fatalf("expected valid bits to remain 64, got %d", p.currPacket.VAddrValidBits)
+	}
+	if p.currPacket.VAddrPktBits != 32 || p.currPacket.VAddrISA != 0 {
+		t.Fatalf("unexpected packet metadata: pktBits=%d isa=%d", p.currPacket.VAddrPktBits, p.currPacket.VAddrISA)
+	}
+}
+
 func TestDecodeNextPacketExtensionDiscard(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x00, 0x03}, 0)
 	if err != nil {
@@ -472,5 +660,32 @@ func TestDecodeNextPacketExtensionIncompleteFallsBack(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x00}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
 		t.Fatalf("expected errDecodeNotImplemented for incomplete extension, got %v", err)
+	}
+}
+
+func TestDecodeNextPacketITE(t *testing.T) {
+	data := []byte{0x09, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 10 {
+		t.Fatalf("expected 10 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != ETE_PktITE {
+		t.Fatalf("expected ETE_PktITE, got %v", pkt.Type)
+	}
+	if pkt.ITEPkt.EL != 0x02 {
+		t.Fatalf("expected EL 0x02, got 0x%X", pkt.ITEPkt.EL)
+	}
+	if pkt.ITEPkt.Value != 0x0807060504030201 {
+		t.Fatalf("expected ITE value 0x0807060504030201, got 0x%X", pkt.ITEPkt.Value)
+	}
+}
+
+func TestDecodeNextPacketITEIncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x09, 0x02}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for incomplete ITE packet, got %v", err)
 	}
 }
