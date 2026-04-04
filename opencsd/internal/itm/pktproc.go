@@ -790,7 +790,7 @@ func decodeContField32NoOverflow(data []byte, start int, limit int) (uint32, int
 	}
 
 	var value uint32
-	for i := 0; i < limit; i++ {
+	for i := range limit {
 		idx := start + i
 		if idx >= len(data) {
 			return 0, 0, false
