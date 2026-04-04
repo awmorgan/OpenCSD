@@ -33,6 +33,9 @@ const (
 type Packet = TracePacket
 
 var errDecodeNeedMoreData = errors.New("decodeNextPacket: need more data")
+var errDecodeNotImplemented = errors.New("decodeNextPacket: packet type not implemented")
+
+var decodeNextPacketWithConfigFn = decodeNextPacketWithConfig
 
 // Processor parses byte streams for ETMv4 packets.
 // Ported from TrcPktProcEtmV4I.
@@ -162,7 +165,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 
 		if p.processState == ProcHdr && p.isSync && consumed < len(dataBlock) {
 			packetIndex := p.blockIndex + ocsd.TrcIndex(consumed)
-			pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, dataBlock, consumed)
+			pkt, bytesConsumed, err := decodeNextPacketWithConfigFn(p.config, dataBlock, consumed)
 			switch {
 			case err == nil:
 				p.packetIndex = packetIndex
@@ -174,6 +177,8 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				continue
 			case errors.Is(err, errDecodeNeedMoreData):
 				// Packet spans block boundary; ProcData loop will accumulate remaining bytes.
+			case errors.Is(err, errDecodeNotImplemented):
+				// Fall back to the legacy state loop while migration is in progress.
 			default:
 				return uint32(consumed), err
 			}
@@ -200,7 +205,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				consumed++
 				p.blockBytesProcessed = consumed
 				if p.isSync {
-					pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, p.currPacketData, 0)
+					pkt, bytesConsumed, err := decodeNextPacketWithConfigFn(p.config, p.currPacketData, 0)
 					if err != nil {
 						if !errors.Is(err, errDecodeNeedMoreData) {
 							return uint32(consumed), err

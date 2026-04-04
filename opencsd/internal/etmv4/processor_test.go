@@ -269,6 +269,41 @@ func TestProcessDataFastPathExceptionEteResetAndTransFail(t *testing.T) {
 	}
 }
 
+func TestProcessDataFallsBackOnDecodeNotImplementedSentinel(t *testing.T) {
+	origDecodeFn := decodeNextPacketWithConfigFn
+	defer func() {
+		decodeNextPacketWithConfigFn = origDecodeFn
+	}()
+
+	callCount := 0
+	decodeNextPacketWithConfigFn = func(config Config, data []byte, offset int) (Packet, int, error) {
+		callCount++
+		if callCount == 1 {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		return decodeNextPacketWithConfig(config, data, offset)
+	}
+
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0xF7})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktAtomF1 {
+		t.Fatalf("unexpected output packet after fallback: count=%d type=%v", out.count, out.last.Type)
+	}
+	if callCount < 2 {
+		t.Fatalf("expected fast path and fallback decode attempts, got %d calls", callCount)
+	}
+}
+
 func TestDecodeNextPacketTimestampNoCycleCount(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x02, 0x2A}, 0)
 	if err != nil {
