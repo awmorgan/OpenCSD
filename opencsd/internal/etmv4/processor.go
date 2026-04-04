@@ -295,6 +295,10 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				case PktMispredict, PktCancelF2, PktCancelF3:
 					p.currPacket.Atom = pkt.Atom
 					p.currPacket.CancelElements = pkt.CancelElements
+				case PktCommit:
+					p.currPacket.CommitElements = pkt.CommitElements
+				case PktCancelF1, PktCancelF1Mispred:
+					p.currPacket.CancelElements = pkt.CancelElements
 				case ETE_PktITE:
 					p.currPacket.ITEPkt = pkt.ITEPkt
 				case PktAddrL_32IS0, PktAddrL_32IS1, ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1:
@@ -492,6 +496,10 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 
 	if pkt, ok := decodeSimpleSpecResPacket(header); ok {
 		return pkt, 1, nil
+	}
+
+	if header == uint8(PktCommit) || header == uint8(PktCancelF1) || header == uint8(PktCancelF1Mispred) {
+		return decodeVariableSpecResPacket(data, offset)
 	}
 
 	if header == 0x0C || header == 0x0D {
@@ -890,6 +898,35 @@ func setSimpleSpecResPayload(pkt *Packet, atomBits uint8, cancelF2 bool) {
 		pkt.CancelElements = 1
 	} else {
 		pkt.CancelElements = 0
+	}
+}
+
+func decodeVariableSpecResPacket(data []byte, offset int) (Packet, int, error) {
+	if offset < 0 || offset >= len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	header := data[offset]
+	fieldVal, n, ok := decodeContField32(data, offset+1, 5)
+	if !ok {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	switch header {
+	case uint8(PktCommit):
+		pkt := Packet{Type: PktCommit}
+		pkt.CommitElements = fieldVal
+		return pkt, 1 + n, nil
+	case uint8(PktCancelF1), uint8(PktCancelF1Mispred):
+		pktType := PktCancelF1
+		if header == uint8(PktCancelF1Mispred) {
+			pktType = PktCancelF1Mispred
+		}
+		pkt := Packet{Type: pktType}
+		pkt.CancelElements = fieldVal
+		return pkt, 1 + n, nil
+	default:
+		return Packet{}, 0, errDecodeNotImplemented
 	}
 }
 

@@ -545,6 +545,68 @@ func TestProcessDataFastPathSpecResSimplePacket(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketSpecResVariablePackets(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x2D, 0x07}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 || pkt.Type != PktCommit || pkt.CommitElements != 7 {
+		t.Fatalf("unexpected commit decode: consumed=%d type=%v commit=%d", consumed, pkt.Type, pkt.CommitElements)
+	}
+
+	pkt, consumed, err = decodeNextPacket([]byte{0x2E, 0x03}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 || pkt.Type != PktCancelF1 || pkt.CancelElements != 3 {
+		t.Fatalf("unexpected cancelF1 decode: consumed=%d type=%v cancel=%d", consumed, pkt.Type, pkt.CancelElements)
+	}
+
+	pkt, consumed, err = decodeNextPacket([]byte{0x2F, 0x05}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 || pkt.Type != PktCancelF1Mispred || pkt.CancelElements != 5 {
+		t.Fatalf("unexpected cancelF1 mispred decode: consumed=%d type=%v cancel=%d", consumed, pkt.Type, pkt.CancelElements)
+	}
+}
+
+func TestDecodeNextPacketSpecResVariableIncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x2D}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for incomplete commit packet, got %v", err)
+	}
+}
+
+func TestProcessDataFastPathSpecResVariablePackets(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x2D, 0x07})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 || out.count != 1 || out.last.Type != PktCommit {
+		t.Fatalf("unexpected commit output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	}
+	if out.last.CommitElements != 7 {
+		t.Fatalf("expected commit elements 7, got %d", out.last.CommitElements)
+	}
+
+	consumed, err = p.processData(2, []byte{0x2F, 0x05})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 || out.count != 2 || out.last.Type != PktCancelF1Mispred {
+		t.Fatalf("unexpected cancel output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	}
+	if out.last.CancelElements != 5 {
+		t.Fatalf("expected cancel elements 5, got %d", out.last.CancelElements)
+	}
+}
+
 func TestDecodeNextPacketTraceOn(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x04}, 0)
 	if err != nil {
