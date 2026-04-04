@@ -589,6 +589,76 @@ func TestDecodeNextPacketD64STM(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketD4MSTM(t *testing.T) {
+	data := []byte{0xDF, 0x05}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktD4 || pkt.Payload.D8 != 0x5 || !pkt.IsMarkerPkt() {
+		t.Fatalf("unexpected D4M decode: type=%v payload=0x%X marker=%v", pkt.Type, pkt.Payload.D8, pkt.IsMarkerPkt())
+	}
+}
+
+func TestDecodeNextPacketD8MSTM(t *testing.T) {
+	data := []byte{0x8F, 0x21}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 4 {
+		t.Fatalf("expected 4 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktD8 || pkt.Payload.D8 != 0x12 || !pkt.IsMarkerPkt() {
+		t.Fatalf("unexpected D8M decode: type=%v payload=0x%X marker=%v", pkt.Type, pkt.Payload.D8, pkt.IsMarkerPkt())
+	}
+}
+
+func TestDecodeNextPacketD16MSTM(t *testing.T) {
+	data := []byte{0x9F, 0x21, 0x43}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 6 {
+		t.Fatalf("expected 6 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktD16 || pkt.Payload.D16 != 0x1234 || !pkt.IsMarkerPkt() {
+		t.Fatalf("unexpected D16M decode: type=%v payload=0x%X marker=%v", pkt.Type, pkt.Payload.D16, pkt.IsMarkerPkt())
+	}
+}
+
+func TestDecodeNextPacketD32MSTM(t *testing.T) {
+	data := []byte{0xAF, 0x21, 0x43, 0x65, 0x87}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 10 {
+		t.Fatalf("expected 10 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktD32 || pkt.Payload.D32 != 0x12345678 || !pkt.IsMarkerPkt() {
+		t.Fatalf("unexpected D32M decode: type=%v payload=0x%X marker=%v", pkt.Type, pkt.Payload.D32, pkt.IsMarkerPkt())
+	}
+}
+
+func TestDecodeNextPacketD64MSTM(t *testing.T) {
+	data := []byte{0xBF, 0x21, 0x43, 0x65, 0x87, 0xA9, 0xCB, 0xED, 0x0F}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 18 {
+		t.Fatalf("expected 18 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktD64 || pkt.Payload.D64 != 0x123456789ABCDEF0 || !pkt.IsMarkerPkt() {
+		t.Fatalf("unexpected D64M decode: type=%v payload=0x%X marker=%v", pkt.Type, pkt.Payload.D64, pkt.IsMarkerPkt())
+	}
+}
+
 func TestDecodeNextPacketM8IncompleteFallsBackSTM(t *testing.T) {
 	data := []byte{0x01}
 	_, _, err := decodeNextPacket(data, 0)
