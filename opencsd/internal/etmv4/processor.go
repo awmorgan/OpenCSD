@@ -32,8 +32,7 @@ const (
 // Packet is a compatibility alias used by the stateless decoder API.
 type Packet = TracePacket
 
-var errDecodeNotImplemented = errors.New("decodeNextPacket: packet type not implemented")
-var errDecodeNeedMoreData = fmt.Errorf("%w: need more data", errDecodeNotImplemented)
+var errDecodeNeedMoreData = errors.New("decodeNextPacket: need more data")
 
 // Processor parses byte streams for ETMv4 packets.
 // Ported from TrcPktProcEtmV4I.
@@ -175,8 +174,6 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				continue
 			case errors.Is(err, errDecodeNeedMoreData):
 				// Packet spans block boundary; ProcData loop will accumulate remaining bytes.
-			case errors.Is(err, errDecodeNotImplemented):
-				// Packet decode path not yet migrated; fall back to the legacy state loop.
 			default:
 				return uint32(consumed), err
 			}
@@ -205,7 +202,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				if p.isSync {
 					pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, p.currPacketData, 0)
 					if err != nil {
-						if !errors.Is(err, errDecodeNeedMoreData) && !errors.Is(err, errDecodeNotImplemented) {
+						if !errors.Is(err, errDecodeNeedMoreData) {
 							return uint32(consumed), err
 						}
 					} else if bytesConsumed == len(p.currPacketData) {
@@ -649,7 +646,6 @@ func (p *Processor) applyDecodedPacket(pkt Packet) {
 
 // decodeNextPacket decodes a single packet starting at offset without using Processor state.
 // It returns errDecodeNeedMoreData when more bytes are required to complete a packet.
-// It returns errDecodeNotImplemented for packet forms that still require legacy handling.
 func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	if offset < 0 || offset >= len(data) {
 		return Packet{}, 0, fmt.Errorf("offset %d out of range", offset)

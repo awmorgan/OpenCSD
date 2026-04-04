@@ -1566,7 +1566,7 @@ func TestDecodeNextPacketAddrContextWithIDsNeedsConfigAwareDecode(t *testing.T) 
 	if err == nil {
 		t.Fatalf("expected hard error for config-sized addr+context payload")
 	}
-	if errors.Is(err, errDecodeNotImplemented) || errors.Is(err, errDecodeNeedMoreData) {
+	if errors.Is(err, errDecodeNeedMoreData) {
 		t.Fatalf("expected hard error, got fallback sentinel: %v", err)
 	}
 }
@@ -2142,7 +2142,7 @@ func TestDecodeNextPacketContextWithIDsNeedsConfigAwareDecode(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected hard error for config-sized context payload")
 	}
-	if errors.Is(err, errDecodeNotImplemented) || errors.Is(err, errDecodeNeedMoreData) {
+	if errors.Is(err, errDecodeNeedMoreData) {
 		t.Fatalf("expected hard error, got fallback sentinel: %v", err)
 	}
 }
@@ -2227,7 +2227,7 @@ func TestDecodeContextPacketWithConfigInvalidHeaderIsHardError(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected invalid-header error")
 	}
-	if errors.Is(err, errDecodeNotImplemented) || errors.Is(err, errDecodeNeedMoreData) {
+	if errors.Is(err, errDecodeNeedMoreData) {
 		t.Fatalf("expected hard error, got fallback sentinel: %v", err)
 	}
 }
@@ -2237,7 +2237,7 @@ func TestDecodeAddrContextPacketWithConfigInvalidHeaderIsHardError(t *testing.T)
 	if err == nil {
 		t.Fatalf("expected invalid-header error")
 	}
-	if errors.Is(err, errDecodeNotImplemented) || errors.Is(err, errDecodeNeedMoreData) {
+	if errors.Is(err, errDecodeNeedMoreData) {
 		t.Fatalf("expected hard error, got fallback sentinel: %v", err)
 	}
 }
@@ -2247,7 +2247,7 @@ func TestDecodeVariableSpecResPacketInvalidHeaderIsHardError(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected invalid-header error")
 	}
-	if errors.Is(err, errDecodeNotImplemented) || errors.Is(err, errDecodeNeedMoreData) {
+	if errors.Is(err, errDecodeNeedMoreData) {
 		t.Fatalf("expected hard error, got fallback sentinel: %v", err)
 	}
 }
