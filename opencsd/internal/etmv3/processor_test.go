@@ -813,6 +813,29 @@ func TestDecodeNextPacketVMIDIncompleteFallsBack(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketTimestampSingleByte(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x42, 0x10}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktTimestamp {
+		t.Fatalf("expected PktTimestamp, got %v", pkt.Type)
+	}
+	if pkt.Timestamp != 0x10 || pkt.TsUpdateBits != 7 {
+		t.Fatalf("expected timestamp 0x10 with 7 update bits, got ts=0x%X bits=%d", pkt.Timestamp, pkt.TsUpdateBits)
+	}
+}
+
+func TestDecodeNextPacketTimestampMultiByteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x42, 0x81, 0x03}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for multi-byte timestamp, got %v", err)
+	}
+}
+
 func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x08}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {

@@ -330,6 +330,8 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 				case PktVMID:
 					fastPkt.Context.VMID = pkt.Context.VMID
 					fastPkt.Context.UpdatedV = pkt.Context.UpdatedV
+				case PktTimestamp:
+					fastPkt.UpdateTimestamp(pkt.Timestamp, pkt.TsUpdateBits)
 				}
 				resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+consumed])
 				p.bytesProcessed += consumed
@@ -428,6 +430,19 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	case 0x7E:
 		return Packet{Type: PktExceptionEntry}, 1, nil
 	default:
+		if (header & 0xFB) == 0x42 {
+			if offset+2 > len(data) {
+				return Packet{}, 0, errDecodeNotImplemented
+			}
+			tsByte := data[offset+1]
+			if (tsByte & 0x80) != 0 {
+				return Packet{}, 0, errDecodeNotImplemented
+			}
+			pkt := Packet{Type: PktTimestamp}
+			pkt.Timestamp = uint64(tsByte & 0x7F)
+			pkt.TsUpdateBits = 7
+			return pkt, 2, nil
+		}
 		return Packet{}, 0, errDecodeNotImplemented
 	}
 }
