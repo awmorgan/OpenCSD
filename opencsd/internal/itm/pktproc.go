@@ -724,8 +724,35 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	if offset < 0 || offset >= len(data) {
 		return Packet{}, 0, fmt.Errorf("offset %d out of range", offset)
 	}
-	if data[offset] == 0x70 {
+	header := data[offset]
+	if header == 0x70 {
 		return Packet{Type: PktOverflow}, 1, nil
+	}
+	if (header & 0x03) != 0x00 {
+		payloadBytes := int(header & 0x3)
+		if payloadBytes == 3 {
+			payloadBytes = 4
+		}
+		if offset+1+payloadBytes > len(data) {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+
+		value := uint32(data[offset+1])
+		if payloadBytes >= 2 {
+			value |= uint32(data[offset+2]) << 8
+		}
+		if payloadBytes == 4 {
+			value |= uint32(data[offset+3]) << 16
+			value |= uint32(data[offset+4]) << 24
+		}
+
+		pktType := PktSWIT
+		if (header & 0x4) != 0 {
+			pktType = PktDWT
+		}
+		pkt := Packet{Type: pktType, SrcID: (header >> 3) & 0x1F}
+		pkt.SetValue(value, uint8(payloadBytes))
+		return pkt, 1 + payloadBytes, nil
 	}
 	return Packet{}, 0, errDecodeNotImplemented
 }

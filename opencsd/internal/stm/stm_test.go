@@ -457,7 +457,69 @@ func TestDecodeNextPacketFlagSTM(t *testing.T) {
 }
 
 func TestDecodeNextPacketReturnsSentinelForUnmigratedHeaderSTM(t *testing.T) {
-	// lower nibble 0x1 = M8 (has payload bytes), not yet migrated
+	// lower nibble 0x2 = MERR opcode, not yet migrated
+	data := []byte{0x02}
+	_, _, err := decodeNextPacket(data, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Errorf("expected errDecodeNotImplemented, got %v", err)
+	}
+}
+
+func TestDecodeNextPacketM8STM(t *testing.T) {
+	// Nibble stream: 1 A B => M8 with master 0xAB.
+	data := []byte{0xA1, 0x0B}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktM8 {
+		t.Fatalf("expected PktM8, got %v", pkt.Type)
+	}
+	if pkt.Master != 0xAB {
+		t.Fatalf("expected master 0xAB, got 0x%X", pkt.Master)
+	}
+}
+
+func TestDecodeNextPacketC8STM(t *testing.T) {
+	// Nibble stream: 3 1 2 => C8 with channel 0x12.
+	data := []byte{0x13, 0x02}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktC8 {
+		t.Fatalf("expected PktC8, got %v", pkt.Type)
+	}
+	if pkt.Channel != 0x12 {
+		t.Fatalf("expected channel 0x12, got 0x%X", pkt.Channel)
+	}
+}
+
+func TestDecodeNextPacketD4STM(t *testing.T) {
+	// Nibble stream: C 5 => D4 payload 0x5.
+	data := []byte{0x5C}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktD4 {
+		t.Fatalf("expected PktD4, got %v", pkt.Type)
+	}
+	if pkt.Payload.D8 != 0x5 {
+		t.Fatalf("expected payload 0x5, got 0x%X", pkt.Payload.D8)
+	}
+}
+
+func TestDecodeNextPacketM8IncompleteFallsBackSTM(t *testing.T) {
 	data := []byte{0x01}
 	_, _, err := decodeNextPacket(data, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {

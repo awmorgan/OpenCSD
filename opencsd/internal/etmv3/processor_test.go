@@ -796,3 +796,24 @@ func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
 		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
 	}
 }
+
+func TestDecodeNextPacketASync(t *testing.T) {
+	data := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 6 {
+		t.Fatalf("expected 6 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktASync {
+		t.Fatalf("expected PktASync, got %v", pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketASyncIncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x00, 0x00}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
+	}
+}

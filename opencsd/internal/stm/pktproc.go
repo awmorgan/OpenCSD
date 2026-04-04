@@ -480,7 +480,19 @@ func (p *PktProc) stateHdr(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool)
 			for range nibblesConsumed {
 				p.readNibble()
 			}
-			p.currPacket.SetPacketType(pkt.Type, false)
+			switch pkt.Type {
+			case PktM8:
+				p.currPacket.SetPacketType(PktM8, false)
+				p.currPacket.SetMaster(pkt.Master)
+			case PktC8:
+				p.currPacket.SetPacketType(PktC8, false)
+				p.currPacket.SetChannel(pkt.Channel, true)
+			case PktD4:
+				p.currPacket.SetPacketType(PktD4, false)
+				p.currPacket.SetD4Payload(pkt.Payload.D8)
+			default:
+				p.currPacket.SetPacketType(pkt.Type, false)
+			}
 			p.procState = procSendPkt
 			return p.stateSendPkt(index)
 		}
@@ -1453,6 +1465,35 @@ func decodeNextPacket(data []byte, nibbleOffset int) (Packet, int, error) {
 		var pkt Packet
 		pkt.SetPacketType(PktNull, false)
 		return pkt, 1, nil
+	case 0x1: // M8 — 3 nibbles total
+		n1, ok1 := getNibble(data, nibbleOffset+1)
+		n2, ok2 := getNibble(data, nibbleOffset+2)
+		if !ok1 || !ok2 {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		var pkt Packet
+		pkt.SetPacketType(PktM8, false)
+		pkt.SetMaster((n1 << 4) | n2)
+		return pkt, 3, nil
+	case 0x3: // C8 — 3 nibbles total
+		n1, ok1 := getNibble(data, nibbleOffset+1)
+		n2, ok2 := getNibble(data, nibbleOffset+2)
+		if !ok1 || !ok2 {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		var pkt Packet
+		pkt.SetPacketType(PktC8, false)
+		pkt.SetChannel(uint16((n1<<4)|n2), true)
+		return pkt, 3, nil
+	case 0xC: // D4 — 2 nibbles total
+		n1, ok := getNibble(data, nibbleOffset+1)
+		if !ok {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		var pkt Packet
+		pkt.SetPacketType(PktD4, false)
+		pkt.SetD4Payload(n1)
+		return pkt, 2, nil
 	case 0xF: // FExt — read second nibble to dispatch op2N
 		n1, ok := getNibble(data, nibbleOffset+1)
 		if !ok {

@@ -478,3 +478,48 @@ func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
 		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
 	}
 }
+
+func TestDecodeNextPacketSWIT(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x19, 0xAB}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktSWIT {
+		t.Fatalf("expected PktSWIT, got %v", pkt.Type)
+	}
+	if pkt.SrcID != 0x3 {
+		t.Fatalf("expected source id 0x3, got 0x%X", pkt.SrcID)
+	}
+	if pkt.Value != 0xAB || pkt.ValSz != 1 {
+		t.Fatalf("unexpected payload decode: value=0x%X size=%d", pkt.Value, pkt.ValSz)
+	}
+}
+
+func TestDecodeNextPacketDWT4BytePayload(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x17, 0x78, 0x56, 0x34, 0x12}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 5 {
+		t.Fatalf("expected 5 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktDWT {
+		t.Fatalf("expected PktDWT, got %v", pkt.Type)
+	}
+	if pkt.SrcID != 0x2 {
+		t.Fatalf("expected source id 0x2, got 0x%X", pkt.SrcID)
+	}
+	if pkt.Value != 0x12345678 || pkt.ValSz != 4 {
+		t.Fatalf("unexpected payload decode: value=0x%X size=%d", pkt.Value, pkt.ValSz)
+	}
+}
+
+func TestDecodeNextPacketStimulusIncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x19}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
+	}
+}

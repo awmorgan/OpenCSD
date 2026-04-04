@@ -395,6 +395,16 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	}
 
 	header := data[offset]
+	if header == 0x00 {
+		if offset+6 > len(data) {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		if data[offset+1] == 0x00 && data[offset+2] == 0x00 && data[offset+3] == 0x00 && data[offset+4] == 0x00 && data[offset+5] == 0x80 {
+			return Packet{Type: PktASync}, 6, nil
+		}
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
 	switch header {
 	case 0x0C:
 		return Packet{Type: PktTrigger}, 1, nil
