@@ -2207,6 +2207,36 @@ func TestDecodeNextPacketWithConfigAddrContextIncludesIDs(t *testing.T) {
 	}
 }
 
+func TestDecodeContextPacketWithConfigInvalidHeaderIsHardError(t *testing.T) {
+	_, _, err := decodeContextPacketWithConfig(Config{}, []byte{0x80}, 0)
+	if err == nil {
+		t.Fatalf("expected invalid-header error")
+	}
+	if errors.Is(err, errDecodeNotImplemented) || errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected hard error, got fallback sentinel: %v", err)
+	}
+}
+
+func TestDecodeAddrContextPacketWithConfigInvalidHeaderIsHardError(t *testing.T) {
+	_, _, err := decodeAddrContextPacketWithConfig(Config{}, []byte{0x81, 0x00}, 0)
+	if err == nil {
+		t.Fatalf("expected invalid-header error")
+	}
+	if errors.Is(err, errDecodeNotImplemented) || errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected hard error, got fallback sentinel: %v", err)
+	}
+}
+
+func TestDecodeVariableSpecResPacketInvalidHeaderIsHardError(t *testing.T) {
+	_, _, err := decodeVariableSpecResPacket([]byte{0x00, 0x01}, 0)
+	if err == nil {
+		t.Fatalf("expected invalid-header error")
+	}
+	if errors.Is(err, errDecodeNotImplemented) || errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected hard error, got fallback sentinel: %v", err)
+	}
+}
+
 func TestDecodeNextPacketDataSyncMarkers(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x23}, 0)
 	if err != nil {

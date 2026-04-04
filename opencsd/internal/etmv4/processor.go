@@ -1203,7 +1203,7 @@ func decodeVariableSpecResPacket(data []byte, offset int) (Packet, int, error) {
 		pkt.CancelElements = fieldVal
 		return pkt, 1 + n, nil
 	default:
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, fmt.Errorf("decodeVariableSpecResPacket: invalid header 0x%02X", header)
 	}
 }
 
@@ -1644,7 +1644,7 @@ func decodeContextPacketWithConfig(config Config, data []byte, offset int) (Pack
 		return Packet{}, 0, errDecodeNeedMoreData
 	}
 	if data[offset] != 0x81 {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, fmt.Errorf("decodeContextPacketWithConfig: invalid header 0x%02X", data[offset])
 	}
 	if offset+2 > len(data) {
 		return Packet{}, 0, errDecodeNeedMoreData
@@ -1715,7 +1715,7 @@ func decodeAddrContextPacket(data []byte, offset int) (Packet, int, error) {
 		is = 1
 		addrBytes = 8
 	default:
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, fmt.Errorf("decodeAddrContextPacket: invalid header 0x%02X", header)
 	}
 
 	minLen := 1 + addrBytes + 1
@@ -1775,7 +1775,7 @@ func decodeAddrContextPacketWithConfig(config Config, data []byte, offset int) (
 		is = 1
 		addrBytes = 8
 	default:
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, fmt.Errorf("decodeAddrContextPacketWithConfig: invalid header 0x%02X", header)
 	}
 
 	minLen := 1 + addrBytes + 1
