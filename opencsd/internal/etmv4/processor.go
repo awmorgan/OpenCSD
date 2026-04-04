@@ -170,8 +170,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
 				consumed += bytesConsumed
 				p.blockBytesProcessed = consumed
-				resp = p.outputPacket()
-				p.resetPacketState()
+				resp = p.emitCurrentPacket()
 				continue
 			case errors.Is(err, errDecodeNotImplemented):
 				// Packet spans block boundary; ProcData loop will accumulate remaining bytes.
@@ -208,15 +207,11 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 						}
 					} else if bytesConsumed == len(p.currPacketData) {
 						p.applyDecodedPacket(pkt)
-						resp = p.outputPacket()
-						p.resetPacketState()
-						p.processState = ProcHdr
+						resp = p.emitCurrentPacket()
 					}
 				} else {
 					if p.processUnsyncedByte(nextByte) {
-						resp = p.outputPacket()
-						p.resetPacketState()
-						p.processState = ProcHdr
+						resp = p.emitCurrentPacket()
 					}
 				}
 			}
@@ -1606,6 +1601,8 @@ func decodeQPacket(data []byte, offset int) (Packet, int, error) {
 	case 0xF:
 		pkt.QPkt = QPkt{QType: qType}
 		return pkt, 1, nil
+	case 0x3, 0x4, 0x7, 0x8, 0x9, 0xD, 0xE:
+		return Packet{Type: PktReserved, Err: errReservedHeader, ErrHdrVal: header}, 1, nil
 	default:
 		return Packet{}, 0, errDecodeNotImplemented
 	}
@@ -2058,6 +2055,13 @@ func (p *Processor) outputPacket() ocsd.DatapathResp {
 	}
 	pkt := p.currPacket
 	resp := ocsd.DataRespFromErr(p.callPktOut(ocsd.OpData, p.packetIndex, &pkt)) //nolint:gosec
+	return resp
+}
+
+func (p *Processor) emitCurrentPacket() ocsd.DatapathResp {
+	resp := p.outputPacket()
+	p.resetPacketState()
+	p.processState = ProcHdr
 	return resp
 }
 

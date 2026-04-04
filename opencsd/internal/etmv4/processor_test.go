@@ -97,7 +97,7 @@ func TestDecodeNextPacketAtomF6(t *testing.T) {
 	}
 }
 
-func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
+func TestDecodeNextPacketTraceInfoHeaderOnlyFallsBack(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x01}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
 		t.Fatalf("expected errDecodeNotImplemented, got %v", err)
@@ -2026,6 +2026,46 @@ func TestDecodeNextPacketQTypeF(t *testing.T) {
 	}
 	if pkt.QPkt.CountPresent {
 		t.Fatalf("did not expect count for QType F")
+	}
+}
+
+func TestDecodeNextPacketQReservedSubtype(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0xA3}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktReserved {
+		t.Fatalf("expected PktReserved, got %v", pkt.Type)
+	}
+	if !errors.Is(pkt.Err, errReservedHeader) {
+		t.Fatalf("expected errReservedHeader, got %v", pkt.Err)
+	}
+	if pkt.ErrHdrVal != 0xA3 {
+		t.Fatalf("expected header value 0xA3, got 0x%X", pkt.ErrHdrVal)
+	}
+}
+
+func TestProcessDataFastPathQReservedSubtype(t *testing.T) {
+	p := NewProcessor(&Config{RegIdr0: 0x8000})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0xA3})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktQ {
+		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	}
+	if !errors.Is(out.last.Err, errReservedHeader) || out.last.ErrHdrVal != 0xA3 {
+		t.Fatalf("unexpected reserved packet metadata: err=%v hdr=0x%X", out.last.Err, out.last.ErrHdrVal)
 	}
 }
 
