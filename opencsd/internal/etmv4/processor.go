@@ -281,6 +281,9 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 					}
 					p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
 					p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
+				case PktMispredict, PktCancelF2, PktCancelF3:
+					p.currPacket.Atom = pkt.Atom
+					p.currPacket.CancelElements = pkt.CancelElements
 				case ETE_PktITE:
 					p.currPacket.ITEPkt = pkt.ITEPkt
 				case PktAddrL_32IS0, PktAddrL_32IS1, ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1:
@@ -474,6 +477,10 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 
 	if header == 0x01 {
 		return decodeTraceInfoPacket(data, offset)
+	}
+
+	if pkt, ok := decodeSimpleSpecResPacket(header); ok {
+		return pkt, 1, nil
 	}
 
 	if header >= 0x10 && header <= 0x1F {
@@ -784,6 +791,47 @@ func decodeCycleCntF3Packet(header uint8) Packet {
 	pkt.CommitElements = uint32((header>>2)&0x3) + 1
 	pkt.CycleCount = uint32(header & 0x3)
 	return pkt
+}
+
+func decodeSimpleSpecResPacket(header uint8) (Packet, bool) {
+	switch {
+	case header >= 0x30 && header <= 0x33:
+		pkt := Packet{Type: PktMispredict}
+		setSimpleSpecResPayload(&pkt, header&0x3, false)
+		return pkt, true
+	case header >= 0x34 && header <= 0x37:
+		pkt := Packet{Type: PktCancelF2}
+		setSimpleSpecResPayload(&pkt, header&0x3, true)
+		return pkt, true
+	case header >= 0x38 && header <= 0x3F:
+		pkt := Packet{Type: PktCancelF3}
+		if (header & 0x1) != 0 {
+			pkt.Atom = ocsd.PktAtom{EnBits: 0x1, Num: 1}
+		}
+		pkt.CancelElements = uint32((header>>1)&0x3) + 2
+		return pkt, true
+	default:
+		return Packet{}, false
+	}
+}
+
+func setSimpleSpecResPayload(pkt *Packet, atomBits uint8, cancelF2 bool) {
+	if pkt == nil {
+		return
+	}
+	switch atomBits {
+	case 0x1:
+		pkt.Atom = ocsd.PktAtom{EnBits: 0x1, Num: 1}
+	case 0x2:
+		pkt.Atom = ocsd.PktAtom{EnBits: 0x3, Num: 2}
+	case 0x3:
+		pkt.Atom = ocsd.PktAtom{EnBits: 0x0, Num: 1}
+	}
+	if cancelF2 {
+		pkt.CancelElements = 1
+	} else {
+		pkt.CancelElements = 0
+	}
 }
 
 func decodeTimestampPacket(data []byte, offset int) (Packet, int, error) {

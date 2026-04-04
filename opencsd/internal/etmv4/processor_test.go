@@ -310,6 +310,62 @@ func TestProcessDataFastPathCycleCntF3CommitOpt1(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketSpecResSimplePackets(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x31}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 || pkt.Type != PktMispredict {
+		t.Fatalf("unexpected mispredict decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if pkt.Atom.Num != 1 || pkt.Atom.EnBits != 0x1 || pkt.CancelElements != 0 {
+		t.Fatalf("unexpected mispredict payload: atom=%+v cancel=%d", pkt.Atom, pkt.CancelElements)
+	}
+
+	pkt, consumed, err = decodeNextPacket([]byte{0x36}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 || pkt.Type != PktCancelF2 {
+		t.Fatalf("unexpected cancelF2 decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if pkt.Atom.Num != 2 || pkt.Atom.EnBits != 0x3 || pkt.CancelElements != 1 {
+		t.Fatalf("unexpected cancelF2 payload: atom=%+v cancel=%d", pkt.Atom, pkt.CancelElements)
+	}
+
+	pkt, consumed, err = decodeNextPacket([]byte{0x3D}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 || pkt.Type != PktCancelF3 {
+		t.Fatalf("unexpected cancelF3 decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+	if pkt.Atom.Num != 1 || pkt.Atom.EnBits != 0x1 || pkt.CancelElements != 4 {
+		t.Fatalf("unexpected cancelF3 payload: atom=%+v cancel=%d", pkt.Atom, pkt.CancelElements)
+	}
+}
+
+func TestProcessDataFastPathSpecResSimplePacket(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x3D})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktCancelF3 {
+		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	}
+	if out.last.Atom.Num != 1 || out.last.Atom.EnBits != 0x1 || out.last.CancelElements != 4 {
+		t.Fatalf("unexpected output payload: atom=%+v cancel=%d", out.last.Atom, out.last.CancelElements)
+	}
+}
+
 func TestDecodeNextPacketTraceOn(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x04}, 0)
 	if err != nil {
