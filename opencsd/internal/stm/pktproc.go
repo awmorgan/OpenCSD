@@ -490,6 +490,16 @@ func (p *PktProc) stateHdr(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool)
 			case PktD4:
 				p.currPacket.SetPacketType(PktD4, false)
 				p.currPacket.SetD4Payload(pkt.Payload.D8)
+			case PktVersion:
+				p.currPacket.SetPacketType(PktVersion, false)
+				p.currPacket.Payload.D8 = pkt.Payload.D8
+				p.currPacket.OnVersionPkt(pkt.TSType)
+			case PktTrig:
+				p.currPacket.SetPacketType(PktTrig, false)
+				p.currPacket.Payload.D8 = pkt.Payload.D8
+			case PktFreq:
+				p.currPacket.SetPacketType(PktFreq, false)
+				p.currPacket.Payload.D32 = pkt.Payload.D32
 			default:
 				p.currPacket.SetPacketType(pkt.Type, false)
 			}
@@ -1500,6 +1510,55 @@ func decodeNextPacket(data []byte, nibbleOffset int) (Packet, int, error) {
 			return Packet{}, 0, errDecodeNotImplemented
 		}
 		switch n1 {
+		case 0x0: // F0Ext
+			n2, ok := getNibble(data, nibbleOffset+2)
+			if !ok {
+				return Packet{}, 0, errDecodeNotImplemented
+			}
+			switch n2 {
+			case 0x0: // VERSION — 4 nibbles total
+				n3, ok := getNibble(data, nibbleOffset+3)
+				if !ok {
+					return Packet{}, 0, errDecodeNotImplemented
+				}
+				var pkt Packet
+				pkt.SetPacketType(PktVersion, false)
+				pkt.Payload.D8 = n3
+				switch n3 {
+				case 3:
+					pkt.TSType = TSNatBinary
+				case 4:
+					pkt.TSType = TSGrey
+				default:
+					return Packet{}, 0, errDecodeNotImplemented
+				}
+				return pkt, 4, nil
+			case 0x6: // TRIG — 5 nibbles total
+				n3, ok3 := getNibble(data, nibbleOffset+3)
+				n4, ok4 := getNibble(data, nibbleOffset+4)
+				if !ok3 || !ok4 {
+					return Packet{}, 0, errDecodeNotImplemented
+				}
+				var pkt Packet
+				pkt.SetPacketType(PktTrig, false)
+				pkt.Payload.D8 = (n3 << 4) | n4
+				return pkt, 5, nil
+			case 0x8: // FREQ — 11 nibbles total
+				var value uint32
+				for i := 0; i < 8; i++ {
+					n, ok := getNibble(data, nibbleOffset+3+i)
+					if !ok {
+						return Packet{}, 0, errDecodeNotImplemented
+					}
+					value = (value << 4) | uint32(n)
+				}
+				var pkt Packet
+				pkt.SetPacketType(PktFreq, false)
+				pkt.Payload.D32 = value
+				return pkt, 11, nil
+			default:
+				return Packet{}, 0, errDecodeNotImplemented
+			}
 		case 0xE: // Flag (no timestamp) — 2 nibbles
 			var pkt Packet
 			pkt.SetPacketType(PktFlag, false)

@@ -526,3 +526,57 @@ func TestDecodeNextPacketM8IncompleteFallsBackSTM(t *testing.T) {
 		t.Errorf("expected errDecodeNotImplemented, got %v", err)
 	}
 }
+
+func TestDecodeNextPacketVersionSTM(t *testing.T) {
+	// Nibble stream: F 0 0 3 => VERSION 3 (natural binary timestamps).
+	data := []byte{0x0F, 0x30}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 4 {
+		t.Fatalf("expected 4 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktVersion {
+		t.Fatalf("expected PktVersion, got %v", pkt.Type)
+	}
+	if pkt.Payload.D8 != 3 || pkt.TSType != TSNatBinary {
+		t.Fatalf("unexpected version decode: payload=%d tsType=%v", pkt.Payload.D8, pkt.TSType)
+	}
+}
+
+func TestDecodeNextPacketTriggerSTM(t *testing.T) {
+	// Nibble stream: F 0 6 1 2 => TRIG payload 0x12.
+	data := []byte{0x0F, 0x16, 0x02}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 5 {
+		t.Fatalf("expected 5 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktTrig {
+		t.Fatalf("expected PktTrig, got %v", pkt.Type)
+	}
+	if pkt.Payload.D8 != 0x12 {
+		t.Fatalf("expected trigger payload 0x12, got 0x%X", pkt.Payload.D8)
+	}
+}
+
+func TestDecodeNextPacketFreqSTM(t *testing.T) {
+	// Nibble stream: F 0 8 1 2 3 4 5 6 7 8 => FREQ payload 0x12345678.
+	data := []byte{0x0F, 0x18, 0x32, 0x54, 0x76, 0x08}
+	pkt, consumed, err := decodeNextPacket(data, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 11 {
+		t.Fatalf("expected 11 nibbles consumed, got %d", consumed)
+	}
+	if pkt.Type != PktFreq {
+		t.Fatalf("expected PktFreq, got %v", pkt.Type)
+	}
+	if pkt.Payload.D32 != 0x12345678 {
+		t.Fatalf("expected frequency payload 0x12345678, got 0x%X", pkt.Payload.D32)
+	}
+}
