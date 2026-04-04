@@ -1540,7 +1540,7 @@ func decodeNextPacket(data []byte, nibbleOffset int) (Packet, int, error) {
 		return pkt, 3, nil
 	case 0x5: // D16 — 5 nibbles total
 		var value uint16
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			n, ok := getNibble(data, nibbleOffset+1+i)
 			if !ok {
 				return Packet{}, 0, errDecodeNotImplemented
@@ -1553,7 +1553,7 @@ func decodeNextPacket(data []byte, nibbleOffset int) (Packet, int, error) {
 		return pkt, 5, nil
 	case 0x6: // D32 — 9 nibbles total
 		var value uint32
-		for i := 0; i < 8; i++ {
+		for i := range 8 {
 			n, ok := getNibble(data, nibbleOffset+1+i)
 			if !ok {
 				return Packet{}, 0, errDecodeNotImplemented
@@ -1566,7 +1566,7 @@ func decodeNextPacket(data []byte, nibbleOffset int) (Packet, int, error) {
 		return pkt, 9, nil
 	case 0x7: // D64 — 17 nibbles total
 		var value uint64
-		for i := 0; i < 16; i++ {
+		for i := range 16 {
 			n, ok := getNibble(data, nibbleOffset+1+i)
 			if !ok {
 				return Packet{}, 0, errDecodeNotImplemented
@@ -1657,7 +1657,7 @@ func decodeNextPacket(data []byte, nibbleOffset int) (Packet, int, error) {
 			return pkt, 4, nil
 		case 0x3: // C16 — 6 nibbles total
 			var value uint16
-			for i := 0; i < 4; i++ {
+			for i := range 4 {
 				n, ok := getNibble(data, nibbleOffset+2+i)
 				if !ok {
 					return Packet{}, 0, errDecodeNotImplemented
@@ -1680,7 +1680,7 @@ func decodeNextPacket(data []byte, nibbleOffset int) (Packet, int, error) {
 			return pkt, 4, nil
 		case 0x9: // D16M — 6 nibbles total
 			var value uint16
-			for i := 0; i < 4; i++ {
+			for i := range 4 {
 				n, ok := getNibble(data, nibbleOffset+2+i)
 				if !ok {
 					return Packet{}, 0, errDecodeNotImplemented
@@ -1693,7 +1693,7 @@ func decodeNextPacket(data []byte, nibbleOffset int) (Packet, int, error) {
 			return pkt, 6, nil
 		case 0xA: // D32M — 10 nibbles total
 			var value uint32
-			for i := 0; i < 8; i++ {
+			for i := range 8 {
 				n, ok := getNibble(data, nibbleOffset+2+i)
 				if !ok {
 					return Packet{}, 0, errDecodeNotImplemented
@@ -1706,7 +1706,7 @@ func decodeNextPacket(data []byte, nibbleOffset int) (Packet, int, error) {
 			return pkt, 10, nil
 		case 0xB: // D64M — 18 nibbles total
 			var value uint64
-			for i := 0; i < 16; i++ {
+			for i := range 16 {
 				n, ok := getNibble(data, nibbleOffset+2+i)
 				if !ok {
 					return Packet{}, 0, errDecodeNotImplemented
