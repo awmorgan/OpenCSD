@@ -720,6 +720,10 @@ func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
 	)
 
 	switch {
+	case header == 0x01:
+		pkt, bytesConsumed, err = decodeTraceInfoPacket(p.currPacketData, 0)
+	case header == 0x02 || header == 0x03:
+		pkt, bytesConsumed, err = decodeTimestampPacket(p.currPacketData, 0)
 	case header == 0x81:
 		pkt, bytesConsumed, err = decodeContextPacketWithConfig(p.config, p.currPacketData, 0)
 	case header == uint8(PktAddrCtxtL_32IS0) || header == uint8(PktAddrCtxtL_32IS1) ||
@@ -751,6 +755,25 @@ func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
 	p.currPacket.ErrHdrVal = pkt.ErrHdrVal
 
 	switch pkt.Type {
+	case PktTraceInfo:
+		p.currPacket.ClearTraceInfo()
+		p.currPacket.TraceInfo = pkt.TraceInfo
+		p.currPacket.P0Key = pkt.P0Key
+		p.currPacket.CurrSpecDepth = pkt.CurrSpecDepth
+		p.currPacket.CCThreshold = pkt.CCThreshold
+		p.currPacket.Valid.TInfo = pkt.Valid.TInfo
+		p.currPacket.Valid.SpecDepthValid = pkt.Valid.SpecDepthValid
+		p.currPacket.Valid.CCThreshold = pkt.Valid.CCThreshold
+		if !p.firstTraceInfo {
+			p.currPacket.TraceInfo.InitialTInfo = true
+			p.firstTraceInfo = true
+		}
+	case PktTimestamp:
+		p.currPacket.Timestamp = pkt.Timestamp
+		p.currPacket.TSBitsChanged = pkt.TSBitsChanged
+		p.currPacket.CycleCount = pkt.CycleCount
+		p.currPacket.Valid.Timestamp = pkt.Valid.Timestamp
+		p.currPacket.Valid.CycleCount = pkt.Valid.CycleCount
 	case PktCtxt:
 		if pkt.Valid.Context {
 			p.currPacket.Context = pkt.Context

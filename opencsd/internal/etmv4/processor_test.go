@@ -325,6 +325,38 @@ func TestDecodeNextPacketTimestampIncompleteFallsBack(t *testing.T) {
 	}
 }
 
+func TestProcessDataFastPathTimestampAcrossBlocks(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x02})
+	if err != nil {
+		t.Fatalf("unexpected error on first block: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected first block fully consumed, got %d", consumed)
+	}
+	if out.count != 0 {
+		t.Fatalf("did not expect output packet from incomplete timestamp")
+	}
+
+	consumed, err = p.processData(1, []byte{0x2A})
+	if err != nil {
+		t.Fatalf("unexpected error on second block: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected second block consumed bytes 1, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktTimestamp {
+		t.Fatalf("unexpected output packet after timestamp reassembly: count=%d type=%v", out.count, out.last.Type)
+	}
+	if out.last.Timestamp != 0x2A || !out.last.Valid.Timestamp {
+		t.Fatalf("unexpected timestamp payload after reassembly: ts=0x%X valid=%v", out.last.Timestamp, out.last.Valid.Timestamp)
+	}
+}
+
 func TestDecodeNextPacketCycleCntF3(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x1B}, 0)
 	if err != nil {
@@ -1257,6 +1289,41 @@ func TestDecodeNextPacketTraceInfoIncompleteFallsBack(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x01, 0x01}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
 		t.Fatalf("expected errDecodeNotImplemented for incomplete trace info, got %v", err)
+	}
+}
+
+func TestProcessDataFastPathTraceInfoAcrossBlocks(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x01, 0x01})
+	if err != nil {
+		t.Fatalf("unexpected error on first block: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected first block fully consumed, got %d", consumed)
+	}
+	if out.count != 0 {
+		t.Fatalf("did not expect output packet from incomplete trace-info")
+	}
+
+	consumed, err = p.processData(2, []byte{0x43})
+	if err != nil {
+		t.Fatalf("unexpected error on second block: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected second block consumed bytes 1, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktTraceInfo {
+		t.Fatalf("unexpected output packet after trace-info reassembly: count=%d type=%v", out.count, out.last.Type)
+	}
+	if !out.last.Valid.TInfo || out.last.TraceInfo.Val != 0x43 {
+		t.Fatalf("unexpected trace-info payload after reassembly: valid=%v val=0x%X", out.last.Valid.TInfo, out.last.TraceInfo.Val)
+	}
+	if !out.last.TraceInfo.InitialTInfo {
+		t.Fatalf("expected InitialTInfo flag on first trace-info packet")
 	}
 }
 
