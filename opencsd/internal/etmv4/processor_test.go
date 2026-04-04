@@ -1883,13 +1883,15 @@ func TestDecodeNextPacketExtensionAsync(t *testing.T) {
 }
 
 func TestDecodeNextPacketExtensionAsyncMalformed(t *testing.T) {
+	// Non-zero at position 10 (i=10, i<11) → early-abort after 11 bytes consumed.
+	// The trailing 0x80 byte is NOT consumed; it will be seen as the next packet.
 	data := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x80}
 	pkt, consumed, err := decodeNextPacket(data, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if consumed != 12 {
-		t.Fatalf("expected 12 bytes consumed, got %d", consumed)
+	if consumed != 11 {
+		t.Fatalf("expected 11 bytes consumed (early-abort at position 10), got %d", consumed)
 	}
 	if pkt.Type != PktAsync {
 		t.Fatalf("expected PktAsync, got %v", pkt.Type)

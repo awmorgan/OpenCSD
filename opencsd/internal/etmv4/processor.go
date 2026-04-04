@@ -273,7 +273,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				p.resetPacketState()
 				continue
 			case errors.Is(err, errDecodeNotImplemented):
-				// Fall back to the legacy state machine while migration is in progress.
+				// Packet spans block boundary; ProcData loop will accumulate remaining bytes.
 			default:
 				return uint32(consumed), err
 			}
@@ -315,8 +315,9 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 						// Keep accumulating bytes for stateless decode completion.
 						continue
 					}
+				} else {
+					p.runDecodeAction(nextByte)
 				}
-				p.runDecodeAction(nextByte)
 			}
 
 		case SendPkt:
@@ -381,6 +382,10 @@ func statelessProcDataManagedHeaderMaxLen(header uint8) (int, bool) {
 		return 6, true // 1 hdr + 5-byte commit
 	case header == 0x06:
 		return 3, true
+	case header == 0x00:
+		return 12, true // Extension: 1 hdr + subtype, up to 10 async padding bytes
+	case header == uint8(ETE_PktITE):
+		return 10, true // ITE: 1 hdr + 1 EL byte + 8 value bytes
 	default:
 		return 0, false
 	}
@@ -591,11 +596,6 @@ func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
 		return false, nil
 	}
 
-	header := p.currPacketData[0]
-	if _, managed := statelessProcDataManagedHeaderMaxLen(header); !managed {
-		return false, nil
-	}
-
 	pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, p.currPacketData, 0)
 
 	if err != nil {
@@ -615,8 +615,8 @@ func (p *Processor) tryStatelessDecodeCurrentPacketData() (bool, error) {
 }
 
 // decodeNextPacket decodes a single packet starting at offset without using Processor state.
-// It returns errDecodeNotImplemented for packet forms that still require legacy,
-// config-aware, or cross-block parsing.
+// It returns errDecodeNotImplemented only when there are insufficient bytes to complete
+// the packet (cross-block scenario); the caller should accumulate more data and retry.
 func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	if offset < 0 || offset >= len(data) {
 		return Packet{}, 0, fmt.Errorf("offset %d out of range", offset)
@@ -943,18 +943,27 @@ func decodeExtensionPacket(data []byte, offset int) (Packet, int, error) {
 	case 0x05:
 		return Packet{Type: PktOverflow}, 2, nil
 	case 0x00:
-		if offset+12 > len(data) {
-			return Packet{}, 0, errDecodeNotImplemented
-		}
-		for i := offset + 2; i < offset+11; i++ {
-			if data[i] != 0x00 {
-				return Packet{Type: PktAsync, Err: ocsd.ErrBadPacketSeq}, 12, nil
+		// Async packet: 12 bytes of form {0x00 ×11, 0x80}.
+		// Early-abort on the first non-zero byte in positions 2-10 to match the
+		// reference decoder's iPktASync behaviour, which outputs the packet immediately
+		// upon seeing the bad byte rather than waiting for a full 12-byte window.
+		for i := 2; i < 12; i++ {
+			if offset+i >= len(data) {
+				return Packet{}, 0, errDecodeNotImplemented
+			}
+			b := data[offset+i]
+			if i < 11 {
+				if b != 0x00 {
+					return Packet{Type: PktAsync, Err: ocsd.ErrBadPacketSeq}, i + 1, nil
+				}
+			} else { // i == 11
+				if b != 0x80 {
+					return Packet{Type: PktAsync, Err: ocsd.ErrBadPacketSeq}, 12, nil
+				}
+				return Packet{Type: PktAsync}, 12, nil
 			}
 		}
-		if data[offset+11] != 0x80 {
-			return Packet{Type: PktAsync, Err: ocsd.ErrBadPacketSeq}, 12, nil
-		}
-		return Packet{Type: PktAsync}, 12, nil
+		return Packet{Type: PktAsync}, 12, nil // unreachable
 	default:
 		return Packet{Type: PktExtension, Err: ocsd.ErrBadPacketSeq}, 2, nil
 	}
