@@ -859,6 +859,33 @@ func TestProcessDataConditionalPacketsFallbackWhenCondTraceDisabled(t *testing.T
 	}
 }
 
+func TestProcessDataFastPathInvalidCfgHeaderConsumesOneByte(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x42})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if out.count != 1 {
+		t.Fatalf("expected one output packet, got %d", out.count)
+	}
+	if out.last.Type != PktCondIF2 {
+		t.Fatalf("expected PktCondIF2 output, got %v", out.last.Type)
+	}
+	if !errors.Is(out.last.Err, errReservedCfg) {
+		t.Fatalf("expected errReservedCfg output, got %v", out.last.Err)
+	}
+	if out.last.ErrHdrVal != 0x42 {
+		t.Fatalf("expected header value 0x42, got 0x%X", out.last.ErrHdrVal)
+	}
+}
+
 func TestProcessDataFastPathReservedHeader(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
