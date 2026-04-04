@@ -83,7 +83,8 @@ type PktDecode struct {
 	pendingNaccAdr uint64
 	pendingNaccMem ocsd.MemSpaceAcc
 
-	csID uint8
+	csID  uint8
+	queue common.ElementQueue
 
 	// Pull-iterator fields (for API consistency with other decoders)
 	pendingElements []traceElemEvent
@@ -208,10 +209,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 			resp = d.ProcessPacket()
 			d.collectElements = false
 
-			for _, dr := range d.outputElemList.Drain() {
-				elem := cloneQueuedElem(&dr.Elem)
-				_ = d.sink.TraceElemIn(dr.Index, d.csID, &elem)
-			}
+			d.flushOutputElements()
 
 			// Drain queued elements only when using legacy push sink wiring.
 			if ocsd.DataRespIsCont(resp) && d.traceElemOut != nil {
@@ -314,6 +312,22 @@ func (d *PktDecode) putBackElement(index ocsd.TrcIndex, traceID uint8, elem ocsd
 	d.pendingElements = append([]traceElemEvent{e}, d.pendingElements...)
 }
 
+func (d *PktDecode) enqueueLegacyOutputElements() {
+	d.queue.PushAll(d.outputElemList.Drain())
+}
+
+func (d *PktDecode) flushOutputQueue() {
+	for _, dr := range d.queue.Drain() {
+		elem := cloneQueuedElem(&dr.Elem)
+		_ = d.sink.TraceElemIn(dr.Index, d.csID, &elem)
+	}
+}
+
+func (d *PktDecode) flushOutputElements() {
+	d.enqueueLegacyOutputElements()
+	d.flushOutputQueue()
+}
+
 func (d *PktDecode) configureDecoder() {
 	d.csID = 0
 	d.resetDecoder()
@@ -333,6 +347,7 @@ func (d *PktDecode) resetDecoder() {
 	d.pendingNaccAdr = 0
 	d.pendingNaccMem = ocsd.MemSpaceNone
 	d.pendingElements = d.pendingElements[:0]
+	d.queue = d.queue[:0]
 	d.outputElemList.Reset()
 }
 
@@ -386,10 +401,7 @@ func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 		return resp
 	}
 
-	for _, dr := range d.outputElemList.Drain() {
-		elem := cloneQueuedElem(&dr.Elem)
-		_ = d.sink.TraceElemIn(dr.Index, d.csID, &elem)
-	}
+	d.flushOutputElements()
 	d.currState = d.nextDecodeState()
 	return resp
 }
@@ -411,10 +423,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	elem.Payload.UnsyncEOTInfo = ocsd.UnsyncEOT
 	d.outputElemList.CommitAllPendElem()
 
-	for _, dr := range d.outputElemList.Drain() {
-		elem := cloneQueuedElem(&dr.Elem)
-		_ = d.sink.TraceElemIn(dr.Index, d.csID, &elem)
-	}
+	d.flushOutputElements()
 	d.currState = decodePkts
 
 	return resp
@@ -485,10 +494,7 @@ func (d *PktDecode) handleDecodePkts() (decoderState, ocsd.DatapathResp, bool) {
 }
 
 func (d *PktDecode) handleSendPkts() (decoderState, ocsd.DatapathResp, bool) {
-	for _, dr := range d.outputElemList.Drain() {
-		elem := cloneQueuedElem(&dr.Elem)
-		_ = d.sink.TraceElemIn(dr.Index, d.csID, &elem)
-	}
+	d.flushOutputElements()
 	return d.nextDecodeState(), ocsd.RespCont, true
 }
 
@@ -566,10 +572,7 @@ func (d *PktDecode) sendUnsyncPacket() ocsd.DatapathResp {
 
 	elem.SetType(ocsd.GenElemNoSync)
 	elem.Payload.UnsyncEOTInfo = ocsd.UnsyncInfo(d.unsyncInfo)
-	for _, dr := range d.outputElemList.Drain() {
-		e := cloneQueuedElem(&dr.Elem)
-		_ = d.sink.TraceElemIn(dr.Index, d.csID, &e)
-	}
+	d.flushOutputElements()
 	return ocsd.RespCont
 }
 

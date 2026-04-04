@@ -53,8 +53,10 @@ func (s *pktDecodeSink) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, ele
 		d.lastElemIndex = queueIndex
 		d.sawActivity = true
 	}
-	e := traceElemEvent{seq: queuedTraceElemSeq.Add(1), index: queueIndex, traceID: trcChanID, elem: cloneTraceElement(elem)}
-	d.pendingElements = append(d.pendingElements, e)
+	queued := cloneTraceElement(elem)
+	queued.TraceID = trcChanID
+	d.queue.Push(common.DrainedElement{Index: queueIndex, Elem: queued})
+	d.queueSeq = append(d.queueSeq, queuedTraceElemSeq.Add(1))
 	return nil
 }
 
@@ -62,6 +64,8 @@ type PktDecode struct {
 	inner           *etmv4.PktDecode
 	traceElemOut    ocsd.GenElemProcessor
 	sink            *pktDecodeSink
+	queue           common.ElementQueue
+	queueSeq        []uint64
 	pendingElements []traceElemEvent
 	lastPacketIndex ocsd.TrcIndex
 	lastElemIndex   ocsd.TrcIndex
@@ -159,7 +163,30 @@ func (d *PktDecode) TracePacketReset(indexSOP ocsd.TrcIndex) error {
 	return d.inner.TracePacketReset(indexSOP)
 }
 
+func (d *PktDecode) drainQueueToPending() {
+	drained := d.queue.Drain()
+	if len(drained) == 0 {
+		return
+	}
+	seqs := d.queueSeq
+	d.queueSeq = d.queueSeq[:0]
+	for i, dr := range drained {
+		seq := queuedTraceElemSeq.Add(1)
+		if i < len(seqs) {
+			seq = seqs[i]
+		}
+		e := traceElemEvent{
+			seq:     seq,
+			index:   dr.Index,
+			traceID: dr.Elem.TraceID,
+			elem:    dr.Elem,
+		}
+		d.pendingElements = append(d.pendingElements, e)
+	}
+}
+
 func (d *PktDecode) NextSequenced() (uint64, *ocsd.TraceElement, error) {
+	d.drainQueueToPending()
 	if len(d.pendingElements) == 0 {
 		return 0, nil, io.EOF
 	}

@@ -205,6 +205,7 @@ type PktDecode struct {
 	}
 
 	// Pull-iterator fields (for API consistency with other decoders)
+	queue           common.ElementQueue
 	pendingElements []traceElemEvent
 	collectElements bool
 	sink            *pktDecodeSink
@@ -292,10 +293,7 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 			resp = d.ProcessPacket()
 			d.collectElements = false
 
-			for _, dr := range d.outElem.Drain() {
-				elem := cloneQueuedElem(&dr.Elem)
-				_ = d.sink.TraceElemIn(dr.Index, d.config.TraceID(), &elem)
-			}
+			d.flushOutputElements()
 
 			// Drain queued elements only when using legacy push sink wiring.
 			if ocsd.DataRespIsCont(resp) && d.traceElemOut != nil {
@@ -398,6 +396,23 @@ func (d *PktDecode) putBackElement(index ocsd.TrcIndex, traceID uint8, elem ocsd
 	d.pendingElements = append([]traceElemEvent{e}, d.pendingElements...)
 }
 
+func (d *PktDecode) enqueueLegacyOutputElements() {
+	d.queue.PushAll(d.outElem.Drain())
+}
+
+func (d *PktDecode) flushOutputQueue() {
+	traceID := d.TraceID()
+	for _, dr := range d.queue.Drain() {
+		elem := cloneQueuedElem(&dr.Elem)
+		_ = d.sink.TraceElemIn(dr.Index, traceID, &elem)
+	}
+}
+
+func (d *PktDecode) flushOutputElements() {
+	d.enqueueLegacyOutputElements()
+	d.flushOutputQueue()
+}
+
 func (d *PktDecode) accessMemory(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
 	return d.AccessMemory(address, d.TraceID(), memSpace, reqBytes)
 }
@@ -427,6 +442,7 @@ func (d *PktDecode) configureDecoder() {
 	d.clearElemRes()
 	d.p0Stack = nil
 	d.poppedElems = nil
+	d.queue = d.queue[:0]
 	d.outElem = *common.NewElemStack()
 	if d.sink == nil {
 		d.sink = &pktDecodeSink{decoder: d}
@@ -567,10 +583,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	if err != nil {
 		resp = ocsd.RespFatalInvalidData
 	} else {
-		for _, dr := range d.outElem.Drain() {
-			elem := cloneQueuedElem(&dr.Elem)
-			_ = d.sink.TraceElemIn(dr.Index, d.config.TraceID(), &elem)
-		}
+		d.flushOutputElements()
 	}
 	return resp
 }
@@ -585,10 +598,7 @@ func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 	if d.currState == resolveElem {
 		return d.resolveElements()
 	}
-	for _, dr := range d.outElem.Drain() {
-		elem := cloneQueuedElem(&dr.Elem)
-		_ = d.sink.TraceElemIn(dr.Index, d.config.TraceID(), &elem)
-	}
+	d.flushOutputElements()
 	return ocsd.RespCont
 }
 
@@ -624,10 +634,7 @@ func (d *PktDecode) handleNoSync() (ocsd.DatapathResp, bool) {
 		err = d.outElem.AddElemType(d.IndexCurrPkt, ocsd.GenElemNoSync)
 		if err == nil {
 			d.outElem.CurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
-			for _, dr := range d.outElem.Drain() {
-				elem := cloneQueuedElem(&dr.Elem)
-				_ = d.sink.TraceElemIn(dr.Index, d.config.TraceID(), &elem)
-			}
+			d.flushOutputElements()
 			d.currState = waitSync
 			return ocsd.RespCont, false // continue to waitSync
 		}
@@ -689,10 +696,7 @@ func (d *PktDecode) resolveElements() ocsd.DatapathResp {
 
 	for !complete {
 		if d.outElem.NumElemToSend() > 0 {
-			for _, dr := range d.outElem.Drain() {
-				elem := cloneQueuedElem(&dr.Elem)
-				_ = d.sink.TraceElemIn(dr.Index, d.config.TraceID(), &elem)
-			}
+			d.flushOutputElements()
 		} else if d.isElemForRes() {
 			err := error(nil)
 			if d.elemRes.P0Commit != 0 {
@@ -2064,6 +2068,7 @@ func (d *PktDecode) resetDecoderState() {
 	d.unsyncPktIdx = ocsd.BadTrcIndex
 	d.eteFirstTSMarker = false
 	d.nextRangeCheckClear()
+	d.queue = d.queue[:0]
 
 	if d.outElem.ResetElemStack() != nil {
 		d.outElem = *common.NewElemStack()
@@ -2101,10 +2106,7 @@ func (d *PktDecode) emitNoSyncAtUnsyncIdx() ocsd.DatapathResp {
 		return ocsd.RespFatalSysErr
 	}
 	d.outElem.CurrElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
-	for _, dr := range d.outElem.Drain() {
-		elem := cloneQueuedElem(&dr.Elem)
-		_ = d.sink.TraceElemIn(dr.Index, d.config.TraceID(), &elem)
-	}
+	d.flushOutputElements()
 	return ocsd.RespCont
 }
 

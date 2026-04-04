@@ -48,6 +48,33 @@ type DrainedElement struct {
 	Elem  ocsd.TraceElement
 }
 
+// ElementQueue is the simple queue used by decoders during migration away
+// from legacy element wrapper types.
+type ElementQueue []DrainedElement
+
+// Push appends one element to the queue.
+func (q *ElementQueue) Push(e DrainedElement) {
+	*q = append(*q, e)
+}
+
+// PushAll appends all provided elements to the queue.
+func (q *ElementQueue) PushAll(elems []DrainedElement) {
+	if len(elems) == 0 {
+		return
+	}
+	*q = append(*q, elems...)
+}
+
+// Drain returns all queued elements and clears the queue.
+func (q *ElementQueue) Drain() []DrainedElement {
+	if len(*q) == 0 {
+		return nil
+	}
+	out := append([]DrainedElement(nil), (*q)...)
+	*q = (*q)[:0]
+	return out
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ElemList
 // ─────────────────────────────────────────────────────────────────────────────
