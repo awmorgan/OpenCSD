@@ -308,6 +308,13 @@ func TestDecodeNextPacketTimestampIncompleteFallsBack(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketTimestampIncompleteNeedsMoreData(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x02}, 0)
+	if !errors.Is(err, errDecodeNeedMoreData) {
+		t.Fatalf("expected errDecodeNeedMoreData for incomplete timestamp, got %v", err)
+	}
+}
+
 func TestProcessDataFastPathTimestampAcrossBlocks(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true

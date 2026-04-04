@@ -33,6 +33,7 @@ const (
 type Packet = TracePacket
 
 var errDecodeNotImplemented = errors.New("decodeNextPacket: packet type not implemented")
+var errDecodeNeedMoreData = fmt.Errorf("%w: need more data", errDecodeNotImplemented)
 
 // Processor parses byte streams for ETMv4 packets.
 // Ported from TrcPktProcEtmV4I.
@@ -172,8 +173,10 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				p.blockBytesProcessed = consumed
 				resp = p.emitCurrentPacket()
 				continue
-			case errors.Is(err, errDecodeNotImplemented):
+			case errors.Is(err, errDecodeNeedMoreData):
 				// Packet spans block boundary; ProcData loop will accumulate remaining bytes.
+			case errors.Is(err, errDecodeNotImplemented):
+				// Packet decode path not yet migrated; fall back to the legacy state loop.
 			default:
 				return uint32(consumed), err
 			}
@@ -202,7 +205,7 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 				if p.isSync {
 					pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, p.currPacketData, 0)
 					if err != nil {
-						if !errors.Is(err, errDecodeNotImplemented) {
+						if !errors.Is(err, errDecodeNeedMoreData) && !errors.Is(err, errDecodeNotImplemented) {
 							return uint32(consumed), err
 						}
 					} else if bytesConsumed == len(p.currPacketData) {
@@ -645,8 +648,8 @@ func (p *Processor) applyDecodedPacket(pkt Packet) {
 }
 
 // decodeNextPacket decodes a single packet starting at offset without using Processor state.
-// It returns errDecodeNotImplemented only when there are insufficient bytes to complete
-// the packet (cross-block scenario); the caller should accumulate more data and retry.
+// It returns errDecodeNeedMoreData when more bytes are required to complete a packet.
+// It returns errDecodeNotImplemented for packet forms that still require legacy handling.
 func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	if offset < 0 || offset >= len(data) {
 		return Packet{}, 0, fmt.Errorf("offset %d out of range", offset)
@@ -790,7 +793,7 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 }
 func decodeITEPacket(data []byte, offset int) (Packet, int, error) {
 	if offset+10 > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	var value uint64
@@ -808,7 +811,7 @@ func decodeITEPacket(data []byte, offset int) (Packet, int, error) {
 
 func decodeExceptionPacket(data []byte, offset int) (Packet, int, error) {
 	if offset+2 > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	byte1 := data[offset+1]
@@ -828,7 +831,7 @@ func decodeExceptionPacket(data []byte, offset int) (Packet, int, error) {
 	}
 
 	if offset+3 > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	byte2 := data[offset+2]
@@ -839,7 +842,7 @@ func decodeExceptionPacket(data []byte, offset int) (Packet, int, error) {
 
 func decodeExceptionPacketWithConfig(config Config, data []byte, offset int) (Packet, int, error) {
 	if offset+2 > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	byte1 := data[offset+1]
@@ -860,7 +863,7 @@ func decodeExceptionPacketWithConfig(config Config, data []byte, offset int) (Pa
 	consumed := 2
 	if requireThreeBytes {
 		if offset+3 > len(data) {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		if hasExtType {
 			byte2 := data[offset+2]
@@ -886,14 +889,14 @@ func decodeExceptionPacketWithConfig(config Config, data []byte, offset int) (Pa
 
 func decodeTraceInfoPacket(data []byte, offset int) (Packet, int, error) {
 	if offset+2 > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	idx := offset + 1
 	firstCtrl := data[idx]
 	for {
 		if idx >= len(data) {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		b := data[idx]
 		idx++
@@ -908,7 +911,7 @@ func decodeTraceInfoPacket(data []byte, offset int) (Packet, int, error) {
 	if presSect&uint8(TInfoInfoSect) != 0 {
 		fieldVal, n, ok := decodeContField32(data, idx, 5)
 		if !ok {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		idx += n
 		pkt.TraceInfo.Val = uint16(fieldVal)
@@ -923,7 +926,7 @@ func decodeTraceInfoPacket(data []byte, offset int) (Packet, int, error) {
 	if presSect&uint8(TInfoKeySect) != 0 {
 		fieldVal, n, ok := decodeContField32(data, idx, 5)
 		if !ok {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		idx += n
 		pkt.P0Key = fieldVal
@@ -932,7 +935,7 @@ func decodeTraceInfoPacket(data []byte, offset int) (Packet, int, error) {
 	if presSect&uint8(TInfoSpecSect) != 0 {
 		fieldVal, n, ok := decodeContField32(data, idx, 5)
 		if !ok {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		idx += n
 		pkt.CurrSpecDepth = fieldVal
@@ -943,7 +946,7 @@ func decodeTraceInfoPacket(data []byte, offset int) (Packet, int, error) {
 	if presSect&uint8(TInfoCyctSect) != 0 {
 		fieldVal, n, ok := decodeContField32(data, idx, 5)
 		if !ok {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		idx += n
 		pkt.CCThreshold = fieldVal
@@ -953,7 +956,7 @@ func decodeTraceInfoPacket(data []byte, offset int) (Packet, int, error) {
 	if presSect&uint8(TInfoWndwSect) != 0 {
 		_, n, ok := decodeContField32(data, idx, 5)
 		if !ok {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		idx += n
 	}
@@ -963,7 +966,7 @@ func decodeTraceInfoPacket(data []byte, offset int) (Packet, int, error) {
 
 func decodeExtensionPacket(data []byte, offset int) (Packet, int, error) {
 	if offset+1 >= len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	subType := data[offset+1]
@@ -979,7 +982,7 @@ func decodeExtensionPacket(data []byte, offset int) (Packet, int, error) {
 		// upon seeing the bad byte rather than waiting for a full 12-byte window.
 		for i := 2; i < 12; i++ {
 			if offset+i >= len(data) {
-				return Packet{}, 0, errDecodeNotImplemented
+				return Packet{}, 0, errDecodeNeedMoreData
 			}
 			b := data[offset+i]
 			if i < 11 {
@@ -1045,7 +1048,7 @@ func decodeCycleCntF3Packet(header uint8) Packet {
 
 func decodeCycleCntF2Packet(data []byte, offset int) (Packet, int, error) {
 	if offset+2 > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	pkt := Packet{Type: PktCcntF2}
@@ -1074,7 +1077,7 @@ func decodeCycleCntF2PacketWithConfig(config Config, data []byte, offset int) (P
 
 func decodeCycleCntF1Packet(data []byte, offset int) (Packet, int, error) {
 	if offset >= len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	header := data[offset]
@@ -1089,7 +1092,7 @@ func decodeCycleCntF1Packet(data []byte, offset int) (Packet, int, error) {
 
 	count, n, ok := decodeContField32(data, offset+1, 3)
 	if !ok {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 	pkt.CycleCount = count
 	pkt.Valid.CycleCount = true
@@ -1098,7 +1101,7 @@ func decodeCycleCntF1Packet(data []byte, offset int) (Packet, int, error) {
 
 func decodeCycleCntF1PacketWithConfig(config Config, data []byte, offset int) (Packet, int, error) {
 	if offset >= len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	header := data[offset]
@@ -1111,7 +1114,7 @@ func decodeCycleCntF1PacketWithConfig(config Config, data []byte, offset int) (P
 	idx := offset + 1
 	commit, n, ok := decodeContField32(data, idx, 5)
 	if !ok {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 	idx += n
 	pkt.CommitElements = commit
@@ -1125,7 +1128,7 @@ func decodeCycleCntF1PacketWithConfig(config Config, data []byte, offset int) (P
 
 	count, n, ok := decodeContField32(data, idx, 3)
 	if !ok {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 	idx += n
 	pkt.CycleCount = count
@@ -1177,13 +1180,13 @@ func setSimpleSpecResPayload(pkt *Packet, atomBits uint8, cancelF2 bool) {
 
 func decodeVariableSpecResPacket(data []byte, offset int) (Packet, int, error) {
 	if offset < 0 || offset >= len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	header := data[offset]
 	fieldVal, n, ok := decodeContField32(data, offset+1, 5)
 	if !ok {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	switch header {
@@ -1213,7 +1216,7 @@ func decodeCondIF2Packet(header uint8) Packet {
 func decodeCondIF1Packet(data []byte, offset int) (Packet, int, error) {
 	fieldVal, n, ok := decodeContField32(data, offset+1, 5)
 	if !ok {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 	pkt := Packet{Type: PktCondIF1}
 	pkt.CondInstr.CondCKey = fieldVal
@@ -1223,7 +1226,7 @@ func decodeCondIF1Packet(data []byte, offset int) (Packet, int, error) {
 
 func decodeCondIF3Packet(data []byte, offset int) (Packet, int, error) {
 	if offset+2 > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 	payload := data[offset+1]
 	pkt := Packet{Type: PktCondIF3}
@@ -1251,7 +1254,7 @@ func decodeCondResF4Packet(header uint8) (Packet, int, error) {
 
 func decodeCondResF1Packet(data []byte, offset int) (Packet, int, error) {
 	if offset < 0 || offset >= len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	header := data[offset]
@@ -1263,7 +1266,7 @@ func decodeCondResF1Packet(data []byte, offset int) (Packet, int, error) {
 	idx := offset + 1
 	key0, res0, n0, ok := decodeCondResultField(data, idx)
 	if !ok {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 	pkt.CondResult.CondRKey0 = key0
 	pkt.CondResult.Res0 = res0
@@ -1275,7 +1278,7 @@ func decodeCondResF1Packet(data []byte, offset int) (Packet, int, error) {
 	if (header & 0xFC) != 0x6C {
 		key1, res1, n1, ok := decodeCondResultField(data, idx)
 		if !ok {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		pkt.CondResult.CondRKey1 = key1
 		pkt.CondResult.Res1 = res1
@@ -1318,7 +1321,7 @@ func decodeCondResultField(data []byte, stIdx int) (key uint32, result uint8, co
 
 func decodeCondResF3Packet(data []byte, offset int) (Packet, int, error) {
 	if offset+2 > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 	pkt := Packet{Type: PktCondResF3}
 	f3Tokens := uint16(data[offset+1])
@@ -1329,12 +1332,12 @@ func decodeCondResF3Packet(data []byte, offset int) (Packet, int, error) {
 
 func decodeTimestampPacket(data []byte, offset int) (Packet, int, error) {
 	if offset+1 >= len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	tsVal, tsBytes, ok := decodeTSField64(data, offset+1)
 	if !ok {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	pkt := Packet{Type: PktTimestamp}
@@ -1350,7 +1353,7 @@ func decodeTimestampPacket(data []byte, offset int) (Packet, int, error) {
 	if (data[offset] & 0x1) != 0 {
 		cc, ccBytes, ok := decodeContField32(data, offset+consumed, 3)
 		if !ok {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		pkt.CycleCount = cc
 		pkt.Valid.CycleCount = true
@@ -1362,7 +1365,7 @@ func decodeTimestampPacket(data []byte, offset int) (Packet, int, error) {
 
 func decodeLongAddr64Packet(data []byte, offset int) (Packet, int, error) {
 	if offset+9 > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	header := data[offset]
@@ -1393,7 +1396,7 @@ func decodeLongAddr64Packet(data []byte, offset int) (Packet, int, error) {
 
 func decodeLongAddr32Packet(data []byte, offset int) (Packet, int, error) {
 	if offset+5 > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	header := data[offset]
@@ -1442,7 +1445,7 @@ func decodeLongAddr32Value(addrBytes []byte, is uint8) uint32 {
 
 func decodeShortAddrPacket(data []byte, offset int) (Packet, int, error) {
 	if offset+2 > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	header := data[offset]
@@ -1461,7 +1464,7 @@ func decodeShortAddrPacket(data []byte, offset int) (Packet, int, error) {
 
 	value, bits, payloadConsumed, ok := decodeShortAddrPayload(data, offset+1, is)
 	if !ok {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	pkt := Packet{
@@ -1511,11 +1514,11 @@ func decodeQPacket(data []byte, offset int) (Packet, int, error) {
 	switch qType {
 	case 0x0, 0x1, 0x2:
 		if offset+1 >= len(data) {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		count, n, ok := decodeContField32(data, offset+1, 5)
 		if !ok {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		pkt.AddrExactMatchIdx = qType & 0x3
 		pkt.Valid.ExactMatchIdxValid = true
@@ -1529,7 +1532,7 @@ func decodeQPacket(data []byte, offset int) (Packet, int, error) {
 		return pkt, 1 + n, nil
 	case 0x5, 0x6:
 		if offset+1 >= len(data) {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		is := uint8(0)
 		if qType == 0x6 {
@@ -1537,11 +1540,11 @@ func decodeQPacket(data []byte, offset int) (Packet, int, error) {
 		}
 		addr, bits, nAddr, ok := decodeShortAddrPayload(data, offset+1, is)
 		if !ok {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		count, nCount, ok := decodeContField32(data, offset+1+nAddr, 5)
 		if !ok {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		pkt.VAddr = ocsd.VAddr(addr)
 		pkt.VAddrValidBits = uint8(bits)
@@ -1558,7 +1561,7 @@ func decodeQPacket(data []byte, offset int) (Packet, int, error) {
 		return pkt, 1 + nAddr + nCount, nil
 	case 0xA, 0xB:
 		if offset+5 >= len(data) {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		is := uint8(0)
 		if qType == 0xB {
@@ -1567,7 +1570,7 @@ func decodeQPacket(data []byte, offset int) (Packet, int, error) {
 		addr := decodeLongAddr32Value(data[offset+1:offset+5], is)
 		count, nCount, ok := decodeContField32(data, offset+5, 5)
 		if !ok {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		pkt.VAddr = ocsd.VAddr(addr)
 		pkt.VAddrValidBits = 32
@@ -1584,11 +1587,11 @@ func decodeQPacket(data []byte, offset int) (Packet, int, error) {
 		return pkt, 5 + nCount, nil
 	case 0xC:
 		if offset+1 >= len(data) {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		count, n, ok := decodeContField32(data, offset+1, 5)
 		if !ok {
-			return Packet{}, 0, errDecodeNotImplemented
+			return Packet{}, 0, errDecodeNeedMoreData
 		}
 		pkt.QPkt = QPkt{
 			QCount:       count,
@@ -1604,7 +1607,7 @@ func decodeQPacket(data []byte, offset int) (Packet, int, error) {
 	case 0x3, 0x4, 0x7, 0x8, 0x9, 0xD, 0xE:
 		return Packet{Type: PktReserved, Err: errReservedHeader, ErrHdrVal: header}, 1, nil
 	default:
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 }
 
@@ -1616,7 +1619,7 @@ func decodeContextPacket(data []byte, offset int) (Packet, int, error) {
 	}
 
 	if offset+2 > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	info := data[offset+1]
@@ -1638,13 +1641,13 @@ func decodeContextPacket(data []byte, offset int) (Packet, int, error) {
 
 func decodeContextPacketWithConfig(config Config, data []byte, offset int) (Packet, int, error) {
 	if offset < 0 || offset >= len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 	if data[offset] != 0x81 {
 		return Packet{}, 0, errDecodeNotImplemented
 	}
 	if offset+2 > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	info := data[offset+1]
@@ -1659,7 +1662,7 @@ func decodeContextPacketWithConfig(config Config, data []byte, offset int) (Pack
 
 	consumed := 2 + vmidBytes + ctxtIDBytes
 	if offset+consumed > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	pkt := Packet{Type: PktCtxt}
@@ -1717,7 +1720,7 @@ func decodeAddrContextPacket(data []byte, offset int) (Packet, int, error) {
 
 	minLen := 1 + addrBytes + 1
 	if offset+minLen > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	info := data[offset+1+addrBytes]
@@ -1750,7 +1753,7 @@ func decodeAddrContextPacket(data []byte, offset int) (Packet, int, error) {
 
 func decodeAddrContextPacketWithConfig(config Config, data []byte, offset int) (Packet, int, error) {
 	if offset < 0 || offset >= len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	header := data[offset]
@@ -1777,7 +1780,7 @@ func decodeAddrContextPacketWithConfig(config Config, data []byte, offset int) (
 
 	minLen := 1 + addrBytes + 1
 	if offset+minLen > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	info := data[offset+1+addrBytes]
@@ -1792,7 +1795,7 @@ func decodeAddrContextPacketWithConfig(config Config, data []byte, offset int) (
 
 	consumed := minLen + vmidBytes + ctxtIDBytes
 	if offset+consumed > len(data) {
-		return Packet{}, 0, errDecodeNotImplemented
+		return Packet{}, 0, errDecodeNeedMoreData
 	}
 
 	pkt := Packet{Type: pktType}
