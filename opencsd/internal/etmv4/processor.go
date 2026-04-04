@@ -414,9 +414,6 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 			pkt, bytesConsumed, err := decodeNextPacket(dataBlock, consumed)
 			switch {
 			case err == nil:
-				if !p.canUseStatelessDecodeResult(pkt.Type) {
-					break
-				}
 				p.packetIndex = packetIndex
 				p.currPacket.Type = pkt.Type
 				p.currPacket.Err = pkt.Err
@@ -820,12 +817,6 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	pkt.ErrHdrVal = header
 	return pkt, 1, nil
 }
-
-func (p *Processor) canUseStatelessDecodeResult(pktType PktType) bool {
-	_ = pktType
-	return true
-}
-
 func decodeITEPacket(data []byte, offset int) (Packet, int, error) {
 	if offset+10 > len(data) {
 		return Packet{}, 0, errDecodeNotImplemented
