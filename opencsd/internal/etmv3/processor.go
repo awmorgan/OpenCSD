@@ -321,6 +321,27 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 			packetIndex := index + ocsd.TrcIndex(p.bytesProcessed)
 			header := dataBlock[p.bytesProcessed]
 
+			if (header & 0x81) == 0x80 {
+				pkt, consumed, err := decodePHdrPacketWithConfig(p.Config, dataBlock, p.bytesProcessed)
+				switch {
+				case err == nil:
+					p.currPacket.Clear()
+					p.currPacket.Type = pkt.Type
+					p.currPacket.Err = pkt.Err
+					p.currPacket.Atom = pkt.Atom
+					p.currPacket.PHdrFmt = pkt.PHdrFmt
+					p.currPacket.CycleCount = pkt.CycleCount
+					fastPkt := p.currPacket
+					resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+consumed])
+					p.bytesProcessed += consumed
+					continue
+				case errors.Is(err, errDecodeNotImplemented):
+					// Fall back to legacy state-machine decode while migration is in progress.
+				default:
+					return uint32(p.bytesProcessed), err
+				}
+			}
+
 			if (header & 0xFB) == 0x42 {
 				pkt, consumed, err := decodeTimestampPacketWithConfig(p.Config, dataBlock, p.bytesProcessed)
 				switch {
@@ -385,6 +406,8 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 				p.currPacket.Type = pkt.Type
 				p.currPacket.Err = pkt.Err
 				switch pkt.Type {
+				case PktCycleCount:
+					p.currPacket.CycleCount = pkt.CycleCount
 				case PktVMID:
 					p.currPacket.Context.VMID = pkt.Context.VMID
 					p.currPacket.Context.UpdatedV = pkt.Context.UpdatedV
@@ -472,6 +495,8 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	}
 
 	switch header {
+	case 0x04:
+		return decodeCycleCountPacket(data, offset)
 	case 0x0C:
 		return Packet{Type: PktTrigger}, 1, nil
 	case 0x3C:
@@ -494,6 +519,71 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		}
 		return Packet{}, 0, errDecodeNotImplemented
 	}
+}
+
+func decodeCycleCountPacket(data []byte, offset int) (Packet, int, error) {
+	if offset+2 > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	if data[offset] != 0x04 {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	idx := offset + 1
+	byteIdx := 0
+	mask := uint8(0x7F)
+	var cycleCount uint32
+
+	for {
+		if idx >= len(data) {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+
+		currByte := data[idx]
+		if byteIdx == 4 {
+			if (currByte & 0x80) != 0 {
+				return Packet{}, 0, fmt.Errorf("malformed cycle count: overlong continuation")
+			}
+			if (currByte & 0x70) != 0 {
+				return Packet{}, 0, fmt.Errorf("malformed cycle count: overflow in terminal byte")
+			}
+		}
+
+		cycleCount |= uint32(currByte&mask) << (7 * byteIdx)
+		idx++
+		byteIdx++
+
+		if byteIdx == 4 {
+			mask = 0x0F
+		}
+
+		if (currByte & 0x80) == 0 {
+			return Packet{Type: PktCycleCount, CycleCount: cycleCount}, 1 + byteIdx, nil
+		}
+
+		if byteIdx == 5 {
+			return Packet{}, 0, fmt.Errorf("malformed cycle count: continuation beyond maximum length")
+		}
+	}
+}
+
+func decodePHdrPacketWithConfig(config *Config, data []byte, offset int) (Packet, int, error) {
+	if offset < 0 || offset >= len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	header := data[offset]
+	if (header & 0x81) != 0x80 {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	if config == nil {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	pkt := Packet{Type: PktPHdr}
+	if !pkt.UpdateAtomFromPHdr(header, config.CycleAcc()) {
+		return Packet{}, 0, fmt.Errorf("invalid P-Header")
+	}
+	return pkt, 1, nil
 }
 
 func decodeTimestampPacket(data []byte, offset int) (Packet, int, error) {

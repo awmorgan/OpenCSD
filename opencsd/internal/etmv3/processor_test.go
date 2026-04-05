@@ -790,6 +790,55 @@ func TestDecodeNextPacketExceptionEntry(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketCycleCountSingleByte(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x04, 0x05}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktCycleCount {
+		t.Fatalf("expected PktCycleCount, got %v", pkt.Type)
+	}
+	if pkt.CycleCount != 5 {
+		t.Fatalf("expected cycle count 5, got %d", pkt.CycleCount)
+	}
+}
+
+func TestDecodeNextPacketCycleCountMultiByte(t *testing.T) {
+	pkt, consumed, err := decodeNextPacket([]byte{0x04, 0x81, 0x01}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 3 {
+		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktCycleCount {
+		t.Fatalf("expected PktCycleCount, got %v", pkt.Type)
+	}
+	if pkt.CycleCount != 129 {
+		t.Fatalf("expected cycle count 129, got %d", pkt.CycleCount)
+	}
+}
+
+func TestDecodeNextPacketCycleCountIncompleteFallsBack(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x04}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected errDecodeNotImplemented for incomplete cycle count, got %v", err)
+	}
+}
+
+func TestDecodeNextPacketCycleCountMalformedOverflow(t *testing.T) {
+	_, _, err := decodeNextPacket([]byte{0x04, 0x81, 0x81, 0x81, 0x81, 0x70}, 0)
+	if err == nil {
+		t.Fatalf("expected malformed cycle count error")
+	}
+	if errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected malformed error, got fallback sentinel")
+	}
+}
+
 func TestDecodeNextPacketVMID(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0x3C, 0x55}, 0)
 	if err != nil {
@@ -888,6 +937,31 @@ func TestDecodeContextIDPacketWithConfig(t *testing.T) {
 	}
 }
 
+func TestDecodePHdrPacketWithConfig(t *testing.T) {
+	config := &Config{}
+	pkt, consumed, err := decodePHdrPacketWithConfig(config, []byte{0x84}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if pkt.Type != PktPHdr {
+		t.Fatalf("expected PktPHdr, got %v", pkt.Type)
+	}
+	if pkt.Atom.Num == 0 {
+		t.Fatalf("expected non-zero atom count")
+	}
+}
+
+func TestDecodePHdrPacketWithConfigInvalidFallsBackOrErrors(t *testing.T) {
+	config := &Config{RegCtrl: ctrlCycleAcc}
+	_, _, err := decodePHdrPacketWithConfig(config, []byte{0x80}, 0)
+	if err == nil {
+		t.Fatalf("expected invalid P-Header error")
+	}
+}
+
 func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x08}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
@@ -979,5 +1053,26 @@ func TestProcessDataFastPathStoreFailAndDataSuppressed(t *testing.T) {
 	}
 	if sink.packets[len(sink.packets)-1].Type != PktDataSuppressed {
 		t.Fatalf("expected PktDataSuppressed output")
+	}
+}
+
+func TestProcessDataFastPathPHdr(t *testing.T) {
+	proc, sink := newSyncedProc(&Config{})
+	consumed, err := proc.ProcessData(6, []byte{0x84})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed, got %d", consumed)
+	}
+	if len(sink.packets) == 0 {
+		t.Fatalf("expected output packet")
+	}
+	pkt := sink.packets[len(sink.packets)-1]
+	if pkt.Type != PktPHdr {
+		t.Fatalf("expected PktPHdr, got %v", pkt.Type)
+	}
+	if pkt.Atom.Num == 0 {
+		t.Fatalf("expected atom data in PHdr packet")
 	}
 }
