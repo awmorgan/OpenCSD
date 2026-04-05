@@ -43,8 +43,8 @@ type Processor struct {
 	// pending raw bytes and packet metadata for cross-block reassembly / unsynced handling.
 	pendingData     []byte
 	pendingStartIdx ocsd.TrcIndex
-	pendingPacket   Packet
 	pendingDump     bool
+	pendingUnsynced bool
 
 	packetIndex          ocsd.TrcIndex
 	blockIndex           ocsd.TrcIndex
@@ -248,13 +248,15 @@ func (p *Processor) processUnsyncedBlock(dataBlock []byte, consumed int) (ocsd.D
 	}
 
 	if len(p.pendingData) == 0 {
-		if p.pendingPacket.Type == 0 {
+		if p.pendingUnsynced {
+			p.packetIndex = p.pendingStartIdx
+		} else {
 			p.pendingStartIdx = p.blockIndex + ocsd.TrcIndex(consumed)
 			p.packetIndex = p.pendingStartIdx
-			p.pendingPacket = Packet{Type: PktNotSync}
-		} else {
-			p.packetIndex = p.pendingStartIdx
+			p.pendingUnsynced = true
 		}
+	} else {
+		p.packetIndex = p.pendingStartIdx
 	}
 
 	for consumed < len(dataBlock) {
@@ -262,8 +264,9 @@ func (p *Processor) processUnsyncedBlock(dataBlock []byte, consumed int) (ocsd.D
 		p.pendingData = append(p.pendingData, nextByte)
 		consumed++
 		p.blockBytesProcessed = consumed
-		if p.processUnsyncedByte(nextByte) {
-			resp = p.emitPendingPacket(p.pendingPacket)
+		done, pkt := p.processUnsyncedByte(nextByte)
+		if done {
+			resp = p.emitPendingPacket(pkt)
 			return resp, consumed, nil
 		}
 		if p.pendingDump {
@@ -2020,16 +2023,14 @@ func (p *Processor) onEOT() ocsd.DatapathResp {
 }
 
 func (p *Processor) pendingPacketForEOT() Packet {
-	if p.pendingPacket.Type != 0 {
-		return p.pendingPacket
-	}
 	if len(p.pendingData) == 0 {
 		return Packet{}
 	}
-	if !p.isSync {
-		return Packet{Type: PktNotSync}
+	if p.isSync {
+		return Packet{Type: packetTypeForHeader(p.config, p.pendingData[0])}
 	}
-	return Packet{Type: packetTypeForHeader(p.config, p.pendingData[0])}
+	typeOnly := p.pendingUnsyncedPacketType()
+	return Packet{Type: typeOnly}
 }
 
 func (p *Processor) onReset() ocsd.DatapathResp {
@@ -2081,8 +2082,8 @@ func (p *Processor) resetProcessorState() {
 func (p *Processor) resetPendingState() {
 	p.pendingData = p.pendingData[:0]
 	p.pendingStartIdx = 0
-	p.pendingPacket = Packet{}
 	p.pendingDump = false
+	p.pendingUnsynced = false
 	p.dumpUnsyncedBytes = 0
 	p.updateOnUnsyncPktIdx = 0
 }
@@ -2144,9 +2145,7 @@ func (p *Processor) emitPendingPacket(pkt Packet) ocsd.DatapathResp {
 func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
 	n := p.dumpUnsyncedBytes
 	pkt := p.statePacket
-	pkt.Type = p.pendingPacket.Type
-	pkt.Err = p.pendingPacket.Err
-	pkt.ErrHdrVal = p.pendingPacket.ErrHdrVal
+	pkt.Type = p.pendingUnsyncedPacketType()
 
 	if p.PktRawMonI != nil && n > 0 && len(p.pendingData) > 0 {
 		monBytes := min(n, len(p.pendingData))
@@ -2169,21 +2168,68 @@ func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
 	return resp
 }
 
+func (p *Processor) pendingUnsyncedPacketType() PktType {
+	if len(p.pendingData) >= 2 && p.pendingData[0] == 0x00 && p.pendingData[1] == 0x00 {
+		allZerosAfterPrefix := true
+		for i := 2; i < len(p.pendingData); i++ {
+			if p.pendingData[i] != 0x00 {
+				allZerosAfterPrefix = false
+				break
+			}
+		}
+		if allZerosAfterPrefix {
+			return PktAsync
+		}
+
+		if len(p.pendingData) == 12 {
+			allZerosBody := true
+			for i := 2; i < 11; i++ {
+				if p.pendingData[i] != 0x00 {
+					allZerosBody = false
+					break
+				}
+			}
+			if allZerosBody && p.pendingData[11] == 0x80 {
+				return PktAsync
+			}
+		}
+	}
+	return PktNotSync
+}
+
+func (p *Processor) pendingUnsyncedASyncCandidateBeforeLast() bool {
+	if len(p.pendingData) < 2 || p.pendingData[0] != 0x00 || p.pendingData[1] != 0x00 {
+		return false
+	}
+	for i := 2; i < len(p.pendingData)-1; i++ {
+		if p.pendingData[i] != 0x00 {
+			return false
+		}
+	}
+	return true
+}
+
 // ============================
 // Packet handlers
 // ============================
 
-func (p *Processor) processUnsyncedByte(lastByte uint8) bool {
-	switch p.pendingPacket.Type {
-	case PktAsync:
-		return p.processUnsyncedASync(lastByte)
-	default:
-		if !p.isSync && len(p.pendingData) > 0 && p.pendingData[0] == 0x00 && len(p.pendingData) <= 2 {
-			return p.processUnsyncedExtension(lastByte)
+func (p *Processor) processUnsyncedByte(lastByte uint8) (bool, Packet) {
+	if !p.isSync && len(p.pendingData) > 0 && p.pendingData[0] == 0x00 && len(p.pendingData) <= 2 {
+		done, pkt, handled := p.processUnsyncedExtension(lastByte)
+		if handled {
+			return done, pkt
 		}
-		p.processUnsyncedNotSync(lastByte)
-		return false
 	}
+
+	if p.pendingUnsyncedASyncCandidateBeforeLast() {
+		done, pkt, handled := p.processUnsyncedASync(lastByte)
+		if handled {
+			return done, pkt
+		}
+	}
+
+	p.processUnsyncedNotSync(lastByte)
+	return false, Packet{}
 }
 
 func (p *Processor) processUnsyncedNotSync(lastByte uint8) {
@@ -2205,59 +2251,52 @@ func (p *Processor) queueUnsyncedDump(bytes int, updateIdx ocsd.TrcIndex) {
 	p.updateOnUnsyncPktIdx = updateIdx
 }
 
-func (p *Processor) processUnsyncedExtension(lastByte uint8) bool {
+func (p *Processor) processUnsyncedExtension(lastByte uint8) (bool, Packet, bool) {
 	if len(p.pendingData) == 1 {
 		p.pendingStartIdx = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
 		p.packetIndex = p.pendingStartIdx
-		return false
+		return false, Packet{}, true
 	}
 
 	if len(p.pendingData) == 2 {
 		if !p.isSync && lastByte != 0x00 {
-			p.pendingPacket.Type = PktNotSync
-			return false
+			return false, Packet{}, true
 		}
 		switch lastByte {
 		case 0x03:
-			p.pendingPacket.Type = PktDiscard
-			return true
+			return true, Packet{Type: PktDiscard}, true
 		case 0x05:
-			p.pendingPacket.Type = PktOverflow
-			return true
+			return true, Packet{Type: PktOverflow}, true
 		case 0x00:
-			p.pendingPacket.Type = PktAsync
-			return false
+			return false, Packet{}, true
 		default:
-			p.pendingPacket.Err = ocsd.ErrBadPacketSeq
-			return true
+			return true, Packet{Type: PktNotSync, Err: ocsd.ErrBadPacketSeq}, true
 		}
 	}
 
-	return false
+	return false, Packet{}, false
 }
 
-func (p *Processor) processUnsyncedASync(lastByte uint8) bool {
+func (p *Processor) processUnsyncedASync(lastByte uint8) (bool, Packet, bool) {
 	if lastByte != 0x00 {
 		if !p.isSync && len(p.pendingData) != 12 {
-			p.pendingPacket.Type = PktNotSync
-			return false
+			return false, Packet{}, true
 		}
 		if len(p.pendingData) != 12 || lastByte != 0x80 {
-			p.pendingPacket.Err = ocsd.ErrBadPacketSeq
+			return true, Packet{Type: PktAsync, Err: ocsd.ErrBadPacketSeq}, true
 		} else {
 			p.isSync = true
+			return true, Packet{Type: PktAsync}, true
 		}
-		return true
 	} else if len(p.pendingData) == 12 {
 		if !p.isSync {
 			p.queueUnsyncedDump(1, 0)
 		} else {
-			p.pendingPacket.Err = ocsd.ErrBadPacketSeq
-			return true
+			return true, Packet{Type: PktAsync, Err: ocsd.ErrBadPacketSeq}, true
 		}
 	}
 
-	return false
+	return false, Packet{}, true
 }
 func (p *Processor) update32BitAddress(state *TracePacket, currAddr ocsd.VAddr, newVal32 uint32) ocsd.VAddr {
 	if state.Valid.Context && state.Context.SF {
