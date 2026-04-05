@@ -342,6 +342,24 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 				}
 			}
 
+			if header == 0x50 || header == 0x62 {
+				pkt, consumed, err := decodeDataModeSingleBytePacketWithConfig(p.Config, dataBlock, p.bytesProcessed)
+				switch {
+				case err == nil:
+					p.currPacket.Clear()
+					p.currPacket.Type = pkt.Type
+					p.currPacket.Err = pkt.Err
+					fastPkt := p.currPacket
+					resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+consumed])
+					p.bytesProcessed += consumed
+					continue
+				case errors.Is(err, errDecodeNotImplemented):
+					// Fall back to legacy state-machine decode while migration is in progress.
+				default:
+					return uint32(p.bytesProcessed), err
+				}
+			}
+
 			if (header & 0xFB) == 0x42 {
 				pkt, consumed, err := decodeTimestampPacketWithConfig(p.Config, dataBlock, p.bytesProcessed)
 				switch {
@@ -379,24 +397,6 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 				default:
 					return uint32(p.bytesProcessed), err
 				}
-			}
-
-			if header == 0x50 && p.Config != nil && p.Config.DataValTrace() {
-				p.currPacket.Clear()
-				p.currPacket.Type = PktStoreFail
-				fastPkt := p.currPacket
-				resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+1])
-				p.bytesProcessed++
-				continue
-			}
-
-			if header == 0x62 && p.Config != nil && p.Config.DataTrace() {
-				p.currPacket.Clear()
-				p.currPacket.Type = PktDataSuppressed
-				fastPkt := p.currPacket
-				resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+1])
-				p.bytesProcessed++
-				continue
 			}
 
 			pkt, consumed, err := decodeNextPacket(dataBlock, p.bytesProcessed)
@@ -584,6 +584,30 @@ func decodePHdrPacketWithConfig(config *Config, data []byte, offset int) (Packet
 		return Packet{}, 0, fmt.Errorf("invalid P-Header")
 	}
 	return pkt, 1, nil
+}
+
+func decodeDataModeSingleBytePacketWithConfig(config *Config, data []byte, offset int) (Packet, int, error) {
+	if offset < 0 || offset >= len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	if config == nil {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	switch data[offset] {
+	case 0x50:
+		if config.DataValTrace() {
+			return Packet{Type: PktStoreFail}, 1, nil
+		}
+		return Packet{}, 0, errDecodeNotImplemented
+	case 0x62:
+		if config.DataTrace() {
+			return Packet{Type: PktDataSuppressed}, 1, nil
+		}
+		return Packet{}, 0, errDecodeNotImplemented
+	default:
+		return Packet{}, 0, errDecodeNotImplemented
+	}
 }
 
 func decodeTimestampPacket(data []byte, offset int) (Packet, int, error) {

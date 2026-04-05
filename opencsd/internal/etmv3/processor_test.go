@@ -962,6 +962,38 @@ func TestDecodePHdrPacketWithConfigInvalidFallsBackOrErrors(t *testing.T) {
 	}
 }
 
+func TestDecodeDataModeSingleBytePacketWithConfig(t *testing.T) {
+	config := &Config{RegCtrl: ctrlDataVal | ctrlDataAddr}
+
+	pkt, consumed, err := decodeDataModeSingleBytePacketWithConfig(config, []byte{0x50}, 0)
+	if err != nil {
+		t.Fatalf("unexpected store-fail error: %v", err)
+	}
+	if consumed != 1 || pkt.Type != PktStoreFail {
+		t.Fatalf("unexpected store-fail decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+
+	pkt, consumed, err = decodeDataModeSingleBytePacketWithConfig(config, []byte{0x62}, 0)
+	if err != nil {
+		t.Fatalf("unexpected data-suppressed error: %v", err)
+	}
+	if consumed != 1 || pkt.Type != PktDataSuppressed {
+		t.Fatalf("unexpected data-suppressed decode: consumed=%d type=%v", consumed, pkt.Type)
+	}
+}
+
+func TestDecodeDataModeSingleBytePacketWithConfigFallsBackWhenDisabled(t *testing.T) {
+	_, _, err := decodeDataModeSingleBytePacketWithConfig(&Config{}, []byte{0x50}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected fallback sentinel for disabled store-fail mode, got %v", err)
+	}
+
+	_, _, err = decodeDataModeSingleBytePacketWithConfig(&Config{}, []byte{0x62}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected fallback sentinel for disabled data-suppressed mode, got %v", err)
+	}
+}
+
 func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x08}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
