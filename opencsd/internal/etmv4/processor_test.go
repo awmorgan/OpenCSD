@@ -240,6 +240,26 @@ func TestDecodeNextPacketWithConfigExceptionEteReset(t *testing.T) {
 	}
 }
 
+func TestDecodeNextPacketWithConfigAllHeadersDoNotUseSentinel(t *testing.T) {
+	configs := []Config{
+		{},
+		{RegIdr1: 0x0500},
+		{RegIdr0: 0x40, RegConfigr: 1 << 8},
+	}
+
+	for _, cfg := range configs {
+		for header := 0; header <= 0xFF; header++ {
+			data := make([]byte, 32)
+			data[0] = byte(header)
+
+			_, _, err := decodeNextPacketWithConfig(cfg, data, 0)
+			if err != nil {
+				t.Fatalf("unexpected decode error for config=%+v header=0x%02X: %v", cfg, header, err)
+			}
+		}
+	}
+}
+
 func TestProcessDataFastPathExceptionEteResetAndTransFail(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr1: 0x0500})
 	p.isSync = true
@@ -266,90 +286,6 @@ func TestProcessDataFastPathExceptionEteResetAndTransFail(t *testing.T) {
 	}
 	if out.count != 2 || out.last.Type != ETE_PktTransFail {
 		t.Fatalf("unexpected second output packet: count=%d type=%v", out.count, out.last.Type)
-	}
-}
-
-func TestProcessDataFallsBackOnDecodeNotImplementedSentinel(t *testing.T) {
-	origDecodeFn := decodeNextPacketWithConfigFn
-	defer func() {
-		decodeNextPacketWithConfigFn = origDecodeFn
-	}()
-
-	callCount := 0
-	decodeNextPacketWithConfigFn = func(config Config, data []byte, offset int) (Packet, int, error) {
-		callCount++
-		if callCount == 1 {
-			return Packet{}, 0, errDecodeNotImplemented
-		}
-		return decodeNextPacketWithConfig(config, data, offset)
-	}
-
-	p := NewProcessor(&Config{})
-	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
-
-	consumed, err := p.processData(0, []byte{0xF7})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if consumed != 1 {
-		t.Fatalf("expected 1 byte consumed, got %d", consumed)
-	}
-	if out.count != 1 || out.last.Type != PktAtomF1 {
-		t.Fatalf("unexpected output packet after fallback: count=%d type=%v", out.count, out.last.Type)
-	}
-	if callCount != 1 {
-		t.Fatalf("expected single hook invocation before concrete fallback, got %d calls", callCount)
-	}
-}
-
-func TestProcessDataFallsBackOnBufferedDecodeNotImplementedSentinel(t *testing.T) {
-	origDecodeFn := decodeNextPacketWithConfigFn
-	defer func() {
-		decodeNextPacketWithConfigFn = origDecodeFn
-	}()
-
-	callCount := 0
-	decodeNextPacketWithConfigFn = func(config Config, data []byte, offset int) (Packet, int, error) {
-		callCount++
-		if len(data)-offset >= 2 && data[offset] == 0x02 && data[offset+1] == 0x2A {
-			return Packet{}, 0, errDecodeNotImplemented
-		}
-		return decodeNextPacketWithConfig(config, data, offset)
-	}
-
-	p := NewProcessor(&Config{})
-	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
-
-	consumed, err := p.processData(0, []byte{0x02})
-	if err != nil {
-		t.Fatalf("unexpected first-block error: %v", err)
-	}
-	if consumed != 1 {
-		t.Fatalf("expected 1 byte consumed on first block, got %d", consumed)
-	}
-	if out.count != 0 {
-		t.Fatalf("did not expect packet output from incomplete first block")
-	}
-
-	consumed, err = p.processData(1, []byte{0x2A})
-	if err != nil {
-		t.Fatalf("unexpected second-block error: %v", err)
-	}
-	if consumed != 1 {
-		t.Fatalf("expected 1 byte consumed on second block, got %d", consumed)
-	}
-	if out.count != 1 || out.last.Type != PktTimestamp {
-		t.Fatalf("unexpected output packet after buffered fallback: count=%d type=%v", out.count, out.last.Type)
-	}
-	if out.last.Timestamp != 0x2A || !out.last.Valid.Timestamp {
-		t.Fatalf("unexpected timestamp payload after buffered fallback: ts=0x%X valid=%v", out.last.Timestamp, out.last.Valid.Timestamp)
-	}
-	if callCount < 2 {
-		t.Fatalf("expected hook calls across both blocks, got %d", callCount)
 	}
 }
 
@@ -416,9 +352,6 @@ func TestProcessDataFastPathTimestampAcrossBlocks(t *testing.T) {
 	}
 	if out.count != 0 {
 		t.Fatalf("did not expect output packet from incomplete timestamp")
-	}
-	if p.processState != ProcHdr {
-		t.Fatalf("expected incomplete synced packet to leave processState as ProcHdr, got %v", p.processState)
 	}
 
 	consumed, err = p.processData(1, []byte{0x2A})

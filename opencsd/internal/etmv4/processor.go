@@ -33,9 +33,6 @@ const (
 type Packet = TracePacket
 
 var errDecodeNeedMoreData = errors.New("decodeNextPacket: need more data")
-var errDecodeNotImplemented = errors.New("decodeNextPacket: packet type not implemented")
-
-var decodeNextPacketWithConfigFn = decodeNextPacketWithConfig
 
 // Processor parses byte streams for ETMv4 packets.
 // Ported from TrcPktProcEtmV4I.
@@ -201,7 +198,7 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 
 	if len(p.currPacketData) == 0 {
 		packetIndex := p.blockIndex + ocsd.TrcIndex(consumed)
-		pkt, bytesConsumed, err := decodeNextPacketWithSentinelFallback(p.config, dataBlock, consumed)
+		pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, dataBlock, consumed)
 		switch {
 		case err == nil:
 			p.packetIndex = packetIndex
@@ -228,7 +225,7 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 		consumed++
 		p.blockBytesProcessed = consumed
 
-		pkt, bytesConsumed, err := decodeNextPacketWithSentinelFallback(p.config, p.currPacketData, 0)
+		pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, p.currPacketData, 0)
 		switch {
 		case err == nil:
 			if bytesConsumed != len(p.currPacketData) {
@@ -426,14 +423,6 @@ func decodeNextPacketWithConfig(config Config, data []byte, offset int) (Packet,
 	default:
 		return decodeNextPacket(data, offset)
 	}
-}
-
-func decodeNextPacketWithSentinelFallback(config Config, data []byte, offset int) (Packet, int, error) {
-	pkt, consumed, err := decodeNextPacketWithConfigFn(config, data, offset)
-	if !errors.Is(err, errDecodeNotImplemented) {
-		return pkt, consumed, err
-	}
-	return decodeNextPacketWithConfig(config, data, offset)
 }
 
 func decodeConfigHeaderOverride(config Config, header uint8) (Packet, bool) {
