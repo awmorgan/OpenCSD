@@ -1014,6 +1014,31 @@ func TestDecodeNextPacketWithConfigFallsBackToBase(t *testing.T) {
 	}
 }
 
+func TestDecodeISyncNoInstrPacketWithConfig(t *testing.T) {
+	config := &Config{RegCtrl: ctrlDataOnly}
+	pkt, consumed, err := decodeISyncNoInstrPacketWithConfig(config, []byte{0x08, 0x08}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if pkt.Type != PktISync {
+		t.Fatalf("expected PktISync, got %v", pkt.Type)
+	}
+	if !pkt.ISyncInfo.NoAddress || !pkt.Context.Updated || !pkt.Context.CurrNS {
+		t.Fatalf("unexpected ISync decode: noAddr=%v updated=%v ns=%v", pkt.ISyncInfo.NoAddress, pkt.Context.Updated, pkt.Context.CurrNS)
+	}
+}
+
+func TestDecodeISyncNoInstrPacketWithConfigFallsBackWhenInstrTraceEnabled(t *testing.T) {
+	config := &Config{}
+	_, _, err := decodeISyncNoInstrPacketWithConfig(config, []byte{0x08, 0x00}, 0)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		t.Fatalf("expected fallback sentinel, got %v", err)
+	}
+}
+
 func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x08}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
@@ -1126,5 +1151,27 @@ func TestProcessDataFastPathPHdr(t *testing.T) {
 	}
 	if pkt.Atom.Num == 0 {
 		t.Fatalf("expected atom data in PHdr packet")
+	}
+}
+
+func TestProcessDataFastPathISyncNoInstr(t *testing.T) {
+	proc, sink := newSyncedProc(&Config{RegCtrl: ctrlDataOnly})
+	before := len(sink.packets)
+	consumed, err := proc.ProcessData(6, []byte{0x08, 0x08})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 2 {
+		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
+	}
+	if len(sink.packets) <= before {
+		t.Fatalf("expected output packet")
+	}
+	pkt := sink.packets[len(sink.packets)-1]
+	if pkt.Type != PktISync {
+		t.Fatalf("expected PktISync, got %v", pkt.Type)
+	}
+	if !pkt.ISyncInfo.NoAddress || !pkt.Context.Updated || !pkt.Context.CurrNS {
+		t.Fatalf("unexpected isync packet output: noAddr=%v updated=%v ns=%v", pkt.ISyncInfo.NoAddress, pkt.Context.Updated, pkt.Context.CurrNS)
 	}
 }

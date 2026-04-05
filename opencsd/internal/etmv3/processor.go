@@ -334,6 +334,14 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 				case PktContextID:
 					p.currPacket.Context.CtxtID = pkt.Context.CtxtID
 					p.currPacket.Context.UpdatedC = pkt.Context.UpdatedC
+				case PktISync:
+					p.currPacket.Context.CtxtID = pkt.Context.CtxtID
+					p.currPacket.Context.CurrAltIsa = pkt.Context.CurrAltIsa
+					p.currPacket.Context.CurrNS = pkt.Context.CurrNS
+					p.currPacket.Context.CurrHyp = pkt.Context.CurrHyp
+					p.currPacket.Context.Updated = pkt.Context.Updated
+					p.currPacket.Context.UpdatedC = pkt.Context.UpdatedC
+					p.currPacket.ISyncInfo = pkt.ISyncInfo
 				case PktCycleCount:
 					p.currPacket.CycleCount = pkt.CycleCount
 				case PktVMID:
@@ -478,6 +486,13 @@ func decodeNextPacketWithConfig(config *Config, data []byte, offset int) (Packet
 
 	if header == 0x6E {
 		pkt, consumed, err := decodeContextIDPacketWithConfig(config, data, offset)
+		if err == nil || !errors.Is(err, errDecodeNotImplemented) {
+			return pkt, consumed, err
+		}
+	}
+
+	if header == 0x08 {
+		pkt, consumed, err := decodeISyncNoInstrPacketWithConfig(config, data, offset)
 		if err == nil || !errors.Is(err, errDecodeNotImplemented) {
 			return pkt, consumed, err
 		}
@@ -688,6 +703,50 @@ func decodeContextIDPacketWithConfig(config *Config, data []byte, offset int) (P
 		pkt.Context.CtxtID = cid
 		pkt.Context.UpdatedC = true
 	}
+	return pkt, consumed, nil
+}
+
+func decodeISyncNoInstrPacketWithConfig(config *Config, data []byte, offset int) (Packet, int, error) {
+	if offset < 0 || offset >= len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	if data[offset] != 0x08 {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	if config == nil || config.InstrTrace() {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	ctxtBytes := config.CtxtIDBytes()
+	if ctxtBytes < 0 {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+	consumed := 2 + ctxtBytes
+	if offset+consumed > len(data) {
+		return Packet{}, 0, errDecodeNotImplemented
+	}
+
+	pkt := Packet{Type: PktISync}
+	if ctxtBytes > 0 {
+		var cid uint32
+		for i := range ctxtBytes {
+			cid |= uint32(data[offset+1+i]) << (i * 8)
+		}
+		pkt.Context.CtxtID = cid
+		pkt.Context.UpdatedC = true
+	}
+
+	infoByte := data[offset+1+ctxtBytes]
+	pkt.ISyncInfo.Reason = ocsd.ISyncReason((infoByte >> 5) & 0x3)
+	if config.MinorRev() >= 3 {
+		pkt.Context.CurrAltIsa = ((infoByte >> 2) & 0x1) != 0
+	}
+	pkt.Context.CurrNS = (infoByte & 0x08) != 0
+	if config.HasVirtExt() {
+		pkt.Context.CurrHyp = ((infoByte >> 1) & 0x1) != 0
+	}
+	pkt.Context.Updated = true
+	pkt.ISyncInfo.NoAddress = true
 	return pkt, consumed, nil
 }
 
