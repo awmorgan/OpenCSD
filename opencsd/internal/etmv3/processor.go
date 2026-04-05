@@ -319,93 +319,21 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 	for ((p.bytesProcessed < dataBlockSize) || (p.bytesProcessed == dataBlockSize && p.processState == sendPkt)) && ocsd.DataRespIsCont(resp) {
 		if p.processState == procHdr && p.streamSync && p.bytesProcessed < dataBlockSize {
 			packetIndex := index + ocsd.TrcIndex(p.bytesProcessed)
-			header := dataBlock[p.bytesProcessed]
 
-			if (header & 0x81) == 0x80 {
-				pkt, consumed, err := decodePHdrPacketWithConfig(p.Config, dataBlock, p.bytesProcessed)
-				switch {
-				case err == nil:
-					p.currPacket.Clear()
-					p.currPacket.Type = pkt.Type
-					p.currPacket.Err = pkt.Err
-					p.currPacket.Atom = pkt.Atom
-					p.currPacket.PHdrFmt = pkt.PHdrFmt
-					p.currPacket.CycleCount = pkt.CycleCount
-					fastPkt := p.currPacket
-					resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+consumed])
-					p.bytesProcessed += consumed
-					continue
-				case errors.Is(err, errDecodeNotImplemented):
-					// Fall back to legacy state-machine decode while migration is in progress.
-				default:
-					return uint32(p.bytesProcessed), err
-				}
-			}
-
-			if header == 0x50 || header == 0x62 {
-				pkt, consumed, err := decodeDataModeSingleBytePacketWithConfig(p.Config, dataBlock, p.bytesProcessed)
-				switch {
-				case err == nil:
-					p.currPacket.Clear()
-					p.currPacket.Type = pkt.Type
-					p.currPacket.Err = pkt.Err
-					fastPkt := p.currPacket
-					resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+consumed])
-					p.bytesProcessed += consumed
-					continue
-				case errors.Is(err, errDecodeNotImplemented):
-					// Fall back to legacy state-machine decode while migration is in progress.
-				default:
-					return uint32(p.bytesProcessed), err
-				}
-			}
-
-			if (header & 0xFB) == 0x42 {
-				pkt, consumed, err := decodeTimestampPacketWithConfig(p.Config, dataBlock, p.bytesProcessed)
-				switch {
-				case err == nil:
-					p.currPacket.Clear()
-					p.currPacket.Type = pkt.Type
-					p.currPacket.Err = pkt.Err
-					p.currPacket.UpdateTimestamp(pkt.Timestamp, pkt.TsUpdateBits)
-					fastPkt := p.currPacket
-					resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+consumed])
-					p.bytesProcessed += consumed
-					continue
-				case errors.Is(err, errDecodeNotImplemented):
-					// Fall back to legacy state-machine decode while migration is in progress.
-				default:
-					return uint32(p.bytesProcessed), err
-				}
-			}
-
-			if header == 0x6E {
-				pkt, consumed, err := decodeContextIDPacketWithConfig(p.Config, dataBlock, p.bytesProcessed)
-				switch {
-				case err == nil:
-					p.currPacket.Clear()
-					p.currPacket.Type = pkt.Type
-					p.currPacket.Err = pkt.Err
-					p.currPacket.Context.CtxtID = pkt.Context.CtxtID
-					p.currPacket.Context.UpdatedC = pkt.Context.UpdatedC
-					fastPkt := p.currPacket
-					resp = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+consumed])
-					p.bytesProcessed += consumed
-					continue
-				case errors.Is(err, errDecodeNotImplemented):
-					// Fall back to legacy state-machine decode while migration is in progress.
-				default:
-					return uint32(p.bytesProcessed), err
-				}
-			}
-
-			pkt, consumed, err := decodeNextPacket(dataBlock, p.bytesProcessed)
+			pkt, consumed, err := decodeNextPacketWithConfig(p.Config, dataBlock, p.bytesProcessed)
 			switch {
 			case err == nil:
 				p.currPacket.Clear()
 				p.currPacket.Type = pkt.Type
 				p.currPacket.Err = pkt.Err
 				switch pkt.Type {
+				case PktPHdr:
+					p.currPacket.Atom = pkt.Atom
+					p.currPacket.PHdrFmt = pkt.PHdrFmt
+					p.currPacket.CycleCount = pkt.CycleCount
+				case PktContextID:
+					p.currPacket.Context.CtxtID = pkt.Context.CtxtID
+					p.currPacket.Context.UpdatedC = pkt.Context.UpdatedC
 				case PktCycleCount:
 					p.currPacket.CycleCount = pkt.CycleCount
 				case PktVMID:
@@ -519,6 +447,43 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 		}
 		return Packet{}, 0, errDecodeNotImplemented
 	}
+}
+
+func decodeNextPacketWithConfig(config *Config, data []byte, offset int) (Packet, int, error) {
+	if offset < 0 || offset >= len(data) {
+		return Packet{}, 0, fmt.Errorf("offset %d out of range", offset)
+	}
+	header := data[offset]
+
+	if (header & 0x81) == 0x80 {
+		pkt, consumed, err := decodePHdrPacketWithConfig(config, data, offset)
+		if err == nil || !errors.Is(err, errDecodeNotImplemented) {
+			return pkt, consumed, err
+		}
+	}
+
+	if header == 0x50 || header == 0x62 {
+		pkt, consumed, err := decodeDataModeSingleBytePacketWithConfig(config, data, offset)
+		if err == nil || !errors.Is(err, errDecodeNotImplemented) {
+			return pkt, consumed, err
+		}
+	}
+
+	if (header & 0xFB) == 0x42 {
+		pkt, consumed, err := decodeTimestampPacketWithConfig(config, data, offset)
+		if err == nil || !errors.Is(err, errDecodeNotImplemented) {
+			return pkt, consumed, err
+		}
+	}
+
+	if header == 0x6E {
+		pkt, consumed, err := decodeContextIDPacketWithConfig(config, data, offset)
+		if err == nil || !errors.Is(err, errDecodeNotImplemented) {
+			return pkt, consumed, err
+		}
+	}
+
+	return decodeNextPacket(data, offset)
 }
 
 func decodeCycleCountPacket(data []byte, offset int) (Packet, int, error) {

@@ -994,6 +994,26 @@ func TestDecodeDataModeSingleBytePacketWithConfigFallsBackWhenDisabled(t *testin
 	}
 }
 
+func TestDecodeNextPacketWithConfigPHdr(t *testing.T) {
+	pkt, consumed, err := decodeNextPacketWithConfig(&Config{}, []byte{0x84}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 || pkt.Type != PktPHdr {
+		t.Fatalf("unexpected decode result: consumed=%d type=%v", consumed, pkt.Type)
+	}
+}
+
+func TestDecodeNextPacketWithConfigFallsBackToBase(t *testing.T) {
+	pkt, consumed, err := decodeNextPacketWithConfig(&Config{}, []byte{0x0C}, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != 1 || pkt.Type != PktTrigger {
+		t.Fatalf("unexpected decode result: consumed=%d type=%v", consumed, pkt.Type)
+	}
+}
+
 func TestDecodeNextPacketReturnsSentinelForUnmigratedHeader(t *testing.T) {
 	_, _, err := decodeNextPacket([]byte{0x08}, 0)
 	if !errors.Is(err, errDecodeNotImplemented) {
