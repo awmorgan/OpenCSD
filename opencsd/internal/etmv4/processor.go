@@ -207,7 +207,6 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 		case errors.Is(err, errDecodeNeedMoreData):
 			p.pendingStartIdx = packetIndex
 			p.packetIndex = p.pendingStartIdx
-			p.pendingPacket = Packet{Type: packetTypeForHeader(p.config, dataBlock[consumed])}
 			p.pendingData = append(p.pendingData[:0], dataBlock[consumed:]...)
 			return resp, len(dataBlock), nil
 		default:
@@ -2007,7 +2006,7 @@ func (p *Processor) onEOT() ocsd.DatapathResp {
 
 	resp := ocsd.RespCont
 	if len(p.pendingData) != 0 {
-		pending := p.pendingPacket
+		pending := p.pendingPacketForEOT()
 		pending.Err = errIncompleteEOT
 		resp = p.emitPendingPacket(pending)
 		p.resetPacketState()
@@ -2018,6 +2017,19 @@ func (p *Processor) onEOT() ocsd.DatapathResp {
 	}
 
 	return resp
+}
+
+func (p *Processor) pendingPacketForEOT() Packet {
+	if p.pendingPacket.Type != 0 {
+		return p.pendingPacket
+	}
+	if len(p.pendingData) == 0 {
+		return Packet{}
+	}
+	if !p.isSync {
+		return Packet{Type: PktNotSync}
+	}
+	return Packet{Type: packetTypeForHeader(p.config, p.pendingData[0])}
 }
 
 func (p *Processor) onReset() ocsd.DatapathResp {

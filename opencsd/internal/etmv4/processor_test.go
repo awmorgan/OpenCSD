@@ -393,8 +393,8 @@ func TestTraceDataEOTIncompleteBufferedPacketKeepsHeaderType(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed, got %d", consumed)
 	}
-	if p.pendingPacket.Type != PktAddrL_32IS0 {
-		t.Fatalf("expected buffered packet type PktAddrL_32IS0, got %v", p.pendingPacket.Type)
+	if len(p.pendingData) != 1 || p.pendingData[0] != 0x9A {
+		t.Fatalf("expected buffered header byte 0x9A, got %v", p.pendingData)
 	}
 
 	if err := p.TraceDataEOT(); err != nil {
