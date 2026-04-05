@@ -205,7 +205,7 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 
 	if len(p.currPacketData) == 0 {
 		packetIndex := p.blockIndex + ocsd.TrcIndex(consumed)
-		pkt, bytesConsumed, err := decodeNextPacketWithConfigFn(p.config, dataBlock, consumed)
+		pkt, bytesConsumed, err := decodeNextPacketWithSentinelFallback(p.config, dataBlock, consumed)
 		switch {
 		case err == nil:
 			p.packetIndex = packetIndex
@@ -220,8 +220,6 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 			p.currPacket.Type = packetTypeForHeader(p.config, dataBlock[consumed])
 			p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:]...)
 			return resp, len(dataBlock), true, nil
-		case errors.Is(err, errDecodeNotImplemented):
-			return resp, consumed, false, nil
 		default:
 			return resp, consumed, true, err
 		}
@@ -234,7 +232,7 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 		consumed++
 		p.blockBytesProcessed = consumed
 
-		pkt, bytesConsumed, err := decodeNextPacketWithConfigFn(p.config, p.currPacketData, 0)
+		pkt, bytesConsumed, err := decodeNextPacketWithSentinelFallback(p.config, p.currPacketData, 0)
 		switch {
 		case err == nil:
 			if bytesConsumed != len(p.currPacketData) {
@@ -246,8 +244,6 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 			return resp, consumed, true, nil
 		case errors.Is(err, errDecodeNeedMoreData):
 			continue
-		case errors.Is(err, errDecodeNotImplemented):
-			return resp, consumed, false, nil
 		default:
 			return resp, consumed, true, err
 		}
@@ -280,7 +276,7 @@ func (p *Processor) processLegacyDataBlock(dataBlock []byte, consumed int) (ocsd
 			consumed++
 			p.blockBytesProcessed = consumed
 			if p.isSync {
-				pkt, bytesConsumed, err := decodeNextPacketWithConfigFn(p.config, p.currPacketData, 0)
+				pkt, bytesConsumed, err := decodeNextPacketWithSentinelFallback(p.config, p.currPacketData, 0)
 				if err != nil {
 					if !errors.Is(err, errDecodeNeedMoreData) {
 						return resp, consumed, err
@@ -450,6 +446,14 @@ func decodeNextPacketWithConfig(config Config, data []byte, offset int) (Packet,
 	default:
 		return decodeNextPacket(data, offset)
 	}
+}
+
+func decodeNextPacketWithSentinelFallback(config Config, data []byte, offset int) (Packet, int, error) {
+	pkt, consumed, err := decodeNextPacketWithConfigFn(config, data, offset)
+	if !errors.Is(err, errDecodeNotImplemented) {
+		return pkt, consumed, err
+	}
+	return decodeNextPacketWithConfig(config, data, offset)
 }
 
 func decodeConfigHeaderOverride(config Config, header uint8) (Packet, bool) {

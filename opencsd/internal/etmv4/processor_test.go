@@ -299,8 +299,57 @@ func TestProcessDataFallsBackOnDecodeNotImplementedSentinel(t *testing.T) {
 	if out.count != 1 || out.last.Type != PktAtomF1 {
 		t.Fatalf("unexpected output packet after fallback: count=%d type=%v", out.count, out.last.Type)
 	}
+	if callCount != 1 {
+		t.Fatalf("expected single hook invocation before concrete fallback, got %d calls", callCount)
+	}
+}
+
+func TestProcessDataFallsBackOnBufferedDecodeNotImplementedSentinel(t *testing.T) {
+	origDecodeFn := decodeNextPacketWithConfigFn
+	defer func() {
+		decodeNextPacketWithConfigFn = origDecodeFn
+	}()
+
+	callCount := 0
+	decodeNextPacketWithConfigFn = func(config Config, data []byte, offset int) (Packet, int, error) {
+		callCount++
+		if len(data)-offset >= 2 && data[offset] == 0x02 && data[offset+1] == 0x2A {
+			return Packet{}, 0, errDecodeNotImplemented
+		}
+		return decodeNextPacketWithConfig(config, data, offset)
+	}
+
+	p := NewProcessor(&Config{})
+	p.isSync = true
+	out := &capturePktOut{}
+	p.SetPktOut(out)
+
+	consumed, err := p.processData(0, []byte{0x02})
+	if err != nil {
+		t.Fatalf("unexpected first-block error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed on first block, got %d", consumed)
+	}
+	if out.count != 0 {
+		t.Fatalf("did not expect packet output from incomplete first block")
+	}
+
+	consumed, err = p.processData(1, []byte{0x2A})
+	if err != nil {
+		t.Fatalf("unexpected second-block error: %v", err)
+	}
+	if consumed != 1 {
+		t.Fatalf("expected 1 byte consumed on second block, got %d", consumed)
+	}
+	if out.count != 1 || out.last.Type != PktTimestamp {
+		t.Fatalf("unexpected output packet after buffered fallback: count=%d type=%v", out.count, out.last.Type)
+	}
+	if out.last.Timestamp != 0x2A || !out.last.Valid.Timestamp {
+		t.Fatalf("unexpected timestamp payload after buffered fallback: ts=0x%X valid=%v", out.last.Timestamp, out.last.Valid.Timestamp)
+	}
 	if callCount < 2 {
-		t.Fatalf("expected fast path and fallback decode attempts, got %d calls", callCount)
+		t.Fatalf("expected hook calls across both blocks, got %d", callCount)
 	}
 }
 
