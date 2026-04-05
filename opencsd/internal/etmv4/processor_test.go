@@ -418,7 +418,7 @@ func TestProcessDataFastPathTimestampAcrossBlocks(t *testing.T) {
 		t.Fatalf("did not expect output packet from incomplete timestamp")
 	}
 	if p.processState != ProcHdr {
-		t.Fatalf("expected incomplete synced packet to stay out of legacy ProcData state, got %v", p.processState)
+		t.Fatalf("expected incomplete synced packet to leave processState as ProcHdr, got %v", p.processState)
 	}
 
 	consumed, err = p.processData(1, []byte{0x2A})
