@@ -7,14 +7,6 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-type ProcessState int
-
-const (
-	ProcHdr ProcessState = iota
-	ProcData
-	SendUnsynced
-)
-
 // TInfoSect are flags to indicate processing progress for these sections is complete.
 type TInfoSect uint8
 
@@ -45,11 +37,15 @@ type Processor struct {
 	// raw packet monitor
 	PktRawMonI ocsd.PacketMonitor
 
-	processState ProcessState
+	// rolling architectural state kept across emitted packets.
+	statePacket TracePacket
 
-	// packet data
-	currPacketData       []byte
-	currPacket           TracePacket
+	// pending raw bytes and packet metadata for cross-block reassembly / unsynced handling.
+	pendingData     []byte
+	pendingStartIdx ocsd.TrcIndex
+	pendingPacket   Packet
+	pendingDump     bool
+
 	packetIndex          ocsd.TrcIndex
 	blockIndex           ocsd.TrcIndex
 	blockBytesProcessed  int
@@ -72,10 +68,9 @@ var _ ocsd.TrcDataProcessorExplicit = (*Processor)(nil)
 // NewProcessor creates and initializes a new ETMv4 packet Processor.
 func NewProcessor(config *Config) *Processor {
 	p := &Processor{
-		config:       *config,
-		processState: ProcHdr,
+		config: *config,
 	}
-	p.currPacket.ProtocolVersion = config.FullVersion()
+	p.statePacket.ProtocolVersion = config.FullVersion()
 	p.isInit = true
 	return p
 }
@@ -160,13 +155,14 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 			break
 		}
 
-		if p.processState == SendUnsynced {
+		if p.pendingDump {
 			resp = p.outputUnsyncedRawPacket()
 			if p.updateOnUnsyncPktIdx != 0 {
 				p.packetIndex = p.updateOnUnsyncPktIdx
+				p.pendingStartIdx = p.packetIndex
 				p.updateOnUnsyncPktIdx = 0
 			}
-			p.processState = ProcData
+			p.pendingDump = false
 			continue
 		}
 
@@ -192,48 +188,48 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd.DatapathResp, int, error) {
 	resp := ocsd.RespCont
 
-	if !p.isSync || p.processState == SendUnsynced {
+	if !p.isSync || p.pendingDump {
 		return resp, consumed, nil
 	}
 
-	if len(p.currPacketData) == 0 {
+	if len(p.pendingData) == 0 {
 		packetIndex := p.blockIndex + ocsd.TrcIndex(consumed)
 		pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, dataBlock, consumed)
 		switch {
 		case err == nil:
-			p.packetIndex = packetIndex
-			p.applyDecodedPacket(pkt)
-			p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
+			p.pendingStartIdx = packetIndex
+			p.packetIndex = p.pendingStartIdx
+			p.pendingData = append(p.pendingData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
 			consumed += bytesConsumed
 			p.blockBytesProcessed = consumed
-			resp = p.emitCurrentPacket()
+			resp = p.emitDecodedPacket(pkt)
 			return resp, consumed, nil
 		case errors.Is(err, errDecodeNeedMoreData):
-			p.packetIndex = packetIndex
-			p.currPacket.Type = packetTypeForHeader(p.config, dataBlock[consumed])
-			p.currPacketData = append(p.currPacketData[:0], dataBlock[consumed:]...)
+			p.pendingStartIdx = packetIndex
+			p.packetIndex = p.pendingStartIdx
+			p.pendingPacket = Packet{Type: packetTypeForHeader(p.config, dataBlock[consumed])}
+			p.pendingData = append(p.pendingData[:0], dataBlock[consumed:]...)
 			return resp, len(dataBlock), nil
 		default:
 			return resp, consumed, err
 		}
 	}
 
-	packetIndex := p.packetIndex
+	packetIndex := p.pendingStartIdx
 	for consumed < len(dataBlock) {
 		nextByte := dataBlock[consumed]
-		p.currPacketData = append(p.currPacketData, nextByte)
+		p.pendingData = append(p.pendingData, nextByte)
 		consumed++
 		p.blockBytesProcessed = consumed
 
-		pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, p.currPacketData, 0)
+		pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, p.pendingData, 0)
 		switch {
 		case err == nil:
-			if bytesConsumed != len(p.currPacketData) {
-				return resp, consumed, fmt.Errorf("decodeNextPacket consumed %d of %d buffered bytes", bytesConsumed, len(p.currPacketData))
+			if bytesConsumed != len(p.pendingData) {
+				return resp, consumed, fmt.Errorf("decodeNextPacket consumed %d of %d buffered bytes", bytesConsumed, len(p.pendingData))
 			}
 			p.packetIndex = packetIndex
-			p.applyDecodedPacket(pkt)
-			resp = p.emitCurrentPacket()
+			resp = p.emitDecodedPacket(pkt)
 			return resp, consumed, nil
 		case errors.Is(err, errDecodeNeedMoreData):
 			continue
@@ -248,25 +244,31 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 func (p *Processor) processUnsyncedBlock(dataBlock []byte, consumed int) (ocsd.DatapathResp, int, error) {
 	resp := ocsd.RespCont
 
-	switch p.processState {
-	case ProcHdr:
-		if consumed >= len(dataBlock) {
+	if consumed >= len(dataBlock) {
+		return resp, consumed, nil
+	}
+
+	if len(p.pendingData) == 0 {
+		if p.pendingPacket.Type == 0 {
+			p.pendingStartIdx = p.blockIndex + ocsd.TrcIndex(consumed)
+			p.packetIndex = p.pendingStartIdx
+			p.pendingPacket = Packet{Type: PktNotSync}
+		} else {
+			p.packetIndex = p.pendingStartIdx
+		}
+	}
+
+	for consumed < len(dataBlock) {
+		nextByte := dataBlock[consumed]
+		p.pendingData = append(p.pendingData, nextByte)
+		consumed++
+		p.blockBytesProcessed = consumed
+		if p.processUnsyncedByte(nextByte) {
+			resp = p.emitPendingPacket(p.pendingPacket)
 			return resp, consumed, nil
 		}
-		p.packetIndex = p.blockIndex + ocsd.TrcIndex(consumed)
-		p.currPacket.Type = PktNotSync
-		p.processState = ProcData
-		fallthrough
-
-	case ProcData:
-		for consumed < len(dataBlock) && p.processState == ProcData {
-			nextByte := dataBlock[consumed]
-			p.currPacketData = append(p.currPacketData, nextByte)
-			consumed++
-			p.blockBytesProcessed = consumed
-			if p.processUnsyncedByte(nextByte) {
-				resp = p.emitCurrentPacket()
-			}
+		if p.pendingDump {
+			return resp, consumed, nil
 		}
 	}
 
@@ -511,179 +513,179 @@ func decodeConfigHeaderOverride(config Config, header uint8) (Packet, bool) {
 	return Packet{}, false
 }
 
-func (p *Processor) applyDecodedContext(ctx Context) {
-	p.currPacket.Context.Updated = ctx.Updated
-	p.currPacket.Context.EL = ctx.EL
-	p.currPacket.Context.SF = ctx.SF
-	p.currPacket.Context.NS = ctx.NS
-	p.currPacket.Context.NSE = ctx.NSE
-	p.currPacket.Context.UpdatedV = ctx.UpdatedV
-	p.currPacket.Context.UpdatedC = ctx.UpdatedC
+func (p *Processor) applyDecodedContext(state *TracePacket, ctx Context) {
+	state.Context.Updated = ctx.Updated
+	state.Context.EL = ctx.EL
+	state.Context.SF = ctx.SF
+	state.Context.NS = ctx.NS
+	state.Context.NSE = ctx.NSE
+	state.Context.UpdatedV = ctx.UpdatedV
+	state.Context.UpdatedC = ctx.UpdatedC
 	if ctx.UpdatedV {
-		p.currPacket.Context.VMID = ctx.VMID
+		state.Context.VMID = ctx.VMID
 	}
 	if ctx.UpdatedC {
-		p.currPacket.Context.CtxtID = ctx.CtxtID
+		state.Context.CtxtID = ctx.CtxtID
 	}
-	p.currPacket.Valid.Context = true
+	state.Valid.Context = true
 }
 
-func (p *Processor) applyDecodedPacket(pkt Packet) {
-	p.currPacket.Type = pkt.Type
-	p.currPacket.Err = pkt.Err
-	p.currPacket.ErrHdrVal = pkt.ErrHdrVal
+func (p *Processor) applyDecodedPacket(state *TracePacket, pkt Packet) {
+	state.Type = pkt.Type
+	state.Err = pkt.Err
+	state.ErrHdrVal = pkt.ErrHdrVal
 
 	switch pkt.Type {
 	case PktAtomF1, PktAtomF2, PktAtomF3, PktAtomF4, PktAtomF5, PktAtomF6:
-		p.currPacket.Atom = pkt.Atom
+		state.Atom = pkt.Atom
 	case PktTraceInfo:
-		p.currPacket.ClearTraceInfo()
-		p.currPacket.TraceInfo = pkt.TraceInfo
-		p.currPacket.P0Key = pkt.P0Key
-		p.currPacket.CurrSpecDepth = pkt.CurrSpecDepth
-		p.currPacket.CCThreshold = pkt.CCThreshold
-		p.currPacket.Valid.TInfo = pkt.Valid.TInfo
-		p.currPacket.Valid.SpecDepthValid = pkt.Valid.SpecDepthValid
-		p.currPacket.Valid.CCThreshold = pkt.Valid.CCThreshold
+		state.ClearTraceInfo()
+		state.TraceInfo = pkt.TraceInfo
+		state.P0Key = pkt.P0Key
+		state.CurrSpecDepth = pkt.CurrSpecDepth
+		state.CCThreshold = pkt.CCThreshold
+		state.Valid.TInfo = pkt.Valid.TInfo
+		state.Valid.SpecDepthValid = pkt.Valid.SpecDepthValid
+		state.Valid.CCThreshold = pkt.Valid.CCThreshold
 		if !p.firstTraceInfo {
-			p.currPacket.TraceInfo.InitialTInfo = true
+			state.TraceInfo.InitialTInfo = true
 			p.firstTraceInfo = true
 		}
 	case PktTimestamp:
-		p.currPacket.Timestamp = pkt.Timestamp
-		p.currPacket.TSBitsChanged = pkt.TSBitsChanged
-		p.currPacket.CycleCount = pkt.CycleCount
-		p.currPacket.Valid.Timestamp = pkt.Valid.Timestamp
-		p.currPacket.Valid.CycleCount = pkt.Valid.CycleCount
+		state.Timestamp = pkt.Timestamp
+		state.TSBitsChanged = pkt.TSBitsChanged
+		state.CycleCount = pkt.CycleCount
+		state.Valid.Timestamp = pkt.Valid.Timestamp
+		state.Valid.CycleCount = pkt.Valid.CycleCount
 	case PktCcntF3:
 		if !p.config.CommitOpt1() {
-			p.currPacket.CommitElements = pkt.CommitElements
-			p.currPacket.Valid.CommitElem = true
+			state.CommitElements = pkt.CommitElements
+			state.Valid.CommitElem = true
 		}
-		p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
-		p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
+		state.CycleCount = state.CCThreshold + pkt.CycleCount
+		state.Valid.CCExactMatch = state.CycleCount == state.CCThreshold
 	case PktCcntF2:
-		p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
-		p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
+		state.CycleCount = state.CCThreshold + pkt.CycleCount
+		state.Valid.CCExactMatch = state.CycleCount == state.CCThreshold
 		if pkt.Valid.CommitElem {
-			p.currPacket.CommitElements = pkt.CommitElements
-			p.currPacket.Valid.CommitElem = true
+			state.CommitElements = pkt.CommitElements
+			state.Valid.CommitElem = true
 		}
 	case PktCcntF1:
 		if pkt.Valid.CycleCount {
-			p.currPacket.CycleCount = p.currPacket.CCThreshold + pkt.CycleCount
-			p.currPacket.Valid.CCExactMatch = p.currPacket.CycleCount == p.currPacket.CCThreshold
+			state.CycleCount = state.CCThreshold + pkt.CycleCount
+			state.Valid.CCExactMatch = state.CycleCount == state.CCThreshold
 		} else {
-			p.currPacket.CycleCount = 0
-			p.currPacket.Valid.CCExactMatch = false
+			state.CycleCount = 0
+			state.Valid.CCExactMatch = false
 		}
 		if pkt.Valid.CommitElem {
-			p.currPacket.CommitElements = pkt.CommitElements
-			p.currPacket.Valid.CommitElem = true
+			state.CommitElements = pkt.CommitElements
+			state.Valid.CommitElem = true
 		}
 	case PktMispredict, PktCancelF2, PktCancelF3:
-		p.currPacket.Atom = pkt.Atom
-		p.currPacket.CancelElements = pkt.CancelElements
+		state.Atom = pkt.Atom
+		state.CancelElements = pkt.CancelElements
 	case PktCommit:
-		p.currPacket.CommitElements = pkt.CommitElements
+		state.CommitElements = pkt.CommitElements
 	case PktCancelF1, PktCancelF1Mispred:
-		p.currPacket.CancelElements = pkt.CancelElements
+		state.CancelElements = pkt.CancelElements
 	case PktCondIF1, PktCondIF2:
-		p.currPacket.CondInstr.CondCKey = pkt.CondInstr.CondCKey
-		p.currPacket.CondInstr.CondKeySet = pkt.CondInstr.CondKeySet
+		state.CondInstr.CondCKey = pkt.CondInstr.CondCKey
+		state.CondInstr.CondKeySet = pkt.CondInstr.CondKeySet
 	case PktCondIF3:
-		p.currPacket.CondInstr.NumCElem = pkt.CondInstr.NumCElem
-		p.currPacket.CondInstr.F3FinalElem = pkt.CondInstr.F3FinalElem
+		state.CondInstr.NumCElem = pkt.CondInstr.NumCElem
+		state.CondInstr.F3FinalElem = pkt.CondInstr.F3FinalElem
 	case PktCondResF1:
-		p.currPacket.CondResult = pkt.CondResult
+		state.CondResult = pkt.CondResult
 	case PktCondResF2:
-		p.currPacket.CondResult.F2KeyIncr = pkt.CondResult.F2KeyIncr
-		p.currPacket.CondResult.Res0 = pkt.CondResult.Res0
+		state.CondResult.F2KeyIncr = pkt.CondResult.F2KeyIncr
+		state.CondResult.Res0 = pkt.CondResult.Res0
 	case PktCondResF4:
-		p.currPacket.CondResult.Res0 = pkt.CondResult.Res0
+		state.CondResult.Res0 = pkt.CondResult.Res0
 	case PktCondResF3:
-		p.currPacket.CondResult.F3Tokens = pkt.CondResult.F3Tokens
+		state.CondResult.F3Tokens = pkt.CondResult.F3Tokens
 	case ETE_PktITE:
-		p.currPacket.ITEPkt = pkt.ITEPkt
+		state.ITEPkt = pkt.ITEPkt
 	case PktAddrL_32IS0, PktAddrL_32IS1, ETE_PktSrcAddrL_32IS0, ETE_PktSrcAddrL_32IS1:
-		p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
-		if p.currPacket.VAddrValidBits < 32 {
-			p.currPacket.VAddrValidBits = 32
+		state.VAddr = p.update32BitAddress(state, state.VAddr, uint32(pkt.VAddr))
+		if state.VAddrValidBits < 32 {
+			state.VAddrValidBits = 32
 		}
-		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-		p.currPacket.VAddrISA = pkt.VAddrISA
-		p.currPacket.PushVAddr()
+		state.VAddrPktBits = pkt.VAddrPktBits
+		state.VAddrISA = pkt.VAddrISA
+		state.PushVAddr()
 	case PktAddrMatch, ETE_PktSrcAddrMatch:
-		p.currPacket.AddrExactMatchIdx = pkt.AddrExactMatchIdx
-		p.currPacket.Valid.ExactMatchIdxValid = pkt.Valid.ExactMatchIdxValid
-		p.currPacket.PopVAddrIdx(p.currPacket.AddrExactMatchIdx)
-		p.currPacket.PushVAddr()
+		state.AddrExactMatchIdx = pkt.AddrExactMatchIdx
+		state.Valid.ExactMatchIdxValid = pkt.Valid.ExactMatchIdxValid
+		state.PopVAddrIdx(state.AddrExactMatchIdx)
+		state.PushVAddr()
 	case PktAddrS_IS0, PktAddrS_IS1, ETE_PktSrcAddrS_IS0, ETE_PktSrcAddrS_IS1:
-		addr, validBits := p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, uint32(pkt.VAddr), int(pkt.VAddrPktBits))
-		p.currPacket.VAddr = addr
-		p.currPacket.VAddrValidBits = validBits
-		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-		p.currPacket.VAddrISA = pkt.VAddrISA
-		p.currPacket.PushVAddr()
+		addr, validBits := p.updateShortAddress(state, state.VAddr, state.VAddrValidBits, uint32(pkt.VAddr), int(pkt.VAddrPktBits))
+		state.VAddr = addr
+		state.VAddrValidBits = validBits
+		state.VAddrPktBits = pkt.VAddrPktBits
+		state.VAddrISA = pkt.VAddrISA
+		state.PushVAddr()
 	case PktAddrL_64IS0, PktAddrL_64IS1, ETE_PktSrcAddrL_64IS0, ETE_PktSrcAddrL_64IS1:
-		p.currPacket.VAddr = pkt.VAddr
-		p.currPacket.VAddrValidBits = pkt.VAddrValidBits
-		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-		p.currPacket.VAddrISA = pkt.VAddrISA
-		p.currPacket.PushVAddr()
+		state.VAddr = pkt.VAddr
+		state.VAddrValidBits = pkt.VAddrValidBits
+		state.VAddrPktBits = pkt.VAddrPktBits
+		state.VAddrISA = pkt.VAddrISA
+		state.PushVAddr()
 	case PktAddrCtxtL_32IS0, PktAddrCtxtL_32IS1:
-		p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
-		if p.currPacket.VAddrValidBits < 32 {
-			p.currPacket.VAddrValidBits = 32
+		state.VAddr = p.update32BitAddress(state, state.VAddr, uint32(pkt.VAddr))
+		if state.VAddrValidBits < 32 {
+			state.VAddrValidBits = 32
 		}
-		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-		p.currPacket.VAddrISA = pkt.VAddrISA
-		p.currPacket.PushVAddr()
+		state.VAddrPktBits = pkt.VAddrPktBits
+		state.VAddrISA = pkt.VAddrISA
+		state.PushVAddr()
 		if pkt.Valid.Context {
-			p.applyDecodedContext(pkt.Context)
+			p.applyDecodedContext(state, pkt.Context)
 		}
 	case PktAddrCtxtL_64IS0, PktAddrCtxtL_64IS1:
-		p.currPacket.VAddr = pkt.VAddr
-		p.currPacket.VAddrValidBits = pkt.VAddrValidBits
-		p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-		p.currPacket.VAddrISA = pkt.VAddrISA
-		p.currPacket.PushVAddr()
+		state.VAddr = pkt.VAddr
+		state.VAddrValidBits = pkt.VAddrValidBits
+		state.VAddrPktBits = pkt.VAddrPktBits
+		state.VAddrISA = pkt.VAddrISA
+		state.PushVAddr()
 		if pkt.Valid.Context {
-			p.applyDecodedContext(pkt.Context)
+			p.applyDecodedContext(state, pkt.Context)
 		}
 	case PktQ:
-		p.currPacket.QPkt = pkt.QPkt
+		state.QPkt = pkt.QPkt
 		if pkt.Valid.ExactMatchIdxValid {
-			p.currPacket.AddrExactMatchIdx = pkt.AddrExactMatchIdx
-			p.currPacket.Valid.ExactMatchIdxValid = true
+			state.AddrExactMatchIdx = pkt.AddrExactMatchIdx
+			state.Valid.ExactMatchIdxValid = true
 		}
 		if pkt.Valid.VAddrValid {
 			if pkt.VAddrPktBits == 32 {
-				p.currPacket.VAddr = p.update32BitAddress(p.currPacket.VAddr, uint32(pkt.VAddr))
-				if p.currPacket.VAddrValidBits < 32 {
-					p.currPacket.VAddrValidBits = 32
+				state.VAddr = p.update32BitAddress(state, state.VAddr, uint32(pkt.VAddr))
+				if state.VAddrValidBits < 32 {
+					state.VAddrValidBits = 32
 				}
 			} else {
-				addr, validBits := p.updateShortAddress(p.currPacket.VAddr, p.currPacket.VAddrValidBits, uint32(pkt.VAddr), int(pkt.VAddrPktBits))
-				p.currPacket.VAddr = addr
-				p.currPacket.VAddrValidBits = validBits
+				addr, validBits := p.updateShortAddress(state, state.VAddr, state.VAddrValidBits, uint32(pkt.VAddr), int(pkt.VAddrPktBits))
+				state.VAddr = addr
+				state.VAddrValidBits = validBits
 			}
-			p.currPacket.VAddrPktBits = pkt.VAddrPktBits
-			p.currPacket.VAddrISA = pkt.VAddrISA
-			p.currPacket.Valid.VAddrValid = true
+			state.VAddrPktBits = pkt.VAddrPktBits
+			state.VAddrISA = pkt.VAddrISA
+			state.Valid.VAddrValid = true
 		}
 	case PktCtxt:
 		if pkt.Valid.Context {
-			p.applyDecodedContext(pkt.Context)
+			p.applyDecodedContext(state, pkt.Context)
 		}
 	case PktNumDsMkr, PktUnnumDsMkr:
-		p.currPacket.DsmVal = pkt.DsmVal
+		state.DsmVal = pkt.DsmVal
 	case PktEvent:
-		p.currPacket.EventVal = pkt.EventVal
+		state.EventVal = pkt.EventVal
 	case PktExcept, ETE_PktPeReset, ETE_PktTransFail:
-		p.currPacket.ExceptionInfo = pkt.ExceptionInfo
+		state.ExceptionInfo = pkt.ExceptionInfo
 		if pkt.Type == ETE_PktPeReset || pkt.Type == ETE_PktTransFail {
-			p.currPacket.VAddr = 0
+			state.VAddr = 0
 		}
 	}
 }
@@ -2004,9 +2006,10 @@ func (p *Processor) onEOT() ocsd.DatapathResp {
 	}
 
 	resp := ocsd.RespCont
-	if len(p.currPacketData) != 0 {
-		p.currPacket.Err = errIncompleteEOT
-		resp = p.outputPacket()
+	if len(p.pendingData) != 0 {
+		pending := p.pendingPacket
+		pending.Err = errIncompleteEOT
+		resp = p.emitPendingPacket(pending)
 		p.resetPacketState()
 	}
 
@@ -2045,34 +2048,13 @@ func (p *Processor) onFlush() ocsd.DatapathResp {
 }
 
 func (p *Processor) resetStartState() {
-	p.currPacket = TracePacket{}
-	p.currPacket.ProtocolVersion = p.config.FullVersion()
+	p.statePacket = TracePacket{}
+	p.statePacket.ProtocolVersion = p.config.FullVersion()
 }
 
 func (p *Processor) resetPacketState() {
-	p.currPacketData = p.currPacketData[:0]
-
-	p.currPacket.Type = 0
-	p.currPacket.Err = nil
-	p.currPacket.ErrHdrVal = 0
-
-	p.currPacket.Valid.CycleCount = false
-	p.currPacket.Valid.CCExactMatch = false
-	p.currPacket.Valid.CommitElem = false
-	p.currPacket.Valid.CancelElem = false
-	p.currPacket.Valid.ExactMatchIdxValid = false
-
-	p.currPacket.Atom.Num = 0
-	p.currPacket.CondInstr = CondInstr{}
-	p.currPacket.CondResult = CondResult{}
-	p.currPacket.Context.Updated = false
-	p.currPacket.Context.UpdatedV = false
-	p.currPacket.Context.UpdatedC = false
-
-	p.currPacket.TraceInfo.InitialTInfo = false
-	p.currPacket.TraceInfo.SpecFieldPresent = false
-
-	p.updateOnUnsyncPktIdx = 0
+	p.resetPendingState()
+	p.clearStateTransient()
 }
 
 func (p *Processor) resetProcessorState() {
@@ -2082,49 +2064,95 @@ func (p *Processor) resetProcessorState() {
 	p.isSync = false
 	p.firstTraceInfo = false
 	p.sentNotsyncPacket = false
-	p.processState = ProcHdr
 }
 
-func (p *Processor) outputPacket() ocsd.DatapathResp {
+func (p *Processor) resetPendingState() {
+	p.pendingData = p.pendingData[:0]
+	p.pendingStartIdx = 0
+	p.pendingPacket = Packet{}
+	p.pendingDump = false
+	p.dumpUnsyncedBytes = 0
+	p.updateOnUnsyncPktIdx = 0
+}
+
+func (p *Processor) clearStateTransient() {
+	p.statePacket.Type = 0
+	p.statePacket.Err = nil
+	p.statePacket.ErrHdrVal = 0
+
+	p.statePacket.Valid.CycleCount = false
+	p.statePacket.Valid.CCExactMatch = false
+	p.statePacket.Valid.CommitElem = false
+	p.statePacket.Valid.CancelElem = false
+	p.statePacket.Valid.ExactMatchIdxValid = false
+
+	p.statePacket.Atom.Num = 0
+	p.statePacket.CondInstr = CondInstr{}
+	p.statePacket.CondResult = CondResult{}
+	p.statePacket.Context.Updated = false
+	p.statePacket.Context.UpdatedV = false
+	p.statePacket.Context.UpdatedC = false
+
+	p.statePacket.TraceInfo.InitialTInfo = false
+	p.statePacket.TraceInfo.SpecFieldPresent = false
+}
+
+func (p *Processor) outputPacket(pkt *TracePacket, rawData []byte) ocsd.DatapathResp {
 	if p.PktRawMonI != nil {
-		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, p.packetIndex, &p.currPacket, p.currPacketData)
+		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, p.packetIndex, pkt, rawData)
 	}
 	if p.pktOut == nil {
 		return ocsd.RespCont
 	}
-	pkt := p.currPacket
-	resp := ocsd.DataRespFromErr(p.callPktOut(ocsd.OpData, p.packetIndex, &pkt)) //nolint:gosec
+	pktCopy := *pkt
+	resp := ocsd.DataRespFromErr(p.callPktOut(ocsd.OpData, p.packetIndex, &pktCopy)) //nolint:gosec
 	return resp
 }
 
-func (p *Processor) emitCurrentPacket() ocsd.DatapathResp {
-	resp := p.outputPacket()
-	p.resetPacketState()
-	p.processState = ProcHdr
+func (p *Processor) emitDecodedPacket(pkt Packet) ocsd.DatapathResp {
+	out := p.statePacket
+	p.applyDecodedPacket(&out, pkt)
+	resp := p.outputPacket(&out, p.pendingData)
+	p.statePacket = out
+	p.clearStateTransient()
+	p.resetPendingState()
+	return resp
+}
+
+func (p *Processor) emitPendingPacket(pkt Packet) ocsd.DatapathResp {
+	out := p.statePacket
+	out.Type = pkt.Type
+	out.Err = pkt.Err
+	out.ErrHdrVal = pkt.ErrHdrVal
+	resp := p.outputPacket(&out, p.pendingData)
+	p.resetPendingState()
 	return resp
 }
 
 func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
 	n := p.dumpUnsyncedBytes
+	pkt := p.statePacket
+	pkt.Type = p.pendingPacket.Type
+	pkt.Err = p.pendingPacket.Err
+	pkt.ErrHdrVal = p.pendingPacket.ErrHdrVal
 
-	if p.PktRawMonI != nil && n > 0 && len(p.currPacketData) > 0 {
-		monBytes := min(n, len(p.currPacketData))
-		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, p.packetIndex, &p.currPacket, p.currPacketData[:monBytes])
+	if p.PktRawMonI != nil && n > 0 && len(p.pendingData) > 0 {
+		monBytes := min(n, len(p.pendingData))
+		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, p.packetIndex, &pkt, p.pendingData[:monBytes])
 	}
 
 	resp := ocsd.RespCont
 	if !p.sentNotsyncPacket {
 		if p.pktOut != nil {
-			pkt := p.currPacket
 			resp = ocsd.DataRespFromErr(p.callPktOut(ocsd.OpData, p.packetIndex, &pkt))
 		}
 		p.sentNotsyncPacket = true
 	}
 
-	if n <= len(p.currPacketData) {
-		p.currPacketData = p.currPacketData[n:]
+	if n <= len(p.pendingData) {
+		p.pendingData = p.pendingData[n:]
 	} else {
-		p.currPacketData = p.currPacketData[:0]
+		p.pendingData = p.pendingData[:0]
 	}
 	return resp
 }
@@ -2134,11 +2162,11 @@ func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
 // ============================
 
 func (p *Processor) processUnsyncedByte(lastByte uint8) bool {
-	switch p.currPacket.Type {
+	switch p.pendingPacket.Type {
 	case PktAsync:
 		return p.processUnsyncedASync(lastByte)
 	default:
-		if !p.isSync && len(p.currPacketData) > 0 && p.currPacketData[0] == 0x00 && len(p.currPacketData) <= 2 {
+		if !p.isSync && len(p.pendingData) > 0 && p.pendingData[0] == 0x00 && len(p.pendingData) <= 2 {
 			return p.processUnsyncedExtension(lastByte)
 		}
 		p.processUnsyncedNotSync(lastByte)
@@ -2148,45 +2176,47 @@ func (p *Processor) processUnsyncedByte(lastByte uint8) bool {
 
 func (p *Processor) processUnsyncedNotSync(lastByte uint8) {
 	if lastByte == 0x00 {
-		if len(p.currPacketData) > 1 {
-			p.queueUnsyncedDump(len(p.currPacketData)-1, p.blockIndex+ocsd.TrcIndex(p.blockBytesProcessed)-1)
+		if len(p.pendingData) > 1 {
+			p.queueUnsyncedDump(len(p.pendingData)-1, p.blockIndex+ocsd.TrcIndex(p.blockBytesProcessed)-1)
 		} else {
-			p.packetIndex = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
+			p.pendingStartIdx = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
+			p.packetIndex = p.pendingStartIdx
 		}
-	} else if len(p.currPacketData) >= 8 {
-		p.queueUnsyncedDump(len(p.currPacketData), p.blockIndex+ocsd.TrcIndex(p.blockBytesProcessed))
+	} else if len(p.pendingData) >= 8 {
+		p.queueUnsyncedDump(len(p.pendingData), p.blockIndex+ocsd.TrcIndex(p.blockBytesProcessed))
 	}
 }
 
 func (p *Processor) queueUnsyncedDump(bytes int, updateIdx ocsd.TrcIndex) {
 	p.dumpUnsyncedBytes = bytes
-	p.processState = SendUnsynced
+	p.pendingDump = true
 	p.updateOnUnsyncPktIdx = updateIdx
 }
 
 func (p *Processor) processUnsyncedExtension(lastByte uint8) bool {
-	if len(p.currPacketData) == 1 {
-		p.packetIndex = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
+	if len(p.pendingData) == 1 {
+		p.pendingStartIdx = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
+		p.packetIndex = p.pendingStartIdx
 		return false
 	}
 
-	if len(p.currPacketData) == 2 {
+	if len(p.pendingData) == 2 {
 		if !p.isSync && lastByte != 0x00 {
-			p.currPacket.Type = PktNotSync
+			p.pendingPacket.Type = PktNotSync
 			return false
 		}
 		switch lastByte {
 		case 0x03:
-			p.currPacket.Type = PktDiscard
+			p.pendingPacket.Type = PktDiscard
 			return true
 		case 0x05:
-			p.currPacket.Type = PktOverflow
+			p.pendingPacket.Type = PktOverflow
 			return true
 		case 0x00:
-			p.currPacket.Type = PktAsync
+			p.pendingPacket.Type = PktAsync
 			return false
 		default:
-			p.currPacket.Err = ocsd.ErrBadPacketSeq
+			p.pendingPacket.Err = ocsd.ErrBadPacketSeq
 			return true
 		}
 	}
@@ -2196,29 +2226,29 @@ func (p *Processor) processUnsyncedExtension(lastByte uint8) bool {
 
 func (p *Processor) processUnsyncedASync(lastByte uint8) bool {
 	if lastByte != 0x00 {
-		if !p.isSync && len(p.currPacketData) != 12 {
-			p.currPacket.Type = PktNotSync
+		if !p.isSync && len(p.pendingData) != 12 {
+			p.pendingPacket.Type = PktNotSync
 			return false
 		}
-		if len(p.currPacketData) != 12 || lastByte != 0x80 {
-			p.currPacket.Err = ocsd.ErrBadPacketSeq
+		if len(p.pendingData) != 12 || lastByte != 0x80 {
+			p.pendingPacket.Err = ocsd.ErrBadPacketSeq
 		} else {
 			p.isSync = true
 		}
 		return true
-	} else if len(p.currPacketData) == 12 {
+	} else if len(p.pendingData) == 12 {
 		if !p.isSync {
 			p.queueUnsyncedDump(1, 0)
 		} else {
-			p.currPacket.Err = ocsd.ErrBadPacketSeq
+			p.pendingPacket.Err = ocsd.ErrBadPacketSeq
 			return true
 		}
 	}
 
 	return false
 }
-func (p *Processor) update32BitAddress(currAddr ocsd.VAddr, newVal32 uint32) ocsd.VAddr {
-	if p.currPacket.Valid.Context && p.currPacket.Context.SF {
+func (p *Processor) update32BitAddress(state *TracePacket, currAddr ocsd.VAddr, newVal32 uint32) ocsd.VAddr {
+	if state.Valid.Context && state.Context.SF {
 		// Context is 64-bit, keep upper 32 bits, replace lower 32 bits
 		mask := ocsd.VAddr(0xFFFFFFFF)
 		return (currAddr & ^mask) | ocsd.VAddr(newVal32)
@@ -2226,17 +2256,17 @@ func (p *Processor) update32BitAddress(currAddr ocsd.VAddr, newVal32 uint32) ocs
 	return ocsd.VAddr(newVal32)
 }
 
-func (p *Processor) markMalformedCurrentPacket(malformedType PktType) {
-	if errors.Is(p.currPacket.Err, ocsd.ErrBadPacketSeq) {
+func (p *Processor) markMalformedCurrentPacket(state *TracePacket, malformedType PktType) {
+	if errors.Is(state.Err, ocsd.ErrBadPacketSeq) {
 		return
 	}
-	p.currPacket.Err = fmt.Errorf("%w: malformed %s", ocsd.ErrBadPacketSeq, malformedType.String())
+	state.Err = fmt.Errorf("%w: malformed %s", ocsd.ErrBadPacketSeq, malformedType.String())
 }
 
 // updateShortAddress updates a VAddr with a short address value (clears lower bits, sets new ones).
-func (p *Processor) updateShortAddress(existing ocsd.VAddr, existingValidBits uint8, addrVal uint32, bits int) (ocsd.VAddr, uint8) {
+func (p *Processor) updateShortAddress(state *TracePacket, existing ocsd.VAddr, existingValidBits uint8, addrVal uint32, bits int) (ocsd.VAddr, uint8) {
 	if bits <= 0 || bits > ocsd.MaxVABitsize {
-		p.markMalformedCurrentPacket(p.currPacket.Type)
+		p.markMalformedCurrentPacket(state, state.Type)
 		return existing, existingValidBits
 	}
 	mask := ocsd.VAddr((uint64(1) << bits) - 1)

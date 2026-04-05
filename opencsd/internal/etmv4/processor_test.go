@@ -2,6 +2,7 @@ package etmv4
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"opencsd/internal/ocsd"
@@ -10,6 +11,11 @@ import (
 type capturePktOut struct {
 	count int
 	last  TracePacket
+}
+
+type captureRawMon struct {
+	indexes []ocsd.TrcIndex
+	lengths []int
 }
 
 func (c *capturePktOut) TracePacketData(_ ocsd.TrcIndex, pkt *TracePacket) error {
@@ -26,15 +32,20 @@ func (c *capturePktOut) TracePacketFlush() error { return nil }
 
 func (c *capturePktOut) TracePacketReset(_ ocsd.TrcIndex) error { return nil }
 
+func (c *captureRawMon) RawPacketDataMon(_ ocsd.DatapathOp, indexSOP ocsd.TrcIndex, _ fmt.Stringer, rawData []byte) {
+	c.indexes = append(c.indexes, indexSOP)
+	c.lengths = append(c.lengths, len(rawData))
+}
+
 func TestProcessorResetPacketStateClearsConditionalState(t *testing.T) {
 	p := NewProcessor(&Config{})
-	p.currPacketData = []byte{0xAA, 0xBB}
-	p.currPacket.CondInstr = CondInstr{
+	p.pendingData = []byte{0xAA, 0xBB}
+	p.statePacket.CondInstr = CondInstr{
 		CondCKey:   0x23,
 		NumCElem:   4,
 		CondKeySet: true,
 	}
-	p.currPacket.CondResult = CondResult{
+	p.statePacket.CondResult = CondResult{
 		CondRKey0:  0x12,
 		CondRKey1:  0x34,
 		Res0:       0xA,
@@ -45,19 +56,19 @@ func TestProcessorResetPacketStateClearsConditionalState(t *testing.T) {
 
 	p.resetPacketState()
 
-	if len(p.currPacketData) != 0 {
-		t.Fatalf("expected packet data cleared, got %d bytes", len(p.currPacketData))
+	if len(p.pendingData) != 0 {
+		t.Fatalf("expected packet data cleared, got %d bytes", len(p.pendingData))
 	}
-	if p.currPacket.CondInstr.CondKeySet {
+	if p.statePacket.CondInstr.CondKeySet {
 		t.Fatalf("expected CondInstr.CondKeySet to be cleared")
 	}
-	if p.currPacket.CondResult.KeyRes0Set {
+	if p.statePacket.CondResult.KeyRes0Set {
 		t.Fatalf("expected CondResult.KeyRes0Set to be cleared")
 	}
-	if p.currPacket.CondResult.KeyRes1Set {
+	if p.statePacket.CondResult.KeyRes1Set {
 		t.Fatalf("expected CondResult.KeyRes1Set to be cleared")
 	}
-	if p.currPacket.CondInstr.CondCKey != 0 || p.currPacket.CondResult.CondRKey0 != 0 || p.currPacket.CondResult.CondRKey1 != 0 {
+	if p.statePacket.CondInstr.CondCKey != 0 || p.statePacket.CondResult.CondRKey0 != 0 || p.statePacket.CondResult.CondRKey1 != 0 {
 		t.Fatalf("expected conditional packet data to be reset")
 	}
 }
@@ -382,8 +393,8 @@ func TestTraceDataEOTIncompleteBufferedPacketKeepsHeaderType(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed, got %d", consumed)
 	}
-	if p.currPacket.Type != PktAddrL_32IS0 {
-		t.Fatalf("expected buffered packet type PktAddrL_32IS0, got %v", p.currPacket.Type)
+	if p.pendingPacket.Type != PktAddrL_32IS0 {
+		t.Fatalf("expected buffered packet type PktAddrL_32IS0, got %v", p.pendingPacket.Type)
 	}
 
 	if err := p.TraceDataEOT(); err != nil {
@@ -397,6 +408,38 @@ func TestTraceDataEOTIncompleteBufferedPacketKeepsHeaderType(t *testing.T) {
 	}
 	if !errors.Is(out.last.Err, errIncompleteEOT) {
 		t.Fatalf("expected errIncompleteEOT, got %v", out.last.Err)
+	}
+}
+
+func TestProcessDataUnsyncedDumpStopsAtThreshold(t *testing.T) {
+	p := NewProcessor(&Config{})
+	raw := &captureRawMon{}
+	p.SetPktRawMonitor(raw)
+
+	data := []byte{
+		0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF, 0xB0, 0xB1,
+		0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9,
+		0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF, 0xC0, 0xC1,
+		0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9,
+	}
+	consumed, err := p.processData(0, data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed != uint32(len(data)) {
+		t.Fatalf("expected %d bytes consumed, got %d", len(data), consumed)
+	}
+	if len(raw.lengths) != 3 {
+		t.Fatalf("expected 3 raw packet callbacks, got %d", len(raw.lengths))
+	}
+	if raw.lengths[0] != 8 || raw.lengths[1] != 8 || raw.lengths[2] != 8 {
+		t.Fatalf("expected raw packet lengths [8 8 8], got %v", raw.lengths)
+	}
+	if raw.indexes[0] != 0 || raw.indexes[1] != 8 || raw.indexes[2] != 16 {
+		t.Fatalf("expected raw packet indexes [0 8 16], got %v", raw.indexes)
+	}
+	if len(p.pendingData) != 8 {
+		t.Fatalf("expected final pending unsynced buffer length 8, got %d", len(p.pendingData))
 	}
 }
 
@@ -545,7 +588,7 @@ func TestDecodeCycleCntF1PacketWithConfigCommitOpt0NoCount(t *testing.T) {
 func TestProcessDataFastPathCycleCntF3CommitOpt0(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	p.currPacket.CCThreshold = 10
+	p.statePacket.CCThreshold = 10
 	out := &capturePktOut{}
 	p.SetPktOut(out)
 
@@ -576,7 +619,7 @@ func TestProcessDataFastPathCycleCntF3CommitOpt0(t *testing.T) {
 func TestProcessDataFastPathCycleCntF3CommitOpt1(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: (1 << 29) | (1 << 7)})
 	p.isSync = true
-	p.currPacket.CCThreshold = 5
+	p.statePacket.CCThreshold = 5
 	out := &capturePktOut{}
 	p.SetPktOut(out)
 
@@ -601,7 +644,7 @@ func TestProcessDataFastPathCycleCntF3CommitOpt1(t *testing.T) {
 func TestProcessDataFastPathCycleCntF2CommitOpt1(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: (1 << 29) | (1 << 7)})
 	p.isSync = true
-	p.currPacket.CCThreshold = 9
+	p.statePacket.CCThreshold = 9
 	out := &capturePktOut{}
 	p.SetPktOut(out)
 
@@ -626,7 +669,7 @@ func TestProcessDataFastPathCycleCntF2CommitOpt1(t *testing.T) {
 func TestProcessDataCycleCntF2CommitOpt1Off(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	p.currPacket.CCThreshold = 0
+	p.statePacket.CCThreshold = 0
 	out := &capturePktOut{}
 	p.SetPktOut(out)
 
@@ -651,7 +694,7 @@ func TestProcessDataCycleCntF2CommitOpt1Off(t *testing.T) {
 func TestProcessDataFastPathCycleCntF1CommitOpt1WithCount(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: (1 << 29) | (1 << 7)})
 	p.isSync = true
-	p.currPacket.CCThreshold = 7
+	p.statePacket.CCThreshold = 7
 	out := &capturePktOut{}
 	p.SetPktOut(out)
 
@@ -676,7 +719,7 @@ func TestProcessDataFastPathCycleCntF1CommitOpt1WithCount(t *testing.T) {
 func TestProcessDataFastPathCycleCntF1CommitOpt1NoCount(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: (1 << 29) | (1 << 7)})
 	p.isSync = true
-	p.currPacket.CCThreshold = 7
+	p.statePacket.CCThreshold = 7
 	out := &capturePktOut{}
 	p.SetPktOut(out)
 
@@ -698,7 +741,7 @@ func TestProcessDataFastPathCycleCntF1CommitOpt1NoCount(t *testing.T) {
 func TestProcessDataCycleCntF1CommitOpt1Off(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	p.currPacket.CCThreshold = 0
+	p.statePacket.CCThreshold = 0
 	out := &capturePktOut{}
 	p.SetPktOut(out)
 
@@ -1709,8 +1752,8 @@ func TestDecodeNextPacketShortAddrIncompleteNeedsMoreData(t *testing.T) {
 func TestProcessDataFastPathShortAddrMergesWithExistingAddress(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	p.currPacket.VAddr = 0xFFFF0000
-	p.currPacket.VAddrValidBits = 32
+	p.statePacket.VAddr = 0xFFFF0000
+	p.statePacket.VAddrValidBits = 32
 
 	consumed, err := p.processData(0, []byte{0x95, 0x15})
 	if err != nil {
@@ -1719,14 +1762,14 @@ func TestProcessDataFastPathShortAddrMergesWithExistingAddress(t *testing.T) {
 	if consumed != 2 {
 		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
 	}
-	if p.currPacket.VAddr != 0xFFFF0054 {
-		t.Fatalf("expected merged address 0xFFFF0054, got 0x%X", p.currPacket.VAddr)
+	if p.statePacket.VAddr != 0xFFFF0054 {
+		t.Fatalf("expected merged address 0xFFFF0054, got 0x%X", p.statePacket.VAddr)
 	}
-	if p.currPacket.VAddrValidBits != 32 {
-		t.Fatalf("expected valid bits to remain 32, got %d", p.currPacket.VAddrValidBits)
+	if p.statePacket.VAddrValidBits != 32 {
+		t.Fatalf("expected valid bits to remain 32, got %d", p.statePacket.VAddrValidBits)
 	}
-	if p.currPacket.VAddrPktBits != 9 || p.currPacket.VAddrISA != 0 {
-		t.Fatalf("unexpected packet metadata: pktBits=%d isa=%d", p.currPacket.VAddrPktBits, p.currPacket.VAddrISA)
+	if p.statePacket.VAddrPktBits != 9 || p.statePacket.VAddrISA != 0 {
+		t.Fatalf("unexpected packet metadata: pktBits=%d isa=%d", p.statePacket.VAddrPktBits, p.statePacket.VAddrISA)
 	}
 }
 
@@ -1765,10 +1808,10 @@ func TestProcessDataFastPathShortAddrAcrossBlocks(t *testing.T) {
 func TestProcessDataFastPathLongAddr32KeepsUpperWhenContext64Bit(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	p.currPacket.VAddr = 0x11223344AABBCCDD
-	p.currPacket.VAddrValidBits = 64
-	p.currPacket.Valid.Context = true
-	p.currPacket.Context.SF = true
+	p.statePacket.VAddr = 0x11223344AABBCCDD
+	p.statePacket.VAddrValidBits = 64
+	p.statePacket.Valid.Context = true
+	p.statePacket.Context.SF = true
 
 	consumed, err := p.processData(0, []byte{0x9A, 0x04, 0x00, 0x34, 0x12})
 	if err != nil {
@@ -1777,22 +1820,22 @@ func TestProcessDataFastPathLongAddr32KeepsUpperWhenContext64Bit(t *testing.T) {
 	if consumed != 5 {
 		t.Fatalf("expected 5 bytes consumed, got %d", consumed)
 	}
-	if p.currPacket.VAddr != 0x1122334412340010 {
-		t.Fatalf("expected merged address 0x1122334412340010, got 0x%X", p.currPacket.VAddr)
+	if p.statePacket.VAddr != 0x1122334412340010 {
+		t.Fatalf("expected merged address 0x1122334412340010, got 0x%X", p.statePacket.VAddr)
 	}
-	if p.currPacket.VAddrValidBits != 64 {
-		t.Fatalf("expected valid bits to remain 64, got %d", p.currPacket.VAddrValidBits)
+	if p.statePacket.VAddrValidBits != 64 {
+		t.Fatalf("expected valid bits to remain 64, got %d", p.statePacket.VAddrValidBits)
 	}
-	if p.currPacket.VAddrPktBits != 32 || p.currPacket.VAddrISA != 0 {
-		t.Fatalf("unexpected packet metadata: pktBits=%d isa=%d", p.currPacket.VAddrPktBits, p.currPacket.VAddrISA)
+	if p.statePacket.VAddrPktBits != 32 || p.statePacket.VAddrISA != 0 {
+		t.Fatalf("unexpected packet metadata: pktBits=%d isa=%d", p.statePacket.VAddrPktBits, p.statePacket.VAddrISA)
 	}
 }
 
 func TestProcessDataFastPathQShortAddrMergesWithExistingAddress(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: 0x1 << 15})
 	p.isSync = true
-	p.currPacket.VAddr = 0xFFFF0000
-	p.currPacket.VAddrValidBits = 32
+	p.statePacket.VAddr = 0xFFFF0000
+	p.statePacket.VAddrValidBits = 32
 
 	consumed, err := p.processData(0, []byte{0xA5, 0x15, 0x03})
 	if err != nil {
@@ -1801,21 +1844,21 @@ func TestProcessDataFastPathQShortAddrMergesWithExistingAddress(t *testing.T) {
 	if consumed != 3 {
 		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
 	}
-	if p.currPacket.VAddr != 0xFFFF0054 {
-		t.Fatalf("expected merged address 0xFFFF0054, got 0x%X", p.currPacket.VAddr)
+	if p.statePacket.VAddr != 0xFFFF0054 {
+		t.Fatalf("expected merged address 0xFFFF0054, got 0x%X", p.statePacket.VAddr)
 	}
-	if p.currPacket.QPkt.QType != 0x5 || p.currPacket.QPkt.QCount != 0x3 {
-		t.Fatalf("unexpected Q packet metadata: %+v", p.currPacket.QPkt)
+	if p.statePacket.QPkt.QType != 0x5 || p.statePacket.QPkt.QCount != 0x3 {
+		t.Fatalf("unexpected Q packet metadata: %+v", p.statePacket.QPkt)
 	}
 }
 
 func TestProcessDataFastPathQLongAddrKeepsUpperWhenContext64Bit(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: 0x1 << 15})
 	p.isSync = true
-	p.currPacket.VAddr = 0x11223344AABBCCDD
-	p.currPacket.VAddrValidBits = 64
-	p.currPacket.Valid.Context = true
-	p.currPacket.Context.SF = true
+	p.statePacket.VAddr = 0x11223344AABBCCDD
+	p.statePacket.VAddrValidBits = 64
+	p.statePacket.Valid.Context = true
+	p.statePacket.Context.SF = true
 
 	consumed, err := p.processData(0, []byte{0xAB, 0x02, 0x01, 0x34, 0x12, 0x03})
 	if err != nil {
@@ -1824,11 +1867,11 @@ func TestProcessDataFastPathQLongAddrKeepsUpperWhenContext64Bit(t *testing.T) {
 	if consumed != 6 {
 		t.Fatalf("expected 6 bytes consumed, got %d", consumed)
 	}
-	if p.currPacket.VAddr != 0x1122334412340104 {
-		t.Fatalf("expected merged address 0x1122334412340104, got 0x%X", p.currPacket.VAddr)
+	if p.statePacket.VAddr != 0x1122334412340104 {
+		t.Fatalf("expected merged address 0x1122334412340104, got 0x%X", p.statePacket.VAddr)
 	}
-	if p.currPacket.QPkt.QType != 0xB || p.currPacket.QPkt.QCount != 0x3 {
-		t.Fatalf("unexpected Q packet metadata: %+v", p.currPacket.QPkt)
+	if p.statePacket.QPkt.QType != 0xB || p.statePacket.QPkt.QCount != 0x3 {
+		t.Fatalf("unexpected Q packet metadata: %+v", p.statePacket.QPkt)
 	}
 }
 
@@ -2330,8 +2373,8 @@ func TestDecodeNextPacketDataSyncMarkers(t *testing.T) {
 func TestProcessDataFastPathContextNoIDUpdatePreservesIDs(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	p.currPacket.Context.VMID = 0xAA
-	p.currPacket.Context.CtxtID = 0xBBCC
+	p.statePacket.Context.VMID = 0xAA
+	p.statePacket.Context.CtxtID = 0xBBCC
 
 	consumed, err := p.processData(0, []byte{0x81, 0x31})
 	if err != nil {
@@ -2341,14 +2384,14 @@ func TestProcessDataFastPathContextNoIDUpdatePreservesIDs(t *testing.T) {
 		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
 	}
 	// Packet output resets Updated/Valid flags, but context values persist across packets.
-	if p.currPacket.Context.Updated {
+	if p.statePacket.Context.Updated {
 		t.Fatalf("expected Updated cleared after packet reset")
 	}
-	if p.currPacket.Context.EL != 0x1 || !p.currPacket.Context.SF || !p.currPacket.Context.NS {
-		t.Fatalf("expected context info fields updated, got %+v", p.currPacket.Context)
+	if p.statePacket.Context.EL != 0x1 || !p.statePacket.Context.SF || !p.statePacket.Context.NS {
+		t.Fatalf("expected context info fields updated, got %+v", p.statePacket.Context)
 	}
-	if p.currPacket.Context.VMID != 0xAA || p.currPacket.Context.CtxtID != 0xBBCC {
-		t.Fatalf("expected VMID/CtxtID to be preserved, got vmid=0x%X ctxt=0x%X", p.currPacket.Context.VMID, p.currPacket.Context.CtxtID)
+	if p.statePacket.Context.VMID != 0xAA || p.statePacket.Context.CtxtID != 0xBBCC {
+		t.Fatalf("expected VMID/CtxtID to be preserved, got vmid=0x%X ctxt=0x%X", p.statePacket.Context.VMID, p.statePacket.Context.CtxtID)
 	}
 }
 
@@ -2389,19 +2432,19 @@ func TestProcessDataFastPathDataSyncMarkerSetsDsmVal(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed, got %d", consumed)
 	}
-	if p.currPacket.DsmVal != 0x3 {
-		t.Fatalf("expected DsmVal 3, got %d", p.currPacket.DsmVal)
+	if p.statePacket.DsmVal != 0x3 {
+		t.Fatalf("expected DsmVal 3, got %d", p.statePacket.DsmVal)
 	}
 }
 
 func TestProcessDataFastPathAddrContext32PreservesUpperIn64BitContext(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	p.currPacket.VAddr = 0x11223344AABBCCDD
-	p.currPacket.VAddrValidBits = 64
-	p.currPacket.Valid.Context = true
-	p.currPacket.Context.SF = true
-	p.currPacket.Context.VMID = 0xAA
+	p.statePacket.VAddr = 0x11223344AABBCCDD
+	p.statePacket.VAddrValidBits = 64
+	p.statePacket.Valid.Context = true
+	p.statePacket.Context.SF = true
+	p.statePacket.Context.VMID = 0xAA
 
 	consumed, err := p.processData(0, []byte{0x82, 0x04, 0x00, 0x34, 0x12, 0x01})
 	if err != nil {
@@ -2410,11 +2453,11 @@ func TestProcessDataFastPathAddrContext32PreservesUpperIn64BitContext(t *testing
 	if consumed != 6 {
 		t.Fatalf("expected 6 bytes consumed, got %d", consumed)
 	}
-	if p.currPacket.VAddr != 0x1122334412340010 {
-		t.Fatalf("expected merged address 0x1122334412340010, got 0x%X", p.currPacket.VAddr)
+	if p.statePacket.VAddr != 0x1122334412340010 {
+		t.Fatalf("expected merged address 0x1122334412340010, got 0x%X", p.statePacket.VAddr)
 	}
-	if p.currPacket.Context.VMID != 0xAA {
-		t.Fatalf("expected VMID preserved, got 0x%X", p.currPacket.Context.VMID)
+	if p.statePacket.Context.VMID != 0xAA {
+		t.Fatalf("expected VMID preserved, got 0x%X", p.statePacket.Context.VMID)
 	}
 }
 
@@ -2422,10 +2465,10 @@ func TestProcessDataFastPathAddrContextWithIDs(t *testing.T) {
 	config := &Config{RegIdr2: (0x4 << 5) | (0x1 << 10)}
 	p := NewProcessor(config)
 	p.isSync = true
-	p.currPacket.VAddr = 0x11223344AABBCCDD
-	p.currPacket.VAddrValidBits = 64
-	p.currPacket.Valid.Context = true
-	p.currPacket.Context.SF = true
+	p.statePacket.VAddr = 0x11223344AABBCCDD
+	p.statePacket.VAddrValidBits = 64
+	p.statePacket.Valid.Context = true
+	p.statePacket.Context.SF = true
 	out := &capturePktOut{}
 	p.SetPktOut(out)
 
