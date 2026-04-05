@@ -835,6 +835,7 @@ func decodeNextPacket(data []byte, offset int) (Packet, int, error) {
 	pkt.ErrHdrVal = header
 	return pkt, 1, nil
 }
+
 func decodeITEPacket(data []byte, offset int) (Packet, int, error) {
 	if offset+10 > len(data) {
 		return Packet{}, 0, errDecodeNeedMoreData
