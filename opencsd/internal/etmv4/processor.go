@@ -199,10 +199,10 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 		case err == nil:
 			p.pendingStartIdx = packetIndex
 			p.packetIndex = p.pendingStartIdx
-			p.pendingData = append(p.pendingData[:0], dataBlock[consumed:consumed+bytesConsumed]...)
+			rawData := dataBlock[consumed : consumed+bytesConsumed]
 			consumed += bytesConsumed
 			p.blockBytesProcessed = consumed
-			resp = p.emitDecodedPacket(pkt)
+			resp = p.emitDecodedPacket(pkt, rawData)
 			return resp, consumed, nil
 		case errors.Is(err, errDecodeNeedMoreData):
 			p.pendingStartIdx = packetIndex
@@ -228,7 +228,7 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 				return resp, consumed, fmt.Errorf("decodeNextPacket consumed %d of %d buffered bytes", bytesConsumed, len(p.pendingData))
 			}
 			p.packetIndex = packetIndex
-			resp = p.emitDecodedPacket(pkt)
+			resp = p.emitDecodedPacket(pkt, p.pendingData)
 			return resp, consumed, nil
 		case errors.Is(err, errDecodeNeedMoreData):
 			continue
@@ -2123,10 +2123,10 @@ func (p *Processor) outputPacket(pkt *TracePacket, rawData []byte) ocsd.Datapath
 	return resp
 }
 
-func (p *Processor) emitDecodedPacket(pkt Packet) ocsd.DatapathResp {
+func (p *Processor) emitDecodedPacket(pkt Packet, rawData []byte) ocsd.DatapathResp {
 	out := p.statePacket
 	p.applyDecodedPacket(&out, pkt)
-	resp := p.outputPacket(&out, p.pendingData)
+	resp := p.outputPacket(&out, rawData)
 	p.statePacket = out
 	p.clearStateTransient()
 	p.resetPendingState()
