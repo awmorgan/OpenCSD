@@ -268,21 +268,41 @@ func (p *Processor) processUnsyncedBlock(dataBlock []byte, consumed int) (ocsd.D
 		p.packetIndex = p.pendingStartIdx
 	}
 
-	for consumed < len(dataBlock) {
-		nextByte := dataBlock[consumed]
-		p.pendingData = append(p.pendingData, nextByte)
+	// Construct a contiguous view of the pending bytes + incoming block.
+	tempBuf := make([]byte, 0, len(p.pendingData)+len(dataBlock)-consumed)
+	tempBuf = append(tempBuf, p.pendingData...)
+	tempBuf = append(tempBuf, dataBlock[consumed:]...)
+
+	startIndex := len(p.pendingData)
+
+	// Scan using a dynamic slice window, rather than appending to the struct.
+	for i := startIndex; i < len(tempBuf); i++ {
+		nextByte := tempBuf[i]
+		window := tempBuf[:i+1] // The exact byte sequence up to this point
+
 		consumed++
 		p.blockBytesProcessed = consumed
-		done, pkt := p.processUnsyncedByte(p.pendingData, nextByte)
+
+		// Pass the window explicitly to our newly parameterized helpers
+		done, pkt := p.processUnsyncedByte(window, nextByte)
+
 		if done {
-			resp = p.emitPendingPacket(pkt, p.pendingData)
+			resp = p.emitPendingPacket(pkt, window)
+			p.pendingData = p.pendingData[:0] // Sequence resolved, clear the buffer!
 			return resp, consumed, nil
 		}
+
 		if p.pendingDump {
+			// The dump logic needs to know exactly what to dump.
+			// We hand off our current window and exit.
+			p.pendingData = window
 			return resp, consumed, nil
 		}
 	}
 
+	// We exhausted the block but didn't resolve the sequence.
+	// Save the contiguous buffer for the next TraceDataIn call.
+	p.pendingData = tempBuf
 	return resp, consumed, nil
 }
 
