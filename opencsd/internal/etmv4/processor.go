@@ -7,6 +7,31 @@ import (
 	"opencsd/internal/ocsd"
 )
 
+// streamBuffer encapsulates cross-block byte persistence and unsynced dump logic.
+type streamBuffer struct {
+	data                 []byte
+	startIdx             ocsd.TrcIndex
+	dump                 bool
+	unsynced             bool
+	dumpBytes            int
+	updateOnUnsyncPktIdx ocsd.TrcIndex
+}
+
+func (s *streamBuffer) reset() {
+	s.data = s.data[:0]
+	s.startIdx = 0
+	s.dump = false
+	s.unsynced = false
+	s.dumpBytes = 0
+	s.updateOnUnsyncPktIdx = 0
+}
+
+func (s *streamBuffer) queueDump(bytes int, updateIdx ocsd.TrcIndex) {
+	s.dumpBytes = bytes
+	s.dump = true
+	s.updateOnUnsyncPktIdx = updateIdx
+}
+
 // TInfoSect are flags to indicate processing progress for these sections is complete.
 type TInfoSect uint8
 
@@ -40,22 +65,17 @@ type Processor struct {
 	// rolling architectural state kept across emitted packets.
 	statePacket TracePacket
 
-	// pending raw bytes and packet metadata for cross-block reassembly / unsynced handling.
-	pendingData     []byte
-	pendingStartIdx ocsd.TrcIndex
-	pendingDump     bool
-	pendingUnsynced bool
+	// encapsulated cross-block reassembly state
+	stream streamBuffer
 
-	packetIndex          ocsd.TrcIndex
-	blockIndex           ocsd.TrcIndex
-	blockBytesProcessed  int
-	updateOnUnsyncPktIdx ocsd.TrcIndex
+	packetIndex         ocsd.TrcIndex
+	blockIndex          ocsd.TrcIndex
+	blockBytesProcessed int
 
 	// syncing
 	isSync            bool
 	firstTraceInfo    bool
 	sentNotsyncPacket bool
-	dumpUnsyncedBytes int
 
 	isInit bool // initialized
 }
@@ -155,14 +175,14 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 			break
 		}
 
-		if p.pendingDump {
+		if p.stream.dump {
 			resp = p.outputUnsyncedRawPacket()
-			if p.updateOnUnsyncPktIdx != 0 {
-				p.packetIndex = p.updateOnUnsyncPktIdx
-				p.pendingStartIdx = p.packetIndex
-				p.updateOnUnsyncPktIdx = 0
+			if p.stream.updateOnUnsyncPktIdx != 0 {
+				p.packetIndex = p.stream.updateOnUnsyncPktIdx
+				p.stream.startIdx = p.packetIndex
+				p.stream.updateOnUnsyncPktIdx = 0
 			}
-			p.pendingDump = false
+			p.stream.dump = false
 			continue
 		}
 
@@ -188,37 +208,37 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd.DatapathResp, int, error) {
 	resp := ocsd.RespCont
 
-	if !p.isSync || p.pendingDump {
+	if !p.isSync || p.stream.dump {
 		return resp, consumed, nil
 	}
 
-	if len(p.pendingData) == 0 {
+	if len(p.stream.data) == 0 {
 		packetIndex := p.blockIndex + ocsd.TrcIndex(consumed)
 		pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, dataBlock, consumed)
 		switch {
 		case err == nil:
-			p.pendingStartIdx = packetIndex
-			p.packetIndex = p.pendingStartIdx
+			p.stream.startIdx = packetIndex
+			p.packetIndex = p.stream.startIdx
 			rawData := dataBlock[consumed : consumed+bytesConsumed]
 			consumed += bytesConsumed
 			p.blockBytesProcessed = consumed
 			resp = p.emitDecodedPacket(pkt, rawData)
 			return resp, consumed, nil
 		case errors.Is(err, errDecodeNeedMoreData):
-			p.pendingStartIdx = packetIndex
-			p.packetIndex = p.pendingStartIdx
-			p.pendingData = append(p.pendingData[:0], dataBlock[consumed:]...)
+			p.stream.startIdx = packetIndex
+			p.packetIndex = p.stream.startIdx
+			p.stream.data = append(p.stream.data[:0], dataBlock[consumed:]...)
 			return resp, len(dataBlock), nil
 		default:
 			return resp, consumed, err
 		}
 	}
 
-	packetIndex := p.pendingStartIdx
+	packetIndex := p.stream.startIdx
 
 	// Construct a contiguous view of the pending bytes + incoming block.
-	tempBuf := make([]byte, 0, len(p.pendingData)+len(dataBlock)-consumed)
-	tempBuf = append(tempBuf, p.pendingData...)
+	tempBuf := make([]byte, 0, len(p.stream.data)+len(dataBlock)-consumed)
+	tempBuf = append(tempBuf, p.stream.data...)
 	tempBuf = append(tempBuf, dataBlock[consumed:]...)
 
 	// Decode exactly once.
@@ -227,7 +247,7 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 	switch {
 	case err == nil:
 		// Success! Calculate how many bytes we took from the new block.
-		bytesFromBlock := bytesConsumed - len(p.pendingData)
+		bytesFromBlock := bytesConsumed - len(p.stream.data)
 
 		p.packetIndex = packetIndex
 		resp = p.emitDecodedPacket(pkt, tempBuf[:bytesConsumed])
@@ -235,12 +255,12 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 		// Advance consumed, clear the cross-block buffer, and return to the fast path!
 		consumed += bytesFromBlock
 		p.blockBytesProcessed = consumed
-		p.pendingData = p.pendingData[:0]
+		p.stream.data = p.stream.data[:0]
 		return resp, consumed, nil
 
 	case errors.Is(err, errDecodeNeedMoreData):
 		// Still incomplete. The packet spans across yet another block.
-		p.pendingData = append(p.pendingData, dataBlock[consumed:]...)
+		p.stream.data = append(p.stream.data, dataBlock[consumed:]...)
 		return resp, len(dataBlock), nil
 
 	default:
@@ -256,24 +276,24 @@ func (p *Processor) processUnsyncedBlock(dataBlock []byte, consumed int) (ocsd.D
 		return resp, consumed, nil
 	}
 
-	if len(p.pendingData) == 0 {
-		if p.pendingUnsynced {
-			p.packetIndex = p.pendingStartIdx
+	if len(p.stream.data) == 0 {
+		if p.stream.unsynced {
+			p.packetIndex = p.stream.startIdx
 		} else {
-			p.pendingStartIdx = p.blockIndex + ocsd.TrcIndex(consumed)
-			p.packetIndex = p.pendingStartIdx
-			p.pendingUnsynced = true
+			p.stream.startIdx = p.blockIndex + ocsd.TrcIndex(consumed)
+			p.packetIndex = p.stream.startIdx
+			p.stream.unsynced = true
 		}
 	} else {
-		p.packetIndex = p.pendingStartIdx
+		p.packetIndex = p.stream.startIdx
 	}
 
 	// Construct a contiguous view of the pending bytes + incoming block.
-	tempBuf := make([]byte, 0, len(p.pendingData)+len(dataBlock)-consumed)
-	tempBuf = append(tempBuf, p.pendingData...)
+	tempBuf := make([]byte, 0, len(p.stream.data)+len(dataBlock)-consumed)
+	tempBuf = append(tempBuf, p.stream.data...)
 	tempBuf = append(tempBuf, dataBlock[consumed:]...)
 
-	startIndex := len(p.pendingData)
+	startIndex := len(p.stream.data)
 
 	// Scan using a dynamic slice window, rather than appending to the struct.
 	for i := startIndex; i < len(tempBuf); i++ {
@@ -288,21 +308,21 @@ func (p *Processor) processUnsyncedBlock(dataBlock []byte, consumed int) (ocsd.D
 
 		if done {
 			resp = p.emitPendingPacket(pkt, window)
-			p.pendingData = p.pendingData[:0] // Sequence resolved, clear the buffer!
+			p.stream.data = p.stream.data[:0] // Sequence resolved, clear the buffer!
 			return resp, consumed, nil
 		}
 
-		if p.pendingDump {
+		if p.stream.dump {
 			// The dump logic needs to know exactly what to dump.
 			// We hand off our current window and exit.
-			p.pendingData = window
+			p.stream.data = window
 			return resp, consumed, nil
 		}
 	}
 
 	// We exhausted the block but didn't resolve the sequence.
 	// Save the contiguous buffer for the next TraceDataIn call.
-	p.pendingData = tempBuf
+	p.stream.data = tempBuf
 	return resp, consumed, nil
 }
 
@@ -2038,10 +2058,10 @@ func (p *Processor) onEOT() ocsd.DatapathResp {
 	}
 
 	resp := ocsd.RespCont
-	if len(p.pendingData) != 0 {
+	if len(p.stream.data) != 0 {
 		pending := p.pendingPacketForEOT()
 		pending.Err = errIncompleteEOT
-		resp = p.emitPendingPacket(pending, p.pendingData)
+		resp = p.emitPendingPacket(pending, p.stream.data)
 		p.resetPacketState()
 	}
 
@@ -2053,13 +2073,13 @@ func (p *Processor) onEOT() ocsd.DatapathResp {
 }
 
 func (p *Processor) pendingPacketForEOT() Packet {
-	if len(p.pendingData) == 0 {
+	if len(p.stream.data) == 0 {
 		return Packet{}
 	}
 	if p.isSync {
-		return Packet{Type: packetTypeForHeader(p.config, p.pendingData[0])}
+		return Packet{Type: packetTypeForHeader(p.config, p.stream.data[0])}
 	}
-	typeOnly := p.pendingUnsyncedPacketType(p.pendingData)
+	typeOnly := p.pendingUnsyncedPacketType(p.stream.data)
 	return Packet{Type: typeOnly}
 }
 
@@ -2096,7 +2116,7 @@ func (p *Processor) resetStartState() {
 }
 
 func (p *Processor) resetPacketState() {
-	p.resetPendingState()
+	p.stream.reset()
 	p.clearStateTransient()
 }
 
@@ -2107,15 +2127,6 @@ func (p *Processor) resetProcessorState() {
 	p.isSync = false
 	p.firstTraceInfo = false
 	p.sentNotsyncPacket = false
-}
-
-func (p *Processor) resetPendingState() {
-	p.pendingData = p.pendingData[:0]
-	p.pendingStartIdx = 0
-	p.pendingDump = false
-	p.pendingUnsynced = false
-	p.dumpUnsyncedBytes = 0
-	p.updateOnUnsyncPktIdx = 0
 }
 
 func (p *Processor) clearStateTransient() {
@@ -2158,7 +2169,7 @@ func (p *Processor) emitDecodedPacket(pkt Packet, rawData []byte) ocsd.DatapathR
 	resp := p.outputPacket(&out, rawData)
 	p.statePacket = out
 	p.clearStateTransient()
-	p.resetPendingState()
+	p.stream.reset()
 	return resp
 }
 
@@ -2168,18 +2179,18 @@ func (p *Processor) emitPendingPacket(pkt Packet, rawData []byte) ocsd.DatapathR
 	out.Err = pkt.Err
 	out.ErrHdrVal = pkt.ErrHdrVal
 	resp := p.outputPacket(&out, rawData)
-	p.resetPendingState()
+	p.stream.reset()
 	return resp
 }
 
 func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
-	n := p.dumpUnsyncedBytes
+	n := p.stream.dumpBytes
 	pkt := p.statePacket
-	pkt.Type = p.pendingUnsyncedPacketType(p.pendingData)
+	pkt.Type = p.pendingUnsyncedPacketType(p.stream.data)
 
-	if p.PktRawMonI != nil && n > 0 && len(p.pendingData) > 0 {
-		monBytes := min(n, len(p.pendingData))
-		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, p.packetIndex, &pkt, p.pendingData[:monBytes])
+	if p.PktRawMonI != nil && n > 0 && len(p.stream.data) > 0 {
+		monBytes := min(n, len(p.stream.data))
+		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, p.packetIndex, &pkt, p.stream.data[:monBytes])
 	}
 
 	resp := ocsd.RespCont
@@ -2190,10 +2201,10 @@ func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
 		p.sentNotsyncPacket = true
 	}
 
-	if n <= len(p.pendingData) {
-		p.pendingData = p.pendingData[n:]
+	if n <= len(p.stream.data) {
+		p.stream.data = p.stream.data[n:]
 	} else {
-		p.pendingData = p.pendingData[:0]
+		p.stream.data = p.stream.data[:0]
 	}
 	return resp
 }
@@ -2265,26 +2276,20 @@ func (p *Processor) processUnsyncedByte(data []byte, lastByte uint8) (bool, Pack
 func (p *Processor) processUnsyncedNotSync(data []byte, lastByte uint8) {
 	if lastByte == 0x00 {
 		if len(data) > 1 {
-			p.queueUnsyncedDump(len(data)-1, p.blockIndex+ocsd.TrcIndex(p.blockBytesProcessed)-1)
+			p.stream.queueDump(len(data)-1, p.blockIndex+ocsd.TrcIndex(p.blockBytesProcessed)-1)
 		} else {
-			p.pendingStartIdx = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
-			p.packetIndex = p.pendingStartIdx
+			p.stream.startIdx = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
+			p.packetIndex = p.stream.startIdx
 		}
 	} else if len(data) >= 8 {
-		p.queueUnsyncedDump(len(data), p.blockIndex+ocsd.TrcIndex(p.blockBytesProcessed))
+		p.stream.queueDump(len(data), p.blockIndex+ocsd.TrcIndex(p.blockBytesProcessed))
 	}
-}
-
-func (p *Processor) queueUnsyncedDump(bytes int, updateIdx ocsd.TrcIndex) {
-	p.dumpUnsyncedBytes = bytes
-	p.pendingDump = true
-	p.updateOnUnsyncPktIdx = updateIdx
 }
 
 func (p *Processor) processUnsyncedExtension(data []byte, lastByte uint8) (bool, Packet, bool) {
 	if len(data) == 1 {
-		p.pendingStartIdx = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
-		p.packetIndex = p.pendingStartIdx
+		p.stream.startIdx = p.blockIndex + ocsd.TrcIndex(p.blockBytesProcessed) - 1
+		p.packetIndex = p.stream.startIdx
 		return false, Packet{}, true
 	}
 
@@ -2320,7 +2325,7 @@ func (p *Processor) processUnsyncedASync(data []byte, lastByte uint8) (bool, Pac
 		}
 	} else if len(data) == 12 {
 		if !p.isSync {
-			p.queueUnsyncedDump(1, 0)
+			p.stream.queueDump(1, 0)
 		} else {
 			return true, Packet{Type: PktAsync, Err: ocsd.ErrBadPacketSeq}, true
 		}

@@ -39,7 +39,7 @@ func (c *captureRawMon) RawPacketDataMon(_ ocsd.DatapathOp, indexSOP ocsd.TrcInd
 
 func TestProcessorResetPacketStateClearsConditionalState(t *testing.T) {
 	p := NewProcessor(&Config{})
-	p.pendingData = []byte{0xAA, 0xBB}
+	p.stream.data = []byte{0xAA, 0xBB}
 	p.statePacket.CondInstr = CondInstr{
 		CondCKey:   0x23,
 		NumCElem:   4,
@@ -56,8 +56,8 @@ func TestProcessorResetPacketStateClearsConditionalState(t *testing.T) {
 
 	p.resetPacketState()
 
-	if len(p.pendingData) != 0 {
-		t.Fatalf("expected packet data cleared, got %d bytes", len(p.pendingData))
+	if len(p.stream.data) != 0 {
+		t.Fatalf("expected packet data cleared, got %d bytes", len(p.stream.data))
 	}
 	if p.statePacket.CondInstr.CondKeySet {
 		t.Fatalf("expected CondInstr.CondKeySet to be cleared")
@@ -393,8 +393,8 @@ func TestTraceDataEOTIncompleteBufferedPacketKeepsHeaderType(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed, got %d", consumed)
 	}
-	if len(p.pendingData) != 1 || p.pendingData[0] != 0x9A {
-		t.Fatalf("expected buffered header byte 0x9A, got %v", p.pendingData)
+	if len(p.stream.data) != 1 || p.stream.data[0] != 0x9A {
+		t.Fatalf("expected buffered header byte 0x9A, got %v", p.stream.data)
 	}
 
 	if err := p.TraceDataEOT(); err != nil {
@@ -438,8 +438,8 @@ func TestProcessDataUnsyncedDumpStopsAtThreshold(t *testing.T) {
 	if raw.indexes[0] != 0 || raw.indexes[1] != 8 || raw.indexes[2] != 16 {
 		t.Fatalf("expected raw packet indexes [0 8 16], got %v", raw.indexes)
 	}
-	if len(p.pendingData) != 8 {
-		t.Fatalf("expected final pending unsynced buffer length 8, got %d", len(p.pendingData))
+	if len(p.stream.data) != 8 {
+		t.Fatalf("expected final pending unsynced buffer length 8, got %d", len(p.stream.data))
 	}
 }
 
