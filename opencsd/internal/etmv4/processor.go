@@ -215,29 +215,38 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 	}
 
 	packetIndex := p.pendingStartIdx
-	for consumed < len(dataBlock) {
-		nextByte := dataBlock[consumed]
-		p.pendingData = append(p.pendingData, nextByte)
-		consumed++
-		p.blockBytesProcessed = consumed
 
-		pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, p.pendingData, 0)
-		switch {
-		case err == nil:
-			if bytesConsumed != len(p.pendingData) {
-				return resp, consumed, fmt.Errorf("decodeNextPacket consumed %d of %d buffered bytes", bytesConsumed, len(p.pendingData))
-			}
-			p.packetIndex = packetIndex
-			resp = p.emitDecodedPacket(pkt, p.pendingData)
-			return resp, consumed, nil
-		case errors.Is(err, errDecodeNeedMoreData):
-			continue
-		default:
-			return resp, consumed, err
-		}
+	// Construct a contiguous view of the pending bytes + incoming block.
+	tempBuf := make([]byte, 0, len(p.pendingData)+len(dataBlock)-consumed)
+	tempBuf = append(tempBuf, p.pendingData...)
+	tempBuf = append(tempBuf, dataBlock[consumed:]...)
+
+	// Decode exactly once.
+	pkt, bytesConsumed, err := decodeNextPacketWithConfig(p.config, tempBuf, 0)
+
+	switch {
+	case err == nil:
+		// Success! Calculate how many bytes we took from the new block.
+		bytesFromBlock := bytesConsumed - len(p.pendingData)
+
+		p.packetIndex = packetIndex
+		resp = p.emitDecodedPacket(pkt, tempBuf[:bytesConsumed])
+
+		// Advance consumed, clear the cross-block buffer, and return to the fast path!
+		consumed += bytesFromBlock
+		p.blockBytesProcessed = consumed
+		p.pendingData = p.pendingData[:0]
+		return resp, consumed, nil
+
+	case errors.Is(err, errDecodeNeedMoreData):
+		// Still incomplete. The packet spans across yet another block.
+		p.pendingData = append(p.pendingData, dataBlock[consumed:]...)
+		return resp, len(dataBlock), nil
+
+	default:
+		return resp, consumed, err
 	}
 
-	return resp, consumed, nil
 }
 
 func (p *Processor) processUnsyncedBlock(dataBlock []byte, consumed int) (ocsd.DatapathResp, int, error) {
