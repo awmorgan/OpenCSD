@@ -582,16 +582,16 @@ func (e *TraceElement) String() string {
 
 func (e *TraceElement) printSWInfoPkt(sb *strings.Builder) {
 	info := e.Payload.SWTraceInfo
-	if !info.GlobalErr() {
-		if info.IDValid() {
+	if !info.GlobalErr {
+		if info.IDValid {
 			fmt.Fprintf(sb, " (Ma:0x%02x; Ch:0x%02x) ", info.MasterID, info.ChannelID)
 		} else {
 			sb.WriteString("(Ma:0x??; Ch:0x??) ")
 		}
 
-		if info.PayloadPktBitsize() > 0 && len(e.PtrExtendedData) > 0 {
+		if info.PayloadPktBitsize > 0 && len(e.PtrExtendedData) > 0 {
 			sb.WriteString("0x")
-			switch info.PayloadPktBitsize() {
+			switch info.PayloadPktBitsize {
 			case 4:
 				fmt.Fprintf(sb, "%x", e.PtrExtendedData[0]&0xF)
 			case 8:
@@ -618,19 +618,19 @@ func (e *TraceElement) printSWInfoPkt(sb *strings.Builder) {
 			sb.WriteString("; ")
 		}
 
-		if info.MarkerPacket() {
+		if info.MarkerPacket {
 			sb.WriteString("+Mrk ")
 		}
-		if info.TriggerEvent() {
+		if info.TriggerEvent {
 			sb.WriteString("Trig ")
 		}
-		if info.HasTimestamp() {
+		if info.HasTimestamp {
 			fmt.Fprintf(sb, " [ TS=0x%012x]; ", e.Timestamp)
 		}
-		if info.Frequency() {
+		if info.Frequency {
 			sb.WriteString("Freq")
 		}
-		if info.MasterErr() {
+		if info.MasterErr {
 			sb.WriteString("{Master Error.}")
 		}
 	} else {

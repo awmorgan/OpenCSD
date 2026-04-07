@@ -389,29 +389,29 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 			sendPacket = true
 		}
 	case PktFreq:
-		d.swtPacketInfo.SetFrequency(true)
+		d.swtPacketInfo.Frequency = true
 		sendPacket = d.updatePayload()
 	case PktTrig:
-		d.swtPacketInfo.SetTriggerEvent(true)
+		d.swtPacketInfo.TriggerEvent = true
 		sendPacket = d.updatePayload()
 	case PktGErr:
 		d.swtPacketInfo.MasterID = uint16(d.CurrPacketIn.Master)
 		d.swtPacketInfo.ChannelID = uint16(d.CurrPacketIn.Channel)
-		d.swtPacketInfo.SetGlobalErr(true)
-		d.swtPacketInfo.SetIDValid(false)
+		d.swtPacketInfo.GlobalErr = true
+		d.swtPacketInfo.IDValid = false
 		sendPacket = d.updatePayload()
 	case PktMErr:
 		d.swtPacketInfo.ChannelID = uint16(d.CurrPacketIn.Channel)
-		d.swtPacketInfo.SetMasterErr(true)
+		d.swtPacketInfo.MasterErr = true
 		sendPacket = d.updatePayload()
 	case PktM8:
 		d.swtPacketInfo.MasterID = uint16(d.CurrPacketIn.Master)
 		d.swtPacketInfo.ChannelID = uint16(d.CurrPacketIn.Channel)
-		d.swtPacketInfo.SetIDValid(true)
+		d.swtPacketInfo.IDValid = true
 	case PktC8, PktC16:
 		d.swtPacketInfo.ChannelID = uint16(d.CurrPacketIn.Channel)
 	case PktFlag:
-		d.swtPacketInfo.SetMarkerPacket(true)
+		d.swtPacketInfo.MarkerPacket = true
 		sendPacket = true
 	case PktD4, PktD8, PktD16, PktD32, PktD64:
 		sendPacket = d.updatePayload()
@@ -420,7 +420,7 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 	if sendPacket {
 		if d.CurrPacketIn.IsTSPkt() {
 			d.outputElem.SetTS(d.CurrPacketIn.Timestamp, true)
-			d.swtPacketInfo.SetHasTimestamp(true)
+			d.swtPacketInfo.HasTimestamp = true
 		}
 		d.outputElem.SetSWTInfo(d.swtPacketInfo)
 		resp = ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
@@ -430,33 +430,37 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 }
 
 func (d *PktDecode) clearSWTPerPcktInfo() {
-	d.swtPacketInfo.FlagBits &= ocsd.SwtIDValidMask
+	d.swtPacketInfo = ocsd.SWTInfo{
+		MasterID:  d.swtPacketInfo.MasterID,
+		ChannelID: d.swtPacketInfo.ChannelID,
+		IDValid:   d.swtPacketInfo.IDValid,
+	}
 }
 
 func (d *PktDecode) updatePayload() bool {
-	d.swtPacketInfo.SetPayloadNumPackets(1)
+	d.swtPacketInfo.PayloadNumPackets = 1
 
 	switch d.CurrPacketIn.Type {
 	case PktD4:
-		d.swtPacketInfo.SetPayloadPktBitsize(4)
+		d.swtPacketInfo.PayloadPktBitsize = 4
 		d.payloadBuffer[0] = d.CurrPacketIn.Payload.D8
 	case PktD8, PktTrig, PktGErr, PktMErr:
-		d.swtPacketInfo.SetPayloadPktBitsize(8)
+		d.swtPacketInfo.PayloadPktBitsize = 8
 		d.payloadBuffer[0] = d.CurrPacketIn.Payload.D8
 	case PktD16:
-		d.swtPacketInfo.SetPayloadPktBitsize(16)
+		d.swtPacketInfo.PayloadPktBitsize = 16
 		binary.LittleEndian.PutUint16(d.payloadBuffer, d.CurrPacketIn.Payload.D16)
 	case PktD32, PktFreq:
-		d.swtPacketInfo.SetPayloadPktBitsize(32)
+		d.swtPacketInfo.PayloadPktBitsize = 32
 		binary.LittleEndian.PutUint32(d.payloadBuffer, d.CurrPacketIn.Payload.D32)
 	case PktD64:
-		d.swtPacketInfo.SetPayloadPktBitsize(64)
+		d.swtPacketInfo.PayloadPktBitsize = 64
 		binary.LittleEndian.PutUint64(d.payloadBuffer, d.CurrPacketIn.Payload.D64)
 	}
 
 	d.outputElem.SetExtendedDataPtr(d.payloadBuffer)
 	if d.CurrPacketIn.IsMarkerPkt() {
-		d.swtPacketInfo.SetMarkerPacket(true)
+		d.swtPacketInfo.MarkerPacket = true
 	}
 	return true
 }

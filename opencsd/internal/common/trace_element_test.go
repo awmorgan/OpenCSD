@@ -425,8 +425,8 @@ func TestTraceElement_SWTraceStrings(t *testing.T) {
 	var info ocsd.SWTInfo
 	info.MasterID = 0x1
 	info.ChannelID = 0x2
-	info.SetIDValid(true)
-	info.SetPayloadPktBitsize(32)
+	info.IDValid = true
+	info.PayloadPktBitsize = 32
 	e.SetSWTInfo(info)
 	e.SetExtendedDataPtr([]byte{0xEF, 0xBE, 0xAD, 0xDE})
 
@@ -436,7 +436,7 @@ func TestTraceElement_SWTraceStrings(t *testing.T) {
 	}
 
 	// 4 bits
-	info.SetPayloadPktBitsize(4)
+	info.PayloadPktBitsize = 4
 	e.SetSWTInfo(info)
 	expected = "OCSD_GEN_TRC_ELEM_SWTRACE( (Ma:0x01; Ch:0x02) 0xf; )"
 	if got := e.String(); got != expected {
@@ -444,7 +444,7 @@ func TestTraceElement_SWTraceStrings(t *testing.T) {
 	}
 
 	// 16 bits
-	info.SetPayloadPktBitsize(16)
+	info.PayloadPktBitsize = 16
 	e.SetSWTInfo(info)
 	expected = "OCSD_GEN_TRC_ELEM_SWTRACE( (Ma:0x01; Ch:0x02) 0xbeef; )"
 	if got := e.String(); got != expected {
@@ -452,7 +452,7 @@ func TestTraceElement_SWTraceStrings(t *testing.T) {
 	}
 
 	// 64 bits
-	info.SetPayloadPktBitsize(64)
+	info.PayloadPktBitsize = 64
 	e.SetSWTInfo(info)
 	e.SetExtendedDataPtr([]byte{0xEF, 0xBE, 0xAD, 0xDE, 0x00, 0x11, 0x22, 0x33})
 	expected = "OCSD_GEN_TRC_ELEM_SWTRACE( (Ma:0x01; Ch:0x02) 0x33221100deadbeef; )"
@@ -461,28 +461,28 @@ func TestTraceElement_SWTraceStrings(t *testing.T) {
 	}
 
 	// Unsupported bits
-	info.SetPayloadPktBitsize(42)
+	info.PayloadPktBitsize = 42
 	e.SetSWTInfo(info)
 	expected = "OCSD_GEN_TRC_ELEM_SWTRACE( (Ma:0x01; Ch:0x02) 0x{Data Error : unsupported bit width.}; )"
 	if got := e.String(); got != expected {
 		t.Errorf("Expected %q, got %q", expected, got)
 	}
 
-	info.SetGlobalErr(true)
+	info.GlobalErr = true
 	e.SetSWTInfo(info)
 	expected = "OCSD_GEN_TRC_ELEM_SWTRACE({Global Error.})"
 	if got := e.String(); got != expected {
 		t.Errorf("Expected %q, got %q", expected, got)
 	}
 
-	info.SetGlobalErr(false)
-	info.SetMasterErr(true)
-	info.SetPayloadPktBitsize(8)
-	info.SetIDValid(false)
-	info.SetMarkerPacket(true)
-	info.SetTriggerEvent(true)
-	info.SetHasTimestamp(true)
-	info.SetFrequency(true)
+	info.GlobalErr = false
+	info.MasterErr = true
+	info.PayloadPktBitsize = 8
+	info.IDValid = false
+	info.MarkerPacket = true
+	info.TriggerEvent = true
+	info.HasTimestamp = true
+	info.Frequency = true
 	e.SetTS(0x998877, false)
 	e.SetSWTInfo(info)
 	expected = "OCSD_GEN_TRC_ELEM_SWTRACE((Ma:0x??; Ch:0x??) 0xef; +Mrk Trig  [ TS=0x000000998877]; Freq{Master Error.})"

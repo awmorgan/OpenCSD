@@ -490,93 +490,19 @@ func ProtocolIsBuiltin(p TraceProtocol) bool { return p > ProtocolUnknown && p <
 func ProtocolIsCustom(p TraceProtocol) bool  { return p >= ProtocolCustom0 && p < ProtocolEnd }
 
 // Software Trace Packets Info
-
 type SWTInfo struct {
-	MasterID  uint16
-	ChannelID uint16
-	FlagBits  uint32
-}
-
-func (s *SWTInfo) PayloadPktBitsize() uint8 { return uint8(s.FlagBits & 0xFF) }
-func (s *SWTInfo) SetPayloadPktBitsize(v uint8) {
-	s.FlagBits = (s.FlagBits &^ 0xFF) | uint32(v)
-}
-
-func (s *SWTInfo) PayloadNumPackets() uint8 { return uint8((s.FlagBits >> 8) & 0xFF) }
-func (s *SWTInfo) SetPayloadNumPackets(v uint8) {
-	s.FlagBits = (s.FlagBits &^ (0xFF << 8)) | (uint32(v) << 8)
-}
-
-func (s *SWTInfo) MarkerPacket() bool { return (s.FlagBits & (1 << 16)) != 0 }
-func (s *SWTInfo) SetMarkerPacket(v bool) {
-	if v {
-		s.FlagBits |= (1 << 16)
-	} else {
-		s.FlagBits &^= (1 << 16)
-	}
-}
-
-func (s *SWTInfo) HasTimestamp() bool { return (s.FlagBits & (1 << 17)) != 0 }
-func (s *SWTInfo) SetHasTimestamp(v bool) {
-	if v {
-		s.FlagBits |= (1 << 17)
-	} else {
-		s.FlagBits &^= (1 << 17)
-	}
-}
-
-func (s *SWTInfo) MarkerFirst() bool { return (s.FlagBits & (1 << 18)) != 0 }
-func (s *SWTInfo) SetMarkerFirst(v bool) {
-	if v {
-		s.FlagBits |= (1 << 18)
-	} else {
-		s.FlagBits &^= (1 << 18)
-	}
-}
-
-func (s *SWTInfo) MasterErr() bool { return (s.FlagBits & (1 << 19)) != 0 }
-func (s *SWTInfo) SetMasterErr(v bool) {
-	if v {
-		s.FlagBits |= (1 << 19)
-	} else {
-		s.FlagBits &^= (1 << 19)
-	}
-}
-
-func (s *SWTInfo) GlobalErr() bool { return (s.FlagBits & (1 << 20)) != 0 }
-func (s *SWTInfo) SetGlobalErr(v bool) {
-	if v {
-		s.FlagBits |= (1 << 20)
-	} else {
-		s.FlagBits &^= (1 << 20)
-	}
-}
-
-func (s *SWTInfo) TriggerEvent() bool { return (s.FlagBits & (1 << 21)) != 0 }
-func (s *SWTInfo) SetTriggerEvent(v bool) {
-	if v {
-		s.FlagBits |= (1 << 21)
-	} else {
-		s.FlagBits &^= (1 << 21)
-	}
-}
-
-func (s *SWTInfo) Frequency() bool { return (s.FlagBits & (1 << 22)) != 0 }
-func (s *SWTInfo) SetFrequency(v bool) {
-	if v {
-		s.FlagBits |= (1 << 22)
-	} else {
-		s.FlagBits &^= (1 << 22)
-	}
-}
-
-func (s *SWTInfo) IDValid() bool { return (s.FlagBits & (1 << 23)) != 0 }
-func (s *SWTInfo) SetIDValid(v bool) {
-	if v {
-		s.FlagBits |= (1 << 23)
-	} else {
-		s.FlagBits &^= (1 << 23)
-	}
+	MasterID          uint16
+	ChannelID         uint16
+	PayloadPktBitsize uint8
+	PayloadNumPackets uint8
+	MarkerPacket      bool
+	HasTimestamp      bool
+	MarkerFirst       bool
+	MasterErr         bool
+	GlobalErr         bool
+	TriggerEvent      bool
+	Frequency         bool
+	IDValid           bool
 }
 
 const SwtIDValidMask = 0x1 << 23

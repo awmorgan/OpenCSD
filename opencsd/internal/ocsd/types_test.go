@@ -188,46 +188,6 @@ func TestPEContext(t *testing.T) {
 	}
 }
 
-func TestSWTInfo(t *testing.T) {
-	swt := &SWTInfo{}
-
-	swt.SetPayloadPktBitsize(0xA5)
-	if swt.PayloadPktBitsize() != 0xA5 {
-		t.Errorf("PayloadPktBitsize expected 0xA5, got 0x%X", swt.PayloadPktBitsize())
-	}
-	if swt.FlagBits != 0xA5 {
-		t.Errorf("FlagBits expected 0xA5, got 0x%X", swt.FlagBits)
-	}
-
-	swt.SetPayloadNumPackets(0x5A)
-	if swt.PayloadNumPackets() != 0x5A {
-		t.Errorf("PayloadNumPackets expected 0x5A, got 0x%X", swt.PayloadNumPackets())
-	}
-	if swt.FlagBits != 0x5AA5 {
-		t.Errorf("FlagBits expected 0x5AA5, got 0x%X", swt.FlagBits)
-	}
-
-	swt.SetGlobalErr(true)
-	if !swt.GlobalErr() {
-		t.Error("GlobalErr set failed")
-	}
-
-	expectedBits := uint32(0x5AA5 | (1 << 20))
-	if swt.FlagBits != expectedBits {
-		t.Errorf("FlagBits expected 0x%X, got 0x%X", expectedBits, swt.FlagBits)
-	}
-
-	swt.SetIDValid(true)
-	if !swt.IDValid() {
-		t.Error("IDValid set failed")
-	}
-
-	expectedBits |= (1 << 23)
-	if swt.FlagBits != expectedBits {
-		t.Errorf("FlagBits expected 0x%X, got 0x%X", expectedBits, swt.FlagBits)
-	}
-}
-
 func TestIDs(t *testing.T) {
 	if !IsValidCSSrcID(0x6F) {
 		t.Error("IsValidCSSrcID failed for valid")
