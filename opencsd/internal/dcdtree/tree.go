@@ -36,7 +36,7 @@ type DecodeTree struct {
 	defaultMapper memacc.Mapper
 	createdMapper bool
 
-	decoderRoot ocsd.TrcDataProcessorExplicit
+	decoderRoot ocsd.TraceProcessor
 }
 
 // NewDecodeTree creates a new Trace Decode Tree using the supplied decoder registry.
@@ -83,7 +83,7 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 	}
 
 	const processChunk = 64 * 1024
-	callTraceData := func(proc ocsd.TrcDataProcessorExplicit, op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, error) {
+	callTraceData := func(proc ocsd.TraceProcessor, op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, error) {
 		switch op {
 		case ocsd.OpData:
 			return proc.TraceData(index, data)
@@ -98,7 +98,7 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 		}
 	}
 
-	processWithContext := func(proc ocsd.TrcDataProcessorExplicit) (uint32, error) {
+	processWithContext := func(proc ocsd.TraceProcessor) (uint32, error) {
 		if proc == nil {
 			return 0, ocsd.ErrNotInit
 		}
@@ -146,7 +146,7 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 }
 
 // AddPullDecoder registers decoder input routing and pull-based output iteration into the tree.
-func (dt *DecodeTree) AddPullDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TrcDataProcessorExplicit, iter ocsd.TraceIterator, flagApplier common.FlagApplier) error {
+func (dt *DecodeTree) AddPullDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TraceProcessor, iter ocsd.TraceIterator, flagApplier common.FlagApplier) error {
 	if dt.treeType == ocsd.TrcSrcSingle {
 		routeID = 0
 	}

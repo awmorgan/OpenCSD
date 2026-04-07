@@ -57,7 +57,7 @@ type Processor struct {
 	config Config
 
 	// output interface
-	pktOut ocsd.PacketProcessorExplicit[TracePacket]
+	pktOut ocsd.PacketProcessor[TracePacket]
 
 	// raw packet monitor
 	PktRawMonI ocsd.PacketMonitor
@@ -82,8 +82,8 @@ type Processor struct {
 
 func (p *Processor) ApplyFlags(flags uint32) error { return nil }
 
-// Ensure the struct satisfies TrcDataProcessorExplicit
-var _ ocsd.TrcDataProcessorExplicit = (*Processor)(nil)
+// Ensure the struct satisfies TraceProcessor
+var _ ocsd.TraceProcessor = (*Processor)(nil)
 
 // NewProcessor creates and initializes a new ETMv4 packet Processor.
 func NewProcessor(config *Config) *Processor {
@@ -96,7 +96,7 @@ func NewProcessor(config *Config) *Processor {
 }
 
 // SetPktOut attaches the packet processor output sink.
-func (p *Processor) SetPktOut(cb ocsd.PacketProcessorExplicit[TracePacket]) {
+func (p *Processor) SetPktOut(cb ocsd.PacketProcessor[TracePacket]) {
 	p.pktOut = cb
 }
 

@@ -344,7 +344,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		cfg.ArchVer = ocsd.ArchV8
 		cfg.CoreProf = ocsd.ProfileCortexA
 
-		var proc ocsd.TrcDataProcessorExplicit
+		var proc ocsd.TraceProcessor
 		var dec *etmv4.PktDecode
 		var applier common.FlagApplier
 		var err error

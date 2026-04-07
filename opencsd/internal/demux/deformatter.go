@@ -43,7 +43,7 @@ type FrameDeformatter struct {
 	rawChanEnable  []bool
 
 	// Datapath Attachments
-	idStreams     []ocsd.TrcDataProcessorExplicit
+	idStreams     []ocsd.TraceProcessor
 	rawTraceFrame ocsd.RawFrameProcessor
 
 	// state params
@@ -71,7 +71,7 @@ type FrameDeformatter struct {
 func NewFrameDeformatter() *FrameDeformatter {
 	d := &FrameDeformatter{
 		rawChanEnable: make([]bool, 128),
-		idStreams:     make([]ocsd.TrcDataProcessorExplicit, 128),
+		idStreams:     make([]ocsd.TraceProcessor, 128),
 	}
 	d.resetStateParams()
 	d.SetRawChanFilterAll(true)
@@ -79,7 +79,7 @@ func NewFrameDeformatter() *FrameDeformatter {
 }
 
 // Attachments
-func (d *FrameDeformatter) SetIDStream(id uint8, stream ocsd.TrcDataProcessorExplicit) {
+func (d *FrameDeformatter) SetIDStream(id uint8, stream ocsd.TraceProcessor) {
 	if id < 128 {
 		d.idStreams[id] = stream
 	}
@@ -163,7 +163,7 @@ func (d *FrameDeformatter) outputRawMonBytes(op ocsd.DatapathOp, index ocsd.TrcI
 	}
 }
 
-func (d *FrameDeformatter) callIDStream(stream ocsd.TrcDataProcessorExplicit, op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, error) {
+func (d *FrameDeformatter) callIDStream(stream ocsd.TraceProcessor, op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, error) {
 	if stream == nil {
 		return 0, nil
 	}

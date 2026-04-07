@@ -145,8 +145,8 @@ func (m *mockDataSink) TraceDataReset(index ocsd.TrcIndex) error {
 	return err
 }
 
-// Ensure mockDataSink implements TrcDataProcessorExplicit
-var _ ocsd.TrcDataProcessorExplicit = (*mockDataSink)(nil)
+// Ensure mockDataSink implements TraceProcessor
+var _ ocsd.TraceProcessor = (*mockDataSink)(nil)
 
 type mockDataSinkWait struct{}
 
@@ -176,8 +176,8 @@ func (m *mockDataSinkWait) TraceDataReset(index ocsd.TrcIndex) error {
 	return err
 }
 
-// Ensure mockDataSinkWait implements TrcDataProcessorExplicit
-var _ ocsd.TrcDataProcessorExplicit = (*mockDataSinkWait)(nil)
+// Ensure mockDataSinkWait implements TraceProcessor
+var _ ocsd.TraceProcessor = (*mockDataSinkWait)(nil)
 
 type mockDataSinkWaitOnce struct {
 	waited bool
@@ -218,7 +218,8 @@ func (m *mockDataSinkWaitOnce) TraceDataReset(index ocsd.TrcIndex) error {
 	return err
 }
 
-var _ ocsd.TrcDataProcessorExplicit = (*mockDataSinkWaitOnce)(nil)
+// Ensure mockDataSinkWaitOnce implements TraceProcessor
+var _ ocsd.TraceProcessor = (*mockDataSinkWaitOnce)(nil)
 
 type mockRawSink struct {
 	out *bytes.Buffer

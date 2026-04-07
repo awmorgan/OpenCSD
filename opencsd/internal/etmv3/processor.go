@@ -25,7 +25,7 @@ type PktProc struct {
 	Stats         ocsd.DecodeStats
 	statsInit     bool
 	Config        *Config
-	pktOut        ocsd.PacketProcessorExplicit[Packet]
+	pktOut        ocsd.PacketProcessor[Packet]
 	PktRawMonI    ocsd.PacketMonitor
 	procErrReason error
 
@@ -73,10 +73,10 @@ func NewPktProc(cfg *Config) *PktProc {
 }
 
 // SetPktOut attaches the downstream packet decoder.
-func (p *PktProc) SetPktOut(out ocsd.PacketProcessorExplicit[Packet]) { p.pktOut = out }
+func (p *PktProc) SetPktOut(out ocsd.PacketProcessor[Packet]) { p.pktOut = out }
 
 // PktOut returns the downstream packet processor.
-func (p *PktProc) PktOut() ocsd.PacketProcessorExplicit[Packet] { return p.pktOut }
+func (p *PktProc) PktOut() ocsd.PacketProcessor[Packet] { return p.pktOut }
 
 // SetPktRawMonitor attaches a raw packet monitor.
 func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor) { p.PktRawMonI = mon }
