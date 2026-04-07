@@ -8,7 +8,7 @@ import (
 type CallbackAccessor struct {
 	BaseAccessor
 	callback        ocsd.MemAccessor
-	traceIDCallback ocsd.MemAccessorWithID
+	traceIDCallback ocsd.MemAccessor
 }
 
 // NewCallbackAccessor creates a new callback accessor.
@@ -28,7 +28,7 @@ func (c *CallbackAccessor) ReadBytes(address ocsd.VAddr, memSpace ocsd.MemSpaceA
 	if c.traceIDCallback != nil {
 		return c.traceIDCallback(address, memSpace, trcID, reqBytes, buffer)
 	} else if c.callback != nil {
-		return c.callback(address, memSpace, reqBytes, buffer)
+		return c.callback(address, memSpace, trcID, reqBytes, buffer)
 	}
 
 	return 0
@@ -41,7 +41,7 @@ func (c *CallbackAccessor) SetCallback(fn ocsd.MemAccessor) {
 }
 
 // SetTraceIDCallback sets a callback function that includes trace ID.
-func (c *CallbackAccessor) SetTraceIDCallback(fn ocsd.MemAccessorWithID) {
+func (c *CallbackAccessor) SetTraceIDCallback(fn ocsd.MemAccessor) {
 	c.traceIDCallback = fn
 	c.callback = nil
 }

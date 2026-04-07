@@ -134,7 +134,7 @@ type testRange struct {
 
 var accCallbackCount int
 
-func makeTestMemAccCB(ranges []testRange) ocsd.MemAccessorWithID {
+func makeTestMemAccCB(ranges []testRange) ocsd.MemAccessor {
 
 	return func(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32 {
 		var bytesRead uint32 = 0
@@ -518,7 +518,7 @@ func TestEdgeCasesAndUtilities(t *testing.T) {
 	}
 }
 
-func testMemAccSimpleCB(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
+func testMemAccSimpleCB(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, _ uint8, reqBytes uint32, buffer []byte) uint32 {
 	if address == 0 {
 		buf := []byte{0xDE, 0xAD, 0xBE, 0xEF}
 		read := min(reqBytes, uint32(len(buf)))
@@ -584,7 +584,7 @@ func TestGlobalMapperRead(t *testing.T) {
 	}
 }
 
-func testMemAccBadLenCB(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
+func testMemAccBadLenCB(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, _ uint8, reqBytes uint32, buffer []byte) uint32 {
 	fmt.Printf("testMemAccBadLenCB called! reqBytes=%d\n", reqBytes)
 	return reqBytes + 1 // deliberately bad
 }
@@ -704,7 +704,7 @@ func TestBufferAccessorReadBytesIgnoresMemSpace(t *testing.T) {
 func TestCallbackAccessorReadBytesDelegatesWithoutPrefilter(t *testing.T) {
 	cbAcc := NewCallbackAccessor(0x1000, 0x1FFF, ocsd.MemSpaceEL1N)
 	called := false
-	cbAcc.SetCallback(func(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
+	cbAcc.SetCallback(func(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, _ uint8, reqBytes uint32, buffer []byte) uint32 {
 		called = true
 		copy(buffer, []byte{0xAB, 0xCD})
 		return 2
@@ -831,7 +831,7 @@ func TestSentinelError_PartialRead(t *testing.T) {
 
 	// Request partial read through callback that returns less
 	cbAcc := NewCallbackAccessor(0x2000, 0x2FFF, ocsd.MemSpaceEL1N)
-	cbAcc.SetCallback(func(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
+	cbAcc.SetCallback(func(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, _ uint8, reqBytes uint32, buffer []byte) uint32 {
 		// Callback returns only 2 bytes (partial read)
 		copy(buffer, []byte{0xAA, 0xBB})
 		return 2
@@ -888,7 +888,7 @@ func TestSentinelError_CallbackBothModes(t *testing.T) {
 	mapper.RemoveAllAccessors()
 	cbAccNoID := NewCallbackAccessor(0x2000, 0x2FFF, ocsd.MemSpaceEL1N)
 	simpleCallbackInvoked := false
-	cbAccNoID.SetCallback(func(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32, buffer []byte) uint32 {
+	cbAccNoID.SetCallback(func(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, _ uint8, reqBytes uint32, buffer []byte) uint32 {
 		simpleCallbackInvoked = true
 		copy(buffer, []byte{0x11, 0x22, 0x33, 0x44})
 		return 4
