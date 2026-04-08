@@ -20,21 +20,16 @@ type traceElemEvent struct {
 	elem    ocsd.TraceElement
 }
 
-type pktDecodeSink struct {
-	decoder *PktDecode
-}
-
-func (s *pktDecodeSink) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
-	if s == nil || s.decoder == nil || elem == nil {
+func (d *PktDecode) pushOutputElement(index ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
+	if d == nil || elem == nil {
 		return nil
 	}
-	d := s.decoder
 	if d.traceElemOut == nil {
-		e := traceElemEvent{indexSOP, trcChanID, cloneQueuedElem(elem)}
+		e := traceElemEvent{index, traceID, cloneQueuedElem(elem)}
 		d.pendingElements = append(d.pendingElements, e)
 		return nil
 	}
-	err := d.traceElemOut.TraceElemIn(indexSOP, trcChanID, elem)
+	err := d.traceElemOut.TraceElemIn(index, traceID, elem)
 	if ocsd.IsDataContErr(err) {
 		return nil
 	}
@@ -205,10 +200,8 @@ type PktDecode struct {
 	}
 
 	// Pull-iterator fields (for API consistency with other decoders)
-	queue           common.ElementQueue
 	pendingElements []traceElemEvent
 	collectElements bool
-	sink            *pktDecodeSink
 }
 
 func (d *PktDecode) ApplyFlags(flags uint32) error {
@@ -229,12 +222,12 @@ func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
 
 // OutputTraceElement sends an element using IndexCurrPkt.
 func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error {
-	return d.sink.TraceElemIn(d.IndexCurrPkt, traceID, elem)
+	return d.pushOutputElement(d.IndexCurrPkt, traceID, elem)
 }
 
 // OutputTraceElementIdx sends an element at an explicit index.
 func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
-	return d.sink.TraceElemIn(idx, traceID, elem)
+	return d.pushOutputElement(idx, traceID, elem)
 }
 
 // AccessMemory reads target memory.
@@ -396,21 +389,12 @@ func (d *PktDecode) putBackElement(index ocsd.TrcIndex, traceID uint8, elem ocsd
 	d.pendingElements = append([]traceElemEvent{e}, d.pendingElements...)
 }
 
-func (d *PktDecode) enqueueLegacyOutputElements() {
-	d.queue.PushAll(d.outElem.Drain())
-}
-
-func (d *PktDecode) flushOutputQueue() {
-	traceID := d.TraceID()
-	for _, dr := range d.queue.Drain() {
-		elem := cloneQueuedElem(&dr.Elem)
-		_ = d.sink.TraceElemIn(dr.Index, traceID, &elem)
-	}
-}
-
 func (d *PktDecode) flushOutputElements() {
-	d.enqueueLegacyOutputElements()
-	d.flushOutputQueue()
+	traceID := d.TraceID()
+	for _, dr := range d.outElem.Drain() {
+		elem := cloneQueuedElem(&dr.Elem)
+		_ = d.pushOutputElement(dr.Index, traceID, &elem)
+	}
 }
 
 func (d *PktDecode) accessMemory(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
@@ -442,11 +426,7 @@ func (d *PktDecode) configureDecoder() {
 	d.clearElemRes()
 	d.p0Stack = nil
 	d.poppedElems = nil
-	d.queue = d.queue[:0]
 	d.outElem = *common.NewElemStack()
-	if d.sink == nil {
-		d.sink = &pktDecodeSink{decoder: d}
-	}
 	if d.config != nil {
 		d.outElem.SetCSID(d.config.TraceID())
 	}
@@ -2068,7 +2048,6 @@ func (d *PktDecode) resetDecoderState() {
 	d.unsyncPktIdx = ocsd.BadTrcIndex
 	d.eteFirstTSMarker = false
 	d.nextRangeCheckClear()
-	d.queue = d.queue[:0]
 
 	if d.outElem.ResetElemStack() != nil {
 		d.outElem = *common.NewElemStack()

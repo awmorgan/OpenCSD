@@ -148,13 +148,4 @@ func TestTracePacketHelpers(t *testing.T) {
 		t.Fatalf("expected non-empty context string")
 	}
 
-	p.VAddrISA = 1
-	if got := p.getISAStr(); got != "ISA=AArch64" {
-		t.Fatalf("expected ISA=AArch64, got %q", got)
-	}
-
-	p.Context.SF = false
-	if got := p.getISAStr(); got != "ISA=Thumb2" {
-		t.Fatalf("expected ISA=Thumb2, got %q", got)
-	}
 }

@@ -932,13 +932,3 @@ func (p *TracePacket) contextStr() string {
 
 	return sb.String()
 }
-
-func (p *TracePacket) getISAStr() string {
-	if p.Context.SF {
-		return "ISA=AArch64"
-	}
-	if p.VAddrISA == 1 {
-		return "ISA=Thumb2"
-	}
-	return "ISA=ARM"
-}

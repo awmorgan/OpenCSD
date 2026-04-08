@@ -3,7 +3,6 @@ package etmv4
 import (
 	"testing"
 
-	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
@@ -13,9 +12,9 @@ func TestDecoderQueueFlushOrder(t *testing.T) {
 		t.Fatalf("NewPktDecode failed: %v", err)
 	}
 
-	first := ocsd.NewTraceElement()
-	first.SetType(ocsd.GenElemEvent)
-	d.queue.Push(common.DrainedElement{Index: 3, Elem: *first})
+	if err := d.outElem.AddElemType(3, ocsd.GenElemEvent); err != nil {
+		t.Fatalf("AddElemType failed: %v", err)
+	}
 
 	if err := d.outElem.AddElemType(4, ocsd.GenElemTimestamp); err != nil {
 		t.Fatalf("AddElemType failed: %v", err)
