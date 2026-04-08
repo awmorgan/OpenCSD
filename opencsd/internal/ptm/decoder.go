@@ -339,12 +339,12 @@ func (d *PktDecode) resetDecoder() {
 	d.instrInfo.ISA = ocsd.ISAUnknown
 	d.memNaccPending = false
 
-	d.peContext.SetCtxtIDValid(false)
-	d.peContext.SetBits64(false)
-	d.peContext.SetVMIDValid(false)
+	d.peContext.CtxtIDValid = false
+	d.peContext.Bits64 = false
+	d.peContext.VMIDValid = false
 	d.peContext.ExceptionLevel = ocsd.ELUnknown
 	d.peContext.SecurityLevel = ocsd.SecSecure
-	d.peContext.SetELValid(false)
+	d.peContext.ELValid = false
 
 	d.currPeState.instrAddr = 0
 	d.currPeState.isa = ocsd.ISAUnknown
@@ -519,24 +519,24 @@ func (d *PktDecode) decodePacket() ocsd.DatapathResp {
 		resp = d.processWPUpdate()
 	case PktContextID:
 		update := true
-		if d.peContext.CtxtIDValid() && d.peContext.ContextID == pkt.Context.CtxtID {
+		if d.peContext.CtxtIDValid && d.peContext.ContextID == pkt.Context.CtxtID {
 			update = false
 		}
 		if update {
 			d.peContext.ContextID = pkt.Context.CtxtID
-			d.peContext.SetCtxtIDValid(true)
+			d.peContext.CtxtIDValid = true
 			d.outputElem.SetType(ocsd.GenElemPeContext)
 			d.outputElem.SetContext(d.peContext)
 			resp = ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
 		}
 	case PktVMID:
 		update := true
-		if d.peContext.VMIDValid() && d.peContext.VMID == uint32(pkt.Context.VMID) {
+		if d.peContext.VMIDValid && d.peContext.VMID == uint32(pkt.Context.VMID) {
 			update = false
 		}
 		if update {
 			d.peContext.VMID = uint32(pkt.Context.VMID)
-			d.peContext.SetVMIDValid(true)
+			d.peContext.VMIDValid = true
 			d.outputElem.SetType(ocsd.GenElemPeContext)
 			d.outputElem.SetContext(d.peContext)
 			resp = ocsd.DataRespFromErr(d.OutputTraceElement(d.csID, &d.outputElem))
@@ -575,13 +575,13 @@ func (d *PktDecode) processIsync() ocsd.DatapathResp {
 		d.iSyncPeCtxt = pkt.CurrISA != pkt.PrevISA
 		if pkt.Context.UpdatedC {
 			d.peContext.ContextID = pkt.Context.CtxtID
-			d.peContext.SetCtxtIDValid(true)
+			d.peContext.CtxtIDValid = true
 			d.iSyncPeCtxt = true
 		}
 
 		if pkt.Context.UpdatedV {
 			d.peContext.VMID = uint32(pkt.Context.VMID)
-			d.peContext.SetVMIDValid(true)
+			d.peContext.VMIDValid = true
 			d.iSyncPeCtxt = true
 		}
 		if pkt.Context.CurrNS {

@@ -634,7 +634,7 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 		if err == nil {
 			elem.SetType(ocsd.GenElemPeContext)
 			d.peContext.ContextID = packetIn.Context.CtxtID
-			d.peContext.SetCtxtIDValid(true)
+			d.peContext.CtxtIDValid = true
 			elem.Context = *d.peContext
 		}
 	case PktVMID:
@@ -642,7 +642,7 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 		if err == nil {
 			elem.SetType(ocsd.GenElemPeContext)
 			d.peContext.VMID = uint32(packetIn.Context.VMID)
-			d.peContext.SetVMIDValid(true)
+			d.peContext.VMIDValid = true
 			elem.Context = *d.peContext
 		}
 	case PktExceptionEntry:
@@ -723,11 +723,11 @@ func (d *PktDecode) processISync(firstSync bool) ocsd.DatapathResp {
 
 		if packetIn.Context.UpdatedC {
 			d.peContext.ContextID = packetIn.Context.CtxtID
-			d.peContext.SetCtxtIDValid(true)
+			d.peContext.CtxtIDValid = true
 		}
 		if packetIn.Context.UpdatedV {
 			d.peContext.VMID = uint32(packetIn.Context.VMID)
-			d.peContext.SetVMIDValid(true)
+			d.peContext.VMIDValid = true
 		}
 		if packetIn.Context.Updated {
 			el := ocsd.ELUnknown
@@ -739,7 +739,7 @@ func (d *PktDecode) processISync(firstSync bool) ocsd.DatapathResp {
 				sec = ocsd.SecNonsecure
 			}
 			d.peContext.ExceptionLevel = el
-			d.peContext.SetELValid(true)
+			d.peContext.ELValid = true
 			d.peContext.SecurityLevel = sec
 		}
 
@@ -831,14 +831,14 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 	d.codeFollower.InstrInfo.ISA = packetIn.CurrISA
 
 	if packetIn.Context.UpdatedC || packetIn.Context.UpdatedV || packetIn.Context.Updated {
-		if packetIn.Context.UpdatedC && (!d.peContext.CtxtIDValid() || d.peContext.ContextID != packetIn.Context.CtxtID) {
+		if packetIn.Context.UpdatedC && (!d.peContext.CtxtIDValid || d.peContext.ContextID != packetIn.Context.CtxtID) {
 			d.peContext.ContextID = packetIn.Context.CtxtID
-			d.peContext.SetCtxtIDValid(true)
+			d.peContext.CtxtIDValid = true
 			updatePEContext = true
 		}
-		if packetIn.Context.UpdatedV && (!d.peContext.VMIDValid() || d.peContext.VMID != uint32(packetIn.Context.VMID)) {
+		if packetIn.Context.UpdatedV && (!d.peContext.VMIDValid || d.peContext.VMID != uint32(packetIn.Context.VMID)) {
 			d.peContext.VMID = uint32(packetIn.Context.VMID)
-			d.peContext.SetVMIDValid(true)
+			d.peContext.VMIDValid = true
 			updatePEContext = true
 		}
 		if packetIn.Context.Updated {
@@ -855,9 +855,9 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 			if packetIn.Context.CurrHyp {
 				el = ocsd.EL2
 			}
-			if !d.peContext.ELValid() || el != d.peContext.ExceptionLevel {
+			if !d.peContext.ELValid || el != d.peContext.ExceptionLevel {
 				d.peContext.ExceptionLevel = el
-				d.peContext.SetELValid(true)
+				d.peContext.ELValid = true
 				updatePEContext = true
 			}
 		}

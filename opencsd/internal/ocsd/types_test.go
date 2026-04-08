@@ -166,28 +166,6 @@ func TestEnumCombinations(t *testing.T) {
 	}
 }
 
-func TestPEContext(t *testing.T) {
-	pe := &PEContext{}
-
-	pe.SetBits64(true)
-	if !pe.Bits64() {
-		t.Error("SetBits64 failed")
-	}
-	pe.SetBits64(false)
-	if pe.Bits64() {
-		t.Error("SetBits64 clear failed")
-	}
-
-	pe.SetELValid(true)
-	if pe.bits != 8 {
-		t.Errorf("ELValid raw bits expected 8, got %d", pe.bits)
-	}
-	pe.SetELValid(false)
-	if pe.bits != 0 {
-		t.Error("ELValid clear failed")
-	}
-}
-
 func TestIDs(t *testing.T) {
 	if !IsValidCSSrcID(0x6F) {
 		t.Error("IsValidCSSrcID failed for valid")

@@ -355,43 +355,10 @@ type PEContext struct {
 	ExceptionLevel ExLevel
 	ContextID      uint32
 	VMID           uint32
-	bits           uint32 // backing field for bitfields
-}
-
-func (p *PEContext) Bits64() bool { return (p.bits & 1) != 0 }
-func (p *PEContext) SetBits64(v bool) {
-	if v {
-		p.bits |= 1
-	} else {
-		p.bits &^= 1
-	}
-}
-
-func (p *PEContext) CtxtIDValid() bool { return (p.bits & 2) != 0 }
-func (p *PEContext) SetCtxtIDValid(v bool) {
-	if v {
-		p.bits |= 2
-	} else {
-		p.bits &^= 2
-	}
-}
-
-func (p *PEContext) VMIDValid() bool { return (p.bits & 4) != 0 }
-func (p *PEContext) SetVMIDValid(v bool) {
-	if v {
-		p.bits |= 4
-	} else {
-		p.bits &^= 4
-	}
-}
-
-func (p *PEContext) ELValid() bool { return (p.bits & 8) != 0 }
-func (p *PEContext) SetELValid(v bool) {
-	if v {
-		p.bits |= 8
-	} else {
-		p.bits &^= 8
-	}
+	Bits64         bool
+	CtxtIDValid    bool
+	VMIDValid      bool
+	ELValid        bool
 }
 
 // Opcode Memory Access

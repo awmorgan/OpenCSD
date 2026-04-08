@@ -1192,7 +1192,7 @@ func (d *PktDecode) updateContext(p0elem *p0Elem, elem *ocsd.TraceElement) {
 	elem.SetType(ocsd.GenElemPeContext)
 
 	d.is64bit = ctx.SF
-	elem.Context.SetBits64(ctx.SF)
+	elem.Context.Bits64 = ctx.SF
 	d.isSecure = !ctx.NS
 	if ctx.NSE {
 		if ctx.NS {
@@ -1208,14 +1208,14 @@ func (d *PktDecode) updateContext(p0elem *p0Elem, elem *ocsd.TraceElement) {
 		}
 	}
 	elem.Context.ExceptionLevel = ocsd.ExLevel(ctx.EL)
-	elem.Context.SetELValid(true)
+	elem.Context.ELValid = true
 
 	if ctx.UpdatedC {
-		elem.Context.SetCtxtIDValid(true)
+		elem.Context.CtxtIDValid = true
 		elem.Context.ContextID = ctx.CtxtID
 	}
 	if ctx.UpdatedV {
-		elem.Context.SetVMIDValid(true)
+		elem.Context.VMIDValid = true
 		elem.Context.VMID = ctx.VMID
 	}
 

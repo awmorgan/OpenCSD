@@ -70,9 +70,9 @@ func TestTraceElement_Setters(t *testing.T) {
 	var ctx ocsd.PEContext
 	ctx.SecurityLevel = ocsd.SecSecure
 	ctx.ExceptionLevel = ocsd.EL3
-	ctx.SetELValid(true)
+	ctx.ELValid = true
 	elem.SetContext(ctx)
-	if elem.Context.SecurityLevel != ocsd.SecSecure || !elem.Context.ELValid() {
+	if elem.Context.SecurityLevel != ocsd.SecSecure || !elem.Context.ELValid {
 		t.Errorf("SetContext failed")
 	}
 
@@ -154,13 +154,13 @@ func TestTraceElement_Strings(t *testing.T) {
 				e.SetISA(ocsd.ISAArm)
 				var ctx ocsd.PEContext
 				ctx.ExceptionLevel = ocsd.EL2
-				ctx.SetELValid(true)
+				ctx.ELValid = true
 				ctx.SecurityLevel = ocsd.SecNonsecure
-				ctx.SetBits64(false)
+				ctx.Bits64 = false
 				ctx.VMID = 0xAA
-				ctx.SetVMIDValid(true)
+				ctx.VMIDValid = true
 				ctx.ContextID = 0xBB
-				ctx.SetCtxtIDValid(true)
+				ctx.CtxtIDValid = true
 				e.SetContext(ctx)
 			},
 			expected: "OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=A32) EL2N; 32-bit; VMID=0xaa; CTXTID=0xbb; )",
@@ -294,9 +294,9 @@ func TestTraceElement_Strings(t *testing.T) {
 				e.SetISA(ocsd.ISAUnknown)
 				var ctx ocsd.PEContext
 				ctx.ExceptionLevel = ocsd.ELUnknown
-				ctx.SetELValid(false)
+				ctx.ELValid = false
 				ctx.SecurityLevel = ocsd.SecRoot
-				ctx.SetBits64(true)
+				ctx.Bits64 = true
 				e.SetContext(ctx)
 			},
 			expected: "OCSD_GEN_TRC_ELEM_PE_CONTEXT((ISA=Unk) Root; 64-bit; )",

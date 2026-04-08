@@ -202,9 +202,9 @@ func (e *TraceElement) Init() {
 	e.CycleCount = 0
 	e.Timestamp = 0
 
-	e.Context.SetCtxtIDValid(false)
-	e.Context.SetVMIDValid(false)
-	e.Context.SetELValid(false)
+	e.Context.CtxtIDValid = false
+	e.Context.VMIDValid = false
+	e.Context.ELValid = false
 
 	e.LastInstrType = InstrOther
 	e.LastInstrSubtype = SInstrNone
@@ -505,7 +505,7 @@ func (e *TraceElement) String() string {
 
 	case GenElemPeContext:
 		fmt.Fprintf(&sb, "(ISA=%s) ", isaNames[e.ISA])
-		if e.Context.ExceptionLevel > ELUnknown && e.Context.ELValid() {
+		if e.Context.ExceptionLevel > ELUnknown && e.Context.ELValid {
 			fmt.Fprintf(&sb, "EL%d", e.Context.ExceptionLevel)
 		}
 		switch e.Context.SecurityLevel {
@@ -518,15 +518,15 @@ func (e *TraceElement) String() string {
 		case SecRealm:
 			sb.WriteString("Realm; ")
 		}
-		if e.Context.Bits64() {
+		if e.Context.Bits64 {
 			sb.WriteString("64-bit; ")
 		} else {
 			sb.WriteString("32-bit; ")
 		}
-		if e.Context.VMIDValid() {
+		if e.Context.VMIDValid {
 			fmt.Fprintf(&sb, "VMID=0x%x; ", e.Context.VMID)
 		}
-		if e.Context.CtxtIDValid() {
+		if e.Context.CtxtIDValid {
 			fmt.Fprintf(&sb, "CTXTID=0x%x; ", e.Context.ContextID)
 		}
 
