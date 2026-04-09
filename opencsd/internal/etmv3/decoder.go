@@ -71,14 +71,15 @@ type PktDecode struct {
 	SentUnknown bool
 	waitISync   bool
 
-	peContext      *ocsd.PEContext
-	outElems       []ocsd.TraceElement
-	outElemsIdx    []ocsd.TrcIndex
-	numPendOut     int
-	pendingNacc    bool
-	pendingNaccIdx ocsd.TrcIndex
-	pendingNaccAdr uint64
-	pendingNaccMem ocsd.MemSpaceAcc
+	peContext       *ocsd.PEContext
+	outElems        []ocsd.TraceElement
+	outElemsIdx     []ocsd.TrcIndex
+	pendOutElems    []ocsd.TraceElement
+	pendOutElemsIdx []ocsd.TrcIndex
+	pendingNacc     bool
+	pendingNaccIdx  ocsd.TrcIndex
+	pendingNaccAdr  uint64
+	pendingNaccMem  ocsd.MemSpaceAcc
 
 	csID            uint8
 	pendingElements []traceElemEvent
@@ -305,19 +306,13 @@ func (d *PktDecode) putBackElement(index ocsd.TrcIndex, traceID uint8, elem ocsd
 
 func (d *PktDecode) flushOutputElements() {
 	traceID := d.csID
-	committed := len(d.outElems) - d.numPendOut
-	if committed <= 0 {
-		return
-	}
-	for i := range committed {
+	for i := range d.outElems {
 		elem := cloneQueuedElem(&d.outElems[i])
 		elem.TraceID = traceID
 		_ = d.pushOutputElement(d.outElemsIdx[i], traceID, &elem)
 	}
-	copy(d.outElems, d.outElems[committed:])
-	copy(d.outElemsIdx, d.outElemsIdx[committed:])
-	d.outElems = d.outElems[:d.numPendOut]
-	d.outElemsIdx = d.outElemsIdx[:d.numPendOut]
+	d.outElems = d.outElems[:0]
+	d.outElemsIdx = d.outElemsIdx[:0]
 }
 
 func (d *PktDecode) configureDecoder() {
@@ -376,7 +371,7 @@ func (d *PktDecode) OnReset() {
 }
 
 func (d *PktDecode) OnFlush() error {
-	if d.numOutElem() == 0 && !d.pendingNacc {
+	if d.numOutElem() == 0 && len(d.pendOutElems) == 0 && !d.pendingNacc {
 		return nil
 	}
 
@@ -1079,26 +1074,37 @@ func (d *PktDecode) nextOutElem(index ocsd.TrcIndex) *ocsd.TraceElement {
 
 func (d *PktDecode) pendLastNOutElem(n int) {
 	if n > 0 && n <= len(d.outElems) {
-		d.numPendOut = n
+		start := len(d.outElems) - n
+		// Always allocate a fresh backing array to keep pendOutElems and outElems distinct.
+		d.pendOutElems = make([]ocsd.TraceElement, n)
+		copy(d.pendOutElems, d.outElems[start:])
+		d.pendOutElemsIdx = make([]ocsd.TrcIndex, n)
+		copy(d.pendOutElemsIdx, d.outElemsIdx[start:])
+		d.outElems = d.outElems[:start]
+		d.outElemsIdx = d.outElemsIdx[:start]
 	}
 }
 
 func (d *PktDecode) commitAllPendOutElem() {
-	d.numPendOut = 0
+	if len(d.pendOutElems) == 0 {
+		return
+	}
+	// Extend pendOutElems with the current output elements, then swap so that
+	// outElems uses pendOutElems' backing array and pendOutElems gets outElems'
+	// old backing.  This keeps the two slice headers pointing at distinct arrays.
+	d.pendOutElems = append(d.pendOutElems, d.outElems...)
+	d.pendOutElemsIdx = append(d.pendOutElemsIdx, d.outElemsIdx...)
+	d.outElems, d.pendOutElems = d.pendOutElems, d.outElems[:0]
+	d.outElemsIdx, d.pendOutElemsIdx = d.pendOutElemsIdx, d.outElemsIdx[:0]
 }
 
 func (d *PktDecode) cancelPendOutElem() {
-	if d.numPendOut == 0 {
-		return
-	}
-	start := len(d.outElems) - d.numPendOut
-	d.outElems = d.outElems[:start]
-	d.outElemsIdx = d.outElemsIdx[:start]
-	d.numPendOut = 0
+	d.pendOutElems = d.pendOutElems[:0]
+	d.pendOutElemsIdx = d.pendOutElemsIdx[:0]
 }
 
 func (d *PktDecode) outElemToSend() bool {
-	return len(d.outElems)-d.numPendOut > 0
+	return len(d.outElems) > 0
 }
 
 func (d *PktDecode) numOutElem() int {
@@ -1115,5 +1121,6 @@ func (d *PktDecode) outElemType(entryN int) ocsd.GenElemType {
 func (d *PktDecode) resetOutElems() {
 	d.outElems = d.outElems[:0]
 	d.outElemsIdx = d.outElemsIdx[:0]
-	d.numPendOut = 0
+	d.pendOutElems = d.pendOutElems[:0]
+	d.pendOutElemsIdx = d.pendOutElemsIdx[:0]
 }
