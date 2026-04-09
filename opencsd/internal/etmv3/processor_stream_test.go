@@ -1,8 +1,12 @@
 package etmv3
 
 import (
-	"opencsd/internal/ocsd"
+	"bytes"
+	"errors"
+	"io"
 	"testing"
+
+	"opencsd/internal/ocsd"
 )
 
 func TestProcStreamComplete(t *testing.T) {
@@ -250,6 +254,35 @@ func TestProcStreamMalformedHeaders(t *testing.T) {
 }
 
 type noopPktSink struct{}
+
+func TestPktProcNextPacketFromReader(t *testing.T) {
+	proc := mustNewConfiguredPktProc(t, &Config{})
+	proc.SetReader(bytes.NewReader([]byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+		0x0C,
+	}))
+
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected first packet error: %v", err)
+	}
+	if pkt.Type != PktASync {
+		t.Fatalf("expected first packet type %v, got %v", PktASync, pkt.Type)
+	}
+
+	pkt, err = proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected second packet error: %v", err)
+	}
+	if pkt.Type != PktTrigger {
+		t.Fatalf("expected second packet type %v, got %v", PktTrigger, pkt.Type)
+	}
+
+	_, err = proc.NextPacket()
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("expected io.EOF after draining packet reader, got %v", err)
+	}
+}
 
 func (n *noopPktSink) Write(indexSOP ocsd.TrcIndex, pkt *Packet) error { return nil }
 func (n *noopPktSink) Close() error                                    { return nil }

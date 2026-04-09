@@ -3,6 +3,7 @@ package etmv4
 import (
 	"errors"
 	"fmt"
+	"io"
 
 	"opencsd/internal/ocsd"
 )
@@ -49,6 +50,8 @@ const (
 // Packet is a compatibility alias used by the stateless decoder API.
 type Packet = TracePacket
 
+const packetReaderChunkSize = 4096
+
 var errDecodeNeedMoreData = errors.New("decodeNextPacket: need more data")
 
 // Processor parses byte streams for ETMv4 packets.
@@ -77,6 +80,13 @@ type Processor struct {
 	firstTraceInfo    bool
 	sentNotsyncPacket bool
 
+	packetReader    io.Reader
+	packetReadIndex ocsd.TrcIndex
+	packetReadEOF   bool
+	packetReadEOT   bool
+	pendingPackets  []Packet
+	collectPackets  bool
+
 	isInit bool // initialized
 }
 
@@ -84,6 +94,7 @@ func (p *Processor) ApplyFlags(flags uint32) error { return nil }
 
 // Ensure the struct satisfies TraceDecoder
 var _ ocsd.TraceDecoder = (*Processor)(nil)
+var _ ocsd.PacketReader[Packet] = (*Processor)(nil)
 
 // NewProcessor creates and initializes a new ETMv4 packet Processor.
 func NewProcessor(config *Config) *Processor {
@@ -104,9 +115,73 @@ func (p *Processor) SetPktRawMonitor(mon ocsd.PacketMonitor) {
 	p.PktRawMonI = mon
 }
 
+// SetReader attaches a pull-style raw byte stream for PacketReader consumers.
+func (p *Processor) SetReader(reader io.Reader) {
+	p.packetReader = reader
+	p.packetReadIndex = 0
+	p.packetReadEOF = false
+	p.packetReadEOT = false
+	p.pendingPackets = p.pendingPackets[:0]
+	p.resetProcessorState()
+}
+
 // Write is the explicit data-path entrypoint used by split interfaces.
 func (p *Processor) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	return p.processData(index, dataBlock)
+}
+
+// NextPacket returns the next packet from the attached reader.
+func (p *Processor) NextPacket() (Packet, error) {
+	for {
+		if len(p.pendingPackets) > 0 {
+			pkt := p.pendingPackets[0]
+			p.pendingPackets = p.pendingPackets[1:]
+			return pkt, nil
+		}
+
+		if p.packetReader == nil {
+			return Packet{}, fmt.Errorf("%w: packet reader not configured", ocsd.ErrInvalidParamVal)
+		}
+
+		if p.packetReadEOF {
+			if p.packetReadEOT {
+				return Packet{}, io.EOF
+			}
+			p.collectPackets = true
+			err := p.onEOT()
+			p.collectPackets = false
+			p.packetReadEOT = true
+			if err != nil && !errors.Is(err, ocsd.ErrWait) {
+				return Packet{}, err
+			}
+			continue
+		}
+
+		buf := make([]byte, packetReaderChunkSize)
+		n, err := p.packetReader.Read(buf)
+		if n > 0 {
+			p.collectPackets = true
+			processed, procErr := p.processData(p.packetReadIndex, buf[:n])
+			p.collectPackets = false
+			p.packetReadIndex += ocsd.TrcIndex(processed)
+			if procErr != nil && !errors.Is(procErr, ocsd.ErrWait) {
+				return Packet{}, procErr
+			}
+			if processed != uint32(n) {
+				return Packet{}, fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, n)
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				p.packetReadEOF = true
+				continue
+			}
+			return Packet{}, err
+		}
+		if n == 0 {
+			return Packet{}, io.ErrNoProgress
+		}
+	}
 }
 
 // Close handles end-of-trace control.
@@ -2096,6 +2171,8 @@ func (p *Processor) resetProcessorState() {
 	p.isSync = false
 	p.firstTraceInfo = false
 	p.sentNotsyncPacket = false
+	p.pendingPackets = p.pendingPackets[:0]
+	p.collectPackets = false
 }
 
 func (p *Processor) clearStateTransient() {
@@ -2121,6 +2198,10 @@ func (p *Processor) clearStateTransient() {
 }
 
 func (p *Processor) outputPacket(pkt *TracePacket, rawData []byte) error {
+	if p.collectPackets {
+		p.pendingPackets = append(p.pendingPackets, *pkt)
+		return nil
+	}
 	if p.PktRawMonI != nil {
 		p.PktRawMonI.MonitorRawData(p.packetIndex, pkt, rawData)
 	}
@@ -2156,14 +2237,16 @@ func (p *Processor) outputUnsyncedRawPacket() error {
 	pkt := p.statePacket
 	pkt.Type = p.pendingUnsyncedPacketType(p.stream.data)
 
-	if p.PktRawMonI != nil && n > 0 && len(p.stream.data) > 0 {
+	if !p.collectPackets && p.PktRawMonI != nil && n > 0 && len(p.stream.data) > 0 {
 		monBytes := min(n, len(p.stream.data))
 		p.PktRawMonI.MonitorRawData(p.packetIndex, &pkt, p.stream.data[:monBytes])
 	}
 
 	var err error
 	if !p.sentNotsyncPacket {
-		if p.pktOut != nil {
+		if p.collectPackets {
+			p.pendingPackets = append(p.pendingPackets, pkt)
+		} else if p.pktOut != nil {
 			err = p.pktOut.Write(p.packetIndex, &pkt)
 		}
 		p.sentNotsyncPacket = true

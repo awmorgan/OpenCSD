@@ -1,8 +1,10 @@
 package etmv4
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"testing"
 
 	"opencsd/internal/ocsd"
@@ -74,6 +76,35 @@ func TestProcessorResetPacketStateClearsConditionalState(t *testing.T) {
 	}
 	if p.statePacket.CondInstr.CondCKey != 0 || p.statePacket.CondResult.CondRKey0 != 0 || p.statePacket.CondResult.CondRKey1 != 0 {
 		t.Fatalf("expected conditional packet data to be reset")
+	}
+}
+
+func TestProcessorNextPacketFromReader(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.SetReader(bytes.NewReader([]byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+		0x04,
+	}))
+
+	pkt, err := p.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected first packet error: %v", err)
+	}
+	if pkt.Type != PktAsync {
+		t.Fatalf("expected first packet type %v, got %v", PktAsync, pkt.Type)
+	}
+
+	pkt, err = p.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected second packet error: %v", err)
+	}
+	if pkt.Type != PktTraceOn {
+		t.Fatalf("expected second packet type %v, got %v", PktTraceOn, pkt.Type)
+	}
+
+	_, err = p.NextPacket()
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("expected io.EOF after draining packet reader, got %v", err)
 	}
 }
 

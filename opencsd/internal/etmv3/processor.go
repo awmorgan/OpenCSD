@@ -3,6 +3,8 @@ package etmv3
 import (
 	"errors"
 	"fmt"
+	"io"
+
 	"opencsd/internal/ocsd"
 )
 
@@ -17,6 +19,8 @@ const (
 )
 
 var errDecodeNotImplemented = errors.New("decodeNextPacket: packet type not implemented")
+
+const packetReaderChunkSize = 4096
 
 // PktProc implements the ETMv3 packet processor.
 // Ported from trc_pkt_proc_etmv3_impl.cpp
@@ -51,9 +55,18 @@ type PktProc struct {
 	foundDataAddr  bool
 
 	packetIndex ocsd.TrcIndex
+
+	packetReader    io.Reader
+	packetReadIndex ocsd.TrcIndex
+	packetReadEOF   bool
+	packetReadEOT   bool
+	pendingPackets  []Packet
+	collectPackets  bool
 }
 
 func (p *PktProc) ApplyFlags(flags uint32) error { return nil }
+
+var _ ocsd.PacketReader[Packet] = (*PktProc)(nil)
 
 // NewPktProc creates a new ETMv3 packet processor
 func NewPktProc(cfg *Config) *PktProc {
@@ -80,6 +93,16 @@ func (p *PktProc) PktOut() ocsd.PacketProcessor[Packet] { return p.pktOut }
 
 // SetPktRawMonitor attaches a raw packet monitor.
 func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor) { p.PktRawMonI = mon }
+
+// SetReader attaches a pull-style raw byte stream for PacketReader consumers.
+func (p *PktProc) SetReader(reader io.Reader) {
+	p.packetReader = reader
+	p.packetReadIndex = 0
+	p.packetReadEOF = false
+	p.packetReadEOT = false
+	p.pendingPackets = p.pendingPackets[:0]
+	p.resetProcessorState()
+}
 
 // HasRawMon reports whether a raw packet monitor is attached.
 func (p *PktProc) HasRawMon() bool { return p.PktRawMonI != nil }
@@ -121,6 +144,10 @@ func (p *PktProc) StatsAddBadSeqCount(count uint32) { p.Stats.BadSequenceErrs +=
 func (p *PktProc) StatsAddBadHdrCount(count uint32) { p.Stats.BadHeaderErrs += count }
 
 func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) error {
+	if p.collectPackets {
+		p.pendingPackets = append(p.pendingPackets, *pkt)
+		return nil
+	}
 	if p.pktOut != nil {
 		return p.pktOut.Write(indexSOP, pkt)
 	}
@@ -146,6 +173,60 @@ func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 		return 0, fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
 	}
 	return p.ProcessData(index, dataBlock)
+}
+
+// NextPacket returns the next packet from the attached reader.
+func (p *PktProc) NextPacket() (Packet, error) {
+	for {
+		if len(p.pendingPackets) > 0 {
+			pkt := p.pendingPackets[0]
+			p.pendingPackets = p.pendingPackets[1:]
+			return pkt, nil
+		}
+
+		if p.packetReader == nil {
+			return Packet{}, fmt.Errorf("%w: packet reader not configured", ocsd.ErrInvalidParamVal)
+		}
+
+		if p.packetReadEOF {
+			if p.packetReadEOT {
+				return Packet{}, io.EOF
+			}
+			p.collectPackets = true
+			err := p.OnEOT()
+			p.collectPackets = false
+			p.packetReadEOT = true
+			if err != nil {
+				return Packet{}, err
+			}
+			continue
+		}
+
+		buf := make([]byte, packetReaderChunkSize)
+		n, err := p.packetReader.Read(buf)
+		if n > 0 {
+			p.collectPackets = true
+			processed, procErr := p.ProcessData(p.packetReadIndex, buf[:n])
+			p.collectPackets = false
+			p.packetReadIndex += ocsd.TrcIndex(processed)
+			if procErr != nil {
+				return Packet{}, procErr
+			}
+			if processed != uint32(n) {
+				return Packet{}, fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, n)
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				p.packetReadEOF = true
+				continue
+			}
+			return Packet{}, err
+		}
+		if n == 0 {
+			return Packet{}, io.ErrNoProgress
+		}
+	}
 }
 
 // Close handles end-of-trace control without op multiplexing.
@@ -196,6 +277,8 @@ func (p *PktProc) resetProcessorState() {
 	p.currPacket.ResetState()
 	p.resetPacketState()
 	p.bSendPartPkt = false
+	p.pendingPackets = p.pendingPackets[:0]
+	p.collectPackets = false
 }
 
 func (p *PktProc) resetPacketState() {
