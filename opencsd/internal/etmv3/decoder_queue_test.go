@@ -8,9 +8,9 @@ import (
 func TestDecoderQueueFlushFromLegacyList(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, &Config{})
 
-	elem := dec.outputElemList.NextElem(11)
+	elem := dec.nextOutElem(11)
 	elem.SetType(ocsd.GenElemTimestamp)
-	dec.outputElemList.CommitAllPendElem()
+	dec.commitAllPendOutElem()
 
 	dec.flushOutputElements()
 

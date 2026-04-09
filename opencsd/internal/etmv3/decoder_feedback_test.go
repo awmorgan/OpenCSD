@@ -59,9 +59,9 @@ func TestOnFlushCommitsPendingElements(t *testing.T) {
 	dec := setupDecFast(&Config{})
 	dec.currState = decodePkts
 
-	elem := dec.outputElemList.NextElem(7)
+	elem := dec.nextOutElem(7)
 	elem.SetType(ocsd.GenElemInstrRange)
-	dec.outputElemList.PendLastNElem(1)
+	dec.pendLastNOutElem(1)
 
 	resp := dec.OnFlush()
 	if resp != ocsd.RespCont {
@@ -127,9 +127,9 @@ func TestProcessBranchAddrContextWithoutException(t *testing.T) {
 func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 	dec := buildDecInDecodePktsPull(t, &Config{})
 
-	elem := dec.outputElemList.NextElem(3)
+	elem := dec.nextOutElem(3)
 	elem.SetType(ocsd.GenElemInstrRange)
-	dec.outputElemList.PendLastNElem(1)
+	dec.pendLastNOutElem(1)
 	dec.pendingNacc = true
 	dec.pendingNaccIdx = 3
 	dec.pendingNaccAdr = 0x3300
@@ -168,9 +168,9 @@ func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 	dec := buildDecInDecodePktsPull(t, &Config{})
 
-	elem := dec.outputElemList.NextElem(5)
+	elem := dec.nextOutElem(5)
 	elem.SetType(ocsd.GenElemInstrRange)
-	dec.outputElemList.PendLastNElem(1)
+	dec.pendLastNOutElem(1)
 	dec.pendingNacc = true
 	dec.pendingNaccIdx = 5
 	dec.pendingNaccAdr = 0x5500
@@ -199,8 +199,8 @@ func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 	if dec.pendingNacc {
 		t.Fatal("expected pending NACC state to be cleared by exception cancel")
 	}
-	if dec.outputElemList.NumElem() != 0 {
-		t.Fatalf("expected output list to be empty after cancel, got %d", dec.outputElemList.NumElem())
+	if dec.numOutElem() != 0 {
+		t.Fatalf("expected output list to be empty after cancel, got %d", dec.numOutElem())
 	}
 }
 

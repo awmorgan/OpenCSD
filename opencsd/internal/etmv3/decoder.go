@@ -72,7 +72,9 @@ type PktDecode struct {
 	waitISync   bool
 
 	peContext      *ocsd.PEContext
-	outputElemList *common.ElemList
+	outElems       []ocsd.TraceElement
+	outElemsIdx    []ocsd.TrcIndex
+	numPendOut     int
 	pendingNacc    bool
 	pendingNaccIdx ocsd.TrcIndex
 	pendingNaccAdr uint64
@@ -104,12 +106,11 @@ func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDec
 	}
 
 	d := &PktDecode{
-		Name:           fmt.Sprintf("DCD_ETMV3_%d", instID),
-		MemAccess:      mem,
-		InstrDecode:    instr,
-		peContext:      &ocsd.PEContext{},
-		outputElemList: common.NewElemList(),
-		codeFollower:   codeFollower,
+		Name:         fmt.Sprintf("DCD_ETMV3_%d", instID),
+		MemAccess:    mem,
+		InstrDecode:  instr,
+		peContext:    &ocsd.PEContext{},
+		codeFollower: codeFollower,
 	}
 	d.configureDecoder()
 	if err := d.SetProtocolConfig(cfg); err != nil {
@@ -304,10 +305,20 @@ func (d *PktDecode) putBackElement(index ocsd.TrcIndex, traceID uint8, elem ocsd
 }
 
 func (d *PktDecode) flushOutputElements() {
-	for _, dr := range d.outputElemList.Drain() {
-		elem := cloneQueuedElem(&dr.Elem)
-		_ = d.pushOutputElement(dr.Index, d.csID, &elem)
+	traceID := d.csID
+	committed := len(d.outElems) - d.numPendOut
+	if committed <= 0 {
+		return
 	}
+	for i := range committed {
+		elem := cloneQueuedElem(&d.outElems[i])
+		elem.TraceID = traceID
+		_ = d.pushOutputElement(d.outElemsIdx[i], traceID, &elem)
+	}
+	copy(d.outElems, d.outElems[committed:])
+	copy(d.outElemsIdx, d.outElemsIdx[committed:])
+	d.outElems = d.outElems[:d.numPendOut]
+	d.outElemsIdx = d.outElemsIdx[:d.numPendOut]
 }
 
 func (d *PktDecode) configureDecoder() {
@@ -326,7 +337,7 @@ func (d *PktDecode) resetDecoder() {
 	d.pendingNaccAdr = 0
 	d.pendingNaccMem = ocsd.MemSpaceNone
 	d.pendingElements = d.pendingElements[:0]
-	d.outputElemList.Reset()
+	d.resetOutElems()
 }
 
 func (d *PktDecode) nextDecodeState() decoderState {
@@ -356,7 +367,6 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 	d.codeFollower.Arch = archProfile
 	d.codeFollower.InstrInfo.PeType = archProfile
 	d.codeFollower.TraceID = d.csID
-	d.outputElemList.SetCSID(d.csID)
 
 	return nil
 }
@@ -369,11 +379,11 @@ func (d *PktDecode) OnReset() ocsd.DatapathResp {
 
 func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	if d.outputElemList.NumElem() == 0 && !d.pendingNacc {
+	if d.numOutElem() == 0 && !d.pendingNacc {
 		return resp
 	}
 
-	d.outputElemList.CommitAllPendElem()
+	d.commitAllPendOutElem()
 	resp = d.emitPendingNacc()
 	if !ocsd.DataRespIsCont(resp) {
 		return resp
@@ -386,7 +396,7 @@ func (d *PktDecode) OnFlush() ocsd.DatapathResp {
 
 func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	resp := ocsd.RespCont
-	d.outputElemList.CommitAllPendElem()
+	d.commitAllPendOutElem()
 	resp = d.emitPendingNacc()
 	if !ocsd.DataRespIsCont(resp) {
 		return resp
@@ -399,7 +409,7 @@ func (d *PktDecode) OnEOT() ocsd.DatapathResp {
 	}
 	elem.SetType(ocsd.GenElemEOTrace)
 	elem.Payload.UnsyncEOTInfo = ocsd.UnsyncEOT
-	d.outputElemList.CommitAllPendElem()
+	d.commitAllPendOutElem()
 
 	d.flushOutputElements()
 	d.currState = decodePkts
@@ -478,26 +488,18 @@ func (d *PktDecode) handleSendPkts() (decoderState, ocsd.DatapathResp, bool) {
 
 // nextSendOrDecodeState returns sendPkts if there are elements to send, otherwise the next decode state.
 func (d *PktDecode) nextSendOrDecodeState() decoderState {
-	if d.outputElemList.ElemToSend() {
+	if d.outElemToSend() {
 		return sendPkts
 	}
 	return d.nextDecodeState()
 }
 
 func (d *PktDecode) getNextOpElem() (*ocsd.TraceElement, error) {
-	elem := d.outputElemList.NextElem(d.IndexCurrPkt)
-	if elem == nil {
-		return nil, fmt.Errorf("%w: Memory Allocation Error - fatal", ocsd.ErrMem)
-	}
-	return elem, nil
+	return d.nextOutElem(d.IndexCurrPkt), nil
 }
 
 func (d *PktDecode) getNextOpElemAt(index ocsd.TrcIndex) (*ocsd.TraceElement, error) {
-	elem := d.outputElemList.NextElem(index)
-	if elem == nil {
-		return nil, fmt.Errorf("%w: Memory Allocation Error - fatal", ocsd.ErrMem)
-	}
-	return elem, nil
+	return d.nextOutElem(index), nil
 }
 
 func (d *PktDecode) queuePendingNacc(addr uint64, memSpace ocsd.MemSpaceAcc) {
@@ -571,7 +573,7 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 	}
 
 	if packetIn.Type != PktBranchAddress {
-		d.outputElemList.CommitAllPendElem()
+		d.commitAllPendOutElem()
 		resp = d.emitPendingNacc()
 		if !ocsd.DataRespIsCont(resp) {
 			return resp, true
@@ -663,10 +665,10 @@ func (d *PktDecode) decodePacket() (resp ocsd.DatapathResp, done bool) {
 		return resp, true
 	}
 
-	if d.outputElemList.ElemToSend() {
+	if d.outElemToSend() {
 		// caller (handleDecodePkts) will compute next state via nextSendOrDecodeState
 	}
-	done = !d.outputElemList.ElemToSend()
+	done = !d.outElemToSend()
 	return resp, done
 }
 
@@ -742,7 +744,7 @@ func (d *PktDecode) processISync(firstSync bool) ocsd.DatapathResp {
 		d.SentUnknown = false
 	}
 
-	if d.outputElemList.ElemToSend() {
+	if d.outElemToSend() {
 		// caller will compute next state via nextSendOrDecodeState
 	}
 
@@ -792,10 +794,10 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 	updatePEContext := false
 
 	if packetIn.ExceptionCancel {
-		d.outputElemList.CancelPendElem()
+		d.cancelPendOutElem()
 		d.clearPendingNacc()
 	} else {
-		d.outputElemList.CommitAllPendElem()
+		d.commitAllPendOutElem()
 		resp := d.emitPendingNacc()
 		if !ocsd.DataRespIsCont(resp) {
 			return resp
@@ -865,7 +867,7 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 		}
 	}
 
-	if d.outputElemList.ElemToSend() {
+	if d.outElemToSend() {
 		// caller will compute next state via nextSendOrDecodeState
 	}
 
@@ -875,14 +877,14 @@ func (d *PktDecode) processBranchAddr() ocsd.DatapathResp {
 func (d *PktDecode) pendExceptionReturn() {
 	pendElem := 1
 	if d.Config.CoreProf != ocsd.ProfileCortexM {
-		nElem := d.outputElemList.NumElem()
+		nElem := d.numOutElem()
 		if nElem > 1 {
-			if d.outputElemList.ElemType(nElem-2) == ocsd.GenElemInstrRange {
+			if d.outElemType(nElem-2) == ocsd.GenElemInstrRange {
 				pendElem = 2
 			}
 		}
 	}
-	d.outputElemList.PendLastNElem(pendElem)
+	d.pendLastNOutElem(pendElem)
 }
 
 // processPHdr uses the etmv3Atoms struct pattern natively in Go inline since it doesn't need external exposure.
@@ -972,7 +974,7 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 				}
 
 				if errors.Is(errCF, ocsd.ErrMemNacc) {
-					if d.outputElemList.NumElem() > 0 && d.outputElemList.ElemType(d.outputElemList.NumElem()-1) == ocsd.GenElemInstrRange {
+					if d.numOutElem() > 0 && d.outElemType(d.numOutElem()-1) == ocsd.GenElemInstrRange {
 						d.queuePendingNacc(uint64(followRes.NaccAddr), memSpace)
 					} else {
 						elem, err = d.getNextOpElem()
@@ -1006,14 +1008,14 @@ func (d *PktDecode) processPHdr() ocsd.DatapathResp {
 		}
 	}
 
-	numElem := d.outputElemList.NumElem()
+	numElem := d.numOutElem()
 	if numElem >= 1 {
-		if d.outputElemList.ElemType(numElem-1) == ocsd.GenElemInstrRange {
-			d.outputElemList.PendLastNElem(1)
+		if d.outElemType(numElem-1) == ocsd.GenElemInstrRange {
+			d.pendLastNOutElem(1)
 		}
 	}
 
-	if d.outputElemList.ElemToSend() {
+	if d.outElemToSend() {
 		// caller will compute next state via nextSendOrDecodeState
 	}
 
@@ -1071,4 +1073,57 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 	}
 	proc.SetPktOut(dec)
 	return proc, dec, nil
+}
+
+// --- ElemList replacements ---
+
+func (d *PktDecode) nextOutElem(index ocsd.TrcIndex) *ocsd.TraceElement {
+	var e ocsd.TraceElement
+	e.Init()
+	d.outElems = append(d.outElems, e)
+	d.outElemsIdx = append(d.outElemsIdx, index)
+	elem := &d.outElems[len(d.outElems)-1]
+	elem.TraceID = d.csID
+	return elem
+}
+
+func (d *PktDecode) pendLastNOutElem(n int) {
+	if n > 0 && n <= len(d.outElems) {
+		d.numPendOut = n
+	}
+}
+
+func (d *PktDecode) commitAllPendOutElem() {
+	d.numPendOut = 0
+}
+
+func (d *PktDecode) cancelPendOutElem() {
+	if d.numPendOut == 0 {
+		return
+	}
+	start := len(d.outElems) - d.numPendOut
+	d.outElems = d.outElems[:start]
+	d.outElemsIdx = d.outElemsIdx[:start]
+	d.numPendOut = 0
+}
+
+func (d *PktDecode) outElemToSend() bool {
+	return len(d.outElems)-d.numPendOut > 0
+}
+
+func (d *PktDecode) numOutElem() int {
+	return len(d.outElems)
+}
+
+func (d *PktDecode) outElemType(entryN int) ocsd.GenElemType {
+	if entryN >= 0 && entryN < len(d.outElems) {
+		return d.outElems[entryN].ElemType
+	}
+	return ocsd.GenElemUnknown
+}
+
+func (d *PktDecode) resetOutElems() {
+	d.outElems = d.outElems[:0]
+	d.outElemsIdx = d.outElemsIdx[:0]
+	d.numPendOut = 0
 }

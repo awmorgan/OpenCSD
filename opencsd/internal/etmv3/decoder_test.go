@@ -808,11 +808,11 @@ func TestOnFlush_SendPktsState(t *testing.T) {
 
 	// Directly manipulate to enter sendPkts state with an element pending
 	dec.currState = sendPkts
-	elem := dec.outputElemList.NextElem(5)
+	elem := dec.nextOutElem(5)
 	if elem != nil {
 		elem.ElemType = ocsd.GenElemEvent
 	}
-	dec.outputElemList.CommitAllPendElem()
+	dec.commitAllPendOutElem()
 
 	n0 := len(out.elements)
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
@@ -854,12 +854,12 @@ func TestOnFlush_SendPkts_WaitISync(t *testing.T) {
 	// Manually put into sendPkts with waitISync=true
 	dec.currState = sendPkts
 	dec.waitISync = true
-	elem := dec.outputElemList.NextElem(2)
+	elem := dec.nextOutElem(2)
 	if elem != nil {
 		elem.ElemType = ocsd.GenElemTimestamp
 		elem.Timestamp = 0xABCD
 	}
-	dec.outputElemList.CommitAllPendElem()
+	dec.commitAllPendOutElem()
 
 	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
 
