@@ -1,6 +1,7 @@
 package ete
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"opencsd/internal/common"
@@ -167,7 +168,26 @@ func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 	return d.inner.Reset(indexSOP)
 }
 
+// NextSequenced returns the next queued trace element with its sequence number,
+// or EOF if none are available. When a pull-based Source is set and no push
+// sink is wired, it fetches the next packet, decodes it, and returns the first
+// resulting element.
 func (d *PktDecode) NextSequenced() (uint64, *ocsd.TraceElement, error) {
+	for len(d.pendingElements) == 0 && d.Source != nil && d.traceElemOut == nil {
+		pkt, err := d.Source.NextPacket()
+		if errors.Is(err, io.EOF) {
+			d.Source = nil
+			_ = d.Close()
+			break
+		}
+		if err != nil {
+			d.Source = nil
+			return 0, nil, err
+		}
+		if wErr := d.Write(0, &pkt); wErr != nil {
+			return 0, nil, wErr
+		}
+	}
 	if len(d.pendingElements) == 0 {
 		return 0, nil, io.EOF
 	}

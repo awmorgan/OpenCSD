@@ -296,7 +296,24 @@ func (d *PktDecode) resetPayloadBuffer() {
 }
 
 // NextElement returns the next queued trace element or EOF if none available.
+// When a pull-based Source is set and no push sink is wired, it fetches the
+// next packet from Source, decodes it, and returns the first resulting element.
 func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
+	for len(d.pendingElements) == 0 && d.Source != nil && d.traceElemOut == nil {
+		pkt, err := d.Source.NextPacket()
+		if errors.Is(err, io.EOF) {
+			d.Source = nil
+			_ = d.Close()
+			break
+		}
+		if err != nil {
+			d.Source = nil
+			return 0, 0, ocsd.TraceElement{}, err
+		}
+		if wErr := d.Write(0, &pkt); wErr != nil {
+			return 0, 0, ocsd.TraceElement{}, wErr
+		}
+	}
 	if len(d.pendingElements) == 0 {
 		return 0, 0, ocsd.TraceElement{}, io.EOF
 	}
