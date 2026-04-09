@@ -127,8 +127,21 @@ func TestTraceListerGoldens(t *testing.T) {
 			gotLines := strings.Split(got, "\n")
 			wantLines := strings.Split(want, "\n")
 
-			if diffIdx, gotLine, wantLine := firstDiff(gotLines, wantLines); diffIdx != 0 {
-				t.Fatalf("golden mismatch at line %d\nwant: %s\n got: %s", diffIdx, wantLine, gotLine)
+			wantPackets, wantElements := splitOutput(wantLines)
+			gotPackets, gotElements := splitOutput(gotLines)
+
+			// Check packets against C++ packets
+			if diffIdx, gotLine, wantLine := firstDiff(gotPackets, wantPackets); diffIdx != 0 {
+				t.Errorf("Packet mismatch at packet %d\nwant: %s\n got: %s", diffIdx, wantLine, gotLine)
+			}
+
+			// Check elements against C++ elements
+			if diffIdx, gotLine, wantLine := firstDiff(gotElements, wantElements); diffIdx != 0 {
+				t.Errorf("Element mismatch at element %d\nwant: %s\n got: %s", diffIdx, wantLine, gotLine)
+			}
+
+			if t.Failed() {
+				t.FailNow() // Stop execution for this specific test case if either stream mismatched
 			}
 		})
 	}
@@ -994,9 +1007,6 @@ func TestMapMemoryRangesDuplicateSemanticMappingIgnored(t *testing.T) {
 	if ranges[0].start != 0x1000 || ranges[0].end != 0x1003 {
 		t.Fatalf("unexpected mapped range: %#v", ranges[0])
 	}
-}
-func init() {
-	_ = splitOutput // silence unused warning
 }
 
 // splitOutput takes a slice of text lines and separates them into two independent streams.
