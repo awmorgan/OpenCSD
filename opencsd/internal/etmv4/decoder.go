@@ -272,63 +272,49 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 	return d, nil
 }
 
-func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *TracePacket) error {
-	switch op {
-	case ocsd.OpData:
-		if pktIn == nil {
-			return ocsd.ErrInvalidParamVal
-		}
-		d.CurrPacketIn = pktIn
-		d.IndexCurrPkt = indexSOP
-		d.collectElements = true
-		err := d.ProcessPacket()
-		d.collectElements = false
-
-		d.flushOutputElements()
-
-		// Drain queued elements only when using legacy push sink wiring.
-		if err == nil && d.traceElemOut != nil {
-			for {
-				_, _, _, nextErr := d.NextElement()
-				if errors.Is(nextErr, io.EOF) {
-					break
-				}
-				if nextErr != nil {
-					return nextErr
-				}
-			}
-		}
-		return err
-	case ocsd.OpEOT:
-		return d.OnEOT()
-	case ocsd.OpFlush:
-		return d.OnFlush()
-	case ocsd.OpReset:
-		d.OnReset()
-		return nil
-	default:
-		return ocsd.ErrInvalidParamVal
-	}
-}
-
 // TracePacketData is the explicit packet data entrypoint used by split interfaces.
 func (d *PktDecode) TracePacketData(indexSOP ocsd.TrcIndex, pktIn *TracePacket) error {
-	return d.PacketDataIn(ocsd.OpData, indexSOP, pktIn)
+	if pktIn == nil {
+		return ocsd.ErrInvalidParamVal
+	}
+	d.CurrPacketIn = pktIn
+	d.IndexCurrPkt = indexSOP
+	d.collectElements = true
+	err := d.ProcessPacket()
+	d.collectElements = false
+
+	d.flushOutputElements()
+
+	// Drain queued elements only when using legacy push sink wiring.
+	if err == nil && d.traceElemOut != nil {
+		for {
+			_, _, _, nextErr := d.NextElement()
+			if errors.Is(nextErr, io.EOF) {
+				break
+			}
+			if nextErr != nil {
+				return nextErr
+			}
+		}
+	}
+	return err
 }
 
-// TracePacketEOT forwards an EOT control operation through the legacy multiplexer.
+// TracePacketEOT handles end-of-trace control.
 func (d *PktDecode) TracePacketEOT() error {
-	return d.PacketDataIn(ocsd.OpEOT, 0, nil)
+	return d.OnEOT()
 }
 
-// TracePacketFlush forwards a flush control operation through the legacy multiplexer.
+// TracePacketFlush handles flush control.
 func (d *PktDecode) TracePacketFlush() error {
-	return d.PacketDataIn(ocsd.OpFlush, 0, nil)
+	return d.OnFlush()
 }
 
-// TracePacketReset forwards a reset control operation through the legacy multiplexer.
+// TracePacketReset handles reset control.
 func (d *PktDecode) TracePacketReset(indexSOP ocsd.TrcIndex) error {
-	return d.PacketDataIn(ocsd.OpReset, indexSOP, nil)
+	_ = indexSOP
+	d.OnReset()
+	return nil
 }
 
 // NextElement returns the next queued trace element or EOF if none available.

@@ -530,7 +530,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		}
 	}
 
-	_, err = tree.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(traceIndex), nil)
+	_, err = tree.TraceDataIn(ocsd.OpEOT, 0, nil)
 	if err != nil && !ocsd.IsDataWaitErr(err) && err != io.EOF {
 		return nil, fmt.Errorf("fatal error on EOT: %v", err)
 	}

@@ -104,69 +104,37 @@ func (p *Processor) SetPktRawMonitor(mon ocsd.PacketMonitor) {
 	p.PktRawMonI = mon
 }
 
-// TraceDataIn implements ocsd.TrcDataProcessor.
-func (p *Processor) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	switch op {
-	case ocsd.OpData:
-		return p.processData(index, dataBlock)
-	case ocsd.OpEOT:
-		if err := p.onEOT(); err != nil && !errors.Is(err, ocsd.ErrWait) {
-			return 0, err
-		}
-		return 0, nil
-	case ocsd.OpReset:
-		if err := p.onReset(); err != nil && !errors.Is(err, ocsd.ErrWait) {
-			return 0, err
-		}
-		return 0, nil
-	case ocsd.OpFlush:
-		if err := p.onFlush(); err != nil && !errors.Is(err, ocsd.ErrWait) {
-			return 0, err
-		}
-		return 0, nil
-	}
-	return 0, nil
-}
-
-func (p *Processor) callPktOut(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *TracePacket) error {
-	if p.pktOut == nil {
-		return nil
-	}
-	switch op {
-	case ocsd.OpData:
-		return p.pktOut.TracePacketData(indexSOP, pkt)
-	case ocsd.OpEOT:
-		return p.pktOut.TracePacketEOT()
-	case ocsd.OpFlush:
-		return p.pktOut.TracePacketFlush()
-	case ocsd.OpReset:
-		return p.pktOut.TracePacketReset(indexSOP)
-	default:
-		return ocsd.ErrInvalidParamVal
-	}
-}
-
 // TraceData is the explicit data-path entrypoint used by split interfaces.
 func (p *Processor) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	return p.TraceDataIn(ocsd.OpData, index, dataBlock)
+	return p.processData(index, dataBlock)
 }
 
-// TraceDataEOT forwards an EOT control operation through the legacy multiplexer.
+// TraceDataEOT handles end-of-trace control.
 func (p *Processor) TraceDataEOT() error {
-	_, err := p.TraceDataIn(ocsd.OpEOT, 0, nil)
-	return err
+	err := p.onEOT()
+	if err != nil && !errors.Is(err, ocsd.ErrWait) {
+		return err
+	}
+	return nil
 }
 
-// TraceDataFlush forwards a flush control operation through the legacy multiplexer.
+// TraceDataFlush handles flush control.
 func (p *Processor) TraceDataFlush() error {
-	_, err := p.TraceDataIn(ocsd.OpFlush, 0, nil)
-	return err
+	err := p.onFlush()
+	if err != nil && !errors.Is(err, ocsd.ErrWait) {
+		return err
+	}
+	return nil
 }
 
-// TraceDataReset forwards a reset control operation through the legacy multiplexer.
+// TraceDataReset handles reset control.
 func (p *Processor) TraceDataReset(index ocsd.TrcIndex) error {
-	_, err := p.TraceDataIn(ocsd.OpReset, index, nil)
-	return err
+	_ = index
+	err := p.onReset()
+	if err != nil && !errors.Is(err, ocsd.ErrWait) {
+		return err
+	}
+	return nil
 }
 
 func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
@@ -2068,7 +2036,7 @@ func (p *Processor) onEOT() error {
 	}
 
 	if p.pktOut != nil && outErr == nil {
-		outErr = p.callPktOut(ocsd.OpEOT, 0, nil)
+		outErr = p.pktOut.TracePacketEOT()
 	}
 
 	return outErr
@@ -2092,7 +2060,7 @@ func (p *Processor) onReset() error {
 
 	var outErr error
 	if p.pktOut != nil {
-		outErr = p.callPktOut(ocsd.OpReset, 0, nil)
+		outErr = p.pktOut.TracePacketReset(0)
 	}
 	if outErr == nil {
 		p.resetProcessorState()
@@ -2106,7 +2074,7 @@ func (p *Processor) onFlush() error {
 	}
 
 	if p.pktOut != nil {
-		return p.callPktOut(ocsd.OpFlush, 0, nil)
+		return p.pktOut.TracePacketFlush()
 	}
 	return nil
 }
@@ -2160,7 +2128,7 @@ func (p *Processor) outputPacket(pkt *TracePacket, rawData []byte) error {
 		return nil
 	}
 	pktCopy := *pkt
-	return p.callPktOut(ocsd.OpData, p.packetIndex, &pktCopy)
+	return p.pktOut.TracePacketData(p.packetIndex, &pktCopy)
 }
 
 func (p *Processor) emitDecodedPacket(pkt Packet, rawData []byte) error {
@@ -2196,7 +2164,7 @@ func (p *Processor) outputUnsyncedRawPacket() error {
 	var err error
 	if !p.sentNotsyncPacket {
 		if p.pktOut != nil {
-			err = p.callPktOut(ocsd.OpData, p.packetIndex, &pkt)
+			err = p.pktOut.TracePacketData(p.packetIndex, &pkt)
 		}
 		p.sentNotsyncPacket = true
 	}

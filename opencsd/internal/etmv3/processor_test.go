@@ -32,12 +32,15 @@ func (c *capturePktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex
 }
 
 func (c *capturePktSink) TracePacketData(indexSOP ocsd.TrcIndex, pkt *Packet) error {
-	return c.PacketDataIn(ocsd.OpData, indexSOP, pkt)
+	if pkt != nil {
+		c.packets = append(c.packets, *pkt)
+	}
+	return nil
 }
-func (c *capturePktSink) TracePacketEOT() error   { return c.PacketDataIn(ocsd.OpEOT, 0, nil) }
-func (c *capturePktSink) TracePacketFlush() error { return c.PacketDataIn(ocsd.OpFlush, 0, nil) }
+func (c *capturePktSink) TracePacketEOT() error   { return nil }
+func (c *capturePktSink) TracePacketFlush() error { return nil }
 func (c *capturePktSink) TracePacketReset(indexSOP ocsd.TrcIndex) error {
-	return c.PacketDataIn(ocsd.OpReset, indexSOP, nil)
+	return nil
 }
 
 func newSyncedProc(config *Config) (*PktProc, *capturePktSink) {
@@ -45,7 +48,7 @@ func newSyncedProc(config *Config) (*PktProc, *capturePktSink) {
 	proc.SetProtocolConfig(config)
 	sink := &capturePktSink{}
 	proc.SetPktOut(sink)
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
+	proc.TraceData(0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
 	return proc, sink
 }
 
@@ -66,7 +69,7 @@ func TestExtractException_ExcepByteNoCancel(t *testing.T) {
 	// hdr=0x81, b1=0x82, b2=0x83, b3=0x84, b4=0x45 → 5th byte (0x45 & 0xC0)=0x40 → branchNeedsEx=true
 	// b5=0x40 (bit7=0 → packetDone; extractBrAddrPkt runs; then extractExceptionData: byte[5]=0x40)
 	// 0x40 & 0xC0 == 0x40 → exception byte: exNum=0, cancel=false
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x40})
+	proc.TraceData(6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x40})
 
 	// Find the branch address packet
 	var brPkt *Packet
@@ -91,7 +94,7 @@ func TestExtractException_ExcepByteNoCancel(t *testing.T) {
 func TestExtractException_ExcepByteWithCancel(t *testing.T) {
 	proc, sink := newSyncedProc(&Config{})
 	// 0x60: bits[7:6]=01, bit5=1 (cancel), exNum=0, bit7=0 → last
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x60})
+	proc.TraceData(6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x60})
 
 	var brPkt *Packet
 	for i := range sink.packets {
@@ -120,7 +123,7 @@ func TestExtractException_ContextByte(t *testing.T) {
 	// After 5-byte addr, branchNeedsEx=true.
 	// Exception byte 0x80 indicates continuation; byte1 0x30 carries context flags:
 	// Hyp=(bit5)=1, NS from byte0 bit0=0.
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x80, 0x30})
+	proc.TraceData(6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x80, 0x30})
 
 	var brPkt *Packet
 	for i := range sink.packets {
@@ -148,7 +151,7 @@ func TestExtractException_ContextByte(t *testing.T) {
 // 0x7F = 0111 1111: bits[7:6]=01 → exception byte, bit5=1(cancel), bits[4:0]=0x1F → exNum=31
 func TestExtractException_ExcepNumNonZero(t *testing.T) {
 	proc, sink := newSyncedProc(&Config{})
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x7F})
+	proc.TraceData(6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x7F})
 
 	var brPkt *Packet
 	for i := range sink.packets {
@@ -185,7 +188,7 @@ func TestExtractDataValue_SizeCode1(t *testing.T) {
 	proc, sink := newSyncedProc(config)
 
 	// OOO Data with size 1: header 0x24, then 1 data byte 0xAB
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x24, 0xAB})
+	proc.TraceData(6, []byte{0x24, 0xAB})
 
 	var pkt *Packet
 	for i := range sink.packets {
@@ -212,7 +215,7 @@ func TestExtractDataValue_SizeCode2(t *testing.T) {
 	config.RegCtrl = ctrlDataVal
 	proc, sink := newSyncedProc(config)
 
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x28, 0x34, 0x12}) // value: 0x1234
+	proc.TraceData(6, []byte{0x28, 0x34, 0x12}) // value: 0x1234
 
 	var pkt *Packet
 	for i := range sink.packets {
@@ -236,7 +239,7 @@ func TestExtractDataValue_SizeCode3(t *testing.T) {
 	config.RegCtrl = ctrlDataVal
 	proc, sink := newSyncedProc(config)
 
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x2C, 0x78, 0x56, 0x34, 0x12}) // value: 0x12345678
+	proc.TraceData(6, []byte{0x2C, 0x78, 0x56, 0x34, 0x12}) // value: 0x12345678
 
 	var pkt *Packet
 	for i := range sink.packets {
@@ -260,7 +263,7 @@ func TestExtractDataValue_SizeCode0(t *testing.T) {
 	config.RegCtrl = ctrlDataVal
 	proc, sink := newSyncedProc(config)
 
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x20}) // size 0 → sendPkt immediately
+	proc.TraceData(6, []byte{0x20}) // size 0 → sendPkt immediately
 
 	var pkt *Packet
 	for i := range sink.packets {
@@ -309,7 +312,7 @@ func TestExtractDataAddress_5ByteBETrue(t *testing.T) {
 	// 5 addr bytes: 4x bit7=1 (continue), 5th=0x40 (bit7=0 stop, bit6=1 BE=true)
 	// NOTE: Final address byte must have bit7=0 (to trigger extraction in processPayloadByte)
 	// and bit6=1 (to set BE=true in extractDataAddress when nBits==35)
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x74, 0x80, 0x80, 0x80, 0x80, 0x40})
+	proc.TraceData(6, []byte{0x74, 0x80, 0x80, 0x80, 0x80, 0x40})
 
 	var pkt *Packet
 	for i := range sink.packets {
@@ -343,7 +346,7 @@ func TestExtractDataAddress_5ByteBEFalse(t *testing.T) {
 	proc, sink := newSyncedProc(config)
 
 	// OOOAddrPlc 0x74: 5 addr bytes, 5th=0x00 (bit7=0 stop, bit6=0 BE=false)
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x74, 0x80, 0x80, 0x80, 0x80, 0x00})
+	proc.TraceData(6, []byte{0x74, 0x80, 0x80, 0x80, 0x80, 0x00})
 
 	var pkt *Packet
 	for i := range sink.packets {
@@ -370,7 +373,7 @@ func TestExtractDataAddress_SingleByte(t *testing.T) {
 	config.RegCtrl = ctrlDataVal | ctrlDataAddr
 	proc, sink := newSyncedProc(config)
 
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x74, 0x10})
+	proc.TraceData(6, []byte{0x74, 0x10})
 
 	var pkt *Packet
 	for i := range sink.packets {
@@ -406,7 +409,7 @@ func TestExtractNormDataValue_Size1(t *testing.T) {
 	config.RegCtrl = ctrlDataVal | ctrlDataAddr | ctrlDataOnly
 	proc, sink := newSyncedProc(config)
 
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x06, 0xCD})
+	proc.TraceData(6, []byte{0x06, 0xCD})
 
 	var pkt *Packet
 	for i := range sink.packets {
@@ -430,7 +433,7 @@ func TestExtractNormDataValue_Size2(t *testing.T) {
 	config.RegCtrl = ctrlDataVal | ctrlDataAddr | ctrlDataOnly
 	proc, sink := newSyncedProc(config)
 
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x0A, 0x34, 0x12})
+	proc.TraceData(6, []byte{0x0A, 0x34, 0x12})
 
 	var pkt *Packet
 	for i := range sink.packets {
@@ -457,7 +460,7 @@ func TestASync_ExtraZero(t *testing.T) {
 
 	// After sync, inject: 0x00 (ASync header) then 4 zeros (payload, len≤5 OK)
 	// then 0x00 again (len=6 > 5 → PktBadSequence + setBytesPartPkt error path)
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	proc.TraceData(6, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
 	// The bad ASync triggers PktBadSequence
 	found := false
@@ -476,7 +479,7 @@ func TestASync_UnexpectedByte(t *testing.T) {
 	proc, sink := newSyncedProc(&Config{})
 
 	// 0x00 = ASync header, then 0x42 = unexpected byte (len=2, not 0x00 and not 0x80 at len==6)
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x00, 0x42})
+	proc.TraceData(6, []byte{0x00, 0x42})
 
 	// Verify ASync or PktBadSequence was emitted (error path)
 	found := false
@@ -505,7 +508,7 @@ func TestISync_V7M_Thumb2ISA(t *testing.T) {
 	// ISync: header=0x08, then info byte 0x01 (Reason=0, J=0, LSiP=0), then 4 addr bytes.
 	// We set the T bit (bit 0) in the first address byte to indicate Thumb state.
 	// [hdr][info][addr_0][addr_1][addr_2][addr_3]
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x08, 0x00, 0x01, 0x00, 0x00, 0x00})
+	proc.TraceData(6, []byte{0x08, 0x00, 0x01, 0x00, 0x00, 0x00})
 
 	var iSyncPkt *Packet
 	for i := range sink.packets {
@@ -533,7 +536,7 @@ func TestISync_JazelleISA(t *testing.T) {
 	proc, sink := newSyncedProc(config)
 
 	// info byte 0x10 has bit 4 (J) set.
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x08, 0x10, 0x00, 0x00, 0x00, 0x00})
+	proc.TraceData(6, []byte{0x08, 0x10, 0x00, 0x00, 0x00, 0x00})
 
 	var iSyncPkt *Packet
 	for i := range sink.packets {
@@ -560,7 +563,7 @@ func TestISync_LSiP_UsesBranchAddressDecode(t *testing.T) {
 	// Then LSIP byte(0x03) terminates LSIP sequence.
 	// For ARM ISA, extractBrAddrPkt decodes 0x03 to low bits 0x4 (not 0x3),
 	// overlaid onto the current instruction address.
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x08, 0x80, 0x00, 0x00, 0x00, 0x80, 0x03})
+	proc.TraceData(6, []byte{0x08, 0x80, 0x00, 0x00, 0x00, 0x80, 0x03})
 
 	var iSyncPkt *Packet
 	for i := range sink.packets {
@@ -588,7 +591,7 @@ func TestExtractException_V7MExtendedNum(t *testing.T) {
 	// 5-byte branch with exception continuation, then:
 	// ex byte0 = 0x92 -> cont=1, ex low nibble=9
 	// ex byte1 = 0x01 -> ex high bits=1 => exception number 0x19 (Cortex-M IRQn class)
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x92, 0x01})
+	proc.TraceData(6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x92, 0x01})
 
 	var brPkt *Packet
 	for i := range sink.packets {
@@ -623,13 +626,13 @@ func TestWaitSync_13Zeros_Transition(t *testing.T) {
 	// 0x00 header → ASync. Then add 11 more zeros (len becomes 13) → triggers extra-zeros path.
 	// Actually we need to be in waitSync state with bStartOfSync=true.
 	// Reset to force waitSync:
-	proc.TraceDataIn(ocsd.OpReset, 0, nil)
+	proc.TraceDataReset(0)
 
 	// Now in waitSync, bStartOfSync=false, streamSync=false.
 	// First 0x00: len=0 → len==0 so bStartOfSync=true, currPacketData=[0x00]
 	// Then 12 more 0x00: len grows to 13 → triggers setBytesPartPkt(8, waitSync, PktNotSync)
 	data := make([]byte, 13)
-	proc.TraceDataIn(ocsd.OpData, 0, data)
+	proc.TraceData(0, data)
 
 	// Should have emitted PktNotSync for the partial packet
 	found := false
@@ -654,7 +657,7 @@ func TestWaitSync_NonZeroFirst(t *testing.T) {
 
 	// In waitSync, bStartOfSync=false, len=0:
 	// non-zero byte → currPacketData=[0xFF], then next 0x00 causes: len=1>0 → decrements bytesProcessed, PktNotSync
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0xFF, 0x00})
+	proc.TraceData(0, []byte{0xFF, 0x00})
 
 	found := false
 	for _, p := range sink.packets {
@@ -682,7 +685,7 @@ func TestAltBranch_BranchNeedsExAlreadySet(t *testing.T) {
 
 	// AltBranch: header 0xC1 (bit0=1 branch, bit6=1 branchNeedsEx, bit7=1 more addr)
 	// Payload 0x00: bit7=0 → packetDone, and no extra exception data continuation required.
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0xC1, 0x00})
+	proc.TraceData(6, []byte{0xC1, 0x00})
 
 	found := false
 	for _, p := range sink.packets {
@@ -702,7 +705,7 @@ func TestAltBranch_BranchNeedsExAlreadySet(t *testing.T) {
 
 func TestProcessor_VMID(t *testing.T) {
 	proc, sink := newSyncedProc(&Config{})
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x3C, 0x55}) // VMID header 0x3C, value 0x55
+	proc.TraceData(6, []byte{0x3C, 0x55}) // VMID header 0x3C, value 0x55
 	if len(sink.packets) < 2 {
 		t.Fatal("expected packets")
 	}
@@ -716,7 +719,7 @@ func TestProcessor_ContextID(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = 2 << 14 // 2 bytes context ID
 	proc, sink := newSyncedProc(config)
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x6E, 0x11, 0x22})
+	proc.TraceData(6, []byte{0x6E, 0x11, 0x22})
 	pkt := sink.packets[len(sink.packets)-1]
 	if pkt.Type != PktContextID || pkt.Context.CtxtID != 0x2211 {
 		t.Errorf("expected PktContextID with 0x2211, got 0x%X", pkt.Context.CtxtID)
@@ -726,7 +729,7 @@ func TestProcessor_ContextID(t *testing.T) {
 func TestProcessor_Timestamp(t *testing.T) {
 	proc, sink := newSyncedProc(&Config{})
 	// Timestamp: 0x42 header, bit7=0 stop byte 0x10
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x42, 0x10})
+	proc.TraceData(6, []byte{0x42, 0x10})
 	pkt := sink.packets[len(sink.packets)-1]
 	if pkt.Type != PktTimestamp {
 		t.Errorf("expected PktTimestamp, got %v", pkt.Type)
@@ -736,7 +739,7 @@ func TestProcessor_Timestamp(t *testing.T) {
 func TestProcessor_ReservedHeader(t *testing.T) {
 	proc, _ := newSyncedProc(&Config{})
 	// 0x3E is reserved
-	_, err := proc.TraceDataIn(ocsd.OpData, 6, []byte{0x3E})
+	_, err := proc.TraceData(6, []byte{0x3E})
 	resp := ocsd.DataRespFromErr(err)
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Error("expected fatal error for reserved header")
@@ -747,7 +750,7 @@ func TestProcessor_ContextID_4Bytes(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = 3 << 14 // 4 bytes context ID
 	proc, sink := newSyncedProc(config)
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x6E, 0x11, 0x22, 0x33, 0x44})
+	proc.TraceData(6, []byte{0x6E, 0x11, 0x22, 0x33, 0x44})
 	pkt := sink.packets[len(sink.packets)-1]
 	if pkt.Context.CtxtID != 0x44332211 {
 		t.Errorf("expected 0x44332211, got 0x%X", pkt.Context.CtxtID)
@@ -757,7 +760,7 @@ func TestProcessor_ContextID_4Bytes(t *testing.T) {
 func TestProcessor_Timestamp_MultiByte(t *testing.T) {
 	proc, sink := newSyncedProc(&Config{})
 	// Timestamp: 0x42 header, bit7=1 continues, bit7=0 stops
-	proc.TraceDataIn(ocsd.OpData, 6, []byte{0x42, 0x81, 0x82, 0x03})
+	proc.TraceData(6, []byte{0x42, 0x81, 0x82, 0x03})
 	pkt := sink.packets[len(sink.packets)-1]
 	if pkt.Type != PktTimestamp || pkt.Timestamp == 0 {
 		t.Error("expected non-zero multip-byte timestamp")

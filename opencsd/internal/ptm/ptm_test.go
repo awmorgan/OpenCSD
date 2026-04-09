@@ -312,15 +312,15 @@ func TestProcAllPacketTypes(t *testing.T) {
 		0x04, // CC byte
 	)
 
-	processed, err := proc.TraceDataIn(ocsd.OpData, 0, data)
+	processed, err := proc.TraceData(0, data)
 	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Fatal resp=%v processed=%d", resp, processed)
 	}
 
 	// Exercise onFlush and onEOT
-	proc.TraceDataIn(ocsd.OpFlush, 0, nil)
-	proc.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(len(data)), nil)
+	proc.TraceDataFlush()
+	proc.TraceDataEOT()
 }
 
 func TestProcISyncWithContextAndBranch5ByteAddr(t *testing.T) {
@@ -359,12 +359,12 @@ func TestProcISyncWithContextAndBranch5ByteAddr(t *testing.T) {
 		0x04, // CC byte
 	)
 
-	processed, err := proc.TraceDataIn(ocsd.OpData, 0, data)
+	processed, err := proc.TraceData(0, data)
 	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Fatal resp=%v processed=%d", resp, processed)
 	}
-	proc.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(len(data)), nil)
+	proc.TraceDataEOT()
 }
 
 func TestProcISyncDebugExitAndCCMultiByte(t *testing.T) {
@@ -387,7 +387,7 @@ func TestProcISyncDebugExitAndCCMultiByte(t *testing.T) {
 		0x00, // CC byte4: bit7=0 -> done (or pktIndex==10 forces done)
 	)
 
-	processed, err := proc.TraceDataIn(ocsd.OpData, 0, data)
+	processed, err := proc.TraceData(0, data)
 	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Fatal resp=%v processed=%d", resp, processed)
@@ -411,7 +411,7 @@ func TestProcTimestamp64Bit(t *testing.T) {
 		0x09, // byte 9: no continuation check, full 8 bits
 	)
 
-	processed, err := proc.TraceDataIn(ocsd.OpData, 0, data)
+	processed, err := proc.TraceData(0, data)
 	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Fatal resp=%v processed=%d", resp, processed)
@@ -427,9 +427,9 @@ func TestProcEOTWithPendingData(t *testing.T) {
 	// Start a timestamp but don't finish it -> incomplete
 	data = append(data, 0x42, 0x81, 0x82)
 
-	proc.TraceDataIn(ocsd.OpData, 0, data)
+	proc.TraceData(0, data)
 	// EOT with pending packet data
-	proc.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(len(data)), nil)
+	proc.TraceDataEOT()
 }
 
 func TestProcCtxtIDZeroBytes(t *testing.T) {
@@ -443,7 +443,7 @@ func TestProcCtxtIDZeroBytes(t *testing.T) {
 	// ContextID packet with 0 ctxtID bytes -> immediate send
 	data = append(data, 0x6E)
 
-	proc.TraceDataIn(ocsd.OpData, 0, data)
+	proc.TraceData(0, data)
 }
 
 func TestProcBranchNoCC(t *testing.T) {
@@ -464,7 +464,7 @@ func TestProcBranchNoCC(t *testing.T) {
 		0x02, // excep byte1: bit7=0 -> done
 	)
 
-	proc.TraceDataIn(ocsd.OpData, 0, data)
+	proc.TraceData(0, data)
 }
 
 func TestProcAtomFormats(t *testing.T) {
@@ -486,7 +486,7 @@ func TestProcAtomFormats(t *testing.T) {
 	// Atom format 0xC0: num=5
 	data = append(data, 0xC0)
 
-	proc.TraceDataIn(ocsd.OpData, 0, data)
+	proc.TraceData(0, data)
 }
 
 // TestProcWaitAsyncCarryOverRawTailByte locks bug-for-bug compatibility for the
@@ -500,7 +500,7 @@ func TestProcWaitAsyncCarryOverRawTailByte(t *testing.T) {
 	proc.SetPktRawMonitor(rawCap)
 
 	// First block leaves waitASyncSOPkt=true with a carry-over 0x00.
-	if _, err := proc.TraceDataIn(ocsd.OpData, 4669, []byte{0x00}); ocsd.DataRespIsFatal(ocsd.DataRespFromErr(err)) {
+	if _, err := proc.TraceData(4669, []byte{0x00}); ocsd.DataRespIsFatal(ocsd.DataRespFromErr(err)) {
 		resp := ocsd.DataRespFromErr(err)
 		t.Fatalf("unexpected fatal resp on carry-over setup: %v", resp)
 	}
@@ -508,7 +508,7 @@ func TestProcWaitAsyncCarryOverRawTailByte(t *testing.T) {
 	// Second block is all non-zero and long enough to force an unsynced flush.
 	// This reproduces the carry-over NOT_ASYNC accounting edge case.
 	data := []byte{0xc0, 0x29, 0xf4, 0x0b, 0xe3, 0x18, 0x50, 0x01, 0xb8, 0xe0, 0x01, 0xef, 0xab, 0x0b, 0x20}
-	if _, err := proc.TraceDataIn(ocsd.OpData, 4670, data); ocsd.DataRespIsFatal(ocsd.DataRespFromErr(err)) {
+	if _, err := proc.TraceData(4670, data); ocsd.DataRespIsFatal(ocsd.DataRespFromErr(err)) {
 		resp := ocsd.DataRespFromErr(err)
 		t.Fatalf("unexpected fatal resp on reproducer block: %v", resp)
 	}
@@ -550,7 +550,7 @@ func TestProcWPointExcepISASwap(t *testing.T) {
 		0x00, // byte[4]: ISA=ARM(no bits), bit6=0 -> excep done
 	)
 
-	proc.TraceDataIn(ocsd.OpData, 0, data)
+	proc.TraceData(0, data)
 }
 
 // --- Decoder tests with mocks ---
@@ -564,7 +564,7 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
 
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 
 	// ISYNC to set valid state
 	pkt := &Packet{}
@@ -575,7 +575,7 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	pkt.ISyncReason = ocsd.ISyncTraceEnable
 	pkt.Context.UpdatedC = true
 	pkt.Context.CtxtID = 0x42
-	dec.PacketDataIn(ocsd.OpData, 0, pkt)
+	dec.TracePacketData(0, pkt)
 
 	// Atom: E (taken branch)
 	pkt2 := &Packet{}
@@ -583,7 +583,7 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	resp := ocsd.DataRespFromErr(dec.PacketDataIn(ocsd.OpData, 1, pkt2))
+	resp := ocsd.DataRespFromErr(dec.TracePacketData(1, pkt2))
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Atom E failed: %v", resp)
 	}
@@ -594,7 +594,7 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	pkt3.Type = PktAtom
 	pkt3.Atom.EnBits = 0x0
 	pkt3.Atom.Num = 1
-	dec.PacketDataIn(ocsd.OpData, 2, pkt3)
+	dec.TracePacketData(2, pkt3)
 
 	// Multiple atoms
 	pkt4 := &Packet{}
@@ -602,7 +602,7 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	pkt4.Type = PktAtom
 	pkt4.Atom.EnBits = 0x5 // E, N, E
 	pkt4.Atom.Num = 3
-	dec.PacketDataIn(ocsd.OpData, 3, pkt4)
+	dec.TracePacketData(3, pkt4)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements from atom processing")
@@ -617,7 +617,7 @@ func TestDecoderWPUpdate(t *testing.T) {
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
 
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 
 	// ISYNC
 	pkt := &Packet{}
@@ -626,14 +626,14 @@ func TestDecoderWPUpdate(t *testing.T) {
 	pkt.AddrVal = 0x2000
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceEnable
-	dec.PacketDataIn(ocsd.OpData, 0, pkt)
+	dec.TracePacketData(0, pkt)
 
 	// WP Update: set addr to exactly instrAddr+4 so traceToAddrIncl matches immediately
 	pkt2 := &Packet{}
 	pkt2.ResetState()
 	pkt2.Type = PktWPointUpdate
 	pkt2.AddrVal = 0x2000 // matches start addr-> currOpAddress == nextAddrMatch on first iter
-	dec.PacketDataIn(ocsd.OpData, 1, pkt2)
+	dec.TracePacketData(1, pkt2)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements from WP update")
@@ -648,7 +648,7 @@ func TestDecoderBranchWithAtomRange(t *testing.T) {
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
 
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 
 	// ISYNC
 	pkt := &Packet{}
@@ -657,7 +657,7 @@ func TestDecoderBranchWithAtomRange(t *testing.T) {
 	pkt.AddrVal = 0x1000
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceRestartAfterOverflow
-	dec.PacketDataIn(ocsd.OpData, 0, pkt)
+	dec.TracePacketData(0, pkt)
 
 	// Branch without exception (exercises processAtomRange via processBranch)
 	pkt2 := &Packet{}
@@ -667,7 +667,7 @@ func TestDecoderBranchWithAtomRange(t *testing.T) {
 	pkt2.CurrISA = ocsd.ISAArm
 	pkt2.CCValid = true
 	pkt2.CycleCount = 5
-	dec.PacketDataIn(ocsd.OpData, 1, pkt2)
+	dec.TracePacketData(1, pkt2)
 
 	// Branch with exception
 	pkt3 := &Packet{}
@@ -679,7 +679,7 @@ func TestDecoderBranchWithAtomRange(t *testing.T) {
 	pkt3.AddrVal = 0x4000
 	pkt3.CCValid = true
 	pkt3.CycleCount = 10
-	dec.PacketDataIn(ocsd.OpData, 2, pkt3)
+	dec.TracePacketData(2, pkt3)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements")
@@ -694,7 +694,7 @@ func TestDecoderMemNacc(t *testing.T) {
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
 
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 
 	// ISYNC
 	pkt := &Packet{}
@@ -703,7 +703,7 @@ func TestDecoderMemNacc(t *testing.T) {
 	pkt.AddrVal = 0x1000
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceEnable
-	dec.PacketDataIn(ocsd.OpData, 0, pkt)
+	dec.TracePacketData(0, pkt)
 
 	// Atom -> will trigger traceInstrToWP -> memNaccPending on 2nd read
 	pkt2 := &Packet{}
@@ -711,7 +711,7 @@ func TestDecoderMemNacc(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	dec.PacketDataIn(ocsd.OpData, 1, pkt2)
+	dec.TracePacketData(1, pkt2)
 
 	// Branch -> checkPendingNacc will emit GenElemAddrNacc
 	pkt3 := &Packet{}
@@ -719,7 +719,7 @@ func TestDecoderMemNacc(t *testing.T) {
 	pkt3.Type = PktBranchAddress
 	pkt3.AddrVal = 0x5000
 	pkt3.CurrISA = ocsd.ISAArm
-	dec.PacketDataIn(ocsd.OpData, 2, pkt3)
+	dec.TracePacketData(2, pkt3)
 
 	// Check that we got nacc element
 	if len(drainDecodedElements(t, dec)) == 0 {
@@ -735,7 +735,7 @@ func TestDecoderMemNaccSecure(t *testing.T) {
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
 
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 
 	// ISYNC with Secure context (CurrNS=false)
 	pkt := &Packet{}
@@ -745,7 +745,7 @@ func TestDecoderMemNaccSecure(t *testing.T) {
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceEnable
 	pkt.Context.CurrNS = false // secure
-	dec.PacketDataIn(ocsd.OpData, 0, pkt)
+	dec.TracePacketData(0, pkt)
 
 	// Atom -> memNacc in secure context
 	pkt2 := &Packet{}
@@ -753,7 +753,7 @@ func TestDecoderMemNaccSecure(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	dec.PacketDataIn(ocsd.OpData, 1, pkt2)
+	dec.TracePacketData(1, pkt2)
 }
 
 func TestDecoderIndirectBranch(t *testing.T) {
@@ -766,7 +766,7 @@ func TestDecoderIndirectBranch(t *testing.T) {
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
 
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 
 	pkt := &Packet{}
 	pkt.ResetState()
@@ -774,7 +774,7 @@ func TestDecoderIndirectBranch(t *testing.T) {
 	pkt.AddrVal = 0x1000
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceEnable
-	dec.PacketDataIn(ocsd.OpData, 0, pkt)
+	dec.TracePacketData(0, pkt)
 
 	// Atom with E -> indirect branch -> return stack pop
 	pkt2 := &Packet{}
@@ -782,7 +782,7 @@ func TestDecoderIndirectBranch(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	dec.PacketDataIn(ocsd.OpData, 1, pkt2)
+	dec.TracePacketData(1, pkt2)
 }
 
 func TestDecoderLinkBranch(t *testing.T) {
@@ -795,7 +795,7 @@ func TestDecoderLinkBranch(t *testing.T) {
 	dec.MemAccess = mem
 	dec.InstrDecode = idec.NewDecoder()
 
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 
 	pkt := &Packet{}
 	pkt.ResetState()
@@ -803,7 +803,7 @@ func TestDecoderLinkBranch(t *testing.T) {
 	pkt.AddrVal = 0x1000
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceEnable
-	dec.PacketDataIn(ocsd.OpData, 0, pkt)
+	dec.TracePacketData(0, pkt)
 
 	// Branch E with IsLink -> push to return stack
 	pkt2 := &Packet{}
@@ -811,7 +811,7 @@ func TestDecoderLinkBranch(t *testing.T) {
 	pkt2.Type = PktBranchAddress
 	pkt2.AddrVal = 0x5000
 	pkt2.CurrISA = ocsd.ISAArm
-	dec.PacketDataIn(ocsd.OpData, 1, pkt2)
+	dec.TracePacketData(1, pkt2)
 }
 
 func TestDecoderContProcess(t *testing.T) {
@@ -819,73 +819,73 @@ func TestDecoderContProcess(t *testing.T) {
 	dec := mustNewPktDecode(t, config)
 
 	// Exercise onFlush when not in cont state
-	dec.PacketDataIn(ocsd.OpFlush, 0, nil)
+	dec.TracePacketFlush()
 
 	// Various decoder ops
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 
 	pkt := &Packet{}
 	pkt.ResetState()
 	pkt.Type = PktASync
-	dec.PacketDataIn(ocsd.OpData, 0, pkt)
+	dec.TracePacketData(0, pkt)
 
 	// Non-ISync while waiting
 	pkt.ResetState()
 	pkt.Type = PktTrigger
-	dec.PacketDataIn(ocsd.OpData, 1, pkt)
+	dec.TracePacketData(1, pkt)
 
 	// ISYNC to move to decodePkts
 	pkt.ResetState()
 	pkt.Type = PktISync
 	pkt.AddrVal = 0x1000
-	dec.PacketDataIn(ocsd.OpData, 2, pkt)
+	dec.TracePacketData(2, pkt)
 
 	// BadSequence
 	pkt.ResetState()
 	pkt.Type = PktASync
 	pkt.Type = PktBadSequence
-	dec.PacketDataIn(ocsd.OpData, 3, pkt)
+	dec.TracePacketData(3, pkt)
 
 	// ExceptionRet
 	pkt.ResetState()
 	pkt.Type = PktASync
-	dec.PacketDataIn(ocsd.OpData, 4, pkt)
+	dec.TracePacketData(4, pkt)
 	pkt.ResetState()
 	pkt.Type = PktISync
 	pkt.AddrVal = 0x2000
-	dec.PacketDataIn(ocsd.OpData, 5, pkt)
+	dec.TracePacketData(5, pkt)
 	pkt.ResetState()
 	pkt.Type = PktExceptionRet
-	dec.PacketDataIn(ocsd.OpData, 6, pkt)
+	dec.TracePacketData(6, pkt)
 
 	// VMID no-update path (same value)
 	pkt.ResetState()
 	pkt.Type = PktVMID
 	pkt.Context.VMID = 0x10
-	dec.PacketDataIn(ocsd.OpData, 7, pkt)
+	dec.TracePacketData(7, pkt)
 	// Same VMID again -> bUpdate=false
 	pkt.ResetState()
 	pkt.Type = PktVMID
 	pkt.Context.VMID = 0x10
-	dec.PacketDataIn(ocsd.OpData, 8, pkt)
+	dec.TracePacketData(8, pkt)
 
 	// ContextID no-update path
 	pkt.ResetState()
 	pkt.Type = PktContextID
 	pkt.Context.CtxtID = 0x20
-	dec.PacketDataIn(ocsd.OpData, 9, pkt)
+	dec.TracePacketData(9, pkt)
 	pkt.ResetState()
 	pkt.Type = PktContextID
 	pkt.Context.CtxtID = 0x20
-	dec.PacketDataIn(ocsd.OpData, 10, pkt)
+	dec.TracePacketData(10, pkt)
 
 	// Ignored packet types
 	pkt.ResetState()
 	pkt.Type = PktNotSync
-	dec.PacketDataIn(ocsd.OpData, 11, pkt)
+	dec.TracePacketData(11, pkt)
 	pkt.ResetState()
 	pkt.Type = PktIgnore
-	dec.PacketDataIn(ocsd.OpData, 12, pkt)
+	dec.TracePacketData(12, pkt)
 
 	// ISync periodic (needIsync=false)
 	pkt.ResetState()
@@ -894,9 +894,9 @@ func TestDecoderContProcess(t *testing.T) {
 	pkt.AddrVal = 0x3000
 	pkt.Context.UpdatedV = true
 	pkt.Context.VMID = 0x99
-	dec.PacketDataIn(ocsd.OpData, 13, pkt)
+	dec.TracePacketData(13, pkt)
 
-	dec.PacketDataIn(ocsd.OpEOT, 14, nil)
+	dec.TracePacketEOT()
 }
 
 // --- Packet String tests ---
@@ -1020,7 +1020,7 @@ func TestProcAsyncPadLimit(t *testing.T) {
 	// Terminate with ASYNC
 	data = append(data, 0x80)
 
-	proc.TraceDataIn(ocsd.OpData, 0, data)
+	proc.TraceData(0, data)
 }
 
 func TestProcAsyncMidStream(t *testing.T) {
@@ -1033,7 +1033,7 @@ func TestProcAsyncMidStream(t *testing.T) {
 	// Inline ASYNC: header 0x00
 	data = append(data, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80)
 
-	proc.TraceDataIn(ocsd.OpData, 0, data)
+	proc.TraceData(0, data)
 }
 
 func TestProcISyncPeriodicNoCC(t *testing.T) {
@@ -1047,7 +1047,7 @@ func TestProcISyncPeriodicNoCC(t *testing.T) {
 		0x00, 0x00, 0x00, 0x00,
 		0x00, // reason=0
 	)
-	proc.TraceDataIn(ocsd.OpData, 0, data)
+	proc.TraceData(0, data)
 }
 
 func TestProcTimestampWithMultiByteCC(t *testing.T) {
@@ -1066,7 +1066,7 @@ func TestProcTimestampWithMultiByteCC(t *testing.T) {
 		0x80, // CC byte4: bit7=1 -> continue
 		0x00, // CC byte5: forced done at count==5
 	)
-	proc.TraceDataIn(ocsd.OpData, 0, data)
+	proc.TraceData(0, data)
 }
 
 // ============================================================
@@ -1080,7 +1080,7 @@ func syncDec(dec *PktDecode, addr ocsd.VAddr) {
 	async := &Packet{}
 	async.ResetState()
 	async.Type = PktASync
-	dec.PacketDataIn(ocsd.OpData, 0, async)
+	dec.TracePacketData(0, async)
 
 	isync := &Packet{}
 	isync.ResetState()
@@ -1088,7 +1088,7 @@ func syncDec(dec *PktDecode, addr ocsd.VAddr) {
 	isync.AddrVal = addr
 	isync.CurrISA = ocsd.ISAArm
 	isync.ISyncReason = ocsd.ISyncTraceEnable
-	dec.PacketDataIn(ocsd.OpData, 1, isync)
+	dec.TracePacketData(1, isync)
 }
 
 // newTestDec creates a PktDecode with mockMemAcc and real InstrDecode attached.
@@ -1141,7 +1141,7 @@ func TestAtomDataMethods(t *testing.T) {
 // instructions before hitting a waypoint (hitAfter:2 -> 2 non-WP, then WP).
 func TestDecoderAtomMultiStep(t *testing.T) {
 	dec := newTestDec(2)
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 	syncDec(dec, 0x1000)
 
 	pkt := &Packet{}
@@ -1149,7 +1149,7 @@ func TestDecoderAtomMultiStep(t *testing.T) {
 	pkt.Type = PktAtom
 	pkt.Atom.EnBits = 0x1 // E
 	pkt.Atom.Num = 1
-	resp := ocsd.DataRespFromErr(dec.PacketDataIn(ocsd.OpData, 2, pkt))
+	resp := ocsd.DataRespFromErr(dec.TracePacketData(2, pkt))
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("multiStep atom failed: %v", resp)
 	}
@@ -1167,7 +1167,7 @@ func TestDecoderAtomRange_NoWPFound(t *testing.T) {
 	dec.MemAccess = &mockMemAcc{failAfter: 2, hitAfter: -1} // fail after 2 reads, never branch
 	dec.InstrDecode = idec.NewDecoder()
 
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 	syncDec(dec, 0x2000)
 
 	pkt := &Packet{}
@@ -1175,15 +1175,15 @@ func TestDecoderAtomRange_NoWPFound(t *testing.T) {
 	pkt.Type = PktAtom
 	pkt.Atom.EnBits = 0x1
 	pkt.Atom.Num = 1
-	dec.PacketDataIn(ocsd.OpData, 2, pkt)
-	dec.PacketDataIn(ocsd.OpEOT, 3, nil)
+	dec.TracePacketData(2, pkt)
+	dec.TracePacketEOT()
 }
 
 // TestDecoderProcessBranch_ExceptionCCValid exercises processBranch with exception
 // present and CCValid set (both the exception emission and the CC path).
 func TestDecoderProcessBranch_ExceptionCCValid(t *testing.T) {
 	dec := newTestDec(0)
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 	syncDec(dec, 0x5000)
 
 	pkt := &Packet{}
@@ -1195,7 +1195,7 @@ func TestDecoderProcessBranch_ExceptionCCValid(t *testing.T) {
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.CCValid = true
 	pkt.CycleCount = 7
-	dec.PacketDataIn(ocsd.OpData, 2, pkt)
+	dec.TracePacketData(2, pkt)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected elements from branch with exception")
@@ -1206,7 +1206,7 @@ func TestDecoderProcessBranch_ExceptionCCValid(t *testing.T) {
 // processAtomRange with traceToAddrIncl where currOpAddress matches nextAddrMatch.
 func TestDecoderProcessWPUpdate_traceToAddrIncl(t *testing.T) {
 	dec := newTestDec(5) // won't hit InstrBr before address match
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 	syncDec(dec, 0x3000)
 
 	// WP Update with addr matching start -> traceToAddrIncl match on first iter
@@ -1214,7 +1214,7 @@ func TestDecoderProcessWPUpdate_traceToAddrIncl(t *testing.T) {
 	pkt.ResetState()
 	pkt.Type = PktWPointUpdate
 	pkt.AddrVal = 0x3000
-	dec.PacketDataIn(ocsd.OpData, 2, pkt)
+	dec.TracePacketData(2, pkt)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected elements from WP update")
@@ -1224,7 +1224,7 @@ func TestDecoderProcessWPUpdate_traceToAddrIncl(t *testing.T) {
 // TestDecoderProcessAtom_MultiAtomLoop exercises processAtom's loop over multiple atoms.
 func TestDecoderProcessAtom_MultiAtomLoop(t *testing.T) {
 	dec := newTestDec(0)
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 	syncDec(dec, 0x4000)
 
 	pkt := &Packet{}
@@ -1232,7 +1232,7 @@ func TestDecoderProcessAtom_MultiAtomLoop(t *testing.T) {
 	pkt.Type = PktAtom
 	pkt.Atom.EnBits = 0x5 // E,N,E,N
 	pkt.Atom.Num = 4
-	dec.PacketDataIn(ocsd.OpData, 2, pkt)
+	dec.TracePacketData(2, pkt)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements from multi-atom loop")
@@ -1247,13 +1247,13 @@ func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	dec.MemAccess = &mockMemAcc{failAfter: 1, hitAfter: -1}
 	dec.InstrDecode = idec.NewDecoder()
 
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 
 	// ASync -> ISync with NS=true (non-secure context)
 	async := &Packet{}
 	async.ResetState()
 	async.Type = PktASync
-	dec.PacketDataIn(ocsd.OpData, 0, async)
+	dec.TracePacketData(0, async)
 
 	isync := &Packet{}
 	isync.ResetState()
@@ -1262,7 +1262,7 @@ func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	isync.CurrISA = ocsd.ISAArm
 	isync.ISyncReason = ocsd.ISyncTraceEnable
 	isync.Context.CurrNS = true // non-secure
-	dec.PacketDataIn(ocsd.OpData, 1, isync)
+	dec.TracePacketData(1, isync)
 
 	// Atom -> memNacc -> memNaccPending=true
 	pkt2 := &Packet{}
@@ -1270,7 +1270,7 @@ func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	dec.PacketDataIn(ocsd.OpData, 2, pkt2)
+	dec.TracePacketData(2, pkt2)
 
 	// Branch -> checkPendingNacc emits AddrNacc
 	pkt3 := &Packet{}
@@ -1278,7 +1278,7 @@ func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	pkt3.Type = PktBranchAddress
 	pkt3.AddrVal = 0x9000
 	pkt3.CurrISA = ocsd.ISAArm
-	dec.PacketDataIn(ocsd.OpData, 3, pkt3)
+	dec.TracePacketData(3, pkt3)
 }
 
 // TestDecoderContProcess_AllStates exercises all four contProcess state branches.
@@ -1289,48 +1289,48 @@ func TestDecoderContProcess_AllStates(t *testing.T) {
 	// decodeContAtom: Atom packets processed at decodePkts then flush
 	{
 		dec := newTestDec(0)
-		dec.PacketDataIn(ocsd.OpReset, 0, nil)
+		dec.TracePacketReset(0)
 		syncDec(dec, 0x1000)
 		pkt := &Packet{}
 		pkt.ResetState()
 		pkt.Type = PktAtom
 		pkt.Atom.EnBits = 0x3
 		pkt.Atom.Num = 2
-		dec.PacketDataIn(ocsd.OpData, 2, pkt)
-		dec.PacketDataIn(ocsd.OpFlush, 3, nil)
+		dec.TracePacketData(2, pkt)
+		dec.TracePacketFlush()
 	}
 
 	// decodeContWPUp: WP update then flush
 	{
 		dec := newTestDec(0)
-		dec.PacketDataIn(ocsd.OpReset, 0, nil)
+		dec.TracePacketReset(0)
 		syncDec(dec, 0x1000)
 		pkt := &Packet{}
 		pkt.ResetState()
 		pkt.Type = PktWPointUpdate
 		pkt.AddrVal = 0x1000
-		dec.PacketDataIn(ocsd.OpData, 2, pkt)
-		dec.PacketDataIn(ocsd.OpFlush, 3, nil)
+		dec.TracePacketData(2, pkt)
+		dec.TracePacketFlush()
 	}
 
 	// decodeContBranch: branch then flush
 	{
 		dec := newTestDec(0)
-		dec.PacketDataIn(ocsd.OpReset, 0, nil)
+		dec.TracePacketReset(0)
 		syncDec(dec, 0x1000)
 		pkt := &Packet{}
 		pkt.ResetState()
 		pkt.Type = PktBranchAddress
 		pkt.AddrVal = 0x9000
 		pkt.CurrISA = ocsd.ISAArm
-		dec.PacketDataIn(ocsd.OpData, 2, pkt)
-		dec.PacketDataIn(ocsd.OpFlush, 3, nil)
+		dec.TracePacketData(2, pkt)
+		dec.TracePacketFlush()
 	}
 
 	// decodeContISync: ISync with UpdatedC context -> iSyncPeCtxt=true -> outputs both TraceOn and PeContext
 	{
 		dec := newTestDec(0)
-		dec.PacketDataIn(ocsd.OpReset, 0, nil)
+		dec.TracePacketReset(0)
 		// First sync
 		syncDec(dec, 0x1000)
 		// Second ISync with context update
@@ -1342,8 +1342,8 @@ func TestDecoderContProcess_AllStates(t *testing.T) {
 		pkt.ISyncReason = ocsd.ISyncTraceEnable
 		pkt.Context.UpdatedC = true
 		pkt.Context.CtxtID = 0xBEEF
-		dec.PacketDataIn(ocsd.OpData, 2, pkt)
-		dec.PacketDataIn(ocsd.OpFlush, 3, nil)
+		dec.TracePacketData(2, pkt)
+		dec.TracePacketFlush()
 	}
 }
 
@@ -1351,13 +1351,13 @@ func TestDecoderContProcess_AllStates(t *testing.T) {
 // pe state (N atom), PktTimestamp with CCValid, and ignored packet types.
 func TestDecoderDecodePacket_RemainingBranches(t *testing.T) {
 	dec := newTestDec(0)
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 
 	// ISyncDebugExit exercises the TraceOnExDebug path in processIsync
 	pkt := &Packet{}
 	pkt.ResetState()
 	pkt.Type = PktASync
-	dec.PacketDataIn(ocsd.OpData, 0, pkt)
+	dec.TracePacketData(0, pkt)
 
 	pkt.ResetState()
 	pkt.Type = PktISync
@@ -1366,7 +1366,7 @@ func TestDecoderDecodePacket_RemainingBranches(t *testing.T) {
 	pkt.ISyncReason = ocsd.ISyncDebugExit
 	pkt.CCValid = true
 	pkt.CycleCount = 3
-	dec.PacketDataIn(ocsd.OpData, 1, pkt)
+	dec.TracePacketData(1, pkt)
 
 	// N Atom while peState is valid
 	pkt2 := &Packet{}
@@ -1374,7 +1374,7 @@ func TestDecoderDecodePacket_RemainingBranches(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x0 // N
 	pkt2.Atom.Num = 1
-	dec.PacketDataIn(ocsd.OpData, 2, pkt2)
+	dec.TracePacketData(2, pkt2)
 
 	// Timestamp with CCValid
 	pkt3 := &Packet{}
@@ -1383,17 +1383,17 @@ func TestDecoderDecodePacket_RemainingBranches(t *testing.T) {
 	pkt3.Timestamp = 0x1234
 	pkt3.CCValid = true
 	pkt3.CycleCount = 99
-	dec.PacketDataIn(ocsd.OpData, 3, pkt3)
+	dec.TracePacketData(3, pkt3)
 
 	// Ignored types in decodePacket
 	for _, tp := range []PktType{PktIncompleteEOT, PktASync, PktIgnore} {
 		p := &Packet{}
 		p.ResetState()
 		p.Type = tp
-		dec.PacketDataIn(ocsd.OpData, 4, p)
+		dec.TracePacketData(4, p)
 	}
 
-	dec.PacketDataIn(ocsd.OpEOT, 5, nil)
+	dec.TracePacketEOT()
 }
 
 // TestDecoderIndirectBranch_ActiveRetStack tests BrIndirect with active return stack.
@@ -1406,7 +1406,7 @@ func TestDecoderIndirectBranch_ActiveRetStack(t *testing.T) {
 	dec.MemAccess = &mockMemAcc{hitAfter: 0, isIndirect: true, isLink: true}
 	dec.InstrDecode = idec.NewDecoder()
 
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 	syncDec(dec, 0x1000)
 
 	// First atom E: BrIndirect IsLink=1 -> return stack is empty, pops nothing
@@ -1415,7 +1415,7 @@ func TestDecoderIndirectBranch_ActiveRetStack(t *testing.T) {
 	pkt.Type = PktAtom
 	pkt.Atom.EnBits = 0x1
 	pkt.Atom.Num = 1
-	dec.PacketDataIn(ocsd.OpData, 2, pkt)
+	dec.TracePacketData(2, pkt)
 
 	// Resync
 	syncDec(dec, 0x2000)
@@ -1426,13 +1426,13 @@ func TestDecoderIndirectBranch_ActiveRetStack(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	dec.PacketDataIn(ocsd.OpData, 5, pkt2)
+	dec.TracePacketData(5, pkt2)
 }
 
 // TestDecoderISyncPeriodic_WithVMIDUpdate exercises ISyncPeriodic with UpdatedV=true.
 func TestDecoderISyncPeriodic_WithVMIDUpdate(t *testing.T) {
 	dec := newTestDec(0)
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 	syncDec(dec, 0xC000)
 
 	pkt := &Packet{}
@@ -1443,26 +1443,26 @@ func TestDecoderISyncPeriodic_WithVMIDUpdate(t *testing.T) {
 	pkt.ISyncReason = ocsd.ISyncPeriodic
 	pkt.Context.UpdatedV = true
 	pkt.Context.VMID = 0xAB
-	dec.PacketDataIn(ocsd.OpData, 2, pkt)
+	dec.TracePacketData(2, pkt)
 }
 
 // TestDecoderWaitISync_NonISyncPacket exercises the decodeWaitISync state where
 // a non-ISync packet is silently dropped (hits the else bPktDone=true branch).
 func TestDecoderWaitISync_NonISyncPacket(t *testing.T) {
 	dec := newTestDec(0)
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 
 	// ASync -> state becomes decodeWaitISync
 	pkt := &Packet{}
 	pkt.ResetState()
 	pkt.Type = PktASync
-	dec.PacketDataIn(ocsd.OpData, 0, pkt)
+	dec.TracePacketData(0, pkt)
 
 	// Non-ISync packet while in decodeWaitISync -> dropped silently
 	pkt.ResetState()
 	pkt.Type = PktTimestamp
 	pkt.Timestamp = 0xFF
-	dec.PacketDataIn(ocsd.OpData, 1, pkt)
+	dec.TracePacketData(1, pkt)
 
 	// ISync to advance to decodePkts
 	pkt.ResetState()
@@ -1470,32 +1470,32 @@ func TestDecoderWaitISync_NonISyncPacket(t *testing.T) {
 	pkt.AddrVal = 0xD000
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceEnable
-	dec.PacketDataIn(ocsd.OpData, 2, pkt)
+	dec.TracePacketData(2, pkt)
 }
 
 // TestDecoderISyncOverflow exercises ISyncTraceRestartAfterOverflow -> TraceOnOverflow.
 func TestDecoderISyncOverflow(t *testing.T) {
 	dec := newTestDec(0)
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 
 	pkt := &Packet{}
 	pkt.ResetState()
 	pkt.Type = PktASync
-	dec.PacketDataIn(ocsd.OpData, 0, pkt)
+	dec.TracePacketData(0, pkt)
 
 	pkt.ResetState()
 	pkt.Type = PktISync
 	pkt.AddrVal = 0xE000
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceRestartAfterOverflow
-	dec.PacketDataIn(ocsd.OpData, 1, pkt)
+	dec.TracePacketData(1, pkt)
 }
 
 // TestDecoderBranchNoException_ValidPeState exercises processBranch without exception
 // and with valid pe state -> calls processAtomRange.
 func TestDecoderBranchNoException_ValidPeState(t *testing.T) {
 	dec := newTestDec(0)
-	dec.PacketDataIn(ocsd.OpReset, 0, nil)
+	dec.TracePacketReset(0)
 	syncDec(dec, 0xF000)
 
 	pkt := &Packet{}
@@ -1503,7 +1503,7 @@ func TestDecoderBranchNoException_ValidPeState(t *testing.T) {
 	pkt.Type = PktBranchAddress
 	pkt.AddrVal = 0xF200
 	pkt.CurrISA = ocsd.ISAArm
-	dec.PacketDataIn(ocsd.OpData, 2, pkt)
+	dec.TracePacketData(2, pkt)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected elements from branch without exception")

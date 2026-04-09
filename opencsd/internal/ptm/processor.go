@@ -166,27 +166,9 @@ func (p *PktProc) StatsAddBadHdrCount(count uint32) { p.Stats.BadHeaderErrs += c
 
 func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) error {
 	if p.pktOut != nil {
-		return p.callPktOut(ocsd.OpData, indexSOP, pkt)
+		return p.pktOut.TracePacketData(indexSOP, pkt)
 	}
 	return nil
-}
-
-func (p *PktProc) callPktOut(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) error {
-	if p.pktOut == nil {
-		return nil
-	}
-	switch op {
-	case ocsd.OpData:
-		return p.pktOut.TracePacketData(indexSOP, pkt)
-	case ocsd.OpEOT:
-		return p.pktOut.TracePacketEOT()
-	case ocsd.OpFlush:
-		return p.pktOut.TracePacketFlush()
-	case ocsd.OpReset:
-		return p.pktOut.TracePacketReset(indexSOP)
-	default:
-		return ocsd.ErrInvalidParamVal
-	}
 }
 
 func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, pData []byte) {
@@ -202,71 +184,56 @@ func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pkt
 	return p.outputDecodedPacket(indexSOP, pkt)
 }
 
-func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	var processed uint32
-
-	switch op {
-	case ocsd.OpData:
-		if len(dataBlock) == 0 {
-			return 0, fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
-		}
-		var err error
-		processed, err = p.ProcessData(index, dataBlock)
-		if err != nil && !errors.Is(err, ocsd.ErrWait) {
-			return processed, err
-		}
-		return processed, nil
-	case ocsd.OpEOT:
-		if err := p.OnEOT(); err != nil {
-			return 0, err
-		}
-		if err := p.callPktOut(ocsd.OpEOT, 0, nil); err != nil && !errors.Is(err, ocsd.ErrWait) {
-			return 0, err
-		}
-		if rawMon := p.PktRawMonI; rawMon != nil {
-			rawMon.MonitorEOT()
-		}
-		return 0, nil
-	case ocsd.OpFlush:
-		if err := p.callPktOut(ocsd.OpFlush, 0, nil); err != nil && !errors.Is(err, ocsd.ErrWait) {
-			return 0, err
-		}
-		return 0, nil
-	case ocsd.OpReset:
-		if err := p.callPktOut(ocsd.OpReset, index, nil); err != nil && !errors.Is(err, ocsd.ErrWait) {
-			return 0, err
-		}
-		p.OnReset()
-		if rawMon := p.PktRawMonI; rawMon != nil {
-			rawMon.MonitorReset(index)
-		}
-		return 0, nil
-	default:
-		return 0, fmt.Errorf("%w: packet processor: unknown datapath operation", ocsd.ErrInvalidParamVal)
-	}
-}
-
 // TraceData is the explicit data-path entrypoint used by split interfaces.
 func (p *PktProc) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	return p.TraceDataIn(ocsd.OpData, index, dataBlock)
+	if len(dataBlock) == 0 {
+		return 0, fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
+	}
+	processed, err := p.ProcessData(index, dataBlock)
+	if err != nil && !errors.Is(err, ocsd.ErrWait) {
+		return processed, err
+	}
+	return processed, nil
 }
 
-// TraceDataEOT forwards an EOT control operation through the legacy multiplexer.
+// TraceDataEOT handles end-of-trace control.
 func (p *PktProc) TraceDataEOT() error {
-	_, err := p.TraceDataIn(ocsd.OpEOT, 0, nil)
-	return err
+	if err := p.OnEOT(); err != nil {
+		return err
+	}
+	if p.pktOut != nil {
+		if err := p.pktOut.TracePacketEOT(); err != nil && !errors.Is(err, ocsd.ErrWait) {
+			return err
+		}
+	}
+	if rawMon := p.PktRawMonI; rawMon != nil {
+		rawMon.MonitorEOT()
+	}
+	return nil
 }
 
-// TraceDataFlush forwards a flush control operation through the legacy multiplexer.
+// TraceDataFlush handles flush control.
 func (p *PktProc) TraceDataFlush() error {
-	_, err := p.TraceDataIn(ocsd.OpFlush, 0, nil)
-	return err
+	if p.pktOut != nil {
+		if err := p.pktOut.TracePacketFlush(); err != nil && !errors.Is(err, ocsd.ErrWait) {
+			return err
+		}
+	}
+	return nil
 }
 
-// TraceDataReset forwards a reset control operation through the legacy multiplexer.
+// TraceDataReset handles reset control.
 func (p *PktProc) TraceDataReset(index ocsd.TrcIndex) error {
-	_, err := p.TraceDataIn(ocsd.OpReset, index, nil)
-	return err
+	if p.pktOut != nil {
+		if err := p.pktOut.TracePacketReset(index); err != nil && !errors.Is(err, ocsd.ErrWait) {
+			return err
+		}
+	}
+	p.OnReset()
+	if rawMon := p.PktRawMonI; rawMon != nil {
+		rawMon.MonitorReset(index)
+	}
+	return nil
 }
 
 func (p *PktProc) SetProtocolConfig(config *Config) error {
@@ -282,10 +249,6 @@ func (p *PktProc) IsBadPacket() bool {
 	return p.currPacket.IsBadPacket()
 }
 
-func (p *PktProc) resetPacketState() {
-	p.currPacket.Clear()
-}
-
 func (p *PktProc) resetProcessorState() {
 	p.currPacket.Type = PktNotSync
 	p.currDecode = decodeReserved
@@ -298,6 +261,25 @@ func (p *PktProc) resetProcessorState() {
 
 	p.currPacket.ResetState()
 	p.resetPacketState()
+}
+
+func (p *PktProc) resetPacketState() {
+	p.currPacket.Clear()
+	p.currPacketData = p.currPacketData[:0]
+	p.numPktBytesReq = 0
+	p.needCycleCount = false
+	p.gotCycleCount = false
+	p.gotCCBytes = 0
+	p.numCtxtIDBytes = 0
+	p.gotCtxtIDBytes = 0
+	p.gotTSBytes = false
+	p.tsByteMax = 0
+	p.gotAddrBytes = false
+	p.numAddrBytes = 0
+	p.gotExcepBytes = false
+	p.numExcepBytes = 0
+	p.addrPktIsa = ocsd.ISAUnknown
+	p.excepAltISA = 0
 }
 
 func (p *PktProc) readByteVal() (uint8, bool) {

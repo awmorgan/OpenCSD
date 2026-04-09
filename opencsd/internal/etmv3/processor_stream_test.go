@@ -31,7 +31,7 @@ func TestProcStreamComplete(t *testing.T) {
 			0x76, // Exception Return
 			0x66, // Reserved
 		}
-		processed, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+		processed, _ := proc.TraceData(0, data)
 		if processed == 0 {
 			t.Fatalf("expected control/context stream to consume input bytes")
 		}
@@ -54,7 +54,7 @@ func TestProcStreamComplete(t *testing.T) {
 		data = append(data, 0x0A, 0x11, 0x22) // normal size2
 		data = append(data, 0x22)             // normal size0 expect addr
 		data = append(data, 0x80, 0x00)       // addr bytes
-		processed, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+		processed, _ := proc.TraceData(0, data)
 		if processed == 0 {
 			t.Fatalf("expected data/address stream to consume input bytes")
 		}
@@ -66,11 +66,12 @@ func TestProcStreamComplete(t *testing.T) {
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
 			0x01, 0x40, 0x00, // Branch with exception data
 		}
-		processed, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+		processed, _ := proc.TraceData(0, data)
 		if processed == 0 {
 			t.Fatalf("expected exception stream to consume input bytes")
 		}
-		processed, _ = proc.TraceDataIn(ocsd.OpFlush, 0, nil)
+		_ = proc.TraceDataFlush()
+		processed = 0
 		if processed != 0 {
 			t.Fatalf("expected flush to report zero consumed bytes, got %d", processed)
 		}
@@ -92,7 +93,7 @@ func TestProcStreamBadTraceMode(t *testing.T) {
 		0x66, // Reserved
 	}
 
-	processed, _ := proc.TraceDataIn(ocsd.OpData, 0, data)
+	processed, _ := proc.TraceData(0, data)
 	if processed == 0 {
 		t.Fatalf("expected processor to consume bytes in bad-trace-mode stream")
 	}
@@ -108,8 +109,8 @@ func TestProcStreamMalformed(t *testing.T) {
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
 		0x06, // Normal Data size 1, but we EOT here
 	}
-	proc.TraceDataIn(ocsd.OpData, 0, data)
-	proc.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(len(data)), nil)
+	proc.TraceData(0, data)
+	proc.TraceDataEOT()
 }
 
 func TestProcStreamComplexPackets(t *testing.T) {
@@ -128,7 +129,7 @@ func TestProcStreamComplexPackets(t *testing.T) {
 		0x08, 0x01, 0x22, 0x33, 0x44, 0x00, 0xaa, 0xbb,
 	}
 
-	proc.TraceDataIn(ocsd.OpData, 0, data)
+	proc.TraceData(0, data)
 }
 
 func TestProcStreamPartPacket(t *testing.T) {
@@ -137,7 +138,7 @@ func TestProcStreamPartPacket(t *testing.T) {
 	proc.SetPktOut(&noopPktSink{})
 
 	// ASYNC
-	_, err := proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
+	_, err := proc.TraceData(0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
 	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Fatalf("unexpected fatal response for sync sequence: %v", resp)
@@ -147,12 +148,12 @@ func TestProcStreamPartPacket(t *testing.T) {
 	part1 := []byte{0x08, 0x01, 0x22}
 	part2 := []byte{0x33, 0x44, 0x00, 0xaa, 0xbb}
 
-	_, err = proc.TraceDataIn(ocsd.OpData, 0, part1)
+	_, err = proc.TraceData(0, part1)
 	resp = ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Fatalf("unexpected fatal response for first part packet: %v", resp)
 	}
-	_, err = proc.TraceDataIn(ocsd.OpData, 0, part2)
+	_, err = proc.TraceData(0, part2)
 	resp = ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Fatalf("unexpected fatal response for second part packet: %v", resp)
@@ -164,27 +165,27 @@ func TestProcStreamExceptionData(t *testing.T) {
 	proc := mustNewConfiguredPktProc(t, config)
 	proc.SetPktOut(&noopPktSink{})
 
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
+	proc.TraceData(0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
 
 	// Exception Data (Branch header bit0=1)
 	// byte0 = 0x41 (bit6=1 excep followed, bit7=0 no more addr)
 	// byte1 = 0x80 (excep byte1: bit7=1 continue)
 	// byte2 = 0x02 (excep byte2: bit7=0 end)
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x41, 0x80, 0x02})
+	proc.TraceData(0, []byte{0x41, 0x80, 0x02})
 
 	// Add missing coverage branches
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x41, 0x00}) // short exception
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x41, 0x01})
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x41, 0x02})
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x41, 0x03})
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x41, 0x08})
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x41, 0x10})
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x41, 0x0B})
+	proc.TraceData(0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
+	proc.TraceData(0, []byte{0x41, 0x00}) // short exception
+	proc.TraceData(0, []byte{0x41, 0x01})
+	proc.TraceData(0, []byte{0x41, 0x02})
+	proc.TraceData(0, []byte{0x41, 0x03})
+	proc.TraceData(0, []byte{0x41, 0x08})
+	proc.TraceData(0, []byte{0x41, 0x10})
+	proc.TraceData(0, []byte{0x41, 0x0B})
 
 	// Exception Data (malformed)
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x41, 0x80})
-	proc.TraceDataIn(ocsd.OpEOT, 0, nil)
+	proc.TraceData(0, []byte{0x41, 0x80})
+	proc.TraceDataEOT()
 }
 
 func TestProcessorPartialPacketAndMalformedState(t *testing.T) {
@@ -216,15 +217,15 @@ func TestProcStreamDataValues(t *testing.T) {
 	proc := mustNewConfiguredPktProc(t, config)
 	proc.SetPktOut(&noopPktSink{})
 
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
+	proc.TraceData(0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
 
 	// Normal Data (0x02=size0) + Value + Address
 	// format: header, addr bytes (if any), value bytes
 	// 0x2A = 0010 1010 => size2 (+1 = 3 expected). wait, 0x2A & 0xD3 = 0x02.
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x2A, 0x80, 0x00, 0x11, 0x22, 0x33})
+	proc.TraceData(0, []byte{0x2A, 0x80, 0x00, 0x11, 0x22, 0x33})
 
 	// OOO Data with address
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x74, 0x80, 0x80, 0x00}) // Address placeholder
+	proc.TraceData(0, []byte{0x74, 0x80, 0x80, 0x00}) // Address placeholder
 }
 
 func TestProcStreamPartPacket2(t *testing.T) {
@@ -232,20 +233,20 @@ func TestProcStreamPartPacket2(t *testing.T) {
 	proc := mustNewConfiguredPktProc(t, config)
 	proc.SetPktOut(&noopPktSink{})
 
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x81})
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x82})
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x03}) // end of branch addr
+	proc.TraceData(0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x81})
+	proc.TraceData(0, []byte{0x82})
+	proc.TraceData(0, []byte{0x03}) // end of branch addr
 }
 
 func TestProcStreamMalformedHeaders(t *testing.T) {
 	config := &Config{}
 	proc := mustNewConfiguredPktProc(t, config)
 	proc.SetPktOut(&noopPktSink{})
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
+	proc.TraceData(0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
 
 	// Malformed branch address (missing bytes)
-	proc.TraceDataIn(ocsd.OpData, 0, []byte{0x81, 0x82})
-	proc.TraceDataIn(ocsd.OpEOT, 0, nil)
+	proc.TraceData(0, []byte{0x81, 0x82})
+	proc.TraceDataEOT()
 }
 
 type noopPktSink struct{}

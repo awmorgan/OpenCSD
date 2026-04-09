@@ -122,27 +122,9 @@ func (p *PktProc) StatsAddBadHdrCount(count uint32) { p.Stats.BadHeaderErrs += c
 
 func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) error {
 	if p.pktOut != nil {
-		return p.callPktOut(ocsd.OpData, indexSOP, pkt)
+		return p.pktOut.TracePacketData(indexSOP, pkt)
 	}
 	return nil
-}
-
-func (p *PktProc) callPktOut(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) error {
-	if p.pktOut == nil {
-		return nil
-	}
-	switch op {
-	case ocsd.OpData:
-		return p.pktOut.TracePacketData(indexSOP, pkt)
-	case ocsd.OpEOT:
-		return p.pktOut.TracePacketEOT()
-	case ocsd.OpFlush:
-		return p.pktOut.TracePacketFlush()
-	case ocsd.OpReset:
-		return p.pktOut.TracePacketReset(indexSOP)
-	default:
-		return ocsd.ErrInvalidParamVal
-	}
 }
 
 func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, pData []byte) {
@@ -158,22 +140,6 @@ func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pkt
 	return p.outputDecodedPacket(indexSOP, pkt)
 }
 
-func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	// Compatibility entrypoint: route op-style callers to explicit methods.
-	switch op {
-	case ocsd.OpData:
-		return p.TraceData(index, dataBlock)
-	case ocsd.OpEOT:
-		return 0, p.TraceDataEOT()
-	case ocsd.OpFlush:
-		return 0, p.TraceDataFlush()
-	case ocsd.OpReset:
-		return 0, p.TraceDataReset(index)
-	default:
-		return 0, fmt.Errorf("%w: packet processor: unknown datapath operation", ocsd.ErrInvalidParamVal)
-	}
-}
-
 // TraceData is the explicit data-path entrypoint used by split interfaces.
 func (p *PktProc) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if len(dataBlock) == 0 {
@@ -187,8 +153,10 @@ func (p *PktProc) TraceDataEOT() error {
 	if err := p.OnEOT(); err != nil {
 		return err
 	}
-	if err := p.callPktOut(ocsd.OpEOT, 0, nil); err != nil && !errors.Is(err, ocsd.ErrWait) {
-		return err
+	if p.pktOut != nil {
+		if err := p.pktOut.TracePacketEOT(); err != nil && !errors.Is(err, ocsd.ErrWait) {
+			return err
+		}
 	}
 	if rawMon := p.PktRawMonI; rawMon != nil {
 		rawMon.MonitorEOT()
@@ -198,16 +166,20 @@ func (p *PktProc) TraceDataEOT() error {
 
 // TraceDataFlush handles flush control without op multiplexing.
 func (p *PktProc) TraceDataFlush() error {
-	if err := p.callPktOut(ocsd.OpFlush, 0, nil); err != nil && !errors.Is(err, ocsd.ErrWait) {
-		return err
+	if p.pktOut != nil {
+		if err := p.pktOut.TracePacketFlush(); err != nil && !errors.Is(err, ocsd.ErrWait) {
+			return err
+		}
 	}
 	return nil
 }
 
 // TraceDataReset handles reset control without op multiplexing.
 func (p *PktProc) TraceDataReset(index ocsd.TrcIndex) error {
-	if err := p.callPktOut(ocsd.OpReset, index, nil); err != nil && !errors.Is(err, ocsd.ErrWait) {
-		return err
+	if p.pktOut != nil {
+		if err := p.pktOut.TracePacketReset(index); err != nil && !errors.Is(err, ocsd.ErrWait) {
+			return err
+		}
 	}
 	p.OnReset()
 	if rawMon := p.PktRawMonI; rawMon != nil {
