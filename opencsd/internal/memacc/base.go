@@ -287,28 +287,20 @@ func (c *Cache) Read(acc Accessor, address ocsd.VAddr, memSpace ocsd.MemSpaceAcc
 	newIdx := c.findNewPage()
 	c.mruIdx = newIdx
 
-	// Prepare for read from accessor
-	// Normalize address to page boundary for aligned caching
-	pageBase := address & ^ocsd.VAddr(c.pageSize-1)
-	accStart, _ := acc.Range()
-	if pageBase < accStart {
-		pageBase = accStart
-	}
-
 	// How many bytes can we read from this accessor?
-	avail := acc.BytesInRange(pageBase, uint32(c.pageSize))
+	avail := acc.BytesInRange(address, uint32(c.pageSize))
 	if avail == 0 {
 		return 0, nil
 	}
 
-	// Read from accessor into cache page
-	read := acc.ReadBytes(pageBase, memSpace, trcID, avail, c.blocks[newIdx].Data)
+	// Read from accessor into cache page (C++ does not align to page boundaries)
+	read := acc.ReadBytes(address, memSpace, trcID, avail, c.blocks[newIdx].Data)
 	if read > uint32(c.pageSize) {
 		c.blocks[newIdx].ValidLen = 0
 		return 0, ocsd.ErrMemAccBadLen
 	}
 
-	c.blocks[newIdx].StartAddr = pageBase
+	c.blocks[newIdx].StartAddr = address
 	c.blocks[newIdx].ValidLen = read
 	c.blocks[newIdx].TrcID = trcID
 	c.incSequence()
