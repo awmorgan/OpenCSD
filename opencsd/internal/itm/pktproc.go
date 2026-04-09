@@ -210,8 +210,8 @@ func (p *PktProc) putBackPacket(e packetEvent) {
 	p.pendingPackets = append([]packetEvent{e}, p.pendingPackets...)
 }
 
-// TraceData is the explicit data-path entrypoint used by split interfaces.
-func (p *PktProc) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+// Write is the explicit data-path entrypoint used by split interfaces.
+func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if len(dataBlock) == 0 {
 		return 0, fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
 	}
@@ -244,8 +244,8 @@ func (p *PktProc) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, erro
 	return processed, nil
 }
 
-// TraceDataEOT handles end-of-trace control.
-func (p *PktProc) TraceDataEOT() error {
+// Close handles end-of-trace control.
+func (p *PktProc) Close() error {
 	if err := p.OnEOT(); err != nil {
 		return err
 	}
@@ -260,8 +260,8 @@ func (p *PktProc) TraceDataEOT() error {
 	return nil
 }
 
-// TraceDataFlush handles flush control.
-func (p *PktProc) TraceDataFlush() error {
+// Flush handles flush control.
+func (p *PktProc) Flush() error {
 	if p.pktOut != nil {
 		if err := p.pktOut.Flush(); err != nil && !errors.Is(err, ocsd.ErrWait) {
 			return err
@@ -270,8 +270,8 @@ func (p *PktProc) TraceDataFlush() error {
 	return nil
 }
 
-// TraceDataReset handles reset control.
-func (p *PktProc) TraceDataReset(index ocsd.TrcIndex) error {
+// Reset handles reset control.
+func (p *PktProc) Reset(index ocsd.TrcIndex) error {
 	if p.pktOut != nil {
 		if err := p.pktOut.Reset(index); err != nil && !errors.Is(err, ocsd.ErrWait) {
 			return err

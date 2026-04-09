@@ -140,16 +140,16 @@ func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pkt
 	return p.outputDecodedPacket(indexSOP, pkt)
 }
 
-// TraceData is the explicit data-path entrypoint used by split interfaces.
-func (p *PktProc) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+// Write is the explicit data-path entrypoint used by split interfaces.
+func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if len(dataBlock) == 0 {
 		return 0, fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
 	}
 	return p.ProcessData(index, dataBlock)
 }
 
-// TraceDataEOT handles end-of-trace control without op multiplexing.
-func (p *PktProc) TraceDataEOT() error {
+// Close handles end-of-trace control without op multiplexing.
+func (p *PktProc) Close() error {
 	if err := p.OnEOT(); err != nil {
 		return err
 	}
@@ -164,8 +164,8 @@ func (p *PktProc) TraceDataEOT() error {
 	return nil
 }
 
-// TraceDataFlush handles flush control without op multiplexing.
-func (p *PktProc) TraceDataFlush() error {
+// Flush handles flush control without op multiplexing.
+func (p *PktProc) Flush() error {
 	if p.pktOut != nil {
 		if err := p.pktOut.Flush(); err != nil && !errors.Is(err, ocsd.ErrWait) {
 			return err
@@ -174,8 +174,8 @@ func (p *PktProc) TraceDataFlush() error {
 	return nil
 }
 
-// TraceDataReset handles reset control without op multiplexing.
-func (p *PktProc) TraceDataReset(index ocsd.TrcIndex) error {
+// Reset handles reset control without op multiplexing.
+func (p *PktProc) Reset(index ocsd.TrcIndex) error {
 	if p.pktOut != nil {
 		if err := p.pktOut.Reset(index); err != nil && !errors.Is(err, ocsd.ErrWait) {
 			return err

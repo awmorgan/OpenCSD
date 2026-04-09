@@ -401,7 +401,7 @@ func TestTraceDataEOTIncompleteBufferedPacketKeepsHeaderType(t *testing.T) {
 		t.Fatalf("expected buffered header byte 0x9A, got %v", p.stream.data)
 	}
 
-	if err := p.TraceDataEOT(); err != nil {
+	if err := p.Close(); err != nil {
 		t.Fatalf("unexpected EOT error: %v", err)
 	}
 	if out.count != 1 {

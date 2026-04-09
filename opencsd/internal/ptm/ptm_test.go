@@ -312,15 +312,15 @@ func TestProcAllPacketTypes(t *testing.T) {
 		0x04, // CC byte
 	)
 
-	processed, err := proc.TraceData(0, data)
+	processed, err := proc.Write(0, data)
 	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Fatal resp=%v processed=%d", resp, processed)
 	}
 
 	// Exercise onFlush and onEOT
-	proc.TraceDataFlush()
-	proc.TraceDataEOT()
+	proc.Flush()
+	proc.Close()
 }
 
 func TestProcISyncWithContextAndBranch5ByteAddr(t *testing.T) {
@@ -359,12 +359,12 @@ func TestProcISyncWithContextAndBranch5ByteAddr(t *testing.T) {
 		0x04, // CC byte
 	)
 
-	processed, err := proc.TraceData(0, data)
+	processed, err := proc.Write(0, data)
 	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Fatal resp=%v processed=%d", resp, processed)
 	}
-	proc.TraceDataEOT()
+	proc.Close()
 }
 
 func TestProcISyncDebugExitAndCCMultiByte(t *testing.T) {
@@ -387,7 +387,7 @@ func TestProcISyncDebugExitAndCCMultiByte(t *testing.T) {
 		0x00, // CC byte4: bit7=0 -> done (or pktIndex==10 forces done)
 	)
 
-	processed, err := proc.TraceData(0, data)
+	processed, err := proc.Write(0, data)
 	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Fatal resp=%v processed=%d", resp, processed)
@@ -411,7 +411,7 @@ func TestProcTimestamp64Bit(t *testing.T) {
 		0x09, // byte 9: no continuation check, full 8 bits
 	)
 
-	processed, err := proc.TraceData(0, data)
+	processed, err := proc.Write(0, data)
 	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Fatal resp=%v processed=%d", resp, processed)
@@ -427,9 +427,9 @@ func TestProcEOTWithPendingData(t *testing.T) {
 	// Start a timestamp but don't finish it -> incomplete
 	data = append(data, 0x42, 0x81, 0x82)
 
-	proc.TraceData(0, data)
+	proc.Write(0, data)
 	// EOT with pending packet data
-	proc.TraceDataEOT()
+	proc.Close()
 }
 
 func TestProcCtxtIDZeroBytes(t *testing.T) {
@@ -443,7 +443,7 @@ func TestProcCtxtIDZeroBytes(t *testing.T) {
 	// ContextID packet with 0 ctxtID bytes -> immediate send
 	data = append(data, 0x6E)
 
-	proc.TraceData(0, data)
+	proc.Write(0, data)
 }
 
 func TestProcBranchNoCC(t *testing.T) {
@@ -464,7 +464,7 @@ func TestProcBranchNoCC(t *testing.T) {
 		0x02, // excep byte1: bit7=0 -> done
 	)
 
-	proc.TraceData(0, data)
+	proc.Write(0, data)
 }
 
 func TestProcAtomFormats(t *testing.T) {
@@ -486,7 +486,7 @@ func TestProcAtomFormats(t *testing.T) {
 	// Atom format 0xC0: num=5
 	data = append(data, 0xC0)
 
-	proc.TraceData(0, data)
+	proc.Write(0, data)
 }
 
 // TestProcWaitAsyncCarryOverRawTailByte locks bug-for-bug compatibility for the
@@ -500,7 +500,7 @@ func TestProcWaitAsyncCarryOverRawTailByte(t *testing.T) {
 	proc.SetPktRawMonitor(rawCap)
 
 	// First block leaves waitASyncSOPkt=true with a carry-over 0x00.
-	if _, err := proc.TraceData(4669, []byte{0x00}); ocsd.DataRespIsFatal(ocsd.DataRespFromErr(err)) {
+	if _, err := proc.Write(4669, []byte{0x00}); ocsd.DataRespIsFatal(ocsd.DataRespFromErr(err)) {
 		resp := ocsd.DataRespFromErr(err)
 		t.Fatalf("unexpected fatal resp on carry-over setup: %v", resp)
 	}
@@ -508,7 +508,7 @@ func TestProcWaitAsyncCarryOverRawTailByte(t *testing.T) {
 	// Second block is all non-zero and long enough to force an unsynced flush.
 	// This reproduces the carry-over NOT_ASYNC accounting edge case.
 	data := []byte{0xc0, 0x29, 0xf4, 0x0b, 0xe3, 0x18, 0x50, 0x01, 0xb8, 0xe0, 0x01, 0xef, 0xab, 0x0b, 0x20}
-	if _, err := proc.TraceData(4670, data); ocsd.DataRespIsFatal(ocsd.DataRespFromErr(err)) {
+	if _, err := proc.Write(4670, data); ocsd.DataRespIsFatal(ocsd.DataRespFromErr(err)) {
 		resp := ocsd.DataRespFromErr(err)
 		t.Fatalf("unexpected fatal resp on reproducer block: %v", resp)
 	}
@@ -550,7 +550,7 @@ func TestProcWPointExcepISASwap(t *testing.T) {
 		0x00, // byte[4]: ISA=ARM(no bits), bit6=0 -> excep done
 	)
 
-	proc.TraceData(0, data)
+	proc.Write(0, data)
 }
 
 // --- Decoder tests with mocks ---
@@ -1020,7 +1020,7 @@ func TestProcAsyncPadLimit(t *testing.T) {
 	// Terminate with ASYNC
 	data = append(data, 0x80)
 
-	proc.TraceData(0, data)
+	proc.Write(0, data)
 }
 
 func TestProcAsyncMidStream(t *testing.T) {
@@ -1033,7 +1033,7 @@ func TestProcAsyncMidStream(t *testing.T) {
 	// Inline ASYNC: header 0x00
 	data = append(data, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80)
 
-	proc.TraceData(0, data)
+	proc.Write(0, data)
 }
 
 func TestProcISyncPeriodicNoCC(t *testing.T) {
@@ -1047,7 +1047,7 @@ func TestProcISyncPeriodicNoCC(t *testing.T) {
 		0x00, 0x00, 0x00, 0x00,
 		0x00, // reason=0
 	)
-	proc.TraceData(0, data)
+	proc.Write(0, data)
 }
 
 func TestProcTimestampWithMultiByteCC(t *testing.T) {
@@ -1066,7 +1066,7 @@ func TestProcTimestampWithMultiByteCC(t *testing.T) {
 		0x80, // CC byte4: bit7=1 -> continue
 		0x00, // CC byte5: forced done at count==5
 	)
-	proc.TraceData(0, data)
+	proc.Write(0, data)
 }
 
 // ============================================================

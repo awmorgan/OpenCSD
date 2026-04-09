@@ -129,24 +129,24 @@ func (m *mockDataSink) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, data
 	return uint32(len(dataBlock)), nil
 }
 
-func (m *mockDataSink) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+func (m *mockDataSink) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	return m.TraceDataIn(ocsd.OpData, index, dataBlock)
 }
-func (m *mockDataSink) TraceDataEOT() error {
+func (m *mockDataSink) Close() error {
 	_, err := m.TraceDataIn(ocsd.OpEOT, 0, nil)
 	return err
 }
-func (m *mockDataSink) TraceDataFlush() error {
+func (m *mockDataSink) Flush() error {
 	_, err := m.TraceDataIn(ocsd.OpFlush, 0, nil)
 	return err
 }
-func (m *mockDataSink) TraceDataReset(index ocsd.TrcIndex) error {
+func (m *mockDataSink) Reset(index ocsd.TrcIndex) error {
 	_, err := m.TraceDataIn(ocsd.OpReset, index, nil)
 	return err
 }
 
-// Ensure mockDataSink implements TraceProcessor
-var _ ocsd.TraceProcessor = (*mockDataSink)(nil)
+// Ensure mockDataSink implements TraceDecoder
+var _ ocsd.TraceDecoder = (*mockDataSink)(nil)
 
 type mockDataSinkWait struct{}
 
@@ -160,24 +160,24 @@ func (m *mockDataSinkWait) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, 
 	return uint32(len(dataBlock)), ocsd.ErrWait
 }
 
-func (m *mockDataSinkWait) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+func (m *mockDataSinkWait) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	return m.TraceDataIn(ocsd.OpData, index, dataBlock)
 }
-func (m *mockDataSinkWait) TraceDataEOT() error {
+func (m *mockDataSinkWait) Close() error {
 	_, err := m.TraceDataIn(ocsd.OpEOT, 0, nil)
 	return err
 }
-func (m *mockDataSinkWait) TraceDataFlush() error {
+func (m *mockDataSinkWait) Flush() error {
 	_, err := m.TraceDataIn(ocsd.OpFlush, 0, nil)
 	return err
 }
-func (m *mockDataSinkWait) TraceDataReset(index ocsd.TrcIndex) error {
+func (m *mockDataSinkWait) Reset(index ocsd.TrcIndex) error {
 	_, err := m.TraceDataIn(ocsd.OpReset, index, nil)
 	return err
 }
 
-// Ensure mockDataSinkWait implements TraceProcessor
-var _ ocsd.TraceProcessor = (*mockDataSinkWait)(nil)
+// Ensure mockDataSinkWait implements TraceDecoder
+var _ ocsd.TraceDecoder = (*mockDataSinkWait)(nil)
 
 type mockDataSinkWaitOnce struct {
 	waited bool
@@ -202,24 +202,24 @@ func (m *mockDataSinkWaitOnce) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcInd
 	return used, nil
 }
 
-func (m *mockDataSinkWaitOnce) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+func (m *mockDataSinkWaitOnce) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	return m.TraceDataIn(ocsd.OpData, index, dataBlock)
 }
-func (m *mockDataSinkWaitOnce) TraceDataEOT() error {
+func (m *mockDataSinkWaitOnce) Close() error {
 	_, err := m.TraceDataIn(ocsd.OpEOT, 0, nil)
 	return err
 }
-func (m *mockDataSinkWaitOnce) TraceDataFlush() error {
+func (m *mockDataSinkWaitOnce) Flush() error {
 	_, err := m.TraceDataIn(ocsd.OpFlush, 0, nil)
 	return err
 }
-func (m *mockDataSinkWaitOnce) TraceDataReset(index ocsd.TrcIndex) error {
+func (m *mockDataSinkWaitOnce) Reset(index ocsd.TrcIndex) error {
 	_, err := m.TraceDataIn(ocsd.OpReset, index, nil)
 	return err
 }
 
-// Ensure mockDataSinkWaitOnce implements TraceProcessor
-var _ ocsd.TraceProcessor = (*mockDataSinkWaitOnce)(nil)
+// Ensure mockDataSinkWaitOnce implements TraceDecoder
+var _ ocsd.TraceDecoder = (*mockDataSinkWaitOnce)(nil)
 
 type mockRawSink struct {
 	out *bytes.Buffer

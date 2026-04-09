@@ -15,18 +15,18 @@ func (f *fakeDataIn) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBl
 	return uint32(len(dataBlock)), nil
 }
 
-func (f *fakeDataIn) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+func (f *fakeDataIn) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	return f.TraceDataIn(ocsd.OpData, index, dataBlock)
 }
-func (f *fakeDataIn) TraceDataEOT() error {
+func (f *fakeDataIn) Close() error {
 	_, err := f.TraceDataIn(ocsd.OpEOT, 0, nil)
 	return err
 }
-func (f *fakeDataIn) TraceDataFlush() error {
+func (f *fakeDataIn) Flush() error {
 	_, err := f.TraceDataIn(ocsd.OpFlush, 0, nil)
 	return err
 }
-func (f *fakeDataIn) TraceDataReset(index ocsd.TrcIndex) error {
+func (f *fakeDataIn) Reset(index ocsd.TrcIndex) error {
 	_, err := f.TraceDataIn(ocsd.OpReset, index, nil)
 	return err
 }

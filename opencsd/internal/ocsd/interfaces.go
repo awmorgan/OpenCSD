@@ -5,11 +5,11 @@ import "fmt"
 type MemAccessor func(address VAddr, memSpace MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32
 
 // Replace the 6 Trc/Packet interfaces with these two:
-type TraceProcessor interface {
-	TraceData(index TrcIndex, dataBlock []byte) (uint32, error)
-	TraceDataEOT() error
-	TraceDataFlush() error
-	TraceDataReset(index TrcIndex) error
+type TraceDecoder interface {
+	Write(index TrcIndex, dataBlock []byte) (uint32, error)
+	Close() error
+	Flush() error
+	Reset(index TrcIndex) error
 }
 
 type PacketProcessor[P any] interface {

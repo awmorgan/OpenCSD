@@ -82,8 +82,8 @@ type Processor struct {
 
 func (p *Processor) ApplyFlags(flags uint32) error { return nil }
 
-// Ensure the struct satisfies TraceProcessor
-var _ ocsd.TraceProcessor = (*Processor)(nil)
+// Ensure the struct satisfies TraceDecoder
+var _ ocsd.TraceDecoder = (*Processor)(nil)
 
 // NewProcessor creates and initializes a new ETMv4 packet Processor.
 func NewProcessor(config *Config) *Processor {
@@ -104,13 +104,13 @@ func (p *Processor) SetPktRawMonitor(mon ocsd.PacketMonitor) {
 	p.PktRawMonI = mon
 }
 
-// TraceData is the explicit data-path entrypoint used by split interfaces.
-func (p *Processor) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+// Write is the explicit data-path entrypoint used by split interfaces.
+func (p *Processor) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	return p.processData(index, dataBlock)
 }
 
-// TraceDataEOT handles end-of-trace control.
-func (p *Processor) TraceDataEOT() error {
+// Close handles end-of-trace control.
+func (p *Processor) Close() error {
 	err := p.onEOT()
 	if err != nil && !errors.Is(err, ocsd.ErrWait) {
 		return err
@@ -118,8 +118,8 @@ func (p *Processor) TraceDataEOT() error {
 	return nil
 }
 
-// TraceDataFlush handles flush control.
-func (p *Processor) TraceDataFlush() error {
+// Flush handles flush control.
+func (p *Processor) Flush() error {
 	err := p.onFlush()
 	if err != nil && !errors.Is(err, ocsd.ErrWait) {
 		return err
@@ -127,8 +127,8 @@ func (p *Processor) TraceDataFlush() error {
 	return nil
 }
 
-// TraceDataReset handles reset control.
-func (p *Processor) TraceDataReset(index ocsd.TrcIndex) error {
+// Reset handles reset control.
+func (p *Processor) Reset(index ocsd.TrcIndex) error {
 	_ = index
 	err := p.onReset()
 	if err != nil && !errors.Is(err, ocsd.ErrWait) {
