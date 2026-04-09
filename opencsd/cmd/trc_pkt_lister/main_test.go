@@ -124,11 +124,11 @@ func TestTraceListerGoldens(t *testing.T) {
 				want = strictTraceListerOutput(string(wantBytes), tc.ignoreMappedRanges)
 			}
 
-			if got != want {
-				gotLines := strings.Split(got, "\n")
-				wantLines := strings.Split(want, "\n")
-				line, gotLine, wantLine := firstDiff(gotLines, wantLines)
-				t.Fatalf("golden mismatch at line %d\nwant: %s\n got: %s", line, wantLine, gotLine)
+			gotLines := strings.Split(got, "\n")
+			wantLines := strings.Split(want, "\n")
+
+			if diffIdx, gotLine, wantLine := firstDiff(gotLines, wantLines); diffIdx != 0 {
+				t.Fatalf("golden mismatch at line %d\nwant: %s\n got: %s", diffIdx, wantLine, gotLine)
 			}
 		})
 	}
