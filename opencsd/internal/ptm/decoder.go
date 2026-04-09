@@ -108,6 +108,10 @@ type PktDecode struct {
 	// Pull-iterator fields
 	pendingElements []traceElemEvent
 	collectElements bool
+
+	// Source is the pull-based packet reader injected at construction time.
+	// May be nil when the push-based Write path is used instead.
+	Source ocsd.PacketReader[Packet]
 }
 
 func (d *PktDecode) ApplyFlags(flags uint32) error { return nil }

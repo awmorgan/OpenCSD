@@ -69,6 +69,10 @@ type PktDecode struct {
 	lastPacketIndex ocsd.TrcIndex
 	lastElemIndex   ocsd.TrcIndex
 	sawActivity     bool
+
+	// Source is the pull-based packet reader injected at construction time.
+	// May be nil when the push-based Write path is used instead.
+	Source ocsd.PacketReader[etmv4.Packet]
 }
 
 func NewPktDecode(cfg *Config) (*PktDecode, error) {
@@ -85,7 +89,8 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 }
 
 // NewConfiguredPktDecodeWithDeps creates an ETE decoder and injects dependencies.
-func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
+// source is the pull-based PacketReader to use; pass nil to use the push-based Write path.
+func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode, source ocsd.PacketReader[etmv4.Packet]) (*PktDecode, error) {
 	_ = instID
 	decoder, err := NewPktDecode(cfg)
 	if err != nil {
@@ -93,6 +98,7 @@ func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMe
 	}
 	decoder.inner.MemAccess = mem
 	decoder.inner.InstrDecode = instr
+	decoder.Source = source
 	return decoder, nil
 }
 
@@ -119,7 +125,7 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 
 	proc := NewProcessor(cfg)
 
-	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr)
+	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, nil)
 	if err != nil {
 		return nil, nil, err
 	}

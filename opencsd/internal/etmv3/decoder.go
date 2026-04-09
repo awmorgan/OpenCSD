@@ -83,6 +83,10 @@ type PktDecode struct {
 	csID            uint8
 	pendingElements []traceElemEvent
 	collectElements bool
+
+	// Source is the pull-based packet reader injected at construction time.
+	// May be nil when the push-based Write path is used instead.
+	Source ocsd.PacketReader[Packet]
 }
 
 func (d *PktDecode) ApplyFlags(flags uint32) error { return nil }
@@ -1006,11 +1010,13 @@ func NewConfiguredPktDecode(instID int, cfg *Config, mem common.TargetMemAccess,
 }
 
 // NewConfiguredPktDecodeWithDeps creates an ETMv3 decoder and injects dependencies.
-func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
+// source is the pull-based PacketReader to use; pass nil to use the push-based Write path.
+func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode, source ocsd.PacketReader[Packet]) (*PktDecode, error) {
 	dec, err := NewConfiguredPktDecode(instID, cfg, mem, instr)
 	if err != nil {
 		return nil, err
 	}
+	dec.Source = source
 	return dec, nil
 }
 
@@ -1034,7 +1040,7 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 	if err != nil {
 		return nil, nil, err
 	}
-	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr)
+	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, nil)
 	if err != nil {
 		return nil, nil, err
 	}

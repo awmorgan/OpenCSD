@@ -23,13 +23,15 @@ func NewConfiguredPktDecode(instID int, cfg *Config) (*PktDecode, error) {
 }
 
 // NewConfiguredPktDecodeWithDeps creates an STM decoder and injects dependencies.
-func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
+// source is the pull-based PacketReader to use; pass nil to use the push-based Write path.
+func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode, source ocsd.PacketReader[Packet]) (*PktDecode, error) {
 	dec, err := NewConfiguredPktDecode(instID, cfg)
 	if err != nil {
 		return nil, err
 	}
 	dec.MemAccess = mem
 	dec.InstrDecode = instr
+	dec.Source = source
 	return dec, nil
 }
 
@@ -53,7 +55,7 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 	if err != nil {
 		return nil, nil, err
 	}
-	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr)
+	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, nil)
 	if err != nil {
 		return nil, nil, err
 	}
