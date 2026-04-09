@@ -32,7 +32,7 @@ const (
 	decodeGlobalTS2
 )
 
-type procStateFn func(ocsd.TrcIndex) (ocsd.DatapathResp, error, bool)
+type procStateFn func(ocsd.TrcIndex) (error, bool)
 
 var errDecodeNotImplemented = errors.New("decodeNextPacket: packet type not implemented")
 
@@ -358,7 +358,6 @@ func (p *PktProc) dataToProcess() bool {
 }
 
 func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	resp := ocsd.RespCont
 	var err error
 	p.dataIn = dataBlock
 	p.dataInSize = uint32(len(dataBlock))
@@ -366,35 +365,20 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 	p.blockReader = bytes.NewReader(dataBlock)
 	p.dataReader = bufio.NewReaderSize(p.blockReader, 4096)
 
-	for p.dataToProcess() && ocsd.DataRespIsCont(resp) {
-		errResp, loopErr, handled := p.processStateLoop(index)
+	for p.dataToProcess() && err == nil {
+		loopErr, handled := p.processStateLoop(index)
 		if handled {
-			resp = errResp
 			err = loopErr
-			if ocsd.DataRespIsFatal(resp) {
-				break
-			}
-			if err != nil {
-				break
-			}
 		}
 	}
-	if ocsd.DataRespIsCont(resp) {
-		return p.dataInUsed, nil
-	}
-	if ocsd.DataRespIsWait(resp) {
-		return p.dataInUsed, ocsd.ErrWait
-	}
-	if err != nil {
-		return p.dataInUsed, err
-	}
-	return p.dataInUsed, ocsd.DataErrFromResp(resp, nil)
+
+	return p.dataInUsed, err
 }
 
-func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (resp ocsd.DatapathResp, err error, handled bool) {
+func (p *PktProc) processStateLoop(index ocsd.TrcIndex) (err error, handled bool) {
 	fn := p.currentProcStateFn()
 	if fn == nil {
-		return ocsd.RespCont, nil, false
+		return nil, false
 	}
 	return fn(index)
 }
@@ -414,12 +398,12 @@ func (p *PktProc) currentProcStateFn() procStateFn {
 	}
 }
 
-func (p *PktProc) stateWaitSync(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool) {
+func (p *PktProc) stateWaitSync(index ocsd.TrcIndex) (error, bool) {
 	err := p.waitForSync(index)
-	return ocsd.DataRespFromErr(err), err, true
+	return err, true
 }
 
-func (p *PktProc) stateHdr(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool) {
+func (p *PktProc) stateHdr(index ocsd.TrcIndex) (error, bool) {
 	p.packetIndex = index + ocsd.TrcIndex(p.dataInUsed)
 
 	if p.streamSync {
@@ -428,7 +412,7 @@ func (p *PktProc) stateHdr(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool)
 		case err == nil:
 			for range consumed {
 				if _, ok := p.readByte(); !ok {
-					return ocsd.RespFatalInvalidData, io.ErrUnexpectedEOF, true
+					return io.ErrUnexpectedEOF, true
 				}
 			}
 			if pkt.Type == PktTSGlobal1 && consumed == 5 && len(p.packetData) >= 5 {
@@ -447,39 +431,43 @@ func (p *PktProc) stateHdr(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool)
 			// would retry the same header indefinitely when the stateless decoder fails
 			// before consuming input.
 		default:
-			return ocsd.RespFatalInvalidData, err, true
+			return err, true
 		}
 	}
-
-	err := p.ProcessHdr() // sets procState for valid headers.
-	if errResp, loopErr, errHandled := p.handleProcError(err); errHandled {
-		return errResp, loopErr, true
+	if err := p.ProcessHdr(); err != nil {
+		if loopErr, errHandled := p.handleProcError(err); errHandled {
+			return loopErr, true
+		}
 	}
-	if p.procState == procData {
-		return p.stateData(index)
-	}
-	return ocsd.RespCont, nil, false
-}
-
-func (p *PktProc) stateData(index ocsd.TrcIndex) (ocsd.DatapathResp, error, bool) {
-	err := p.runDataDecodeState()
-	if errResp, loopErr, errHandled := p.handleProcError(err); errHandled {
-		return errResp, loopErr, true
+	if !p.streamSync {
+		p.procState = procWaitSync
+		return p.stateWaitSync(index)
 	}
 	if p.procState == procSendPkt {
 		return p.stateSendPkt(index)
 	}
-	return ocsd.RespCont, nil, false
+	return p.stateData(index)
 }
 
-func (p *PktProc) stateSendPkt(_ ocsd.TrcIndex) (ocsd.DatapathResp, error, bool) {
+func (p *PktProc) stateData(index ocsd.TrcIndex) (error, bool) {
+	err := p.runDataDecodeState()
+	if loopErr, errHandled := p.handleProcError(err); errHandled {
+		return loopErr, true
+	}
+	if p.procState == procSendPkt {
+		return p.stateSendPkt(index)
+	}
+	return nil, false
+}
+
+func (p *PktProc) stateSendPkt(_ ocsd.TrcIndex) (error, bool) {
 	err := p.outputPacket()
-	return ocsd.DataRespFromErr(err), err, true
+	return err, true
 }
 
-func (p *PktProc) handleProcError(err error) (resp ocsd.DatapathResp, outErr error, handled bool) {
+func (p *PktProc) handleProcError(err error) (outErr error, handled bool) {
 	if err == nil {
-		return ocsd.RespCont, nil, false
+		return nil, false
 	}
 
 	if (errors.Is(err, ocsd.ErrBadPacketSeq) || errors.Is(err, ocsd.ErrInvalidPcktHdr)) &&
@@ -488,9 +476,12 @@ func (p *PktProc) handleProcError(err error) (resp ocsd.DatapathResp, outErr err
 		if p.unsyncOnBadPkts {
 			p.procState = procWaitSync
 		}
-		return ocsd.DataRespFromErr(outErr), nil, true
+		if outErr != nil {
+			return outErr, true
+		}
+		return nil, true
 	}
-	return ocsd.RespFatalInvalidData, err, true
+	return err, true
 }
 
 func (p *PktProc) OnEOT() error {
