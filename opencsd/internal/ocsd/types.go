@@ -100,18 +100,6 @@ const (
 	ErrSevInfo  ErrSeverity = 3
 )
 
-// Trace Datapath
-
-// DatapathOp represents trace datapath operations.
-type DatapathOp uint32
-
-const (
-	OpData  DatapathOp = 0
-	OpEOT   DatapathOp = 1
-	OpFlush DatapathOp = 2
-	OpReset DatapathOp = 3
-)
-
 // DatapathResp is a transitional uint32 alias while datapath code migrates
 // to standard Go error-only control flow.
 type DatapathResp = uint32

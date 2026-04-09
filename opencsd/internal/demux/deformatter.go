@@ -147,22 +147,11 @@ func (d *FrameDeformatter) outputRawMonBytes(index ocsd.TrcIndex, frameElem ocsd
 	}
 }
 
-func (d *FrameDeformatter) callIDStream(stream ocsd.TraceDecoder, op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, error) {
+func (d *FrameDeformatter) callIDStream(stream ocsd.TraceDecoder, index ocsd.TrcIndex, data []byte) (uint32, error) {
 	if stream == nil {
 		return 0, nil
 	}
-	switch op {
-	case ocsd.OpData:
-		return stream.Write(index, data)
-	case ocsd.OpEOT:
-		return 0, stream.Close()
-	case ocsd.OpFlush:
-		return 0, stream.Flush()
-	case ocsd.OpReset:
-		return 0, stream.Reset(index)
-	default:
-		return 0, ocsd.ErrInvalidParamVal
-	}
+	return stream.Write(index, data)
 }
 
 func (d *FrameDeformatter) flushAllIDs() error {
@@ -170,7 +159,7 @@ func (d *FrameDeformatter) flushAllIDs() error {
 
 	for _, stream := range d.idStreams {
 		if stream != nil { // if attached
-			_, err := d.callIDStream(stream, ocsd.OpFlush, 0, nil)
+			err := stream.Flush()
 			if err != nil && outErr == nil {
 				outErr = err
 			}
@@ -191,7 +180,7 @@ func (d *FrameDeformatter) resetAllIDs(index ocsd.TrcIndex) error {
 
 	for _, stream := range d.idStreams {
 		if stream != nil { // if attached
-			_, err := d.callIDStream(stream, ocsd.OpReset, index, nil)
+			err := stream.Reset(index)
 			if err != nil && outErr == nil {
 				outErr = err
 			}
@@ -212,7 +201,7 @@ func (d *FrameDeformatter) closeAllIDs() error {
 
 	for _, stream := range d.idStreams {
 		if stream != nil { // if attached
-			_, err := d.callIDStream(stream, ocsd.OpEOT, 0, nil)
+			err := stream.Close()
 			if err != nil && outErr == nil {
 				outErr = err
 			}
@@ -264,22 +253,6 @@ func (d *FrameDeformatter) resetStateParams() {
 		d.outData = make([]outDataEntry, 16)
 	} else {
 		d.outData = d.outData[:16]
-	}
-}
-
-// TraceDataIn implementation
-func (d *FrameDeformatter) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	switch op {
-	case ocsd.OpReset:
-		return 0, d.Reset(index)
-	case ocsd.OpFlush:
-		return 0, d.Flush()
-	case ocsd.OpEOT:
-		return 0, d.Close()
-	case ocsd.OpData:
-		return d.Write(index, dataBlock)
-	default:
-		return 0, ocsd.ErrInvalidParamVal
 	}
 }
 

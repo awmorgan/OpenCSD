@@ -473,7 +473,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 			payload := remaining[:payloadLen]
 
 			for len(payload) > 0 {
-				consumed, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), payload)
+				consumed, ocsdErr := tree.Write(ocsd.TrcIndex(traceIndex), payload)
 				if ocsdErr != nil && !ocsd.IsDataWaitErr(ocsdErr) && ocsdErr != io.EOF {
 					return nil, fmt.Errorf("fatal error at trace index %d: %v", traceIndex, ocsdErr)
 				}
@@ -499,7 +499,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 			if sendLen > maxChunk {
 				sendLen = maxChunk - (maxChunk % frameAlignment)
 			}
-			consumed, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
+			consumed, ocsdErr := tree.Write(ocsd.TrcIndex(traceIndex), pending[:sendLen])
 			if ocsdErr != nil && !ocsd.IsDataWaitErr(ocsdErr) && ocsdErr != io.EOF {
 				return nil, fmt.Errorf("fatal error at trace index %d: %v", traceIndex, ocsdErr)
 			}
@@ -515,7 +515,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 	} else {
 		remaining := traceData
 		for len(remaining) > 0 {
-			consumed, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
+			consumed, ocsdErr := tree.Write(ocsd.TrcIndex(traceIndex), remaining)
 			if ocsdErr != nil && !ocsd.IsDataWaitErr(ocsdErr) && ocsdErr != io.EOF {
 				return nil, fmt.Errorf("fatal error at trace index %d: %v", traceIndex, ocsdErr)
 			}
@@ -530,7 +530,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		}
 	}
 
-	_, err = tree.TraceDataIn(ocsd.OpEOT, 0, nil)
+	err = tree.Close()
 	if err != nil && !ocsd.IsDataWaitErr(err) && err != io.EOF {
 		return nil, fmt.Errorf("fatal error on EOT: %v", err)
 	}

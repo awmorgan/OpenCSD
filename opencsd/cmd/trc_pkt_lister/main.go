@@ -440,7 +440,7 @@ func processInputFileProducer(out io.Writer, tree *dcdtree.DecodeTree, fileName 
 				}
 			}
 
-			used, dpErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
+			used, dpErr := tree.Write(ocsd.TrcIndex(traceIndex), pending[:sendLen])
 			dataPathResp = ocsd.DataRespFromErr(dpErr)
 			if dpErr != nil {
 				dataPathErr = dpErr
@@ -465,8 +465,7 @@ func processInputFileProducer(out io.Writer, tree *dcdtree.DecodeTree, fileName 
 			}
 
 			if ocsd.DataRespIsWait(dataPathResp) {
-				var dpErr error
-				_, dpErr = tree.TraceDataIn(ocsd.OpFlush, 0, nil)
+				dpErr := tree.Flush()
 				dataPathResp = ocsd.DataRespFromErr(dpErr)
 				if dpErr != nil {
 					dataPathErr = fmt.Errorf("flush after wait: %w", dpErr)
@@ -557,7 +556,7 @@ func processInputFileProducer(out io.Writer, tree *dcdtree.DecodeTree, fileName 
 		return framedTailError(traceIndex, len(pending), align)
 	}
 
-	if _, err := tree.TraceDataIn(ocsd.OpEOT, 0, nil); err != nil {
+	if err := tree.Close(); err != nil {
 		return fmt.Errorf("trace packet lister: OpEOT error: %w", err)
 	}
 	if err := drainTreeElementsToSink(tree, sink, genPrinter); err != nil {
@@ -565,7 +564,7 @@ func processInputFileProducer(out io.Writer, tree *dcdtree.DecodeTree, fileName 
 	}
 
 	if opts.multiSession {
-		if _, err := tree.TraceDataIn(ocsd.OpReset, 0, nil); err != nil {
+		if err := tree.Reset(0); err != nil {
 			return fmt.Errorf("trace packet lister: OpReset error: %w", err)
 		}
 		if err := drainTreeElementsToSink(tree, sink, genPrinter); err != nil {

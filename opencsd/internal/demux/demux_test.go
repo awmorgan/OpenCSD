@@ -125,24 +125,17 @@ func makeBufBadData() []byte {
 
 type mockDataSink struct{}
 
-func (m *mockDataSink) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+func (m *mockDataSink) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	return uint32(len(dataBlock)), nil
 }
-
-func (m *mockDataSink) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	return m.TraceDataIn(ocsd.OpData, index, dataBlock)
-}
 func (m *mockDataSink) Close() error {
-	_, err := m.TraceDataIn(ocsd.OpEOT, 0, nil)
-	return err
+	return nil
 }
 func (m *mockDataSink) Flush() error {
-	_, err := m.TraceDataIn(ocsd.OpFlush, 0, nil)
-	return err
+	return nil
 }
 func (m *mockDataSink) Reset(index ocsd.TrcIndex) error {
-	_, err := m.TraceDataIn(ocsd.OpReset, index, nil)
-	return err
+	return nil
 }
 
 // Ensure mockDataSink implements TraceDecoder
@@ -150,30 +143,20 @@ var _ ocsd.TraceDecoder = (*mockDataSink)(nil)
 
 type mockDataSinkWait struct{}
 
-func (m *mockDataSinkWait) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	if op != ocsd.OpData {
-		return 0, nil
-	}
+func (m *mockDataSinkWait) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if len(dataBlock) > 2 {
 		return 2, ocsd.ErrWait
 	}
 	return uint32(len(dataBlock)), ocsd.ErrWait
 }
-
-func (m *mockDataSinkWait) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	return m.TraceDataIn(ocsd.OpData, index, dataBlock)
-}
 func (m *mockDataSinkWait) Close() error {
-	_, err := m.TraceDataIn(ocsd.OpEOT, 0, nil)
-	return err
+	return nil
 }
 func (m *mockDataSinkWait) Flush() error {
-	_, err := m.TraceDataIn(ocsd.OpFlush, 0, nil)
-	return err
+	return nil
 }
 func (m *mockDataSinkWait) Reset(index ocsd.TrcIndex) error {
-	_, err := m.TraceDataIn(ocsd.OpReset, index, nil)
-	return err
+	return nil
 }
 
 // Ensure mockDataSinkWait implements TraceDecoder
@@ -184,10 +167,7 @@ type mockDataSinkWaitOnce struct {
 	total  uint32
 }
 
-func (m *mockDataSinkWaitOnce) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	if op != ocsd.OpData {
-		return 0, nil
-	}
+func (m *mockDataSinkWaitOnce) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if !m.waited {
 		m.waited = true
 		used := uint32(2)
@@ -201,21 +181,14 @@ func (m *mockDataSinkWaitOnce) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcInd
 	m.total += used
 	return used, nil
 }
-
-func (m *mockDataSinkWaitOnce) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	return m.TraceDataIn(ocsd.OpData, index, dataBlock)
-}
 func (m *mockDataSinkWaitOnce) Close() error {
-	_, err := m.TraceDataIn(ocsd.OpEOT, 0, nil)
-	return err
+	return nil
 }
 func (m *mockDataSinkWaitOnce) Flush() error {
-	_, err := m.TraceDataIn(ocsd.OpFlush, 0, nil)
-	return err
+	return nil
 }
 func (m *mockDataSinkWaitOnce) Reset(index ocsd.TrcIndex) error {
-	_, err := m.TraceDataIn(ocsd.OpReset, index, nil)
-	return err
+	return nil
 }
 
 // Ensure mockDataSinkWaitOnce implements TraceDecoder
@@ -264,7 +237,7 @@ func (m *mockRawSink) ResetRawFrames() error { return nil }
 func (m *mockRawSink) CloseRawFrames() error { return nil }
 
 func resetDecoder(df *FrameDeformatter, t *testing.T) {
-	_, err := df.TraceDataIn(ocsd.OpReset, 0, nil)
+	err := df.Reset(0)
 	resp := ocsd.DataRespFromErr(err)
 	if resp != ocsd.RespCont {
 		t.Errorf("Datapath error response on reset: %v", resp)
@@ -301,7 +274,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	// 1
 	resetDecoder(df, t)
 	buf := makeBufMemAlign()
-	processed, _ := df.TraceDataIn(ocsd.OpData, 0, buf)
+	processed, _ := df.Write(0, buf)
 	if processed != uint32(len(buf)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf), processed)
 	}
@@ -309,7 +282,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	// 2
 	resetDecoder(df, t)
 	buf2 := makeBufMemAlign8Id()
-	processed, _ = df.TraceDataIn(ocsd.OpData, 0, buf2)
+	processed, _ = df.Write(0, buf2)
 	if processed != uint32(len(buf2)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf2), processed)
 	}
@@ -318,7 +291,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	df.Configure(baseCfg | ocsd.DfrmtrResetOn4xFsync)
 	resetDecoder(df, t)
 	buf3 := makeBufMemAlignStRst()
-	processed, _ = df.TraceDataIn(ocsd.OpData, 0, buf3)
+	processed, _ = df.Write(0, buf3)
 	if processed != uint32(len(buf3)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf3), processed)
 	}
@@ -326,7 +299,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	// 4
 	resetDecoder(df, t)
 	buf4 := makeBufMemAlignMidRst()
-	processed, _ = df.TraceDataIn(ocsd.OpData, 0, buf4)
+	processed, _ = df.Write(0, buf4)
 	if processed != uint32(len(buf4)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf4), processed)
 	}
@@ -334,7 +307,7 @@ func TestRunMemAlignTest(t *testing.T) {
 	// 5
 	resetDecoder(df, t)
 	buf5 := makeBufMemAlignEnRst()
-	processed, _ = df.TraceDataIn(ocsd.OpData, 0, buf5)
+	processed, _ = df.Write(0, buf5)
 	if processed != uint32(len(buf5)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf5), processed)
 	}
@@ -372,22 +345,22 @@ func TestDemuxEdgeCases(t *testing.T) {
 	df.closeAllIDs()
 
 	resetDecoder(df, t)
-	df.TraceDataIn(ocsd.OpData, 0, buf)
+	df.Write(0, buf)
 
 	// Flush and EOT
 	resetDecoder(df, t)
-	df.TraceDataIn(ocsd.OpFlush, 0, nil)
-	df.TraceDataIn(ocsd.OpEOT, 0, nil)
+	df.Flush()
+	df.Close()
 
 	// Test error handler code path coverage by sending non-aligned length
 	df.Configure(baseCfg)
 	resetDecoder(df, t)
-	df.TraceDataIn(ocsd.OpData, 0, buf[:3])
+	df.Write(0, buf[:3])
 
 	// Test continuous trace data exception
 	resetDecoder(df, t)
-	df.TraceDataIn(ocsd.OpData, 0, buf)
-	df.TraceDataIn(ocsd.OpData, 999, buf) // triggers not continuous panic
+	df.Write(0, buf)
+	df.Write(999, buf) // triggers not continuous panic
 
 	// Trigger generic system panic recovery
 	resetDecoder(df, t)
@@ -396,7 +369,7 @@ func TestDemuxEdgeCases(t *testing.T) {
 	df.Configure(0x80 | ocsd.DfrmtrFrameMemAlign)
 
 	// OpEOT again but under different conditions
-	df.TraceDataIn(ocsd.OpEOT, 0, nil)
+	df.Close()
 
 	// Filter ID bounds checking
 	df.OutputFilterIDs([]uint8{129}, true) // returns err
@@ -409,7 +382,7 @@ func TestDemuxEdgeCases(t *testing.T) {
 
 	// pass un-aligned mock trace sequence to force hit the loop
 	btest := makeBufMemAlign()
-	df.TraceDataIn(ocsd.OpData, 0, btest)
+	df.Write(0, btest)
 
 	// FSYNC error paths
 	df.Configure(baseCfg | ocsd.DfrmtrResetOn4xFsync)
@@ -423,27 +396,27 @@ func TestDemuxEdgeCases(t *testing.T) {
 		0x04, 0x05, 0x06, 0x07,
 		0x08, 0x09, 0x0a, 0x0b,
 		0x0c, 0x0d, 0x0e, 0x0f}
-	df.TraceDataIn(ocsd.OpData, 0, badFsyncBuf)
+	df.Write(0, badFsyncBuf)
 
 	// HSYNC missing config panic
 	df.Configure(baseCfg | ocsd.DfrmtrHasFsyncs) // Only FSYNC
 	resetDecoder(df, t)
 	hsyncPanicBuf := []byte{0xff, 0x7f, 0x00, 0x00}
-	df.TraceDataIn(ocsd.OpData, 0, hsyncPanicBuf)
+	df.Write(0, hsyncPanicBuf)
 
 	// FSYNC split EOB paths (triggering line 142 + 128)
 	df.Configure((baseCfg & ^uint32(ocsd.DfrmtrFrameMemAlign)) | ocsd.DfrmtrHasFsyncs)
 	resetDecoder(df, t)
 	splitFsyncStartBuf := []byte{0xff, 0xff} // End of buffer start of FSYNC
-	df.TraceDataIn(ocsd.OpData, 0, splitFsyncStartBuf)
+	df.Write(0, splitFsyncStartBuf)
 	splitFsyncEndBuf := []byte{0xff, 0x7f, 0x10, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f}
-	df.TraceDataIn(ocsd.OpData, 2, splitFsyncEndBuf)
+	df.Write(2, splitFsyncEndBuf)
 
 	// FSYNC split EOB Error (triggering line 125)
 	resetDecoder(df, t)
-	df.TraceDataIn(ocsd.OpData, 0, splitFsyncStartBuf)
+	df.Write(0, splitFsyncStartBuf)
 	badFsyncEndBuf := []byte{0x00, 0x00, 0x10, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f}
-	df.TraceDataIn(ocsd.OpData, 2, badFsyncEndBuf)
+	df.Write(2, badFsyncEndBuf)
 
 	// Testing line 167 (Bad FSYNC start inside a frame)
 	df.Configure(baseCfg)
@@ -455,40 +428,40 @@ func TestDemuxEdgeCases(t *testing.T) {
 		0x04, 0x05, 0x06, 0x07,
 		0x08, 0x09, 0x0a, 0x0b,
 		0x0c, 0x0d, 0x0e, 0x0f}
-	df.TraceDataIn(ocsd.OpData, 0, badFsyncStartBuf)
+	df.Write(0, badFsyncStartBuf)
 
 	// FSYNC split EOB with extra spacing to satisfy line 125 block
 	df.Configure((baseCfg & ^uint32(ocsd.DfrmtrFrameMemAlign)) | ocsd.DfrmtrHasHsyncs | ocsd.DfrmtrHasFsyncs)
 	resetDecoder(df, t)
 	splitBadStartBuf := []byte{0xff, 0xff} // End of buffer start of FSYNC
-	df.TraceDataIn(ocsd.OpData, 0, splitBadStartBuf)
+	df.Write(0, splitBadStartBuf)
 	splitBadEndBuf := []byte{0x00, 0x00, 0x10, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f}
-	df.TraceDataIn(ocsd.OpData, 2, splitBadEndBuf) // Triggers bad HSYNC checking path inside line 125 block
+	df.Write(2, splitBadEndBuf) // Triggers bad HSYNC checking path inside line 125 block
 
 	// FSYNC split EOB Error, bufleft >= 2 valid
 	resetDecoder(df, t)
-	df.TraceDataIn(ocsd.OpData, 0, splitBadStartBuf)
+	df.Write(0, splitBadStartBuf)
 	validFsyncEndBuf := []byte{0xff, 0x7f, 0xff, 0xff, 0xff, 0x7f}
-	df.TraceDataIn(ocsd.OpData, 2, validFsyncEndBuf) // Triggers line 128 block
+	df.Write(2, validFsyncEndBuf) // Triggers line 128 block
 
 	// Force an empty buffer processing step during continuous path
 	resetDecoder(df, t)
-	df.TraceDataIn(ocsd.OpData, 0, []byte{})
+	df.Write(0, []byte{})
 
 	// FSYNC split EOB Error, bufleft >= 2 valid but NOT HSYNC_PATTERN
 	df.Configure((baseCfg & ^uint32(ocsd.DfrmtrFrameMemAlign)) | ocsd.DfrmtrHasHsyncs | ocsd.DfrmtrHasFsyncs)
 	resetDecoder(df, t)
-	df.TraceDataIn(ocsd.OpData, 0, splitBadStartBuf)
+	df.Write(0, splitBadStartBuf)
 	validFsyncEndBadHsyncBuf := []byte{0x7f, 0xff, 0xff, 0xff, 0xff, 0x7f} // NOT HSYNC pattern at start
-	df.TraceDataIn(ocsd.OpData, 2, validFsyncEndBadHsyncBuf)               // Triggers line 125 block
+	df.Write(2, validFsyncEndBadHsyncBuf)                                  // Triggers line 125 block
 
 	// FSYNC split EOB Error, bufleft == 2 and == FSYNC_START
 	df.Configure(baseCfg | ocsd.DfrmtrHasFsyncs)
 	resetDecoder(df, t)
 	fsyncEOBBufStart := []byte{0xff, 0xff, 0xff, 0x7f, 0xff, 0xff} // Full fsync + half fsync
-	df.TraceDataIn(ocsd.OpData, 0, fsyncEOBBufStart)
-	fsyncEOBBufEnd := []byte{0x00, 0x01}           // random trailing to hit 146 + 130
-	df.TraceDataIn(ocsd.OpData, 6, fsyncEOBBufEnd) // Triggers line 146 & 130
+	df.Write(0, fsyncEOBBufStart)
+	fsyncEOBBufEnd := []byte{0x00, 0x01} // random trailing to hit 146 + 130
+	df.Write(6, fsyncEOBBufEnd)          // Triggers line 146 & 130
 }
 
 func TestMemAlignAcceptsUnalignedChunks(t *testing.T) {
@@ -503,7 +476,7 @@ func TestMemAlignAcceptsUnalignedChunks(t *testing.T) {
 
 	for _, chunkLen := range chunks {
 		end := start + chunkLen
-		processed, err := df.TraceDataIn(ocsd.OpData, idx, buf[start:end])
+		processed, err := df.Write(idx, buf[start:end])
 		resp := ocsd.DataRespFromErr(err)
 		if processed != uint32(chunkLen) {
 			t.Fatalf("expected to consume full chunk (%d), got %d", chunkLen, processed)
@@ -531,15 +504,15 @@ func TestRunHSyncFSyncTest(t *testing.T) {
 	// 1
 	resetDecoder(df, t)
 	buf1 := makeBufHsyncFsync()
-	processed, _ := df.TraceDataIn(ocsd.OpData, 0, buf1)
+	processed, _ := df.Write(0, buf1)
 	if processed != uint32(len(buf1)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf1), processed)
 	}
 
 	// 2 split
 	resetDecoder(df, t)
-	processed1, _ := df.TraceDataIn(ocsd.OpData, 0, buf1[:2])
-	processed2, _ := df.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(processed1), buf1[processed1:])
+	processed1, _ := df.Write(0, buf1[:2])
+	processed2, _ := df.Write(ocsd.TrcIndex(processed1), buf1[processed1:])
 	if processed1+processed2 != uint32(len(buf1)) {
 		t.Errorf("Size mismatch: in=%d out=%d", len(buf1), processed1+processed2)
 	}
@@ -547,7 +520,7 @@ func TestRunHSyncFSyncTest(t *testing.T) {
 	// 3 bad input
 	resetDecoder(df, t)
 	bufBad := makeBufBadData()
-	_, inErr := df.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(len(buf1)), bufBad)
+	_, inErr := df.Write(ocsd.TrcIndex(len(buf1)), bufBad)
 	resp := ocsd.DataRespFromErr(inErr)
 	if resp != ocsd.RespFatalInvalidData || !errors.Is(inErr, ocsd.ErrDfrmtrBadFhsync) {
 		t.Errorf("Expected RespFatalInvalidData and ErrDfrmtrBadFhsync, got resp=%v err=%v", resp, inErr)
@@ -563,7 +536,7 @@ func TestRunDemuxBadDataTest(t *testing.T) {
 
 	resetDecoder(df, t)
 	bufBad := makeBufBadData()
-	_, inErr := df.TraceDataIn(ocsd.OpData, 0, bufBad)
+	_, inErr := df.Write(0, bufBad)
 	resp := ocsd.DataRespFromErr(inErr)
 	if resp != ocsd.RespFatalInvalidData || !errors.Is(inErr, ocsd.ErrDfrmtrBadFhsync) {
 		t.Errorf("Expected RespFatalInvalidData and ErrDfrmtrBadFhsync, got resp=%v err=%v", resp, inErr)
@@ -580,7 +553,7 @@ func TestDemuxWaitResumeWithFlush(t *testing.T) {
 	df.SetIDStream(0x10, sink)
 
 	buf := makeBufMemAlign()
-	processed, err := df.TraceDataIn(ocsd.OpData, 0, buf)
+	processed, err := df.Write(0, buf)
 	resp := ocsd.DataRespFromErr(err)
 	if err != nil && !ocsd.IsDataWaitErr(err) {
 		t.Fatalf("TraceDataIn OpData returned error: %v", err)
@@ -596,7 +569,7 @@ func TestDemuxWaitResumeWithFlush(t *testing.T) {
 	}
 
 	beforeFlushTotal := sink.total
-	_, flushErr := df.TraceDataIn(ocsd.OpFlush, 0, nil)
+	flushErr := df.Flush()
 	flushResp := ocsd.DataRespFromErr(flushErr)
 	if flushErr != nil {
 		t.Fatalf("TraceDataIn OpFlush returned error: %v", flushErr)

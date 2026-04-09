@@ -11,24 +11,13 @@ import (
 
 type fakeDataIn struct{}
 
-func (f *fakeDataIn) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+func (f *fakeDataIn) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	return uint32(len(dataBlock)), nil
 }
-
-func (f *fakeDataIn) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	return f.TraceDataIn(ocsd.OpData, index, dataBlock)
-}
-func (f *fakeDataIn) Close() error {
-	_, err := f.TraceDataIn(ocsd.OpEOT, 0, nil)
-	return err
-}
-func (f *fakeDataIn) Flush() error {
-	_, err := f.TraceDataIn(ocsd.OpFlush, 0, nil)
-	return err
-}
+func (f *fakeDataIn) Close() error { return nil }
+func (f *fakeDataIn) Flush() error { return nil }
 func (f *fakeDataIn) Reset(index ocsd.TrcIndex) error {
-	_, err := f.TraceDataIn(ocsd.OpReset, index, nil)
-	return err
+	return nil
 }
 
 type fakeManager struct{ appliedFlags uint32 }
@@ -178,7 +167,7 @@ func TestDecodeTreeTraceDataInContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	processed, err := tree.TraceDataInContext(ctx, ocsd.OpData, 0, []byte{0xAA})
+	processed, err := tree.WriteContext(ctx, 0, []byte{0xAA})
 	if processed != 0 {
 		t.Fatalf("expected zero processed bytes, got %d", processed)
 	}

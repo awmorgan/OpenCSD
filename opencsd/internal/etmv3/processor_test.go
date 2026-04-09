@@ -24,13 +24,6 @@ type capturePktSink struct {
 	packets []Packet
 }
 
-func (c *capturePktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) error {
-	if op == ocsd.OpData && pkt != nil {
-		c.packets = append(c.packets, *pkt)
-	}
-	return nil
-}
-
 func (c *capturePktSink) Write(indexSOP ocsd.TrcIndex, pkt *Packet) error {
 	if pkt != nil {
 		c.packets = append(c.packets, *pkt)

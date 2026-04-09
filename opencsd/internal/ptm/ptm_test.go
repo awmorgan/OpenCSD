@@ -91,10 +91,6 @@ func makeAsyncBlock() []byte {
 // noopPktSink is a no-op packet receiver that just swallows packets without decoding.
 type noopPktSink struct{}
 
-func (n *noopPktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) error {
-	return nil
-}
-
 func (n *noopPktSink) Write(indexSOP ocsd.TrcIndex, pkt *Packet) error { return nil }
 func (n *noopPktSink) Close() error                                    { return nil }
 func (n *noopPktSink) Flush() error                                    { return nil }

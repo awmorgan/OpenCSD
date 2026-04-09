@@ -26,7 +26,7 @@ var (
 //
 // IMPORTANT: DecodeTree is strictly thread-unsafe. The underlying elements map
 // (decodeElements) is written to during CreateFullDecoder/RemoveDecoder
-// and read from during TraceDataIn. Concurrent configuration and data processing
+// and read from during Write. Concurrent configuration and data processing
 // will result in a runtime panic.
 type DecodeTree struct {
 	treeType         ocsd.DcdTreeSrc
@@ -67,13 +67,13 @@ func (dt *DecodeTree) Destroy() {
 	}
 }
 
-// TraceDataIn handles incoming raw byte trace streams into the tree.
-func (dt *DecodeTree) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, error) {
-	return dt.TraceDataInContext(context.Background(), op, index, data)
+// Write handles incoming raw byte trace streams into the tree.
+func (dt *DecodeTree) Write(index ocsd.TrcIndex, data []byte) (uint32, error) {
+	return dt.WriteContext(context.Background(), index, data)
 }
 
-// TraceDataInContext handles incoming raw byte trace streams into the tree with cancellation support.
-func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, error) {
+// WriteContext handles incoming raw byte trace streams into the tree with cancellation support.
+func (dt *DecodeTree) WriteContext(ctx context.Context, index ocsd.TrcIndex, data []byte) (uint32, error) {
 	if ctx != nil {
 		select {
 		case <-ctx.Done():
@@ -83,28 +83,13 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 	}
 
 	const processChunk = 64 * 1024
-	callTraceData := func(proc ocsd.TraceDecoder, op ocsd.DatapathOp, index ocsd.TrcIndex, data []byte) (uint32, error) {
-		switch op {
-		case ocsd.OpData:
-			return proc.Write(index, data)
-		case ocsd.OpEOT:
-			return 0, proc.Close()
-		case ocsd.OpFlush:
-			return 0, proc.Flush()
-		case ocsd.OpReset:
-			return 0, proc.Reset(index)
-		default:
-			return 0, ocsd.ErrInvalidParamVal
-		}
-	}
 
 	processWithContext := func(proc ocsd.TraceDecoder) (uint32, error) {
 		if proc == nil {
 			return 0, ocsd.ErrNotInit
 		}
-		if ctx == nil || op != ocsd.OpData || len(data) <= processChunk {
-			processed, err := callTraceData(proc, op, index, data)
-			return processed, err
+		if ctx == nil || len(data) <= processChunk {
+			return proc.Write(index, data)
 		}
 
 		var total uint32
@@ -118,7 +103,7 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 			end := min(offset+processChunk, len(data))
 
 			chunkIdx := index + ocsd.TrcIndex(offset)
-			amt, err := callTraceData(proc, op, chunkIdx, data[offset:end])
+			amt, err := proc.Write(chunkIdx, data[offset:end])
 			total += amt
 			if !ocsd.DataRespIsCont(ocsd.DataRespFromErr(err)) {
 				return total, err
@@ -143,6 +128,48 @@ func (dt *DecodeTree) TraceDataInContext(ctx context.Context, op ocsd.DatapathOp
 		}
 	}
 	return 0, ocsd.ErrNotInit
+}
+
+// Flush forwards flush control directly to the decoder root.
+func (dt *DecodeTree) Flush() error {
+	if dt.decoderRoot != nil {
+		return dt.decoderRoot.Flush()
+	}
+	if dt.treeType == ocsd.TrcSrcSingle {
+		elem := dt.decodeElements[0]
+		if elem != nil && elem.DataIn != nil {
+			return elem.DataIn.Flush()
+		}
+	}
+	return ocsd.ErrNotInit
+}
+
+// Reset forwards reset control directly to the decoder root.
+func (dt *DecodeTree) Reset(index ocsd.TrcIndex) error {
+	if dt.decoderRoot != nil {
+		return dt.decoderRoot.Reset(index)
+	}
+	if dt.treeType == ocsd.TrcSrcSingle {
+		elem := dt.decodeElements[0]
+		if elem != nil && elem.DataIn != nil {
+			return elem.DataIn.Reset(index)
+		}
+	}
+	return ocsd.ErrNotInit
+}
+
+// Close forwards end-of-trace control directly to the decoder root.
+func (dt *DecodeTree) Close() error {
+	if dt.decoderRoot != nil {
+		return dt.decoderRoot.Close()
+	}
+	if dt.treeType == ocsd.TrcSrcSingle {
+		elem := dt.decodeElements[0]
+		if elem != nil && elem.DataIn != nil {
+			return elem.DataIn.Close()
+		}
+	}
+	return ocsd.ErrNotInit
 }
 
 // AddPullDecoder registers decoder input routing and pull-based output iteration into the tree.

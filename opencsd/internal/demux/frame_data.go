@@ -298,7 +298,7 @@ func (d *FrameDeformatter) outputFrame(outErr error) (bool, error) {
 						d.outData[d.outProcessed].data[:d.outData[d.outProcessed].valid],
 						id)
 				}
-				bytesUsed, err := d.callIDStream(dataIn, ocsd.OpData,
+				bytesUsed, err := d.callIDStream(dataIn,
 					d.outData[d.outProcessed].index+ocsd.TrcIndex(d.outData[d.outProcessed].used),
 					d.outData[d.outProcessed].data[d.outData[d.outProcessed].used:d.outData[d.outProcessed].valid])
 
