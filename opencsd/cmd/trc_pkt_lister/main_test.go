@@ -127,17 +127,24 @@ func TestTraceListerGoldens(t *testing.T) {
 			gotLines := strings.Split(got, "\n")
 			wantLines := strings.Split(want, "\n")
 
-			wantPackets, wantElements := splitOutput(wantLines)
-			gotPackets, gotElements := splitOutput(gotLines)
+			wantPackets, wantElementsByID := splitOutput(wantLines)
+			gotPackets, gotElementsByID := splitOutput(gotLines)
 
 			// Check packets against C++ packets
 			if diffIdx, gotLine, wantLine := firstDiff(gotPackets, wantPackets); diffIdx != 0 {
 				t.Errorf("Packet mismatch at packet %d\nwant: %s\n got: %s", diffIdx, wantLine, gotLine)
 			}
 
-			// Check elements against C++ elements
-			if diffIdx, gotLine, wantLine := firstDiff(gotElements, wantElements); diffIdx != 0 {
-				t.Errorf("Element mismatch at element %d\nwant: %s\n got: %s", diffIdx, wantLine, gotLine)
+			// Check elements against C++ elements per ID stream
+			for id, wantElems := range wantElementsByID {
+				gotElems := gotElementsByID[id]
+				if diffIdx, gotLine, wantLine := firstDiff(gotElems, wantElems); diffIdx != 0 {
+					t.Errorf("Element mismatch on ID:%s at element %d\nwant: %s\n got: %s", id, diffIdx, wantLine, gotLine)
+				}
+			}
+
+			if t.Failed() {
+				t.FailNow()
 			}
 
 			if t.Failed() {
@@ -191,11 +198,7 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 		{decoder: "ete", goldenName: "trace_file_vmid", snapshotName: "trace_file_vmid"},
 		{decoder: "ete", goldenName: "ts_bit64_set", snapshotName: "ts_bit64_set"},
 		{decoder: "ete", goldenName: "ts_marker", snapshotName: "ts_marker"},
-		{
-			decoder: "etmv3", goldenName: "TC2", snapshotName: "TC2",
-			//todo: remove this (and others)
-			normalizeReason: "legacy ETMv3 TC2 packet-vs-generic-element sequencing mismatch around P-header emission",
-		},
+		{decoder: "etmv3", goldenName: "TC2", snapshotName: "TC2"},
 		{
 			decoder: "etmv4", goldenName: "a55-test-tpiu", snapshotName: "a55-test-tpiu",
 			normalizeReason: "legacy ETMv4 packet formatting instability (raw-byte prefix presence differs)",
@@ -226,10 +229,7 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 		{decoder: "itm", goldenName: "itm_only_csformat", snapshotName: "itm_only_csformat"},
 		{decoder: "itm", goldenName: "itm_only_raw", snapshotName: "itm_only_raw"},
 		{decoder: "ptm", goldenName: "Snowball", snapshotName: "Snowball"},
-		{
-			decoder: "ptm", goldenName: "TC2", snapshotName: "TC2",
-			normalizeReason: "legacy PTM TC2 packet-vs-generic-element sequencing mismatch around P-header emission",
-		},
+		{decoder: "ptm", goldenName: "TC2", snapshotName: "TC2"},
 		{decoder: "ptm", goldenName: "tc2-ptm-rstk-t32", snapshotName: "tc2-ptm-rstk-t32"},
 		{decoder: "ptm", goldenName: "trace_cov_a15", snapshotName: "trace_cov_a15"},
 		{decoder: "stm", goldenName: "stm-issue-27", snapshotName: "stm-issue-27"}, {decoder: "stm", goldenName: "stm_only-2", snapshotName: "stm_only-2"},
@@ -1009,18 +1009,23 @@ func TestMapMemoryRangesDuplicateSemanticMappingIgnored(t *testing.T) {
 	}
 }
 
-// splitOutput takes a slice of text lines and separates them into two independent streams.
-func splitOutput(lines []string) (packets []string, elements []string) {
+func splitOutput(lines []string) (packets []string, elementsByID map[string][]string) {
+	elementsByID = make(map[string][]string)
 	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
 			continue
 		}
-		// Trace elements usually have this prefix or contain "Trace Event"
 		if strings.Contains(line, "OCSD_GEN_TRC_ELEM") || strings.Contains(line, "Trace Event") {
-			elements = append(elements, line)
-		} else if strings.HasPrefix(strings.TrimSpace(line), "Idx:") {
+			id := "unknown"
+			// reExtractID is already defined at the top of your main_test.go
+			if m := reExtractID.FindStringSubmatch(line); len(m) == 2 {
+				id = strings.ToLower(m[1])
+			}
+			elementsByID[id] = append(elementsByID[id], line)
+		} else if strings.HasPrefix(trimmed, "Idx:") {
 			packets = append(packets, line)
 		}
 	}
-	return packets, elements
+	return packets, elementsByID
 }
