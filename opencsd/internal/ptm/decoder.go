@@ -239,47 +239,38 @@ func (d *PktDecode) InvalidateMemAccCache(traceID uint8) error {
 }
 
 func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pktIn *Packet) error {
-	resp := ocsd.RespCont
-	var err error
-
 	switch op {
 	case ocsd.OpData:
 		if pktIn == nil {
-			err = ocsd.ErrInvalidParamVal
-			resp = ocsd.RespFatalInvalidParam
-		} else {
-			d.CurrPacketIn = pktIn
-			d.IndexCurrPkt = indexSOP
-			d.collectElements = true
-			resp = d.ProcessPacket()
-			d.collectElements = false
-			// Drain queued elements only when using legacy push sink wiring.
-			if ocsd.DataRespIsCont(resp) && d.traceElemOut != nil {
-				err = nil
-				for {
-					_, _, _, nextErr := d.NextElement()
-					if errors.Is(nextErr, io.EOF) {
-						break
-					}
-					if nextErr != nil {
-						err = nextErr
-						resp = ocsd.DataRespFromErr(err)
-						break
-					}
+			return ocsd.ErrInvalidParamVal
+		}
+		d.CurrPacketIn = pktIn
+		d.IndexCurrPkt = indexSOP
+		d.collectElements = true
+		resp := d.ProcessPacket()
+		d.collectElements = false
+		// Drain queued elements only when using legacy push sink wiring.
+		if ocsd.DataRespIsCont(resp) && d.traceElemOut != nil {
+			for {
+				_, _, _, nextErr := d.NextElement()
+				if errors.Is(nextErr, io.EOF) {
+					break
+				}
+				if nextErr != nil {
+					return nextErr
 				}
 			}
 		}
+		return ocsd.DataErrFromResp(resp, nil)
 	case ocsd.OpEOT:
-		resp = d.OnEOT()
+		return ocsd.DataErrFromResp(d.OnEOT(), nil)
 	case ocsd.OpFlush:
-		resp = d.OnFlush()
+		return ocsd.DataErrFromResp(d.OnFlush(), nil)
 	case ocsd.OpReset:
-		resp = d.OnReset()
+		return ocsd.DataErrFromResp(d.OnReset(), nil)
 	default:
-		err = ocsd.ErrInvalidParamVal
-		resp = ocsd.RespFatalInvalidOp
+		return ocsd.ErrInvalidParamVal
 	}
-	return ocsd.DataErrFromResp(resp, err)
 }
 
 // TracePacketData is the explicit packet data entrypoint used by split interfaces.
