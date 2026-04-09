@@ -110,11 +110,20 @@ func (p *Processor) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlo
 	case ocsd.OpData:
 		return p.processData(index, dataBlock)
 	case ocsd.OpEOT:
-		return 0, ocsd.DataErrFromResp(p.onEOT(), nil)
+		if err := p.onEOT(); err != nil && !errors.Is(err, ocsd.ErrWait) {
+			return 0, err
+		}
+		return 0, nil
 	case ocsd.OpReset:
-		return 0, ocsd.DataErrFromResp(p.onReset(), nil)
+		if err := p.onReset(); err != nil && !errors.Is(err, ocsd.ErrWait) {
+			return 0, err
+		}
+		return 0, nil
 	case ocsd.OpFlush:
-		return 0, ocsd.DataErrFromResp(p.onFlush(), nil)
+		if err := p.onFlush(); err != nil && !errors.Is(err, ocsd.ErrWait) {
+			return 0, err
+		}
+		return 0, nil
 	}
 	return 0, nil
 }
@@ -167,16 +176,16 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 
 	p.blockIndex = index
 	p.blockBytesProcessed = 0
-	resp := ocsd.RespCont
+	var outErr error
 	consumed := 0
 
-	for ocsd.DataRespIsCont(resp) {
+	for outErr == nil {
 		if consumed >= len(dataBlock) {
 			break
 		}
 
 		if p.stream.dump {
-			resp = p.outputUnsyncedRawPacket()
+			outErr = p.outputUnsyncedRawPacket()
 			if p.stream.updateOnUnsyncPktIdx != 0 {
 				p.packetIndex = p.stream.updateOnUnsyncPktIdx
 				p.stream.startIdx = p.packetIndex
@@ -186,30 +195,27 @@ func (p *Processor) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, 
 			continue
 		}
 
-		var err error
 		if p.isSync {
-			resp, consumed, err = p.processSyncedDataBlock(dataBlock, consumed)
-			if err != nil {
-				return uint32(consumed), err
+			consumed, outErr = p.processSyncedDataBlock(dataBlock, consumed)
+			if outErr != nil {
+				return uint32(consumed), outErr
 			}
 			p.blockBytesProcessed = consumed
 			continue
 		}
 
-		resp, consumed, err = p.processUnsyncedBlock(dataBlock, consumed)
-		if err != nil {
-			return uint32(consumed), err
+		consumed, outErr = p.processUnsyncedBlock(dataBlock, consumed)
+		if outErr != nil {
+			return uint32(consumed), outErr
 		}
 	}
 
-	return uint32(consumed), ocsd.DataErrFromResp(resp, nil)
+	return uint32(consumed), outErr
 }
 
-func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd.DatapathResp, int, error) {
-	resp := ocsd.RespCont
-
+func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (int, error) {
 	if !p.isSync || p.stream.dump {
-		return resp, consumed, nil
+		return consumed, nil
 	}
 
 	if len(p.stream.data) == 0 {
@@ -222,15 +228,14 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 			rawData := dataBlock[consumed : consumed+bytesConsumed]
 			consumed += bytesConsumed
 			p.blockBytesProcessed = consumed
-			resp = p.emitDecodedPacket(pkt, rawData)
-			return resp, consumed, nil
+			return consumed, p.emitDecodedPacket(pkt, rawData)
 		case errors.Is(err, errDecodeNeedMoreData):
 			p.stream.startIdx = packetIndex
 			p.packetIndex = p.stream.startIdx
 			p.stream.data = append(p.stream.data[:0], dataBlock[consumed:]...)
-			return resp, len(dataBlock), nil
+			return len(dataBlock), nil
 		default:
-			return resp, consumed, err
+			return consumed, err
 		}
 	}
 
@@ -250,30 +255,27 @@ func (p *Processor) processSyncedDataBlock(dataBlock []byte, consumed int) (ocsd
 		bytesFromBlock := bytesConsumed - len(p.stream.data)
 
 		p.packetIndex = packetIndex
-		resp = p.emitDecodedPacket(pkt, tempBuf[:bytesConsumed])
+		outErr := p.emitDecodedPacket(pkt, tempBuf[:bytesConsumed])
 
 		// Advance consumed, clear the cross-block buffer, and return to the fast path!
 		consumed += bytesFromBlock
 		p.blockBytesProcessed = consumed
 		p.stream.data = p.stream.data[:0]
-		return resp, consumed, nil
+		return consumed, outErr
 
 	case errors.Is(err, errDecodeNeedMoreData):
 		// Still incomplete. The packet spans across yet another block.
 		p.stream.data = append(p.stream.data, dataBlock[consumed:]...)
-		return resp, len(dataBlock), nil
+		return len(dataBlock), nil
 
 	default:
-		return resp, consumed, err
+		return consumed, err
 	}
-
 }
 
-func (p *Processor) processUnsyncedBlock(dataBlock []byte, consumed int) (ocsd.DatapathResp, int, error) {
-	resp := ocsd.RespCont
-
+func (p *Processor) processUnsyncedBlock(dataBlock []byte, consumed int) (int, error) {
 	if consumed >= len(dataBlock) {
-		return resp, consumed, nil
+		return consumed, nil
 	}
 
 	if len(p.stream.data) == 0 {
@@ -303,27 +305,27 @@ func (p *Processor) processUnsyncedBlock(dataBlock []byte, consumed int) (ocsd.D
 		consumed++
 		p.blockBytesProcessed = consumed
 
-		// Pass the window explicitly to our newly parameterized helpers
+		// Pass the window explicitly to our parameterised helpers
 		done, pkt := p.processUnsyncedByte(window, nextByte)
 
 		if done {
-			resp = p.emitPendingPacket(pkt, window)
+			outErr := p.emitPendingPacket(pkt, window)
 			p.stream.data = p.stream.data[:0] // Sequence resolved, clear the buffer!
-			return resp, consumed, nil
+			return consumed, outErr
 		}
 
 		if p.stream.dump {
 			// The dump logic needs to know exactly what to dump.
 			// We hand off our current window and exit.
 			p.stream.data = window
-			return resp, consumed, nil
+			return consumed, nil
 		}
 	}
 
 	// We exhausted the block but didn't resolve the sequence.
 	// Save the contiguous buffer for the next TraceDataIn call.
 	p.stream.data = tempBuf
-	return resp, consumed, nil
+	return consumed, nil
 }
 
 func packetTypeForHeader(config Config, header uint8) PktType {
@@ -2052,24 +2054,24 @@ func decodeAtomPacket(header uint8) (PktType, ocsd.PktAtom, bool) {
 	}
 }
 
-func (p *Processor) onEOT() ocsd.DatapathResp {
+func (p *Processor) onEOT() error {
 	if !p.isInit {
-		return ocsd.RespFatalNotInit
+		return ocsd.ErrNotInit
 	}
 
-	resp := ocsd.RespCont
+	var outErr error
 	if len(p.stream.data) != 0 {
 		pending := p.pendingPacketForEOT()
 		pending.Err = errIncompleteEOT
-		resp = p.emitPendingPacket(pending, p.stream.data)
+		outErr = p.emitPendingPacket(pending, p.stream.data)
 		p.resetPacketState()
 	}
 
-	if p.pktOut != nil && !ocsd.DataRespIsFatal(resp) {
-		resp = ocsd.DataRespFromErr(p.callPktOut(ocsd.OpEOT, 0, nil))
+	if p.pktOut != nil && outErr == nil {
+		outErr = p.callPktOut(ocsd.OpEOT, 0, nil)
 	}
 
-	return resp
+	return outErr
 }
 
 func (p *Processor) pendingPacketForEOT() Packet {
@@ -2083,31 +2085,30 @@ func (p *Processor) pendingPacketForEOT() Packet {
 	return Packet{Type: typeOnly}
 }
 
-func (p *Processor) onReset() ocsd.DatapathResp {
+func (p *Processor) onReset() error {
 	if !p.isInit {
-		return ocsd.RespFatalNotInit
+		return ocsd.ErrNotInit
 	}
 
-	resp := ocsd.RespCont
+	var outErr error
 	if p.pktOut != nil {
-		resp = ocsd.DataRespFromErr(p.callPktOut(ocsd.OpReset, 0, nil))
+		outErr = p.callPktOut(ocsd.OpReset, 0, nil)
 	}
-	if !ocsd.DataRespIsFatal(resp) {
+	if outErr == nil {
 		p.resetProcessorState()
 	}
-	return resp
+	return outErr
 }
 
-func (p *Processor) onFlush() ocsd.DatapathResp {
+func (p *Processor) onFlush() error {
 	if !p.isInit {
-		return ocsd.RespFatalNotInit
+		return ocsd.ErrNotInit
 	}
 
-	resp := ocsd.RespCont
 	if p.pktOut != nil {
-		resp = ocsd.DataRespFromErr(p.callPktOut(ocsd.OpFlush, 0, nil))
+		return p.callPktOut(ocsd.OpFlush, 0, nil)
 	}
-	return resp
+	return nil
 }
 
 func (p *Processor) resetStartState() {
@@ -2151,39 +2152,38 @@ func (p *Processor) clearStateTransient() {
 	p.statePacket.TraceInfo.SpecFieldPresent = false
 }
 
-func (p *Processor) outputPacket(pkt *TracePacket, rawData []byte) ocsd.DatapathResp {
+func (p *Processor) outputPacket(pkt *TracePacket, rawData []byte) error {
 	if p.PktRawMonI != nil {
 		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, p.packetIndex, pkt, rawData)
 	}
 	if p.pktOut == nil {
-		return ocsd.RespCont
+		return nil
 	}
 	pktCopy := *pkt
-	resp := ocsd.DataRespFromErr(p.callPktOut(ocsd.OpData, p.packetIndex, &pktCopy)) //nolint:gosec
-	return resp
+	return p.callPktOut(ocsd.OpData, p.packetIndex, &pktCopy)
 }
 
-func (p *Processor) emitDecodedPacket(pkt Packet, rawData []byte) ocsd.DatapathResp {
+func (p *Processor) emitDecodedPacket(pkt Packet, rawData []byte) error {
 	out := p.statePacket
 	p.applyDecodedPacket(&out, pkt)
-	resp := p.outputPacket(&out, rawData)
+	err := p.outputPacket(&out, rawData)
 	p.statePacket = out
 	p.clearStateTransient()
 	p.stream.reset()
-	return resp
+	return err
 }
 
-func (p *Processor) emitPendingPacket(pkt Packet, rawData []byte) ocsd.DatapathResp {
+func (p *Processor) emitPendingPacket(pkt Packet, rawData []byte) error {
 	out := p.statePacket
 	out.Type = pkt.Type
 	out.Err = pkt.Err
 	out.ErrHdrVal = pkt.ErrHdrVal
-	resp := p.outputPacket(&out, rawData)
+	err := p.outputPacket(&out, rawData)
 	p.stream.reset()
-	return resp
+	return err
 }
 
-func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
+func (p *Processor) outputUnsyncedRawPacket() error {
 	n := p.stream.dumpBytes
 	pkt := p.statePacket
 	pkt.Type = p.pendingUnsyncedPacketType(p.stream.data)
@@ -2193,10 +2193,10 @@ func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
 		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, p.packetIndex, &pkt, p.stream.data[:monBytes])
 	}
 
-	resp := ocsd.RespCont
+	var err error
 	if !p.sentNotsyncPacket {
 		if p.pktOut != nil {
-			resp = ocsd.DataRespFromErr(p.callPktOut(ocsd.OpData, p.packetIndex, &pkt))
+			err = p.callPktOut(ocsd.OpData, p.packetIndex, &pkt)
 		}
 		p.sentNotsyncPacket = true
 	}
@@ -2206,7 +2206,7 @@ func (p *Processor) outputUnsyncedRawPacket() ocsd.DatapathResp {
 	} else {
 		p.stream.data = p.stream.data[:0]
 	}
-	return resp
+	return err
 }
 
 func (p *Processor) pendingUnsyncedPacketType(data []byte) PktType {
