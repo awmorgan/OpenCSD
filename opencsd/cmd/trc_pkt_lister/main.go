@@ -146,13 +146,8 @@ func (w *synchronizedWriter) Write(p []byte) (int, error) {
 
 func (p *genericRawPrinter) SetMute(bool) {}
 
-func (p *genericRawPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
-	if op == ocsd.OpEOT {
-		fmt.Fprintf(p.writer, "ID:%x\tEND OF TRACE DATA\n", p.id)
-		return
-	}
-
-	if op != ocsd.OpData || len(rawData) == 0 {
+func (p *genericRawPrinter) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
+	if len(rawData) == 0 {
 		return
 	}
 
@@ -167,6 +162,12 @@ func (p *genericRawPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.T
 	}
 	fmt.Fprintf(p.writer, "];\t%s\n", formattedPkt)
 }
+
+func (p *genericRawPrinter) MonitorEOT() {
+	fmt.Fprintf(p.writer, "ID:%x\tEND OF TRACE DATA\n", p.id)
+}
+
+func (p *genericRawPrinter) MonitorReset(indexSOP ocsd.TrcIndex) {}
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {

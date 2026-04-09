@@ -21,7 +21,9 @@ type PacketProcessor[P any] interface {
 
 // PacketMonitor provides packet monitor functionality off the decode path.
 type PacketMonitor interface {
-	RawPacketDataMon(op DatapathOp, indexSOP TrcIndex, pkt fmt.Stringer, rawData []byte)
+	MonitorRawData(indexSOP TrcIndex, pkt fmt.Stringer, rawData []byte)
+	MonitorEOT()
+	MonitorReset(indexSOP TrcIndex)
 }
 
 // GenElemProcessor is the input interface for generic trace elements.
@@ -31,5 +33,8 @@ type GenElemProcessor interface {
 
 // RawFrameProcessor is the input interface for raw frame bytes.
 type RawFrameProcessor interface {
-	TraceRawFrameIn(op DatapathOp, index TrcIndex, frameElem RawframeElem, data []byte, traceID uint8) error
+	WriteRawFrame(index TrcIndex, frameElem RawframeElem, data []byte, traceID uint8) error
+	FlushRawFrames() error
+	ResetRawFrames() error
+	CloseRawFrames() error
 }

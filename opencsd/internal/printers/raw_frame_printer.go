@@ -21,51 +21,61 @@ func NewRawFramePrinter(writer io.Writer) *RawFramePrinter {
 	}
 }
 
-// TraceRawFrameIn responds to the RawFrameProcessor datapath interface.
-func (p *RawFramePrinter) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, frameElem ocsd.RawframeElem, data []byte, traceID uint8) error {
+// WriteRawFrame responds to raw frame data callbacks.
+func (p *RawFramePrinter) WriteRawFrame(index ocsd.TrcIndex, frameElem ocsd.RawframeElem, data []byte, traceID uint8) error {
 	if p.IsMuted() {
 		return nil
 	}
 
-	if op == ocsd.OpData { // only interested in actual frame data
-		var sb strings.Builder
+	var sb strings.Builder
 
-		sb.WriteString(fmt.Sprintf("Frame Data; Index%7d; ", index))
+	sb.WriteString(fmt.Sprintf("Frame Data; Index%7d; ", index))
 
-		switch frameElem {
-		case ocsd.FrmPacked:
-			fmt.Fprintf(&sb, "%15s", "RAW_PACKED; ")
-		case ocsd.FrmHsync:
-			fmt.Fprintf(&sb, "%15s", "HSYNC; ")
-		case ocsd.FrmFsync:
-			fmt.Fprintf(&sb, "%15s", "FSYNC; ")
-		case ocsd.FrmIDData:
-			fmt.Fprintf(&sb, "%10s", "ID_DATA[")
-			if traceID == ocsd.BadCSSrcID {
-				sb.WriteString("????")
-			} else {
-				fmt.Fprintf(&sb, "0x%02x", traceID)
-			}
-			sb.WriteString("]; ")
-		default:
-			fmt.Fprintf(&sb, "%15s", "UNKNOWN; ")
+	switch frameElem {
+	case ocsd.FrmPacked:
+		fmt.Fprintf(&sb, "%15s", "RAW_PACKED; ")
+	case ocsd.FrmHsync:
+		fmt.Fprintf(&sb, "%15s", "HSYNC; ")
+	case ocsd.FrmFsync:
+		fmt.Fprintf(&sb, "%15s", "FSYNC; ")
+	case ocsd.FrmIDData:
+		fmt.Fprintf(&sb, "%10s", "ID_DATA[")
+		if traceID == ocsd.BadCSSrcID {
+			sb.WriteString("????")
+		} else {
+			fmt.Fprintf(&sb, "0x%02x", traceID)
 		}
-
-		// Process byte data if available
-		if len(data) > 0 {
-			lineBytes := 0
-			for i := range data {
-				if lineBytes == 16 {
-					sb.WriteString("\n")
-					lineBytes = 0
-				}
-				sb.WriteString(fmt.Sprintf("%02x ", data[i]))
-				lineBytes++
-			}
-		}
-		sb.WriteString("\n")
-		p.ItemPrintLine(sb.String())
+		sb.WriteString("]; ")
+	default:
+		fmt.Fprintf(&sb, "%15s", "UNKNOWN; ")
 	}
 
+	// Process byte data if available
+	if len(data) > 0 {
+		lineBytes := 0
+		for i := range data {
+			if lineBytes == 16 {
+				sb.WriteString("\n")
+				lineBytes = 0
+			}
+			sb.WriteString(fmt.Sprintf("%02x ", data[i]))
+			lineBytes++
+		}
+	}
+	sb.WriteString("\n")
+	p.ItemPrintLine(sb.String())
+
+	return nil
+}
+
+func (p *RawFramePrinter) FlushRawFrames() error {
+	return nil
+}
+
+func (p *RawFramePrinter) ResetRawFrames() error {
+	return nil
+}
+
+func (p *RawFramePrinter) CloseRawFrames() error {
 	return nil
 }

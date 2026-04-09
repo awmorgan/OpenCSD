@@ -69,8 +69,8 @@ func makeMemRegionAccessCB(cbCtx *memRegionCallbackCtx) ocsd.MemAccessor {
 	}
 }
 
-func (p *etmv4RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
-	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
+func (p *etmv4RawPacketPrinter) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
+	if p.writer == nil || pkt == nil || len(rawData) == 0 {
 		return
 	}
 	etmPkt, ok := pkt.(*etmv4.TracePacket)
@@ -88,6 +88,10 @@ func (p *etmv4RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP oc
 	sb.WriteString(" : description\n")
 	_, _ = io.WriteString(p.writer, sb.String())
 }
+
+func (p *etmv4RawPacketPrinter) MonitorEOT() {}
+
+func (p *etmv4RawPacketPrinter) MonitorReset(indexSOP ocsd.TrcIndex) {}
 
 func (m *mapperAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
 	buf := make([]byte, reqBytes)

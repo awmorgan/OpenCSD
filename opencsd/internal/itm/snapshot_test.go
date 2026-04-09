@@ -23,8 +23,8 @@ type itmRawPacketPrinter struct {
 	traceID uint8
 }
 
-func (p *itmRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
-	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
+func (p *itmRawPacketPrinter) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
+	if p.writer == nil || pkt == nil || len(rawData) == 0 {
 		return
 	}
 	itmPkt, ok := pkt.(*itm.Packet)
@@ -43,6 +43,10 @@ func (p *itmRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd
 	sb.WriteString("\n")
 	_, _ = io.WriteString(p.writer, sb.String())
 }
+
+func (p *itmRawPacketPrinter) MonitorEOT() {}
+
+func (p *itmRawPacketPrinter) MonitorReset(indexSOP ocsd.TrcIndex) {}
 
 func itmPacketTypeName(t itm.PktType) string {
 	switch t {

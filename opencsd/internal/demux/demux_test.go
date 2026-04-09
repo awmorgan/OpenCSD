@@ -225,11 +225,7 @@ type mockRawSink struct {
 	out *bytes.Buffer
 }
 
-func (m *mockRawSink) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, frameElem ocsd.RawframeElem, data []byte, traceID uint8) error {
-	if op != ocsd.OpData {
-		return nil
-	}
-
+func (m *mockRawSink) WriteRawFrame(index ocsd.TrcIndex, frameElem ocsd.RawframeElem, data []byte, traceID uint8) error {
 	var elemStr string
 	switch frameElem {
 	case ocsd.FrmPacked:
@@ -260,6 +256,12 @@ func (m *mockRawSink) TraceRawFrameIn(op ocsd.DatapathOp, index ocsd.TrcIndex, f
 	m.out.WriteString("\n")
 	return nil
 }
+
+func (m *mockRawSink) FlushRawFrames() error { return nil }
+
+func (m *mockRawSink) ResetRawFrames() error { return nil }
+
+func (m *mockRawSink) CloseRawFrames() error { return nil }
 
 func resetDecoder(df *FrameDeformatter, t *testing.T) {
 	_, err := df.TraceDataIn(ocsd.OpReset, 0, nil)
@@ -365,8 +367,9 @@ func TestDemuxEdgeCases(t *testing.T) {
 	df.outData[0].valid = 1
 	df.outData[0].id = 0x10 // Valid test stream ID
 
-	// Triggers executeNoneDataOpAllIDs continuation bounds
-	df.executeNoneDataOpAllIDs(ocsd.OpData, 0)
+	// Exercise control fanout helpers.
+	df.flushAllIDs()
+	df.closeAllIDs()
 
 	resetDecoder(df, t)
 	df.TraceDataIn(ocsd.OpData, 0, buf)

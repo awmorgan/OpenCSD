@@ -29,8 +29,8 @@ type ptmRawPacketPrinter struct {
 	traceID uint8
 }
 
-func (p *ptmRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
-	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
+func (p *ptmRawPacketPrinter) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
+	if p.writer == nil || pkt == nil || len(rawData) == 0 {
 		return
 	}
 
@@ -44,6 +44,10 @@ func (p *ptmRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd
 	sb.WriteString("\n")
 	_, _ = io.WriteString(p.writer, sb.String())
 }
+
+func (p *ptmRawPacketPrinter) MonitorEOT() {}
+
+func (p *ptmRawPacketPrinter) MonitorReset(indexSOP ocsd.TrcIndex) {}
 
 func (m *mapperAdapter) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
 	buf := make([]byte, reqBytes)

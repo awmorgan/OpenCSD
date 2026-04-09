@@ -32,10 +32,14 @@ func (c *capturePktOut) TracePacketFlush() error { return nil }
 
 func (c *capturePktOut) TracePacketReset(_ ocsd.TrcIndex) error { return nil }
 
-func (c *captureRawMon) RawPacketDataMon(_ ocsd.DatapathOp, indexSOP ocsd.TrcIndex, _ fmt.Stringer, rawData []byte) {
+func (c *captureRawMon) MonitorRawData(indexSOP ocsd.TrcIndex, _ fmt.Stringer, rawData []byte) {
 	c.indexes = append(c.indexes, indexSOP)
 	c.lengths = append(c.lengths, len(rawData))
 }
+
+func (c *captureRawMon) MonitorEOT() {}
+
+func (c *captureRawMon) MonitorReset(indexSOP ocsd.TrcIndex) {}
 
 func TestProcessorResetPacketStateClearsConditionalState(t *testing.T) {
 	p := NewProcessor(&Config{})

@@ -392,8 +392,11 @@ func isErrorCode(err error, code error) bool {
 
 type dummyMon struct{}
 
-func (d *dummyMon) RawPacketDataMon(op ocsd.DatapathOp, index ocsd.TrcIndex, pkt fmt.Stringer, data []byte) {
-}
+func (d *dummyMon) MonitorRawData(index ocsd.TrcIndex, pkt fmt.Stringer, data []byte) {}
+
+func (d *dummyMon) MonitorEOT() {}
+
+func (d *dummyMon) MonitorReset(index ocsd.TrcIndex) {}
 
 func TestWaitForSync_WrapAround(t *testing.T) {
 	defer func() {

@@ -191,7 +191,7 @@ func (p *PktProc) callPktOut(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Pa
 
 func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, pData []byte) {
 	if p.PktRawMonI != nil && len(pData) > 0 {
-		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, indexSOP, pkt, pData)
+		p.PktRawMonI.MonitorRawData(indexSOP, pkt, pData)
 	}
 }
 
@@ -224,7 +224,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 			return 0, err
 		}
 		if rawMon := p.PktRawMonI; rawMon != nil {
-			rawMon.RawPacketDataMon(ocsd.OpEOT, 0, nil, nil)
+			rawMon.MonitorEOT()
 		}
 		return 0, nil
 	case ocsd.OpFlush:
@@ -238,7 +238,7 @@ func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock
 		}
 		p.OnReset()
 		if rawMon := p.PktRawMonI; rawMon != nil {
-			rawMon.RawPacketDataMon(ocsd.OpReset, index, nil, nil)
+			rawMon.MonitorReset(index)
 		}
 		return 0, nil
 	default:

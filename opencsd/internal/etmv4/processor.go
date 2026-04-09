@@ -2154,7 +2154,7 @@ func (p *Processor) clearStateTransient() {
 
 func (p *Processor) outputPacket(pkt *TracePacket, rawData []byte) error {
 	if p.PktRawMonI != nil {
-		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, p.packetIndex, pkt, rawData)
+		p.PktRawMonI.MonitorRawData(p.packetIndex, pkt, rawData)
 	}
 	if p.pktOut == nil {
 		return nil
@@ -2190,7 +2190,7 @@ func (p *Processor) outputUnsyncedRawPacket() error {
 
 	if p.PktRawMonI != nil && n > 0 && len(p.stream.data) > 0 {
 		monBytes := min(n, len(p.stream.data))
-		p.PktRawMonI.RawPacketDataMon(ocsd.OpData, p.packetIndex, &pkt, p.stream.data[:monBytes])
+		p.PktRawMonI.MonitorRawData(p.packetIndex, &pkt, p.stream.data[:monBytes])
 	}
 
 	var err error

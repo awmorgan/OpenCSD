@@ -31,14 +31,18 @@ type rawPktCapture struct {
 	packets [][]byte
 }
 
-func (r *rawPktCapture) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
-	if op != ocsd.OpData || len(rawData) == 0 {
+func (r *rawPktCapture) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
+	if len(rawData) == 0 {
 		return
 	}
 	cp := make([]byte, len(rawData))
 	copy(cp, rawData)
 	r.packets = append(r.packets, cp)
 }
+
+func (r *rawPktCapture) MonitorEOT() {}
+
+func (r *rawPktCapture) MonitorReset(indexSOP ocsd.TrcIndex) {}
 
 // --- Mocks ---
 

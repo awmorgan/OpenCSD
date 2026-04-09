@@ -41,8 +41,8 @@ type etmv3RawPacketPrinter struct {
 	traceID uint8
 }
 
-func (p *etmv3RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
-	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
+func (p *etmv3RawPacketPrinter) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
+	if p.writer == nil || pkt == nil || len(rawData) == 0 {
 		return
 	}
 	etmPkt, ok := pkt.(*etmv3.Packet)
@@ -61,6 +61,10 @@ func (p *etmv3RawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP oc
 	sb.WriteString("\n")
 	_, _ = io.WriteString(p.writer, sb.String())
 }
+
+func (p *etmv3RawPacketPrinter) MonitorEOT() {}
+
+func (p *etmv3RawPacketPrinter) MonitorReset(indexSOP ocsd.TrcIndex) {}
 
 // etmv3PacketTypeName maps the Go ETMv3 PktType to the C++ packet type name exactly.
 func etmv3PacketTypeName(t etmv3.PktType) string {

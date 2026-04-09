@@ -141,9 +141,9 @@ func (d *FrameDeformatter) rawChanEnabled(id uint8) bool {
 
 // Decode control
 
-func (d *FrameDeformatter) outputRawMonBytes(op ocsd.DatapathOp, index ocsd.TrcIndex, frameElem ocsd.RawframeElem, data []byte, traceID uint8) {
+func (d *FrameDeformatter) outputRawMonBytes(index ocsd.TrcIndex, frameElem ocsd.RawframeElem, data []byte, traceID uint8) {
 	if d.rawTraceFrame != nil {
-		_ = d.rawTraceFrame.TraceRawFrameIn(op, index, frameElem, data, traceID)
+		_ = d.rawTraceFrame.WriteRawFrame(index, frameElem, data, traceID)
 	}
 }
 
@@ -165,12 +165,12 @@ func (d *FrameDeformatter) callIDStream(stream ocsd.TraceProcessor, op ocsd.Data
 	}
 }
 
-func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocsd.TrcIndex) error {
+func (d *FrameDeformatter) flushAllIDs() error {
 	var outErr error
 
 	for _, stream := range d.idStreams {
 		if stream != nil { // if attached
-			_, err := d.callIDStream(stream, op, index, nil)
+			_, err := d.callIDStream(stream, ocsd.OpFlush, 0, nil)
 			if err != nil && outErr == nil {
 				outErr = err
 			}
@@ -178,7 +178,49 @@ func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocs
 	}
 
 	if d.rawTraceFrame != nil {
-		err := d.rawTraceFrame.TraceRawFrameIn(op, 0, ocsd.FrmNone, nil, 0)
+		err := d.rawTraceFrame.FlushRawFrames()
+		if err != nil && outErr == nil {
+			outErr = err
+		}
+	}
+	return outErr
+}
+
+func (d *FrameDeformatter) resetAllIDs(index ocsd.TrcIndex) error {
+	var outErr error
+
+	for _, stream := range d.idStreams {
+		if stream != nil { // if attached
+			_, err := d.callIDStream(stream, ocsd.OpReset, index, nil)
+			if err != nil && outErr == nil {
+				outErr = err
+			}
+		}
+	}
+
+	if d.rawTraceFrame != nil {
+		err := d.rawTraceFrame.ResetRawFrames()
+		if err != nil && outErr == nil {
+			outErr = err
+		}
+	}
+	return outErr
+}
+
+func (d *FrameDeformatter) closeAllIDs() error {
+	var outErr error
+
+	for _, stream := range d.idStreams {
+		if stream != nil { // if attached
+			_, err := d.callIDStream(stream, ocsd.OpEOT, 0, nil)
+			if err != nil && outErr == nil {
+				outErr = err
+			}
+		}
+	}
+
+	if d.rawTraceFrame != nil {
+		err := d.rawTraceFrame.CloseRawFrames()
 		if err != nil && outErr == nil {
 			outErr = err
 		}
@@ -188,11 +230,11 @@ func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocs
 
 func (d *FrameDeformatter) Reset() error {
 	d.resetStateParams()
-	return d.executeNoneDataOpAllIDs(ocsd.OpReset, 0)
+	return d.resetAllIDs(0)
 }
 
 func (d *FrameDeformatter) Flush() error {
-	outErr := d.executeNoneDataOpAllIDs(ocsd.OpFlush, 0)
+	outErr := d.flushAllIDs()
 	if outErr == nil {
 		_, outErr = d.outputFrame(outErr)
 	}
@@ -255,7 +297,7 @@ func (d *FrameDeformatter) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uin
 func (d *FrameDeformatter) TraceDataEOT() error {
 	d.outPackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrPackedRawOut) != 0
 	d.outUnpackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrUnpackedRawOut) != 0
-	return d.executeNoneDataOpAllIDs(ocsd.OpEOT, 0)
+	return d.closeAllIDs()
 }
 
 // TraceDataFlush forwards a flush operation through the legacy multiplexer.

@@ -23,8 +23,8 @@ type stmRawPacketPrinter struct {
 	traceID uint8
 }
 
-func (p *stmRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
-	if p.writer == nil || op != ocsd.OpData || pkt == nil || len(rawData) == 0 {
+func (p *stmRawPacketPrinter) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.Stringer, rawData []byte) {
+	if p.writer == nil || pkt == nil || len(rawData) == 0 {
 		return
 	}
 
@@ -38,6 +38,10 @@ func (p *stmRawPacketPrinter) RawPacketDataMon(op ocsd.DatapathOp, indexSOP ocsd
 	sb.WriteString("\n")
 	_, _ = io.WriteString(p.writer, sb.String())
 }
+
+func (p *stmRawPacketPrinter) MonitorEOT() {}
+
+func (p *stmRawPacketPrinter) MonitorReset(indexSOP ocsd.TrcIndex) {}
 
 func TestSTMSnapshotsAgainstGolden(t *testing.T) {
 	t.Parallel()

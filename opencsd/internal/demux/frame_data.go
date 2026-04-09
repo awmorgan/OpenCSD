@@ -68,7 +68,7 @@ func (d *FrameDeformatter) checkForResetFSyncPatterns(dataBlockSize uint32) (fSy
 
 	if numFsyncs > 0 {
 		if numFsyncs%4 == 0 {
-			err = d.executeNoneDataOpAllIDs(ocsd.OpReset, d.trcCurrIdx)
+			err = d.resetAllIDs(d.trcCurrIdx)
 			d.currSrcID = ocsd.BadCSSrcID
 			d.exFrmBytes = 0
 			d.trcCurrIdxSof = ocsd.BadTrcIndex
@@ -104,7 +104,7 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) (bool, error) {
 			}
 
 			if fSyncBytes > 0 && (d.outPackedRaw || d.outUnpackedRaw) {
-				d.outputRawMonBytes(ocsd.OpData, d.trcCurrIdx, ocsd.FrmFsync, d.inBlockBase[d.inBlockProcessed:d.inBlockProcessed+fSyncBytes], 0)
+				d.outputRawMonBytes(d.trcCurrIdx, ocsd.FrmFsync, d.inBlockBase[d.inBlockProcessed:d.inBlockProcessed+fSyncBytes], 0)
 			}
 			if syncErr != nil {
 				if syncErr == ocsd.ErrDfrmtrBadFhsync {
@@ -199,7 +199,7 @@ func (d *FrameDeformatter) extractFrame(dataBlockSize uint32) (bool, error) {
 	}
 
 	if (d.exFrmBytes == ocsd.DfrmtrFrameSize || bufLeft == 0) && d.outPackedRaw {
-		d.outputRawMonBytes(ocsd.OpData, d.trcCurrIdx, ocsd.FrmPacked, d.inBlockBase[d.inBlockProcessed:d.inBlockProcessed+totalProcessed], 0)
+		d.outputRawMonBytes(d.trcCurrIdx, ocsd.FrmPacked, d.inBlockBase[d.inBlockProcessed:d.inBlockProcessed+totalProcessed], 0)
 	}
 
 	d.inBlockProcessed += totalProcessed
@@ -292,7 +292,7 @@ func (d *FrameDeformatter) outputFrame(outErr error) (bool, error) {
 			dataIn := d.idStreams[id]
 			if dataIn != nil {
 				if d.outUnpackedRaw && d.outData[d.outProcessed].used == 0 && d.rawChanEnabled(id) {
-					d.outputRawMonBytes(ocsd.OpData,
+					d.outputRawMonBytes(
 						d.outData[d.outProcessed].index,
 						ocsd.FrmIDData,
 						d.outData[d.outProcessed].data[:d.outData[d.outProcessed].valid],
@@ -317,7 +317,7 @@ func (d *FrameDeformatter) outputFrame(outErr error) (bool, error) {
 				}
 			} else {
 				if d.outUnpackedRaw && d.rawChanEnabled(id) {
-					d.outputRawMonBytes(ocsd.OpData,
+					d.outputRawMonBytes(
 						d.outData[d.outProcessed].index,
 						ocsd.FrmIDData,
 						d.outData[d.outProcessed].data[:d.outData[d.outProcessed].valid],
@@ -327,7 +327,7 @@ func (d *FrameDeformatter) outputFrame(outErr error) (bool, error) {
 			}
 		} else {
 			if d.outUnpackedRaw {
-				d.outputRawMonBytes(ocsd.OpData,
+				d.outputRawMonBytes(
 					d.outData[d.outProcessed].index,
 					ocsd.FrmIDData,
 					d.outData[d.outProcessed].data[:d.outData[d.outProcessed].valid],

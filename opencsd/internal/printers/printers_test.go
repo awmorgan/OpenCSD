@@ -43,7 +43,7 @@ func TestRawFramePrinter(t *testing.T) {
 
 	// Test muted
 	rp.SetMute(true)
-	err := rp.TraceRawFrameIn(ocsd.OpData, 0, ocsd.FrmPacked, nil, 0)
+	err := rp.WriteRawFrame(0, ocsd.FrmPacked, nil, 0)
 	if err != nil {
 		t.Errorf("Expected nil error, got %v", err)
 	}
@@ -52,10 +52,18 @@ func TestRawFramePrinter(t *testing.T) {
 	}
 	rp.SetMute(false)
 
-	// Test not OpData
-	err = rp.TraceRawFrameIn(ocsd.OpFlush, 0, ocsd.FrmPacked, nil, 0)
+	// Test control methods
+	err = rp.FlushRawFrames()
 	if err != nil {
-		t.Errorf("Expected nil error for non-data op, got %v", err)
+		t.Errorf("Expected nil error for flush, got %v", err)
+	}
+	err = rp.ResetRawFrames()
+	if err != nil {
+		t.Errorf("Expected nil error for reset, got %v", err)
+	}
+	err = rp.CloseRawFrames()
+	if err != nil {
+		t.Errorf("Expected nil error for close, got %v", err)
 	}
 
 	tests := []struct {
@@ -116,7 +124,7 @@ func TestRawFramePrinter(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
 			buf.Reset()
-			rp.TraceRawFrameIn(ocsd.OpData, tc.index, tc.elem, tc.data, tc.traceID)
+			rp.WriteRawFrame(tc.index, tc.elem, tc.data, tc.traceID)
 			if buf.String() != tc.exptStr {
 				t.Errorf("\nexpected:\n%q\nactual:\n%q", tc.exptStr, buf.String())
 			}
