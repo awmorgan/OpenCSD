@@ -995,3 +995,22 @@ func TestMapMemoryRangesDuplicateSemanticMappingIgnored(t *testing.T) {
 		t.Fatalf("unexpected mapped range: %#v", ranges[0])
 	}
 }
+func init() {
+	_ = splitOutput // silence unused warning
+}
+
+// splitOutput takes a slice of text lines and separates them into two independent streams.
+func splitOutput(lines []string) (packets []string, elements []string) {
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		// Trace elements usually have this prefix or contain "Trace Event"
+		if strings.Contains(line, "OCSD_GEN_TRC_ELEM") || strings.Contains(line, "Trace Event") {
+			elements = append(elements, line)
+		} else if strings.HasPrefix(strings.TrimSpace(line), "Idx:") {
+			packets = append(packets, line)
+		}
+	}
+	return packets, elements
+}
