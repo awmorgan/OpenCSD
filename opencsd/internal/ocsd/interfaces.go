@@ -23,6 +23,10 @@ type PacketReader[Packet any] interface {
 	NextPacket() (Packet, error)
 }
 
+type TraceElementReader interface {
+	NextElement() (*TraceElement, error)
+}
+
 // PacketMonitor provides packet monitor functionality off the decode path.
 type PacketMonitor interface {
 	MonitorRawData(indexSOP TrcIndex, pkt fmt.Stringer, rawData []byte)
