@@ -164,11 +164,11 @@ func (p *PktProc) StatsAddBadSeqCount(count uint32) { p.Stats.BadSequenceErrs +=
 // StatsAddBadHdrCount adds to the bad-header-error counter.
 func (p *PktProc) StatsAddBadHdrCount(count uint32) { p.Stats.BadHeaderErrs += count }
 
-func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) ocsd.DatapathResp {
+func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) error {
 	if p.pktOut != nil {
-		return ocsd.DataRespFromErr(p.callPktOut(ocsd.OpData, indexSOP, pkt))
+		return p.callPktOut(ocsd.OpData, indexSOP, pkt)
 	}
-	return ocsd.RespCont
+	return nil
 }
 
 func (p *PktProc) callPktOut(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt *Packet) error {
@@ -195,7 +195,7 @@ func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, 
 	}
 }
 
-func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pktData []byte) ocsd.DatapathResp {
+func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pktData []byte) error {
 	if len(pktData) > 0 {
 		p.outputRawPacketToMonitor(indexSOP, pkt, pktData)
 	}
@@ -203,76 +203,46 @@ func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pkt
 }
 
 func (p *PktProc) TraceDataIn(op ocsd.DatapathOp, index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	resp := ocsd.RespCont
-	var processed uint32 = 0
-	var err error
+	var processed uint32
 
 	switch op {
 	case ocsd.OpData:
 		if len(dataBlock) == 0 {
-			err = fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
-			resp = ocsd.RespFatalInvalidParam
-		} else {
-			processed, err = p.ProcessData(index, dataBlock)
-			resp = ocsd.DataRespFromErr(err)
+			return 0, fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
 		}
+		var err error
+		processed, err = p.ProcessData(index, dataBlock)
+		if err != nil && !errors.Is(err, ocsd.ErrWait) {
+			return processed, err
+		}
+		return processed, nil
 	case ocsd.OpEOT:
-		resp = p.OnEOT()
-		if p.pktOut != nil && !ocsd.DataRespIsFatal(resp) {
-			err = p.callPktOut(ocsd.OpEOT, 0, nil)
-			resp = ocsd.DataRespFromErr(err)
-			if ocsd.IsDataWaitErr(err) {
-				err = nil
-			}
+		if err := p.OnEOT(); err != nil {
+			return 0, err
+		}
+		if err := p.callPktOut(ocsd.OpEOT, 0, nil); err != nil && !errors.Is(err, ocsd.ErrWait) {
+			return 0, err
 		}
 		if rawMon := p.PktRawMonI; rawMon != nil {
 			rawMon.RawPacketDataMon(ocsd.OpEOT, 0, nil, nil)
 		}
+		return 0, nil
 	case ocsd.OpFlush:
-		resp = p.OnFlush()
-		if ocsd.DataRespIsCont(resp) && p.pktOut != nil {
-			err = p.callPktOut(ocsd.OpFlush, 0, nil)
-			resp = ocsd.DataRespFromErr(err)
-			if ocsd.IsDataWaitErr(err) {
-				err = nil
-			}
+		if err := p.callPktOut(ocsd.OpFlush, 0, nil); err != nil && !errors.Is(err, ocsd.ErrWait) {
+			return 0, err
 		}
+		return 0, nil
 	case ocsd.OpReset:
-		if p.pktOut != nil {
-			err = p.callPktOut(ocsd.OpReset, index, nil)
-			resp = ocsd.DataRespFromErr(err)
-			if ocsd.IsDataWaitErr(err) {
-				err = nil
-			}
+		if err := p.callPktOut(ocsd.OpReset, index, nil); err != nil && !errors.Is(err, ocsd.ErrWait) {
+			return 0, err
 		}
-		if !ocsd.DataRespIsFatal(resp) {
-			resp = p.OnReset()
-		}
+		p.OnReset()
 		if rawMon := p.PktRawMonI; rawMon != nil {
 			rawMon.RawPacketDataMon(ocsd.OpReset, index, nil, nil)
 		}
+		return 0, nil
 	default:
-		err = fmt.Errorf("%w: packet processor: unknown datapath operation", ocsd.ErrInvalidParamVal)
-		resp = ocsd.RespFatalInvalidOp
-	}
-	if ocsd.DataRespIsCont(resp) {
-		return processed, nil
-	}
-	if ocsd.DataRespIsWait(resp) {
-		return processed, ocsd.ErrWait
-	}
-	if err != nil {
-		return processed, err
-	}
-	switch resp {
-	case ocsd.RespFatalNotInit:
-		return processed, ocsd.ErrNotInit
-	case ocsd.RespFatalInvalidParam, ocsd.RespFatalInvalidOp:
-		return processed, ocsd.ErrInvalidParamVal
-	case ocsd.RespFatalSysErr:
-		return processed, ocsd.ErrFail
-	default:
-		return processed, ocsd.ErrDataDecodeFatal
+		return 0, fmt.Errorf("%w: packet processor: unknown datapath operation", ocsd.ErrInvalidParamVal)
 	}
 }
 
@@ -351,7 +321,6 @@ func (p *PktProc) malformedPacketErr(msg string) error {
 }
 
 func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, error) {
-	resp := ocsd.RespCont
 	var err error
 
 	p.dataInProcessed = 0
@@ -363,39 +332,23 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, e
 	p.dataInLen = uint32(len(dataBlock))
 	p.blockIdx = index
 
-	for ((p.dataInProcessed < p.dataInLen) || (p.dataInProcessed == p.dataInLen && p.processState == stateSendPkt)) && ocsd.DataRespIsCont(resp) {
-		resp, _, _, err = p.doProcessLoop()
-		if ocsd.DataRespIsFatal(resp) {
-			break
-		}
-		if err != nil {
-			break
-		}
+	for ((p.dataInProcessed < p.dataInLen) || (p.dataInProcessed == p.dataInLen && p.processState == stateSendPkt)) && err == nil {
+		_, _, err = p.doProcessLoop()
 	}
 
-	if ocsd.DataRespIsCont(resp) {
-		return p.dataInProcessed, nil
-	}
-	if ocsd.DataRespIsWait(resp) {
-		return p.dataInProcessed, ocsd.ErrWait
-	}
-	if err != nil {
-		return p.dataInProcessed, err
-	}
-	return p.dataInProcessed, ocsd.DataErrFromResp(resp, nil)
+	return p.dataInProcessed, err
 }
 
-func (p *PktProc) doProcessLoop() (resp ocsd.DatapathResp, currByte uint8, ok bool, err error) {
-	resp = ocsd.RespCont
-	handleErr := func(err error) (ocsd.DatapathResp, error) {
+func (p *PktProc) doProcessLoop() (currByte uint8, ok bool, err error) {
+	handleErr := func(err error) error {
 		if err == nil {
-			return ocsd.RespCont, nil
+			return nil
 		}
 		if errors.Is(err, ocsd.ErrBadPacketSeq) || errors.Is(err, ocsd.ErrInvalidPcktHdr) {
 			p.processState = stateSendPkt
-			return ocsd.RespCont, err
+			return err
 		}
-		return ocsd.RespFatalInvalidData, err
+		return err
 	}
 
 	switch p.processState {
@@ -405,7 +358,7 @@ func (p *PktProc) doProcessLoop() (resp ocsd.DatapathResp, currByte uint8, ok bo
 			p.currPacket.Type = PktNotSync
 			p.bAsyncRawOp = p.PktRawMonI != nil
 		}
-		resp = p.waitASync()
+		err = p.waitASync()
 
 	case stateProcHdr:
 		p.currPktIndex = p.blockIdx + ocsd.TrcIndex(p.dataInProcessed)
@@ -414,25 +367,25 @@ func (p *PktProc) doProcessLoop() (resp ocsd.DatapathResp, currByte uint8, ok bo
 			p.currPacket.Type = p.iTable[currByte].pktType
 		} else {
 			e := fmt.Errorf("%w: Data Buffer Overrun", ocsd.ErrPktInterpFail)
-			resp, err = handleErr(e)
-			return resp, currByte, ok, err
+			err = handleErr(e)
+			return currByte, ok, err
 		}
 		p.processState = stateProcData
 		fallthrough
 
 	case stateProcData:
-		if err := p.runDecodeAction(); err != nil {
-			resp, err = handleErr(err)
-			return resp, currByte, ok, err
+		if loopErr := p.runDecodeAction(); loopErr != nil {
+			err = handleErr(loopErr)
+			return currByte, ok, err
 		}
 
 	case stateSendPkt:
-		resp = p.outputPacket()
+		err = p.outputPacket()
 		p.resetPacketState()
 		p.processState = stateProcHdr
 	}
 
-	return resp, currByte, ok, nil
+	return currByte, ok, err
 }
 
 func (p *PktProc) runDecodeAction() error {
@@ -464,41 +417,38 @@ func (p *PktProc) runDecodeAction() error {
 	}
 }
 
-func (p *PktProc) outputPacket() ocsd.DatapathResp {
-	resp := p.outputOnAllInterfaces(p.currPktIndex, &p.currPacket, p.currPacketData)
+func (p *PktProc) outputPacket() error {
+	err := p.outputOnAllInterfaces(p.currPktIndex, &p.currPacket, p.currPacketData)
 	p.currPacketData = p.currPacketData[:0]
-	return resp
+	return err
 }
 
-func (p *PktProc) OnEOT() ocsd.DatapathResp {
+func (p *PktProc) OnEOT() error {
 	if p.Config == nil {
-		return ocsd.RespFatalNotInit
+		return ocsd.ErrNotInit
 	}
-	resp := ocsd.RespCont
 	if len(p.currPacketData) > 0 {
 		p.currPacket.Type = PktIncompleteEOT
-		resp = p.outputPacket()
+		return p.outputPacket()
 	}
-	return resp
+	return nil
 }
 
-func (p *PktProc) OnReset() ocsd.DatapathResp {
+func (p *PktProc) OnReset() {
+	if p.Config != nil {
+		p.resetProcessorState()
+	}
+}
+
+func (p *PktProc) OnFlush() error {
 	if p.Config == nil {
-		return ocsd.RespFatalNotInit
+		return ocsd.ErrNotInit
 	}
-	p.resetProcessorState()
-	return ocsd.RespCont
+	return nil
 }
 
-func (p *PktProc) OnFlush() ocsd.DatapathResp {
-	if p.Config == nil {
-		return ocsd.RespFatalNotInit
-	}
-	return ocsd.RespCont
-}
-
-func (p *PktProc) waitASync() ocsd.DatapathResp {
-	resp := ocsd.RespCont
+func (p *PktProc) waitASync() error {
+	var err error
 	doScan := true
 	bSendUnsyncedData := false
 	bHaveASync := false
@@ -509,7 +459,7 @@ func (p *PktProc) waitASync() ocsd.DatapathResp {
 
 	const unsyncPktMax = 16
 
-	for doScan && ocsd.DataRespIsCont(resp) {
+	for doScan && err == nil {
 		if p.waitASyncSOPkt {
 			switch p.findAsync() {
 			case asyncResultAsync, asyncResultAsyncExtra0:
@@ -581,7 +531,7 @@ func (p *PktProc) waitASync() ocsd.DatapathResp {
 				}
 			}
 			if !p.bOPNotSyncPkt {
-				resp = p.outputDecodedPacket(p.currPktIndex, &p.currPacket)
+				err = p.outputDecodedPacket(p.currPktIndex, &p.currPacket)
 				p.bOPNotSyncPkt = true
 			}
 			unsyncScanBlockStart += unsyncedBytes
@@ -594,7 +544,7 @@ func (p *PktProc) waitASync() ocsd.DatapathResp {
 			p.currPacket.Type = PktASync
 		}
 	}
-	return resp
+	return err
 }
 
 func (p *PktProc) findAsync() asyncResult {
