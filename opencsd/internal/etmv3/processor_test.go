@@ -31,15 +31,15 @@ func (c *capturePktSink) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex
 	return nil
 }
 
-func (c *capturePktSink) TracePacketData(indexSOP ocsd.TrcIndex, pkt *Packet) error {
+func (c *capturePktSink) Write(indexSOP ocsd.TrcIndex, pkt *Packet) error {
 	if pkt != nil {
 		c.packets = append(c.packets, *pkt)
 	}
 	return nil
 }
-func (c *capturePktSink) TracePacketEOT() error   { return nil }
-func (c *capturePktSink) TracePacketFlush() error { return nil }
-func (c *capturePktSink) TracePacketReset(indexSOP ocsd.TrcIndex) error {
+func (c *capturePktSink) Close() error { return nil }
+func (c *capturePktSink) Flush() error { return nil }
+func (c *capturePktSink) Reset(indexSOP ocsd.TrcIndex) error {
 	return nil
 }
 

@@ -135,8 +135,8 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 	return nil
 }
 
-// TracePacketData is the explicit packet data entrypoint used by split interfaces.
-func (d *PktDecode) TracePacketData(indexSOP ocsd.TrcIndex, pktIn *Packet) error {
+// Write is the explicit packet data entrypoint used by split interfaces.
+func (d *PktDecode) Write(indexSOP ocsd.TrcIndex, pktIn *Packet) error {
 	if pktIn == nil {
 		return ocsd.ErrInvalidParamVal
 	}
@@ -157,8 +157,8 @@ func (d *PktDecode) TracePacketData(indexSOP ocsd.TrcIndex, pktIn *Packet) error
 	return err
 }
 
-// TracePacketEOT forwards an EOT control operation through the legacy multiplexer.
-func (d *PktDecode) TracePacketEOT() error {
+// Close forwards an EOT control operation through the legacy multiplexer.
+func (d *PktDecode) Close() error {
 	err := d.OnEOT()
 	if err == nil && d.traceElemOut != nil {
 		for {
@@ -174,13 +174,13 @@ func (d *PktDecode) TracePacketEOT() error {
 	return err
 }
 
-// TracePacketFlush forwards a flush control operation through the legacy multiplexer.
-func (d *PktDecode) TracePacketFlush() error {
+// Flush forwards a flush control operation through the legacy multiplexer.
+func (d *PktDecode) Flush() error {
 	return d.OnFlush()
 }
 
-// TracePacketReset forwards a reset control operation through the legacy multiplexer.
-func (d *PktDecode) TracePacketReset(indexSOP ocsd.TrcIndex) error {
+// Reset forwards a reset control operation through the legacy multiplexer.
+func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 	_ = indexSOP
 	return d.OnReset()
 }

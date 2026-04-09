@@ -168,7 +168,7 @@ func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) error
 		return nil
 	}
 	if p.pktOut != nil {
-		return p.pktOut.TracePacketData(indexSOP, pkt)
+		return p.pktOut.Write(indexSOP, pkt)
 	}
 	return nil
 }
@@ -250,7 +250,7 @@ func (p *PktProc) TraceDataEOT() error {
 		return err
 	}
 	if p.pktOut != nil {
-		if err := p.pktOut.TracePacketEOT(); err != nil && !errors.Is(err, ocsd.ErrWait) {
+		if err := p.pktOut.Close(); err != nil && !errors.Is(err, ocsd.ErrWait) {
 			return err
 		}
 	}
@@ -263,7 +263,7 @@ func (p *PktProc) TraceDataEOT() error {
 // TraceDataFlush handles flush control.
 func (p *PktProc) TraceDataFlush() error {
 	if p.pktOut != nil {
-		if err := p.pktOut.TracePacketFlush(); err != nil && !errors.Is(err, ocsd.ErrWait) {
+		if err := p.pktOut.Flush(); err != nil && !errors.Is(err, ocsd.ErrWait) {
 			return err
 		}
 	}
@@ -273,7 +273,7 @@ func (p *PktProc) TraceDataFlush() error {
 // TraceDataReset handles reset control.
 func (p *PktProc) TraceDataReset(index ocsd.TrcIndex) error {
 	if p.pktOut != nil {
-		if err := p.pktOut.TracePacketReset(index); err != nil && !errors.Is(err, ocsd.ErrWait) {
+		if err := p.pktOut.Reset(index); err != nil && !errors.Is(err, ocsd.ErrWait) {
 			return err
 		}
 	}

@@ -13,10 +13,10 @@ type TraceProcessor interface {
 }
 
 type PacketProcessor[P any] interface {
-	TracePacketData(indexSOP TrcIndex, pkt *P) error
-	TracePacketEOT() error
-	TracePacketFlush() error
-	TracePacketReset(indexSOP TrcIndex) error
+	Write(indexSOP TrcIndex, pkt *P) error
+	Close() error
+	Flush() error
+	Reset(indexSOP TrcIndex) error
 }
 
 // PacketMonitor provides packet monitor functionality off the decode path.

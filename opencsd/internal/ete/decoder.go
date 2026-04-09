@@ -141,24 +141,24 @@ func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
 	d.traceElemOut = out
 }
 
-func (d *PktDecode) TracePacketData(indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket) error {
+func (d *PktDecode) Write(indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket) error {
 	d.lastPacketIndex = indexSOP
 	if indexSOP != 0 {
 		d.sawActivity = true
 	}
-	return d.inner.TracePacketData(indexSOP, pkt)
+	return d.inner.Write(indexSOP, pkt)
 }
 
-func (d *PktDecode) TracePacketEOT() error {
-	return d.inner.TracePacketEOT()
+func (d *PktDecode) Close() error {
+	return d.inner.Close()
 }
 
-func (d *PktDecode) TracePacketFlush() error {
-	return d.inner.TracePacketFlush()
+func (d *PktDecode) Flush() error {
+	return d.inner.Flush()
 }
 
-func (d *PktDecode) TracePacketReset(indexSOP ocsd.TrcIndex) error {
-	return d.inner.TracePacketReset(indexSOP)
+func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
+	return d.inner.Reset(indexSOP)
 }
 
 func (d *PktDecode) NextSequenced() (uint64, *ocsd.TraceElement, error) {

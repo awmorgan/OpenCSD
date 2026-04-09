@@ -2036,7 +2036,7 @@ func (p *Processor) onEOT() error {
 	}
 
 	if p.pktOut != nil && outErr == nil {
-		outErr = p.pktOut.TracePacketEOT()
+		outErr = p.pktOut.Close()
 	}
 
 	return outErr
@@ -2060,7 +2060,7 @@ func (p *Processor) onReset() error {
 
 	var outErr error
 	if p.pktOut != nil {
-		outErr = p.pktOut.TracePacketReset(0)
+		outErr = p.pktOut.Reset(0)
 	}
 	if outErr == nil {
 		p.resetProcessorState()
@@ -2074,7 +2074,7 @@ func (p *Processor) onFlush() error {
 	}
 
 	if p.pktOut != nil {
-		return p.pktOut.TracePacketFlush()
+		return p.pktOut.Flush()
 	}
 	return nil
 }
@@ -2128,7 +2128,7 @@ func (p *Processor) outputPacket(pkt *TracePacket, rawData []byte) error {
 		return nil
 	}
 	pktCopy := *pkt
-	return p.pktOut.TracePacketData(p.packetIndex, &pktCopy)
+	return p.pktOut.Write(p.packetIndex, &pktCopy)
 }
 
 func (p *Processor) emitDecodedPacket(pkt Packet, rawData []byte) error {
@@ -2164,7 +2164,7 @@ func (p *Processor) outputUnsyncedRawPacket() error {
 	var err error
 	if !p.sentNotsyncPacket {
 		if p.pktOut != nil {
-			err = p.pktOut.TracePacketData(p.packetIndex, &pkt)
+			err = p.pktOut.Write(p.packetIndex, &pkt)
 		}
 		p.sentNotsyncPacket = true
 	}

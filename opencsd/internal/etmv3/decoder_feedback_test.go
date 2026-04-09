@@ -14,12 +14,12 @@ func buildDecInDecodePktsPull(t *testing.T, config *Config) *PktDecode {
 		t.Fatalf("NewConfiguredPktDecode failed: %v", err)
 	}
 
-	dec.TracePacketReset(0)
+	dec.Reset(0)
 
 	asyncPkt := &Packet{}
 	asyncPkt.ResetState()
 	asyncPkt.Type = PktASync
-	dec.TracePacketData(0, asyncPkt)
+	dec.Write(0, asyncPkt)
 
 	isyncPkt := &Packet{}
 	isyncPkt.ResetState()
@@ -27,7 +27,7 @@ func buildDecInDecodePktsPull(t *testing.T, config *Config) *PktDecode {
 	isyncPkt.Addr = 0x1000
 	isyncPkt.CurrISA = ocsd.ISAArm
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
-	dec.TracePacketData(1, isyncPkt)
+	dec.Write(1, isyncPkt)
 
 	_ = drainDecodedElements(t, dec)
 	return dec
@@ -95,7 +95,7 @@ func TestProcessBranchAddrContextWithoutException(t *testing.T) {
 	pkt.Context.CurrNS = true
 	pkt.Context.CurrHyp = true
 
-	err := dec.TracePacketData(2, pkt)
+	err := dec.Write(2, pkt)
 	if err != nil {
 		t.Fatalf("unexpected fatal response: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 	pkt.ResetState()
 	pkt.Type = PktTrigger
 
-	err := dec.TracePacketData(4, pkt)
+	err := dec.Write(4, pkt)
 	if err != nil {
 		t.Fatalf("unexpected fatal response: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 	pkt.ExceptionCancel = true
 	pkt.Exception.Present = true
 
-	err := dec.TracePacketData(6, pkt)
+	err := dec.Write(6, pkt)
 	if err != nil {
 		t.Fatalf("unexpected fatal response: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestProcessPHdrUsesPacketISA(t *testing.T) {
 	phdr.Atom.Num = 1
 	phdr.Atom.EnBits = 0x1
 
-	err := dec.TracePacketData(2, phdr)
+	err := dec.Write(2, phdr)
 	if err != nil {
 		t.Fatalf("unexpected fatal response: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestProcessPHdrUsesPacketISA(t *testing.T) {
 	trigger := &Packet{}
 	trigger.ResetState()
 	trigger.Type = PktTrigger
-	err = dec.TracePacketData(3, trigger)
+	err = dec.Write(3, trigger)
 	if err != nil {
 		t.Fatalf("unexpected fatal response: %v", err)
 	}

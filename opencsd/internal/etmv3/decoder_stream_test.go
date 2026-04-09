@@ -10,7 +10,7 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	config := &Config{}
 	dec := setupDecFast(config)
 
-	dec.TracePacketReset(0)
+	dec.Reset(0)
 
 	pkt := &Packet{}
 	pkt.ResetState()
@@ -20,14 +20,14 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	pkt.ISyncInfo.Reason = 1
 	pkt.Context.UpdatedC = true
 	pkt.Context.CtxtID = 0x42
-	dec.TracePacketData(0, pkt)
+	dec.Write(0, pkt)
 
 	pkt2 := &Packet{}
 	pkt2.ResetState()
 	pkt2.Type = PktPHdr
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	resp := ocsd.DataRespFromErr(dec.TracePacketData(1, pkt2))
+	resp := ocsd.DataRespFromErr(dec.Write(1, pkt2))
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Atom E failed: %v", resp)
 	}
@@ -37,14 +37,14 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	pkt3.Type = PktPHdr
 	pkt3.Atom.EnBits = 0x0
 	pkt3.Atom.Num = 1
-	dec.TracePacketData(2, pkt3)
+	dec.Write(2, pkt3)
 
 	pkt4 := &Packet{}
 	pkt4.ResetState()
 	pkt4.Type = PktPHdr
 	pkt4.Atom.EnBits = 0x5 // E, N, E
 	pkt4.Atom.Num = 3
-	dec.TracePacketData(3, pkt4)
+	dec.Write(3, pkt4)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements from atom processing")
@@ -54,7 +54,7 @@ func TestDecoderAtomProcessing(t *testing.T) {
 func TestDecoderWPUpdate(t *testing.T) {
 	config := &Config{}
 	dec := setupDecFast(config)
-	dec.TracePacketReset(0)
+	dec.Reset(0)
 
 	pkt := &Packet{}
 	pkt.ResetState()
@@ -62,14 +62,14 @@ func TestDecoderWPUpdate(t *testing.T) {
 	pkt.Addr = 0x2000
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncInfo.Reason = 1
-	dec.TracePacketData(0, pkt)
+	dec.Write(0, pkt)
 
 	// Since ETMv3 doesn't have PktWPointUpdate, let's test BranchAddress instead
 	pkt2 := &Packet{}
 	pkt2.ResetState()
 	pkt2.Type = PktBranchAddress
 	pkt2.Addr = 0x3000
-	dec.TracePacketData(1, pkt2)
+	dec.Write(1, pkt2)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements from WP update")
@@ -79,14 +79,14 @@ func TestDecoderWPUpdate(t *testing.T) {
 func TestDecoderBranchWithException(t *testing.T) {
 	config := &Config{}
 	dec := setupDecFast(config)
-	dec.TracePacketReset(0)
+	dec.Reset(0)
 
 	pkt := &Packet{}
 	pkt.ResetState()
 	pkt.Type = PktISync
 	pkt.Addr = 0x1000
 	pkt.CurrISA = ocsd.ISAArm
-	dec.TracePacketData(0, pkt)
+	dec.Write(0, pkt)
 
 	pkt3 := &Packet{}
 	pkt3.ResetState()
@@ -97,7 +97,7 @@ func TestDecoderBranchWithException(t *testing.T) {
 	pkt3.CurrISA = ocsd.ISAArm
 	pkt3.Addr = 0x4000
 	pkt3.CycleCount = 10
-	dec.TracePacketData(2, pkt3)
+	dec.Write(2, pkt3)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements")
@@ -111,28 +111,28 @@ func TestDecoderMemNacc(t *testing.T) {
 	dec.SetMemAccess(mem)
 	dec.SetInstrDecode(idec.NewDecoder())
 
-	dec.TracePacketReset(0)
+	dec.Reset(0)
 
 	pkt := &Packet{}
 	pkt.ResetState()
 	pkt.Type = PktISync
 	pkt.Addr = 0x1000
 	pkt.CurrISA = ocsd.ISAArm
-	dec.TracePacketData(0, pkt)
+	dec.Write(0, pkt)
 
 	pkt2 := &Packet{}
 	pkt2.ResetState()
 	pkt2.Type = PktPHdr
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	dec.TracePacketData(1, pkt2)
+	dec.Write(1, pkt2)
 
 	pkt3 := &Packet{}
 	pkt3.ResetState()
 	pkt3.Type = PktBranchAddress
 	pkt3.Addr = 0x5000
 	pkt3.CurrISA = ocsd.ISAArm
-	dec.TracePacketData(2, pkt3)
+	dec.Write(2, pkt3)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Logf("No elements generated (memNacc path)")
@@ -143,23 +143,23 @@ func TestDecoderContProcess(t *testing.T) {
 	config := &Config{}
 	dec := setupDecFast(config)
 
-	dec.TracePacketFlush()
-	dec.TracePacketReset(0)
+	dec.Flush()
+	dec.Reset(0)
 
 	pkt := &Packet{}
 	pkt.ResetState()
 	pkt.Type = PktASync
-	dec.TracePacketData(0, pkt)
+	dec.Write(0, pkt)
 
 	pkt.Type = PktContextID
-	dec.TracePacketData(0, pkt)
+	dec.Write(0, pkt)
 
 	pkt.Type = PktCycleCount
 	pkt.CycleCount = 100
-	dec.TracePacketData(0, pkt)
+	dec.Write(0, pkt)
 
 	pkt.Type = PktTrigger
-	dec.TracePacketData(0, pkt)
+	dec.Write(0, pkt)
 
 	_ = drainDecodedElements(t, dec)
 }
@@ -167,13 +167,13 @@ func TestDecoderContProcess(t *testing.T) {
 func TestDecoderBranchVariations(t *testing.T) {
 	config := &Config{}
 	dec := setupDecFast(config)
-	dec.TracePacketReset(0)
+	dec.Reset(0)
 
 	syncPkt := &Packet{}
 	syncPkt.ResetState()
 	syncPkt.Type = PktISync
 	syncPkt.Addr = 0x8000
-	dec.TracePacketData(0, syncPkt)
+	dec.Write(0, syncPkt)
 
 	// Branch missing CC
 	pkt1 := &Packet{}
@@ -181,41 +181,41 @@ func TestDecoderBranchVariations(t *testing.T) {
 	pkt1.Type = PktBranchAddress
 	pkt1.Addr = 0x2000
 	pkt1.CurrISA = ocsd.ISAArm
-	dec.TracePacketData(0, pkt1)
+	dec.Write(0, pkt1)
 
 	pkt1.Exception.Present = true
 	pkt1.ExceptionCancel = true
 	pkt1.Context.UpdatedC = true
 	pkt1.Context.CurrNS = true
-	dec.TracePacketData(1, pkt1)
+	dec.Write(1, pkt1)
 
 	pkt1.ExceptionCancel = false
 	pkt1.Context.CurrNS = false
-	dec.TracePacketData(2, pkt1)
+	dec.Write(2, pkt1)
 
 	// Alt branch
 	config.RegIDR = idrAltBranch | (4 << 4) // enable IsAltBranch
 	pkt1.Exception.Present = true
-	dec.TracePacketData(3, pkt1)
+	dec.Write(3, pkt1)
 
 	// Unsync packet
 	pkt2 := &Packet{}
 	pkt2.ResetState()
 	pkt2.Type = PktNotSync
-	dec.TracePacketData(4, pkt2)
+	dec.Write(4, pkt2)
 }
 
 func TestDecoderPHeaderVariations(t *testing.T) {
 	config := &Config{}
 	dec := setupDecFast(config)
-	dec.TracePacketReset(0)
+	dec.Reset(0)
 
 	pkt1 := &Packet{}
 	pkt1.ResetState()
 	pkt1.Type = PktISync
 	pkt1.Addr = 0x1000
 	pkt1.ISyncInfo.Reason = 2
-	dec.TracePacketData(0, pkt1)
+	dec.Write(0, pkt1)
 
 	pkt2 := &Packet{}
 	pkt2.ResetState()
@@ -223,24 +223,24 @@ func TestDecoderPHeaderVariations(t *testing.T) {
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 5
 	pkt2.PHdrFmt = 1
-	dec.TracePacketData(1, pkt2)
+	dec.Write(1, pkt2)
 
 	// Fmt 2
 	pkt2.PHdrFmt = 2
 	pkt2.Atom.Num = 2
-	dec.TracePacketData(2, pkt2)
+	dec.Write(2, pkt2)
 
 	// Fmt 3
 	pkt2.PHdrFmt = 3
 	pkt2.CycleCount = 100
-	dec.TracePacketData(3, pkt2)
+	dec.Write(3, pkt2)
 
 	// Without Sync / unknown address
-	dec.TracePacketReset(0)
+	dec.Reset(0)
 	pkt2.PHdrFmt = 1
-	dec.TracePacketData(4, pkt2)
+	dec.Write(4, pkt2)
 
-	dec.TracePacketFlush()
+	dec.Flush()
 }
 
 func TestDecoderAtomUsage(t *testing.T) {
@@ -250,13 +250,13 @@ func TestDecoderAtomUsage(t *testing.T) {
 	dec.SetMemAccess(mem)
 	dec.SetInstrDecode(idec.NewDecoder()) // conditional branch consumes atoms!
 
-	dec.TracePacketReset(0)
+	dec.Reset(0)
 
 	pkt1 := &Packet{}
 	pkt1.ResetState()
 	pkt1.Type = PktISync
 	pkt1.Addr = 0x1000
-	dec.TracePacketData(0, pkt1)
+	dec.Write(0, pkt1)
 
 	// Send an atom packet E, N
 	pkt2 := &Packet{}
@@ -264,13 +264,13 @@ func TestDecoderAtomUsage(t *testing.T) {
 	pkt2.Type = PktPHdr
 	pkt2.Atom.Num = 2
 	pkt2.Atom.EnBits = 1 // E, N
-	dec.TracePacketData(1, pkt2)
+	dec.Write(1, pkt2)
 
 	pkt3 := &Packet{}
 	pkt3.ResetState()
 	pkt3.Type = PktBranchAddress
 	pkt3.Addr = 0x2000
-	dec.TracePacketData(2, pkt3)
+	dec.Write(2, pkt3)
 
 	elems := drainDecodedElements(t, dec)
 	for _, e := range elems {
@@ -286,7 +286,7 @@ func TestDecoderAllPackets(t *testing.T) {
 	config := &Config{}
 	dec := setupDecFast(config)
 
-	dec.TracePacketReset(0)
+	dec.Reset(0)
 
 	syncPkt := &Packet{}
 	syncPkt.ResetState()
@@ -295,7 +295,7 @@ func TestDecoderAllPackets(t *testing.T) {
 	syncPkt.ISyncInfo.Reason = 0
 	syncPkt.Context.UpdatedC = true
 	syncPkt.Context.CtxtID = 42
-	dec.TracePacketData(0, syncPkt)
+	dec.Write(0, syncPkt)
 
 	types := []PktType{
 		PktCycleCount, PktTrigger, PktStoreFail,
@@ -305,29 +305,29 @@ func TestDecoderAllPackets(t *testing.T) {
 	}
 
 	for i, typ := range types {
-		dec.TracePacketReset(0)
+		dec.Reset(0)
 
-		dec.TracePacketData(ocsd.TrcIndex(i), syncPkt)
+		dec.Write(ocsd.TrcIndex(i), syncPkt)
 		pkt := &Packet{}
 		pkt.ResetState()
 		pkt.Type = typ
-		dec.TracePacketData(ocsd.TrcIndex(i), pkt)
+		dec.Write(ocsd.TrcIndex(i), pkt)
 	}
 
 	// Add missing error branches
-	dec.TracePacketReset(0)
-	dec.TracePacketData(0, syncPkt)
+	dec.Reset(0)
+	dec.Write(0, syncPkt)
 	errPkt := &Packet{}
 	errPkt.ResetState()
 	errPkt.Type = PktBadSequence
-	dec.TracePacketData(0, errPkt)
+	dec.Write(0, errPkt)
 
-	dec.TracePacketReset(0)
-	dec.TracePacketData(0, syncPkt)
+	dec.Reset(0)
+	dec.Write(0, syncPkt)
 	errPkt.Type = PktReserved
-	dec.TracePacketData(0, errPkt)
+	dec.Write(0, errPkt)
 
-	dec.TracePacketFlush()
+	dec.Flush()
 }
 
 func setupDecFast(config *Config) *PktDecode {

@@ -18,7 +18,7 @@ type captureRawMon struct {
 	lengths []int
 }
 
-func (c *capturePktOut) TracePacketData(_ ocsd.TrcIndex, pkt *TracePacket) error {
+func (c *capturePktOut) Write(_ ocsd.TrcIndex, pkt *TracePacket) error {
 	c.count++
 	if pkt != nil {
 		c.last = *pkt
@@ -26,11 +26,11 @@ func (c *capturePktOut) TracePacketData(_ ocsd.TrcIndex, pkt *TracePacket) error
 	return nil
 }
 
-func (c *capturePktOut) TracePacketEOT() error { return nil }
+func (c *capturePktOut) Close() error { return nil }
 
-func (c *capturePktOut) TracePacketFlush() error { return nil }
+func (c *capturePktOut) Flush() error { return nil }
 
-func (c *capturePktOut) TracePacketReset(_ ocsd.TrcIndex) error { return nil }
+func (c *capturePktOut) Reset(_ ocsd.TrcIndex) error { return nil }
 
 func (c *captureRawMon) MonitorRawData(indexSOP ocsd.TrcIndex, _ fmt.Stringer, rawData []byte) {
 	c.indexes = append(c.indexes, indexSOP)

@@ -327,11 +327,11 @@ func TestSTMFlushResetAndBadPacketClassification(t *testing.T) {
 		t.Errorf("Expected non-fatal response on proc reset, got %v", resp)
 	}
 
-	resp = ocsd.DataRespFromErr(dec.TracePacketFlush())
+	resp = ocsd.DataRespFromErr(dec.Flush())
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected non-fatal response on decoder flush, got %v", resp)
 	}
-	resp = ocsd.DataRespFromErr(dec.TracePacketReset(0))
+	resp = ocsd.DataRespFromErr(dec.Reset(0))
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected non-fatal response on decoder reset, got %v", resp)
 	}

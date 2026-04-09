@@ -272,8 +272,8 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 	return d, nil
 }
 
-// TracePacketData is the explicit packet data entrypoint used by split interfaces.
-func (d *PktDecode) TracePacketData(indexSOP ocsd.TrcIndex, pktIn *TracePacket) error {
+// Write is the explicit packet data entrypoint used by split interfaces.
+func (d *PktDecode) Write(indexSOP ocsd.TrcIndex, pktIn *TracePacket) error {
 	if pktIn == nil {
 		return ocsd.ErrInvalidParamVal
 	}
@@ -300,18 +300,18 @@ func (d *PktDecode) TracePacketData(indexSOP ocsd.TrcIndex, pktIn *TracePacket) 
 	return err
 }
 
-// TracePacketEOT handles end-of-trace control.
-func (d *PktDecode) TracePacketEOT() error {
+// Close handles end-of-trace control.
+func (d *PktDecode) Close() error {
 	return d.OnEOT()
 }
 
-// TracePacketFlush handles flush control.
-func (d *PktDecode) TracePacketFlush() error {
+// Flush handles flush control.
+func (d *PktDecode) Flush() error {
 	return d.OnFlush()
 }
 
-// TracePacketReset handles reset control.
-func (d *PktDecode) TracePacketReset(indexSOP ocsd.TrcIndex) error {
+// Reset handles reset control.
+func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 	_ = indexSOP
 	d.OnReset()
 	return nil
