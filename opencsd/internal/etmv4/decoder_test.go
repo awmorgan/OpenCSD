@@ -75,7 +75,7 @@ func TestDecoderTSRequiresMarkerWhenConfigured(t *testing.T) {
 	if err := d.processTSCCEventElem(tsElem); err != nil {
 		t.Fatalf("processTSCCEventElem pre-marker failed: %v", err)
 	}
-	if got := d.outElem.NumElemToSend(); got != 0 {
+	if got := d.numOutElemToSend(); got != 0 {
 		t.Fatalf("expected no timestamp element before TS marker, got %d queued elems", got)
 	}
 
@@ -97,7 +97,7 @@ func TestDecoderTSRequiresMarkerWhenConfigured(t *testing.T) {
 	if err := d.processTSCCEventElem(tsElem); err != nil {
 		t.Fatalf("processTSCCEventElem post-marker failed: %v", err)
 	}
-	if got := d.outElem.NumElemToSend(); got != 2 {
+	if got := d.numOutElemToSend(); got != 2 {
 		t.Fatalf("expected marker + timestamp queued after TS marker, got %d", got)
 	}
 }

@@ -12,11 +12,11 @@ func TestDecoderQueueFlushOrder(t *testing.T) {
 		t.Fatalf("NewPktDecode failed: %v", err)
 	}
 
-	if err := d.outElem.AddElemType(3, ocsd.GenElemEvent); err != nil {
+	if err := d.addOutElemType(3, ocsd.GenElemEvent); err != nil {
 		t.Fatalf("AddElemType failed: %v", err)
 	}
 
-	if err := d.outElem.AddElemType(4, ocsd.GenElemTimestamp); err != nil {
+	if err := d.addOutElemType(4, ocsd.GenElemTimestamp); err != nil {
 		t.Fatalf("AddElemType failed: %v", err)
 	}
 
