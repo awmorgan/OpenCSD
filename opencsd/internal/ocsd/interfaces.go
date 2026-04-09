@@ -19,6 +19,10 @@ type PacketProcessor[P any] interface {
 	Reset(indexSOP TrcIndex) error
 }
 
+type PacketReader[Packet any] interface {
+	NextPacket() (Packet, error)
+}
+
 // PacketMonitor provides packet monitor functionality off the decode path.
 type PacketMonitor interface {
 	MonitorRawData(indexSOP TrcIndex, pkt fmt.Stringer, rawData []byte)
