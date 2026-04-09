@@ -14,21 +14,7 @@ type outDataEntry struct {
 	data  [16]byte
 }
 
-func mergeDataPathResult(currResp ocsd.DatapathResp, currErr error, nextResp ocsd.DatapathResp, nextErr error) (ocsd.DatapathResp, error) {
-	candidate := nextErr
-	if candidate == nil {
-		if !ocsd.DataRespIsCont(nextResp) {
-			candidate = ocsd.DataErrFromResp(nextResp, nil)
-		} else {
-			return currResp, currErr
-		}
-	}
 
-	if currErr == nil || ocsd.DataRespFromErr(candidate) > ocsd.DataRespFromErr(currErr) {
-		return ocsd.DataRespFromErr(candidate), candidate
-	}
-	return currResp, currErr
-}
 
 // FrameDeformatter represents TraceFormatterFrameDecoder and its TraceFmtDcdImpl.
 // It translates the CoreSight formatted trace byte stream into a demuxed packet stream per ID.
@@ -181,37 +167,38 @@ func (d *FrameDeformatter) callIDStream(stream ocsd.TraceProcessor, op ocsd.Data
 	}
 }
 
-func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocsd.TrcIndex) (ocsd.DatapathResp, error) {
-	resp := ocsd.RespCont
+func (d *FrameDeformatter) executeNoneDataOpAllIDs(op ocsd.DatapathOp, index ocsd.TrcIndex) error {
 	var outErr error
 
 	for _, stream := range d.idStreams {
 		if stream != nil { // if attached
 			_, err := d.callIDStream(stream, op, index, nil)
-			resp, outErr = mergeDataPathResult(resp, outErr, ocsd.DataRespFromErr(err), err)
+			if err != nil && outErr == nil {
+				outErr = err
+			}
 		}
 	}
 
 	if d.rawTraceFrame != nil {
 		err := d.rawTraceFrame.TraceRawFrameIn(op, 0, ocsd.FrmNone, nil, 0)
-		if err != nil {
-			resp, outErr = mergeDataPathResult(resp, outErr, ocsd.RespFatalInvalidData, err)
+		if err != nil && outErr == nil {
+			outErr = err
 		}
 	}
-	return resp, outErr
+	return outErr
 }
 
-func (d *FrameDeformatter) Reset() (ocsd.DatapathResp, error) {
+func (d *FrameDeformatter) Reset() error {
 	d.resetStateParams()
 	return d.executeNoneDataOpAllIDs(ocsd.OpReset, 0)
 }
 
-func (d *FrameDeformatter) Flush() (ocsd.DatapathResp, error) {
-	resp, outErr := d.executeNoneDataOpAllIDs(ocsd.OpFlush, 0)
-	if ocsd.DataRespIsCont(resp) {
-		_, resp, outErr = d.outputFrame(resp, outErr)
+func (d *FrameDeformatter) Flush() error {
+	outErr := d.executeNoneDataOpAllIDs(ocsd.OpFlush, 0)
+	if outErr == nil {
+		_, outErr = d.outputFrame(outErr)
 	}
-	return resp, outErr
+	return outErr
 }
 
 func (d *FrameDeformatter) resetStateParams() {
@@ -263,63 +250,45 @@ func (d *FrameDeformatter) TraceData(index ocsd.TrcIndex, dataBlock []byte) (uin
 	if len(dataBlock) == 0 {
 		return 0, ocsd.ErrInvalidParamVal
 	}
-	numBytesProcessed, resp, err := d.processTraceData(index, dataBlock)
-	if err == nil && !ocsd.DataRespIsCont(resp) {
-		err = ocsd.DataErrFromResp(resp, nil)
-	}
-	return numBytesProcessed, err
+	return d.processTraceData(index, dataBlock)
 }
 
 // TraceDataEOT forwards an EOT operation through the legacy multiplexer.
 func (d *FrameDeformatter) TraceDataEOT() error {
 	d.outPackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrPackedRawOut) != 0
 	d.outUnpackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrUnpackedRawOut) != 0
-	resp, err := d.executeNoneDataOpAllIDs(ocsd.OpEOT, 0)
-	if err == nil && !ocsd.DataRespIsCont(resp) {
-		err = ocsd.DataErrFromResp(resp, nil)
-	}
-	return err
+	return d.executeNoneDataOpAllIDs(ocsd.OpEOT, 0)
 }
 
 // TraceDataFlush forwards a flush operation through the legacy multiplexer.
 func (d *FrameDeformatter) TraceDataFlush() error {
 	d.outPackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrPackedRawOut) != 0
 	d.outUnpackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrUnpackedRawOut) != 0
-	resp, err := d.Flush()
-	if err == nil && !ocsd.DataRespIsCont(resp) {
-		err = ocsd.DataErrFromResp(resp, nil)
-	}
-	return err
+	return d.Flush()
 }
 
 // TraceDataReset forwards a reset operation through the legacy multiplexer.
 func (d *FrameDeformatter) TraceDataReset(index ocsd.TrcIndex) error {
 	d.outPackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrPackedRawOut) != 0
 	d.outUnpackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrUnpackedRawOut) != 0
-	resp, err := d.Reset()
-	if err == nil && !ocsd.DataRespIsCont(resp) {
-		err = ocsd.DataErrFromResp(resp, nil)
-	}
-	return err
+	return d.Reset()
 }
 
-func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byte) (numBytesProcessed uint32, outResp ocsd.DatapathResp, outErr error) {
-	outResp = ocsd.RespCont
-
+func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if d.alignment == 0 {
-		return 0, ocsd.RespFatalSysErr, fmt.Errorf("%w: Deformatter not configured", ocsd.ErrFail)
+		return 0, fmt.Errorf("%w: Deformatter not configured", ocsd.ErrFail)
 	}
 
 	if len(d.pendingData) > 0 {
 		expected := d.pendingIndex + ocsd.TrcIndex(len(d.pendingData))
 		if expected != index {
 			err := fmt.Errorf("%w: Not continuous trace data", ocsd.ErrDfrmtrNotconttrace)
-			return 0, ocsd.RespFatalInvalidData, err
+			return 0, err
 		}
 	} else if d.firstData {
 		if d.trcCurrIdx != index {
 			err := fmt.Errorf("%w: Not continuous trace data", ocsd.ErrDfrmtrNotconttrace)
-			return 0, ocsd.RespFatalInvalidData, err
+			return 0, err
 		}
 	}
 	if len(d.pendingData) == 0 {
@@ -334,15 +303,15 @@ func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byt
 		if !d.firstData {
 			d.firstData = true
 		}
-		numBytesProcessed = uint32(len(dataBlock))
-		return numBytesProcessed, ocsd.RespCont, nil
+		return uint32(len(dataBlock)), nil
 	}
 
 	alignedBlock := d.pendingData[:processSize]
 	alignedIndex := d.pendingIndex
 
 	var alignedProcessed uint32
-	alignedProcessed, outResp, outErr = d.processTraceDataAligned(alignedIndex, alignedBlock)
+	var outErr error
+	alignedProcessed, outErr = d.processTraceDataAligned(alignedIndex, alignedBlock)
 
 	if alignedProcessed > 0 {
 		d.pendingData = d.pendingData[int(alignedProcessed):]
@@ -357,49 +326,45 @@ func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byt
 		d.firstData = true
 	}
 
-	numBytesProcessed = uint32(len(dataBlock))
-	if outErr != nil || !ocsd.DataRespIsCont(outResp) {
-		return numBytesProcessed, outResp, outErr
-	}
-	return numBytesProcessed, outResp, nil
+	numBytesProcessed := uint32(len(dataBlock))
+	return numBytesProcessed, outErr
 }
 
-func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBlock []byte) (numBytesProcessed uint32, outResp ocsd.DatapathResp, outErr error) {
-	outResp = ocsd.RespCont
-
+func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	d.trcCurrIdx = index
 
 	// record incoming block
 	d.inBlockBase = dataBlock
 	d.inBlockProcessed = 0
 	dataBlockSize := uint32(len(dataBlock))
+	var outErr error
 
 	if dataBlockSize%d.alignment != 0 {
-		return 0, ocsd.RespFatalInvalidData, fmt.Errorf("%w: Input block incorrect size, must be %d byte multiple", ocsd.ErrInvalidParamVal, d.alignment)
+		return 0, fmt.Errorf("%w: Input block incorrect size, must be %d byte multiple", ocsd.ErrInvalidParamVal, d.alignment)
 	}
 
 	if d.checkForSync(dataBlockSize) {
 		bProcessing := true
 		for bProcessing {
-			var frameResp ocsd.DatapathResp
 			var frameErr error
-			bProcessing, frameResp, frameErr = d.extractFrame(dataBlockSize)
-			outResp, outErr = mergeDataPathResult(outResp, outErr, frameResp, frameErr)
-			if !ocsd.DataRespIsCont(outResp) {
+			bProcessing, frameErr = d.extractFrame(dataBlockSize)
+			if frameErr != nil && outErr == nil {
+				outErr = frameErr
+			}
+			if outErr != nil {
 				break
 			}
 			if bProcessing {
 				bProcessing = d.unpackFrame()
 			}
 			if bProcessing {
-				bProcessing, outResp, outErr = d.outputFrame(outResp, outErr)
-				if !ocsd.DataRespIsCont(outResp) {
+				bProcessing, outErr = d.outputFrame(outErr)
+				if outErr != nil {
 					break
 				}
 			}
 		}
 	}
 
-	numBytesProcessed = d.inBlockProcessed
-	return numBytesProcessed, outResp, outErr
+	return d.inBlockProcessed, outErr
 }
