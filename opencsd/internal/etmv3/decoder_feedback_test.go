@@ -43,9 +43,9 @@ func TestDecodePacketPreservesWaitISyncWithoutOutput(t *testing.T) {
 	pkt.Type = PktIgnore
 	dec.CurrPacketIn = pkt
 
-	resp, pktDone := dec.decodePacket()
-	if resp != ocsd.RespCont {
-		t.Fatalf("expected RespCont, got %v", resp)
+	err, pktDone := dec.decodePacket()
+	if err != nil {
+		t.Fatalf("expected nil err, got %v", err)
 	}
 	if !pktDone {
 		t.Fatal("expected packet to be complete when no output is generated")
@@ -63,9 +63,9 @@ func TestOnFlushCommitsPendingElements(t *testing.T) {
 	elem.SetType(ocsd.GenElemInstrRange)
 	dec.pendLastNOutElem(1)
 
-	resp := dec.OnFlush()
-	if resp != ocsd.RespCont {
-		t.Fatalf("expected RespCont, got %v", resp)
+	err := dec.OnFlush()
+	if err != nil {
+		t.Fatalf("expected err nil, got %v", err)
 	}
 	elems := drainDecodedElements(t, dec)
 	if len(elems) != 1 {
@@ -95,9 +95,9 @@ func TestProcessBranchAddrContextWithoutException(t *testing.T) {
 	pkt.Context.CurrNS = true
 	pkt.Context.CurrHyp = true
 
-	resp := ocsd.DataRespFromErr(dec.PacketDataIn(ocsd.OpData, 2, pkt))
-	if ocsd.DataRespIsFatal(resp) {
-		t.Fatalf("unexpected fatal response: %v", resp)
+	err := dec.PacketDataIn(ocsd.OpData, 2, pkt)
+	if err != nil {
+		t.Fatalf("unexpected fatal response: %v", err)
 	}
 
 	elems := drainDecodedElements(t, dec)
@@ -139,9 +139,9 @@ func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 	pkt.ResetState()
 	pkt.Type = PktTrigger
 
-	resp := ocsd.DataRespFromErr(dec.PacketDataIn(ocsd.OpData, 4, pkt))
-	if ocsd.DataRespIsFatal(resp) {
-		t.Fatalf("unexpected fatal response: %v", resp)
+	err := dec.PacketDataIn(ocsd.OpData, 4, pkt)
+	if err != nil {
+		t.Fatalf("unexpected fatal response: %v", err)
 	}
 
 	elems := drainDecodedElements(t, dec)
@@ -183,13 +183,13 @@ func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 	pkt.ExceptionCancel = true
 	pkt.Exception.Present = true
 
-	resp := ocsd.DataRespFromErr(dec.PacketDataIn(ocsd.OpData, 6, pkt))
-	if ocsd.DataRespIsFatal(resp) {
-		t.Fatalf("unexpected fatal response: %v", resp)
+	err := dec.PacketDataIn(ocsd.OpData, 6, pkt)
+	if err != nil {
+		t.Fatalf("unexpected fatal response: %v", err)
 	}
-	resp = dec.OnFlush()
-	if ocsd.DataRespIsFatal(resp) {
-		t.Fatalf("unexpected fatal response from flush: %v", resp)
+	err = dec.OnFlush()
+	if err != nil {
+		t.Fatalf("unexpected fatal response from flush: %v", err)
 	}
 
 	elems := drainDecodedElements(t, dec)
@@ -217,17 +217,17 @@ func TestProcessPHdrUsesPacketISA(t *testing.T) {
 	phdr.Atom.Num = 1
 	phdr.Atom.EnBits = 0x1
 
-	resp := ocsd.DataRespFromErr(dec.PacketDataIn(ocsd.OpData, 2, phdr))
-	if ocsd.DataRespIsFatal(resp) {
-		t.Fatalf("unexpected fatal response: %v", resp)
+	err := dec.PacketDataIn(ocsd.OpData, 2, phdr)
+	if err != nil {
+		t.Fatalf("unexpected fatal response: %v", err)
 	}
 
 	trigger := &Packet{}
 	trigger.ResetState()
 	trigger.Type = PktTrigger
-	resp = ocsd.DataRespFromErr(dec.PacketDataIn(ocsd.OpData, 3, trigger))
-	if ocsd.DataRespIsFatal(resp) {
-		t.Fatalf("unexpected fatal response: %v", resp)
+	err = dec.PacketDataIn(ocsd.OpData, 3, trigger)
+	if err != nil {
+		t.Fatalf("unexpected fatal response: %v", err)
 	}
 
 	elems := drainDecodedElements(t, dec)

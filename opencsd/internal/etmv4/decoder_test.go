@@ -47,9 +47,9 @@ func TestDecoderOnFlushResolvesPendingState(t *testing.T) {
 	}
 
 	d.currState = resolveElem
-	resp := d.OnFlush()
-	if resp != ocsd.RespCont {
-		t.Fatalf("OnFlush resp = %v, want %v", resp, ocsd.RespCont)
+	err = d.OnFlush()
+	if err != nil {
+		t.Fatalf("OnFlush err = %v, want nil", err)
 	}
 	if d.currState != decodePkts {
 		t.Fatalf("expected currState to transition to decodePkts, got %v", d.currState)

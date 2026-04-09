@@ -14,8 +14,6 @@ type outDataEntry struct {
 	data  [16]byte
 }
 
-
-
 // FrameDeformatter represents TraceFormatterFrameDecoder and its TraceFmtDcdImpl.
 // It translates the CoreSight formatted trace byte stream into a demuxed packet stream per ID.
 type FrameDeformatter struct {

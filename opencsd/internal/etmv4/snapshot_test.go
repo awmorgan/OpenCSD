@@ -470,9 +470,8 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 
 			for len(payload) > 0 {
 				consumed, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), payload)
-				resp := ocsd.DataRespFromErr(ocsdErr)
-				if ocsd.DataRespIsFatal(resp) {
-					return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v", resp, traceIndex, ocsdErr)
+				if ocsdErr != nil && !ocsd.IsDataWaitErr(ocsdErr) && ocsdErr != io.EOF {
+					return nil, fmt.Errorf("fatal error at trace index %d: %v", traceIndex, ocsdErr)
 				}
 				if consumed == 0 {
 					return nil, fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
@@ -497,9 +496,8 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 				sendLen = maxChunk - (maxChunk % frameAlignment)
 			}
 			consumed, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), pending[:sendLen])
-			resp := ocsd.DataRespFromErr(ocsdErr)
-			if ocsd.DataRespIsFatal(resp) {
-				return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v", resp, traceIndex, ocsdErr)
+			if ocsdErr != nil && !ocsd.IsDataWaitErr(ocsdErr) && ocsdErr != io.EOF {
+				return nil, fmt.Errorf("fatal error at trace index %d: %v", traceIndex, ocsdErr)
 			}
 			if consumed == 0 {
 				return nil, fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
@@ -514,9 +512,8 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		remaining := traceData
 		for len(remaining) > 0 {
 			consumed, ocsdErr := tree.TraceDataIn(ocsd.OpData, ocsd.TrcIndex(traceIndex), remaining)
-			resp := ocsd.DataRespFromErr(ocsdErr)
-			if ocsd.DataRespIsFatal(resp) {
-				return nil, fmt.Errorf("fatal datapath response %d at trace index %d: %v", resp, traceIndex, ocsdErr)
+			if ocsdErr != nil && !ocsd.IsDataWaitErr(ocsdErr) && ocsdErr != io.EOF {
+				return nil, fmt.Errorf("fatal error at trace index %d: %v", traceIndex, ocsdErr)
 			}
 			if consumed == 0 {
 				return nil, fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
@@ -530,9 +527,8 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 	}
 
 	_, err = tree.TraceDataIn(ocsd.OpEOT, ocsd.TrcIndex(traceIndex), nil)
-	resp := ocsd.DataRespFromErr(err)
-	if ocsd.DataRespIsFatal(resp) {
-		return nil, fmt.Errorf("fatal datapath response on EOT")
+	if err != nil && !ocsd.IsDataWaitErr(err) && err != io.EOF {
+		return nil, fmt.Errorf("fatal error on EOT: %v", err)
 	}
 	if err := drainAndPrintElements(tree, printer); err != nil {
 		return nil, err

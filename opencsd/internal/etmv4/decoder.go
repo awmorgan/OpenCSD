@@ -281,13 +281,13 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 		d.CurrPacketIn = pktIn
 		d.IndexCurrPkt = indexSOP
 		d.collectElements = true
-		resp := d.ProcessPacket()
+		err := d.ProcessPacket()
 		d.collectElements = false
 
 		d.flushOutputElements()
 
 		// Drain queued elements only when using legacy push sink wiring.
-		if ocsd.DataRespIsCont(resp) && d.traceElemOut != nil {
+		if err == nil && d.traceElemOut != nil {
 			for {
 				_, _, _, nextErr := d.NextElement()
 				if errors.Is(nextErr, io.EOF) {
@@ -298,13 +298,14 @@ func (d *PktDecode) PacketDataIn(op ocsd.DatapathOp, indexSOP ocsd.TrcIndex, pkt
 				}
 			}
 		}
-		return ocsd.DataErrFromResp(resp, nil)
+		return err
 	case ocsd.OpEOT:
-		return ocsd.DataErrFromResp(d.OnEOT(), nil)
+		return d.OnEOT()
 	case ocsd.OpFlush:
-		return ocsd.DataErrFromResp(d.OnFlush(), nil)
+		return d.OnFlush()
 	case ocsd.OpReset:
-		return ocsd.DataErrFromResp(d.OnReset(), nil)
+		d.OnReset()
+		return nil
 	default:
 		return ocsd.ErrInvalidParamVal
 	}
@@ -553,58 +554,55 @@ func (d *PktDecode) commitElemOnEOT() error {
 	return err
 }
 
-func (d *PktDecode) OnEOT() ocsd.DatapathResp {
-	resp := ocsd.RespCont
+func (d *PktDecode) OnEOT() error {
 	err := d.commitElemOnEOT()
 	if err != nil {
-		resp = ocsd.RespFatalInvalidData
-	} else {
-		d.flushOutputElements()
+		return ocsd.ErrDataDecodeFatal
 	}
-	return resp
+	d.flushOutputElements()
+	return nil
 }
 
-func (d *PktDecode) OnReset() ocsd.DatapathResp {
+func (d *PktDecode) OnReset() {
 	d.configureDecoder()
 	d.unsyncEOTInfo = ocsd.UnsyncResetDecoder
-	return ocsd.RespCont
 }
 
-func (d *PktDecode) OnFlush() ocsd.DatapathResp {
+func (d *PktDecode) OnFlush() error {
 	if d.currState == resolveElem {
 		return d.resolveElements()
 	}
 	d.flushOutputElements()
-	return ocsd.RespCont
+	return nil
 }
 
-func (d *PktDecode) ProcessPacket() ocsd.DatapathResp {
+func (d *PktDecode) ProcessPacket() error {
 	d.syncAA64OpcodeCheckMode()
 
-	var resp ocsd.DatapathResp
+	var err error
 	for {
 		var done bool
 		switch d.currState {
 		case noSync:
-			resp, done = d.handleNoSync()
+			err, done = d.handleNoSync()
 		case waitSync:
-			resp, done = d.handleWaitSync()
+			err, done = d.handleWaitSync()
 		case waitISync:
-			resp, done = d.handleWaitISync()
+			err, done = d.handleWaitISync()
 		case decodePkts:
-			resp, done = d.handleDecodePkts()
+			err, done = d.handleDecodePkts()
 		case resolveElem:
-			resp, done = d.handleResolveElem()
+			err, done = d.handleResolveElem()
 		default:
-			return ocsd.RespCont
+			return nil
 		}
 		if done {
-			return resp
+			return err
 		}
 	}
 }
 
-func (d *PktDecode) handleNoSync() (ocsd.DatapathResp, bool) {
+func (d *PktDecode) handleNoSync() (error, bool) {
 	err := d.resetOutElems()
 	if err == nil {
 		err = d.addOutElemType(d.IndexCurrPkt, ocsd.GenElemNoSync)
@@ -612,47 +610,48 @@ func (d *PktDecode) handleNoSync() (ocsd.DatapathResp, bool) {
 			d.currOutElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
 			d.flushOutputElements()
 			d.currState = waitSync
-			return ocsd.RespCont, false // continue to waitSync
+			return nil, false // continue to waitSync
 		}
 	}
-	return ocsd.RespFatalSysErr, true
+	return ocsd.ErrFail, true
 }
 
-func (d *PktDecode) handleWaitSync() (ocsd.DatapathResp, bool) {
+func (d *PktDecode) handleWaitSync() (error, bool) {
 	if d.CurrPacketIn.Type == PktAsync {
 		d.currState = waitISync
 	}
-	return ocsd.RespCont, true
+	return nil, true
 }
 
-func (d *PktDecode) handleWaitISync() (ocsd.DatapathResp, bool) {
+func (d *PktDecode) handleWaitISync() (error, bool) {
 	pkt := d.CurrPacketIn
 	d.needCtxt = true
 	d.NeedAddr = true
 	if pkt.Type == PktTraceInfo {
 		d.doTraceInfoPacket()
 		d.currState = decodePkts
+		// if we had a discontinuity due to bad trace, flush branch targets
 		d.returnStack.Flush()
 	} else if d.config.MajVersion() >= 0x5 && pkt.Type == PktEvent {
 		if err := d.decodePacket(); err != nil {
-			return ocsd.RespFatalInvalidData, true
+			return ocsd.ErrDataDecodeFatal, true
 		}
 	}
-	return ocsd.RespCont, true
+	return nil, true
 }
 
-func (d *PktDecode) handleDecodePkts() (ocsd.DatapathResp, bool) {
+func (d *PktDecode) handleDecodePkts() (error, bool) {
 	if err := d.decodePacket(); err != nil {
-		return ocsd.RespFatalInvalidData, true
+		return ocsd.ErrDataDecodeFatal, true
 	}
 	// decodePacket may set d.currState = resolveElem; if so, continue the loop
-	return ocsd.RespCont, d.currState != resolveElem
+	return nil, d.currState != resolveElem
 }
 
-func (d *PktDecode) handleResolveElem() (ocsd.DatapathResp, bool) {
-	resp := d.resolveElements()
+func (d *PktDecode) handleResolveElem() (error, bool) {
+	err := d.resolveElements()
 	// resolveElements sets d.currState = decodePkts when complete
-	return resp, d.currState == decodePkts || resp != ocsd.RespCont
+	return err, d.currState == decodePkts || err != nil
 }
 
 func (d *PktDecode) clearElemRes() {
@@ -666,8 +665,8 @@ func (d *PktDecode) isElemForRes() bool {
 	return d.elemRes.P0Commit != 0 || d.elemRes.P0Cancel != 0 || d.elemRes.Mispredict || d.elemRes.Discard
 }
 
-func (d *PktDecode) resolveElements() ocsd.DatapathResp {
-	resp := ocsd.RespCont
+func (d *PktDecode) resolveElements() error {
+	var loopErr error
 	complete := false
 
 	for !complete {
@@ -693,26 +692,23 @@ func (d *PktDecode) resolveElements() ocsd.DatapathResp {
 
 			if err != nil {
 				if d.currState == noSync {
-					emitResp := d.emitNoSyncAtUnsyncIdx()
-					if emitResp == ocsd.RespFatalSysErr {
-						resp = emitResp
+					emitErr := d.emitNoSyncAtUnsyncIdx()
+					if emitErr != nil {
+						loopErr = emitErr
 					} else {
 						if d.currState == noSync {
 							d.currState = waitSync
 						}
-						resp = ocsd.RespErrCont
+						// Maps to old RespErrCont logic which bypassed DatapathResp fatal checks
+						loopErr = nil
 					}
 				} else {
-					resp = ocsd.RespFatalInvalidData
+					loopErr = ocsd.ErrDataDecodeFatal
 				}
 			}
 		}
 
-		if resp != ocsd.RespCont && resp != ocsd.RespWait {
-			// Wait or Error - break out
-			break
-		}
-		if (resp == ocsd.RespWait) && (d.numOutElemToSend() > 0) {
+		if loopErr != nil {
 			break
 		}
 
@@ -723,7 +719,7 @@ func (d *PktDecode) resolveElements() ocsd.DatapathResp {
 			}
 		}
 	}
-	return resp
+	return loopErr
 }
 
 func (d *PktDecode) decodePacket() error {
@@ -2066,21 +2062,21 @@ func (d *PktDecode) calcISA(is64bit bool, is uint8) ocsd.ISA {
 	return ocsd.ISAArm
 }
 
-func (d *PktDecode) emitNoSyncAtUnsyncIdx() ocsd.DatapathResp {
+func (d *PktDecode) emitNoSyncAtUnsyncIdx() error {
 	idx := d.unsyncPktIdx
 	if idx == ocsd.BadTrcIndex {
-		return ocsd.RespCont
+		return nil
 	}
 	d.unsyncPktIdx = ocsd.BadTrcIndex
 	if err := d.resetOutElems(); err != nil {
-		return ocsd.RespFatalSysErr
+		return ocsd.ErrFail
 	}
 	if err := d.addOutElemType(idx, ocsd.GenElemNoSync); err != nil {
-		return ocsd.RespFatalSysErr
+		return ocsd.ErrFail
 	}
 	d.currOutElem().SetUnSyncEOTReason(d.unsyncEOTInfo)
 	d.flushOutputElements()
-	return ocsd.RespCont
+	return nil
 }
 
 // ========================
