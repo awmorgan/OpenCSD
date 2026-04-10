@@ -29,9 +29,9 @@ func (p *stmRawPacketPrinter) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.Str
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Idx:%d; ID:%x; [", indexSOP, p.traceID))
+	fmt.Fprintf(&sb, "Idx:%d; ID:%x; [", indexSOP, p.traceID)
 	for _, b := range rawData {
-		sb.WriteString(fmt.Sprintf("0x%02x ", b))
+		fmt.Fprintf(&sb, "0x%02x ", b)
 	}
 	sb.WriteString("];\t")
 	sb.WriteString(pkt.String())

@@ -51,9 +51,9 @@ func (p *etmv3RawPacketPrinter) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.S
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Idx:%d; ID:%x; [", indexSOP, p.traceID))
+	fmt.Fprintf(&sb, "Idx:%d; ID:%x; [", indexSOP, p.traceID)
 	for _, b := range rawData {
-		sb.WriteString(fmt.Sprintf("0x%02x ", b))
+		fmt.Fprintf(&sb, "0x%02x ", b)
 	}
 	sb.WriteString("];\t")
 	sb.WriteString(etmv3PacketTypeName(etmPkt.Type))

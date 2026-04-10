@@ -45,7 +45,7 @@ func (p *GenericElementPrinter) PrintElement(elem *ocsd.TraceElement) error {
 
 	var sb strings.Builder
 	if !p.IDPrintMuted() {
-		sb.WriteString(fmt.Sprintf("Idx:%d; ID:%x; ", elem.Index, elem.TraceID))
+		fmt.Fprintf(&sb, "Idx:%d; ID:%x; ", elem.Index, elem.TraceID)
 	}
 
 	// append trace element standard formatting
@@ -84,7 +84,7 @@ func (p *GenericElementPrinter) PrintStats() {
 
 	sb.WriteString("Generic Packets processed:-\n")
 	for i := ocsd.GenElemUnknown; i <= ocsd.GenElemCustom; i++ {
-		sb.WriteString(fmt.Sprintf("%s : %d\n", elemName(i), p.packetCounts[i]))
+		fmt.Fprintf(&sb, "%s : %d\n", elemName(i), p.packetCounts[i])
 	}
 	sb.WriteString("\n\n")
 

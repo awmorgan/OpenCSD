@@ -29,7 +29,7 @@ func (p *RawFramePrinter) WriteRawFrame(index ocsd.TrcIndex, frameElem ocsd.Rawf
 
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("Frame Data; Index%7d; ", index))
+	fmt.Fprintf(&sb, "Frame Data; Index%7d; ", index)
 
 	switch frameElem {
 	case ocsd.FrmPacked:
@@ -58,7 +58,7 @@ func (p *RawFramePrinter) WriteRawFrame(index ocsd.TrcIndex, frameElem ocsd.Rawf
 				sb.WriteString("\n")
 				lineBytes = 0
 			}
-			sb.WriteString(fmt.Sprintf("%02x ", data[i]))
+			fmt.Fprintf(&sb, "%02x ", data[i])
 			lineBytes++
 		}
 	}

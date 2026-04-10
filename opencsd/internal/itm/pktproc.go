@@ -621,7 +621,7 @@ func (p *PktProc) PktData() error {
 	}
 
 	if payloadBytesGot == payloadBytesReq {
-		var value uint32 = uint32(p.packetData[1])
+		value := uint32(p.packetData[1])
 		if payloadBytesReq >= 2 {
 			value |= (uint32(p.packetData[2]) << 8)
 		}

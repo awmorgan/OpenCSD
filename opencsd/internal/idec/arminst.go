@@ -377,7 +377,7 @@ func InstThumbBranchDestination(addr uint32, inst uint32) (pnpc uint32, ok bool)
 		return pnpc, true
 	case (inst&0xf800d000) == 0xf0008000 && (inst&0x03800000) != 0x03800000:
 		// B (encoding T3)
-		var offset uint32 = ((inst & 0x04000000) << 5) |
+		offset := ((inst & 0x04000000) << 5) |
 			((inst & 0x0800) << 19) |
 			((inst & 0x2000) << 16) |
 			((inst & 0x003f0000) << 7) |
@@ -388,7 +388,7 @@ func InstThumbBranchDestination(addr uint32, inst uint32) (pnpc uint32, ok bool)
 	case (inst & 0xf8009000) == 0xf0009000:
 		// B (encoding T4); BL (encoding T1)
 		S := ((inst & 0x04000000) >> 26) - 1 // ffffffff or 0 according to S bit
-		var offset uint32 = ((inst & 0x04000000) << 5) |
+		offset := ((inst & 0x04000000) << 5) |
 			(((inst ^ S) & 0x2000) << 17) |
 			(((inst ^ S) & 0x0800) << 18) |
 			((inst & 0x03ff0000) << 3) |
@@ -400,7 +400,7 @@ func InstThumbBranchDestination(addr uint32, inst uint32) (pnpc uint32, ok bool)
 		// BLX (encoding T2)
 		S := ((inst & 0x04000000) >> 26) - 1 // ffffffff or 0 according to S bit
 		addr &= 0xfffffffc                   // Align(PC,4)
-		var offset uint32 = ((inst & 0x04000000) << 5) |
+		offset := ((inst & 0x04000000) << 5) |
 			(((inst ^ S) & 0x2000) << 17) |
 			(((inst ^ S) & 0x0800) << 18) |
 			((inst & 0x03ff0000) << 3) |

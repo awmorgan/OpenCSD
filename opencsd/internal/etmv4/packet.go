@@ -802,7 +802,7 @@ func (p *TracePacket) getExceptionStr() string {
 		if p.ExceptionInfo.ExceptionType < 0x20 {
 			sb.WriteString(mExcep[p.ExceptionInfo.ExceptionType] + ";")
 		} else if p.ExceptionInfo.ExceptionType >= 0x208 && p.ExceptionInfo.ExceptionType <= 0x3EF {
-			sb.WriteString(fmt.Sprintf("IRQ%d;", p.ExceptionInfo.ExceptionType-0x200))
+			fmt.Fprintf(&sb, "IRQ%d;", p.ExceptionInfo.ExceptionType-0x200)
 		} else {
 			sb.WriteString("Reserved;")
 		}
@@ -907,7 +907,7 @@ func (p *TracePacket) contextStr() string {
 	} else {
 		sb.WriteString("AArch32, ")
 	}
-	sb.WriteString(fmt.Sprintf("EL%d, ", p.Context.EL))
+	fmt.Fprintf(&sb, "EL%d, ", p.Context.EL)
 
 	if p.Context.NSE {
 		if p.Context.NS {
@@ -924,10 +924,10 @@ func (p *TracePacket) contextStr() string {
 	}
 
 	if p.Context.UpdatedC {
-		sb.WriteString(fmt.Sprintf("CID=0x%08x; ", p.Context.CtxtID))
+		fmt.Fprintf(&sb, "CID=0x%08x; ", p.Context.CtxtID)
 	}
 	if p.Context.UpdatedV {
-		sb.WriteString(fmt.Sprintf("VMID=0x%04x; ", p.Context.VMID))
+		fmt.Fprintf(&sb, "VMID=0x%04x; ", p.Context.VMID)
 	}
 
 	return sb.String()
