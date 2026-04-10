@@ -229,7 +229,8 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 		{decoder: "ptm", goldenName: "TC2", snapshotName: "TC2"},
 		{decoder: "ptm", goldenName: "tc2-ptm-rstk-t32", snapshotName: "tc2-ptm-rstk-t32"},
 		{decoder: "ptm", goldenName: "trace_cov_a15", snapshotName: "trace_cov_a15"},
-		{decoder: "stm", goldenName: "stm-issue-27", snapshotName: "stm-issue-27"}, {decoder: "stm", goldenName: "stm_only-2", snapshotName: "stm_only-2"},
+		{decoder: "stm", goldenName: "stm-issue-27", snapshotName: "stm-issue-27"},
+		{decoder: "stm", goldenName: "stm_only-2", snapshotName: "stm_only-2"},
 		{
 			decoder: "stm", goldenName: "stm_only-juno", snapshotName: "stm_only-juno",
 			expectedRunError: "trace packet lister: data path fatal response=",
