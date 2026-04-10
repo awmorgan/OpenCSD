@@ -129,8 +129,9 @@ func (g *filteredGenElemPrinter) PrintElement(elem *ocsd.TraceElement) error {
 }
 
 type genericRawPrinter struct {
-	writer io.Writer
-	id     uint8
+	writer       io.Writer
+	id           uint8
+	showRawBytes bool
 }
 
 type synchronizedWriter struct {
@@ -156,11 +157,15 @@ func (p *genericRawPrinter) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.Strin
 		return
 	}
 
-	fmt.Fprintf(p.writer, "Idx:%d; ID:%x; [", indexSOP, p.id)
-	for _, b := range rawData {
-		fmt.Fprintf(p.writer, "0x%02x ", b)
+	if p.showRawBytes {
+		fmt.Fprintf(p.writer, "Idx:%d; ID:%x; [", indexSOP, p.id)
+		for _, b := range rawData {
+			fmt.Fprintf(p.writer, "0x%02x ", b)
+		}
+		fmt.Fprintf(p.writer, "];\t%s\n", formattedPkt)
+	} else {
+		fmt.Fprintf(p.writer, "Idx:%d; ID:%x;\t%s\n", indexSOP, p.id, formattedPkt)
 	}
-	fmt.Fprintf(p.writer, "];\t%s\n", formattedPkt)
 }
 
 func (p *genericRawPrinter) MonitorEOT() {
@@ -654,6 +659,7 @@ func applyAdditionalFlags(tree *dcdtree.DecodeTree, flags uint32) error {
 func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options) int {
 	attached := 0
 	idFilter := makeIDSet(opts.idList)
+	showRawBytes := opts.decode || opts.pktMon
 
 	type elemRef struct {
 		id   uint8
@@ -681,32 +687,37 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 		switch proc := elem.DataIn.(type) {
 		case *ptm.PktProc:
 			proc.SetPktRawMonitor(&genericRawPrinter{
-				writer: out,
-				id:     csID,
+				writer:       out,
+				id:           csID,
+				showRawBytes: showRawBytes,
 			})
 			ok = true
 		case *etmv3.PktProc:
 			proc.SetPktRawMonitor(&genericRawPrinter{
-				writer: out,
-				id:     csID,
+				writer:       out,
+				id:           csID,
+				showRawBytes: showRawBytes,
 			})
 			ok = true
 		case *etmv4.Processor:
 			proc.SetPktRawMonitor(&genericRawPrinter{
-				writer: out,
-				id:     csID,
+				writer:       out,
+				id:           csID,
+				showRawBytes: showRawBytes,
 			})
 			ok = true
 		case *itm.PktProc:
 			proc.SetPktRawMonitor(&genericRawPrinter{
-				writer: out,
-				id:     csID,
+				writer:       out,
+				id:           csID,
+				showRawBytes: showRawBytes,
 			})
 			ok = true
 		case *stm.PktProc:
 			proc.SetPktRawMonitor(&genericRawPrinter{
-				writer: out,
-				id:     csID,
+				writer:       out,
+				id:           csID,
+				showRawBytes: showRawBytes,
 			})
 			ok = true
 		}
