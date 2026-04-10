@@ -199,10 +199,7 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 		{decoder: "ete", goldenName: "ts_bit64_set", snapshotName: "ts_bit64_set"},
 		{decoder: "ete", goldenName: "ts_marker", snapshotName: "ts_marker"},
 		{decoder: "etmv3", goldenName: "TC2", snapshotName: "TC2"},
-		{
-			decoder: "etmv4", goldenName: "a55-test-tpiu", snapshotName: "a55-test-tpiu",
-			normalizeReason: "legacy ETMv4 packet formatting instability (raw-byte prefix presence differs)",
-		},
+		{decoder: "etmv4", goldenName: "a55-test-tpiu", snapshotName: "a55-test-tpiu"},
 		{decoder: "etmv4", goldenName: "a57_single_step", snapshotName: "a57_single_step"},
 		{decoder: "etmv4", goldenName: "armv8_1m_branches", snapshotName: "armv8_1m_branches"},
 		{decoder: "etmv4", goldenName: "init-short-addr", snapshotName: "init-short-addr"},
