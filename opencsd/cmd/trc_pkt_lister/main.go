@@ -360,6 +360,10 @@ func drainTreeElementsToSink(tree *dcdtree.DecodeTree, sink *filteredGenElemPrin
 			return nil
 		}
 		if err != nil {
+			if errors.Is(err, ocsd.ErrWait) {
+				// Queue is empty, wait for more bytes. This is normal!
+				break
+			}
 			return err
 		}
 		if elem == nil {
@@ -377,6 +381,7 @@ func drainTreeElementsToSink(tree *dcdtree.DecodeTree, sink *filteredGenElemPrin
 			}
 		}
 	}
+	return nil
 }
 
 func processInputFileProducer(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
