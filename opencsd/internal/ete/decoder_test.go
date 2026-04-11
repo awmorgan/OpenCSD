@@ -10,6 +10,18 @@ import (
 	"opencsd/internal/ocsd"
 )
 
+// Dummy implementations for push-mode pipeline wiring tests
+type dummyMem struct{}
+
+func (d *dummyMem) ReadTargetMemory(address ocsd.VAddr, csTraceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
+	return 0, nil, nil
+}
+func (d *dummyMem) InvalidateMemAccCache(csTraceID uint8) {}
+
+type dummyInstr struct{}
+
+func (d *dummyInstr) DecodeInstruction(instrInfo *ocsd.InstrInfo) error { return nil }
+
 type stubPacketReader struct {
 	packets []etmv4.Packet
 	errs    []error
@@ -60,6 +72,37 @@ func TestTypedPipelineConstructors(t *testing.T) {
 	if proc == nil || dec == nil {
 		t.Fatalf("NewConfiguredPipeline returned nil outputs")
 	}
+	if dec.Source != proc {
+		t.Fatalf("expected NewConfiguredPipeline decoder source to be injected processor")
+	}
+
+	procWithDeps, decWithDeps, err := NewConfiguredPipelineWithDeps(4, NewConfig(), nil, nil)
+	if err != nil {
+		t.Fatalf("NewConfiguredPipelineWithDeps err=%v", err)
+	}
+	if procWithDeps == nil || decWithDeps == nil {
+		t.Fatalf("NewConfiguredPipelineWithDeps returned nil outputs")
+	}
+	if decWithDeps.Source != procWithDeps {
+		t.Fatalf("expected NewConfiguredPipelineWithDeps decoder source to be injected processor when deps are nil")
+	}
+
+	// When dependencies are present, should use push wiring (source is nil)
+	procPush, decPush, err := NewConfiguredPipelineWithDeps(5, NewConfig(), &dummyMem{}, &dummyInstr{})
+	if err != nil {
+		t.Fatalf("NewConfiguredPipelineWithDeps (push) err=%v", err)
+	}
+	if procPush == nil || decPush == nil {
+		t.Fatalf("NewConfiguredPipelineWithDeps (push) returned nil outputs")
+	}
+	if decPush.Source != nil {
+		t.Fatalf("expected NewConfiguredPipelineWithDeps decoder source to be nil when deps are present (push mode)")
+	}
+	// (Cannot check procPush.SetPktOut side effect directly)
+
+	typeCheck := func(any any) {}
+	typeCheck(procPush)
+	typeCheck(decPush)
 
 	if procOnly := NewProcessor(nil); procOnly == nil {
 		t.Fatalf("expected default-config processor for nil config, got nil")
