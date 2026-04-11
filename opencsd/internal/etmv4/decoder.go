@@ -24,19 +24,9 @@ func (d *PktDecode) pushOutputElement(index ocsd.TrcIndex, traceID uint8, elem *
 	if d == nil || elem == nil {
 		return nil
 	}
-	if d.traceElemOut == nil {
-		e := traceElemEvent{index, traceID, cloneQueuedElem(elem)}
-		d.elemBuf = append(d.elemBuf, e)
-		return nil
-	}
-	err := d.traceElemOut.TraceElemIn(index, traceID, elem)
-	if ocsd.IsDataContErr(err) {
-		return nil
-	}
-	if ocsd.IsDataWaitErr(err) {
-		return ocsd.ErrWait
-	}
-	return err
+	e := traceElemEvent{index, traceID, cloneQueuedElem(elem)}
+	d.elemBuf = append(d.elemBuf, e)
+	return nil
 }
 
 type decodeState int
@@ -148,7 +138,6 @@ type etmv4DecodeCtx struct {
 // PktDecode decodes ETMv4 trace packets into generic trace elements.
 type PktDecode struct {
 	Name         string
-	traceElemOut ocsd.GenElemProcessor
 	MemAccess    common.TargetMemAccess
 	InstrDecode  common.InstrDecode
 	IndexCurrPkt ocsd.TrcIndex
@@ -225,11 +214,6 @@ func (d *PktDecode) ApplyFlags(flags uint32) error {
 	}
 	d.syncAA64OpcodeCheckMode()
 	return nil
-}
-
-// SetTraceElemOut satisfies dcdtree's traceElemSetterOwner interface.
-func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
-	d.traceElemOut = out
 }
 
 // OutputTraceElement sends an element using IndexCurrPkt.
@@ -315,7 +299,7 @@ func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 // When a pull-based Source is set and no push sink is wired, it fetches the
 // next packet from Source, decodes it, and yields elements one at a time.
 func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
-	for d.elemBufPos >= len(d.elemBuf) && d.Source != nil && d.traceElemOut == nil {
+	for d.elemBufPos >= len(d.elemBuf) && d.Source != nil {
 		d.elemBuf = d.elemBuf[:0]
 		d.elemBufPos = 0
 		pkt, err := d.Source.NextPacket()
@@ -339,19 +323,6 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 	}
 	e := d.elemBuf[d.elemBufPos]
 	d.elemBufPos++
-	if d.traceElemOut != nil {
-		err := d.traceElemOut.TraceElemIn(e.index, e.traceID, &e.elem)
-		if ocsd.IsDataContErr(err) {
-			return e.index, e.traceID, e.elem, nil
-		}
-		if ocsd.IsDataWaitErr(err) {
-			d.elemBufPos-- // put back
-			return 0, 0, ocsd.TraceElement{}, ocsd.ErrWait
-		}
-		if err != nil {
-			return 0, 0, ocsd.TraceElement{}, err
-		}
-	}
 	return e.index, e.traceID, e.elem, nil
 }
 

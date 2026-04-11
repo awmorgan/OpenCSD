@@ -17,56 +17,6 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// helpers local to this file
-// ---------------------------------------------------------------------------
-
-// buildDecInDecodePkts returns a decoder that has gone through Reset→ASync→ISync
-// so currState==decodePkts. The testTrcElemIn sink is attached.
-func buildDecInDecodePkts(config *Config) (*PktDecode, *testTrcElemIn) {
-	dec, err := NewConfiguredPktDecode(0, config, &mockMemAcc{failAfter: -1}, idec.NewDecoder())
-	if err != nil {
-		panic(err)
-	}
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
-
-	dec.Reset(0)
-
-	asyncPkt := &Packet{}
-	asyncPkt.ResetState()
-	asyncPkt.Type = PktASync
-	dec.Write(0, asyncPkt)
-
-	isyncPkt := &Packet{}
-	isyncPkt.ResetState()
-	isyncPkt.Type = PktISync
-	isyncPkt.Addr = 0x1000
-	isyncPkt.CurrISA = ocsd.ISAArm
-	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1) // non-periodic → emits TraceOn + PeContext
-	dec.Write(1, isyncPkt)
-
-	return dec, out
-}
-
-// elemTypes returns the slice of ElemTypes from the captured elements.
-func elemTypes(out *testTrcElemIn) []ocsd.GenElemType {
-	types := make([]ocsd.GenElemType, len(out.elements))
-	for i, e := range out.elements {
-		types[i] = e.ElemType
-	}
-	return types
-}
-
-func containsElemType(out *testTrcElemIn, want ocsd.GenElemType) bool {
-	for _, e := range out.elements {
-		if e.ElemType == want {
-			return true
-		}
-	}
-	return false
-}
-
-// ---------------------------------------------------------------------------
 // sendUnsyncPacket
 // ---------------------------------------------------------------------------
 
@@ -74,8 +24,6 @@ func containsElemType(out *testTrcElemIn, want ocsd.GenElemType) bool {
 // noSync→sendUnsyncPacket → GenElemNoSync emitted, then transitions to waitAsync.
 func TestSendUnsyncPacket_EmitsNoSync(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, &Config{})
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 	// Do NOT call OpReset - decoder starts in noSync
 
 	pkt := &Packet{}
@@ -85,7 +33,14 @@ func TestSendUnsyncPacket_EmitsNoSync(t *testing.T) {
 	pkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
 	dec.Write(0, pkt)
 
-	if !containsElemType(out, ocsd.GenElemNoSync) {
+	found := false
+	for _, e := range drainDecodedElements(t, dec) {
+		if e.ElemType == ocsd.GenElemNoSync {
+			found = true
+			break
+		}
+	}
+	if !found {
 		t.Error("expected GenElemNoSync from sendUnsyncPacket")
 	}
 }
@@ -93,8 +48,6 @@ func TestSendUnsyncPacket_EmitsNoSync(t *testing.T) {
 // TestSendUnsyncPacket_UnsyncInfoPreserved: after bad packet, unsyncInfo is UnsyncBadPacket.
 func TestSendUnsyncPacket_UnsyncInfoPreserved(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, &Config{})
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	// NoSync state → any packet triggers sendUnsyncPacket → GenElemNoSync
 	pkt := &Packet{}
@@ -103,7 +56,7 @@ func TestSendUnsyncPacket_UnsyncInfoPreserved(t *testing.T) {
 	dec.Write(0, pkt)
 
 	found := false
-	for _, e := range out.elements {
+	for _, e := range drainDecodedElements(t, dec) {
 		if e.ElemType == ocsd.GenElemNoSync {
 			found = true
 			// verify the UnsyncEOTInfo was set from initDecoder's UnsyncInitDecoder
@@ -221,7 +174,7 @@ func TestProcessBranchAddr_ExcepContextUpdate_EmitsPeContext(t *testing.T) {
 // el=ELUnknown == peContext.ExceptionLevel=ELUnknown → no EL change → bUpdatePEContext=false.
 func TestProcessBranchAddr_ExcepPresent_SameSecuritySameEL(t *testing.T) {
 	dec := buildDecInDecodePktsPull(t, &Config{})
-	// ISync in buildDecInDecodePkts doesn't set Context.Updated, so peContext is default.
+	// ISync in buildDecInDecodePktsPull doesn't set Context.Updated, so peContext is default.
 	// After first ISync, peContext is reset: SecurityLevel=SecSecure, ExceptionLevel=ELUnknown.
 
 	// Now verify peContext defaults
@@ -514,13 +467,11 @@ func TestProcessPHdr_CCOnly_ZeroAtoms(t *testing.T) {
 // The second PHdr call sees needAddr=true, sentUnknown=false → emits AddrUnknown.
 func TestProcessPHdr_NeedAddr_EmitsAddrUnknown(t *testing.T) {
 	config := &Config{}
-	dec, out := buildDecInDecodePkts(config)
+	dec := buildDecInDecodePktsPull(t, config)
 
 	// First: set needAddr=true directly to skip the complex atom-following
 	dec.NeedAddr = true
 	dec.SentUnknown = false
-
-	n0 := len(out.elements)
 
 	phdrPkt := &Packet{}
 	phdrPkt.ResetState()
@@ -531,15 +482,16 @@ func TestProcessPHdr_NeedAddr_EmitsAddrUnknown(t *testing.T) {
 	dec.Write(2, phdrPkt)
 	dec.Flush()
 
+	elems := drainDecodedElements(t, dec)
 	found := false
-	for _, e := range out.elements[n0:] {
+	for _, e := range elems {
 		if e.ElemType == ocsd.GenElemAddrUnknown {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Logf("elements after needAddr=true: %v", elemTypes(out)[n0:])
+		t.Logf("elements after needAddr=true: %v", elems)
 		t.Error("expected GenElemAddrUnknown when needAddr=true and sentUnknown=false")
 	}
 }
@@ -548,7 +500,7 @@ func TestProcessPHdr_NeedAddr_EmitsAddrUnknown(t *testing.T) {
 func TestProcessPHdr_NeedAddr_SentUnknown_Skips(t *testing.T) {
 	config := &Config{} // non-CC
 
-	dec, out := buildDecInDecodePkts(config)
+	dec := buildDecInDecodePktsPull(t, config)
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBrIndirect}
 	dec.SetMemAccess(mem)
 	dec.SetInstrDecode(idec.NewDecoder())
@@ -562,16 +514,17 @@ func TestProcessPHdr_NeedAddr_SentUnknown_Skips(t *testing.T) {
 	phdrPkt.Atom.EnBits = 0x1
 	dec.Write(2, phdrPkt)
 	dec.Flush()
+	_ = drainDecodedElements(t, dec)
 
 	// No new AddrUnknown element should appear (skip path)
 	// Actually, the previous PHdr call set needAddr=true and reset sentUnknown=false.
 	// So we need to call it ONCE to set sentUnknown=true, then AGAIN to skip.
 	dec.Write(3, phdrPkt) // This one emits AddrUnknown and sets sentUnknown=true
-	n1 := len(out.elements)
+	_ = drainDecodedElements(t, dec)
 	dec.Write(4, phdrPkt) // This one SHOULD skip
 	dec.Flush()
 
-	for _, e := range out.elements[n1:] {
+	for _, e := range drainDecodedElements(t, dec) {
 		if e.ElemType == ocsd.GenElemAddrUnknown {
 			t.Error("should NOT emit AddrUnknown when sentUnknown=true and !isCycleAcc")
 		}
@@ -587,8 +540,6 @@ func TestProcessPHdr_Nacc_ZeroInstructions(t *testing.T) {
 	// failAfter:0 → fail on first call (after 0 successes)
 	dec.SetMemAccess(&mockMemAcc{failAfter: 0})
 	dec.SetInstrDecode(idec.NewDecoder())
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.Reset(0)
 	asyncPkt := &Packet{Type: PktASync}
@@ -601,7 +552,7 @@ func TestProcessPHdr_Nacc_ZeroInstructions(t *testing.T) {
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
 	dec.Write(1, isyncPkt)
 
-	n0 := len(out.elements)
+	_ = drainDecodedElements(t, dec)
 
 	phdrPkt := &Packet{}
 	phdrPkt.ResetState()
@@ -612,15 +563,16 @@ func TestProcessPHdr_Nacc_ZeroInstructions(t *testing.T) {
 	dec.Write(2, phdrPkt)
 	dec.Flush()
 
+	elems := drainDecodedElements(t, dec)
 	found := false
-	for _, e := range out.elements[n0:] {
+	for _, e := range elems {
 		if e.ElemType == ocsd.GenElemAddrNacc {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Logf("elements: %v", elemTypes(out)[n0:])
+		t.Logf("elements: %v", elems)
 		t.Error("expected GenElemAddrNacc from memory failure")
 	}
 }
@@ -634,9 +586,6 @@ func TestProcessPHdr_MemSpaceSecure(t *testing.T) {
 	mem := &mockMemAcc{failAfter: -1, hitAfter: 0, instrType: ocsd.InstrBr}
 	dec.SetMemAccess(mem)
 	dec.SetInstrDecode(idec.NewDecoder())
-
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.Reset(0)
 	asyncPkt := &Packet{Type: PktASync}
@@ -667,8 +616,6 @@ func TestProcessPHdr_MemSpaceSecure(t *testing.T) {
 	phdrPkt.Atom.EnBits = 0x1
 	dec.Write(2, phdrPkt)
 	dec.Flush()
-
-	_ = out // just verify no crash
 }
 
 // ---------------------------------------------------------------------------
@@ -677,17 +624,32 @@ func TestProcessPHdr_MemSpaceSecure(t *testing.T) {
 
 // TestProcessISync_NonPeriodic_EmitsTraceOn: reason != periodic → GenElemTraceOn emitted.
 func TestProcessISync_NonPeriodic_EmitsTraceOn(t *testing.T) {
-	_, out := buildDecInDecodePkts(&Config{})
-	// buildDecInDecodePkts already sends non-periodic ISync (reason=1) → check TraceOn
-	if !containsElemType(out, ocsd.GenElemTraceOn) {
+	dec := mustNewConfiguredPktDecode(t, &Config{})
+	dec.Reset(0)
+	dec.Write(0, &Packet{Type: PktASync})
+	isyncPkt := &Packet{}
+	isyncPkt.ResetState()
+	isyncPkt.Type = PktISync
+	isyncPkt.Addr = 0x1000
+	isyncPkt.CurrISA = ocsd.ISAArm
+	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
+	dec.Write(1, isyncPkt)
+	elems := drainDecodedElements(t, dec)
+	found := false
+	for _, e := range elems {
+		if e.ElemType == ocsd.GenElemTraceOn {
+			found = true
+			break
+		}
+	}
+	if !found {
 		t.Error("expected GenElemTraceOn from non-periodic ISync")
 	}
 }
 
 // TestProcessISync_Periodic_NoTraceOn: second ISync with reason=0 (periodic) → no TraceOn.
 func TestProcessISync_Periodic_NoTraceOn(t *testing.T) {
-	dec, out := buildDecInDecodePkts(&Config{})
-	n0 := len(out.elements)
+	dec := buildDecInDecodePktsPull(t, &Config{})
 
 	syncPkt2 := &Packet{}
 	syncPkt2.ResetState()
@@ -697,7 +659,7 @@ func TestProcessISync_Periodic_NoTraceOn(t *testing.T) {
 	dec.Write(2, syncPkt2)
 	dec.Flush()
 
-	for _, e := range out.elements[n0:] {
+	for _, e := range drainDecodedElements(t, dec) {
 		if e.ElemType == ocsd.GenElemTraceOn {
 			t.Error("should NOT emit TraceOn for periodic ISync")
 		}
@@ -712,8 +674,6 @@ func TestProcessISync_WithCC_LSipAddr(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, config)
 	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
 	dec.SetInstrDecode(idec.NewDecoder())
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.Reset(0)
 	asyncPkt := &Packet{Type: PktASync}
@@ -738,7 +698,15 @@ func TestProcessISync_WithCC_LSipAddr(t *testing.T) {
 	if dec.iAddr != 0xDEAD {
 		t.Errorf("expected iAddr=0xDEAD from HasLSipAddr, got 0x%X", dec.iAddr)
 	}
-	if !containsElemType(out, ocsd.GenElemTraceOn) {
+	elems := drainDecodedElements(t, dec)
+	found := false
+	for _, e := range elems {
+		if e.ElemType == ocsd.GenElemTraceOn {
+			found = true
+			break
+		}
+	}
+	if !found {
 		t.Error("expected GenElemTraceOn")
 	}
 }
@@ -746,8 +714,7 @@ func TestProcessISync_WithCC_LSipAddr(t *testing.T) {
 // TestProcessISync_ContextUpdate_CtxAndVMID: context has UpdatedC + UpdatedV → PeContext elem.
 func TestProcessISync_ContextUpdate_CtxAndVMID(t *testing.T) {
 	config := &Config{}
-	dec, out := buildDecInDecodePkts(config)
-	n0 := len(out.elements)
+	dec := buildDecInDecodePktsPull(t, config)
 
 	syncPkt2 := &Packet{}
 	syncPkt2.ResetState()
@@ -764,7 +731,7 @@ func TestProcessISync_ContextUpdate_CtxAndVMID(t *testing.T) {
 	dec.Flush()
 
 	hasPeCtx := false
-	for _, e := range out.elements[n0:] {
+	for _, e := range drainDecodedElements(t, dec) {
 		if e.ElemType == ocsd.GenElemPeContext {
 			hasPeCtx = true
 			if e.Context.ContextID != 0xBEEF {
@@ -790,8 +757,6 @@ func TestOnFlush_SendPktsState(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, config)
 	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
 	dec.SetInstrDecode(idec.NewDecoder())
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.Reset(0)
 
@@ -806,6 +771,8 @@ func TestOnFlush_SendPktsState(t *testing.T) {
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
 	dec.Write(1, isyncPkt)
 
+	_ = drainDecodedElements(t, dec)
+
 	// Directly manipulate to enter sendPkts state with an element pending
 	dec.currState = sendPkts
 	elem := dec.nextOutElem(5)
@@ -814,20 +781,17 @@ func TestOnFlush_SendPktsState(t *testing.T) {
 	}
 	dec.commitAllPendOutElem()
 
-	n0 := len(out.elements)
 	dec.Flush()
 
-	if len(out.elements) <= n0 {
-		t.Error("expected GenElemEvent from OnFlush in sendPkts state")
-	}
+	elems := drainDecodedElements(t, dec)
 	found := false
-	for _, e := range out.elements[n0:] {
+	for _, e := range elems {
 		if e.ElemType == ocsd.GenElemEvent {
 			found = true
 		}
 	}
 	if !found {
-		t.Error("expected GenElemEvent in output")
+		t.Error("expected GenElemEvent in output from OnFlush in sendPkts state")
 	}
 }
 
@@ -837,8 +801,6 @@ func TestOnFlush_SendPkts_WaitISync(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, config)
 	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
 	dec.SetInstrDecode(idec.NewDecoder())
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.Reset(0)
 	asyncPkt := &Packet{Type: PktASync}
@@ -875,13 +837,12 @@ func TestOnFlush_SendPkts_WaitISync(t *testing.T) {
 
 // TestOnEOT_EmitsEOTrace: decoder in decodePkts → OnEOT emits GenElemEOTrace.
 func TestOnEOT_EmitsEOTrace(t *testing.T) {
-	dec, out := buildDecInDecodePkts(&Config{})
-	n0 := len(out.elements)
+	dec := buildDecInDecodePktsPull(t, &Config{})
 
 	dec.Close()
 
 	found := false
-	for _, e := range out.elements[n0:] {
+	for _, e := range drainDecodedElements(t, dec) {
 		if e.ElemType == ocsd.GenElemEOTrace {
 			found = true
 			break
@@ -904,8 +865,6 @@ func TestPreISyncValid_CycleCount_Emitted(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, config)
 	dec.SetMemAccess(&mockMemAcc{failAfter: -1})
 	dec.SetInstrDecode(idec.NewDecoder())
-	out := &testTrcElemIn{}
-	dec.SetTraceElemOut(out)
 
 	dec.Reset(0)
 	asyncPkt := &Packet{Type: PktASync}
@@ -920,7 +879,7 @@ func TestPreISyncValid_CycleCount_Emitted(t *testing.T) {
 	dec.Flush()
 
 	found := false
-	for _, e := range out.elements {
+	for _, e := range drainDecodedElements(t, dec) {
 		if e.ElemType == ocsd.GenElemCycleCount && e.CycleCount == 42 {
 			found = true
 			break
@@ -936,14 +895,13 @@ func TestPreISyncValid_CycleCount_Emitted(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDecoder_Trigger(t *testing.T) {
-	dec, out := buildDecInDecodePkts(&Config{})
-	n0 := len(out.elements)
+	dec := buildDecInDecodePktsPull(t, &Config{})
 	pkt := &Packet{Type: PktTrigger}
 	dec.Write(1, pkt)
 	dec.Flush()
 
 	found := false
-	for _, e := range out.elements[n0:] {
+	for _, e := range drainDecodedElements(t, dec) {
 		if e.ElemType == ocsd.GenElemEvent && e.Payload.TraceEvent.EvType == ocsd.EventTrigger {
 			found = true
 			break

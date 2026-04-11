@@ -10,15 +10,6 @@ import (
 )
 
 // --- Mocks ---
-type testTrcElemIn struct {
-	elements []ocsd.TraceElement
-}
-
-func (t *testTrcElemIn) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
-	t.elements = append(t.elements, *elem)
-	return nil
-}
-
 type mockMemAcc struct {
 	failAfter int
 	calls     int

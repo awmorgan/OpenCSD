@@ -27,18 +27,8 @@ func (d *PktDecode) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *o
 	if d == nil || elem == nil {
 		return nil
 	}
-	if d.traceElemOut != nil {
-		if elem.ElemType != ocsd.GenElemEOTrace && indexSOP != 0 {
-			d.lastElemIndex = indexSOP
-			d.sawActivity = true
-		}
-		return d.traceElemOut.TraceElemIn(indexSOP, trcChanID, elem)
-	}
 	queueIndex := indexSOP
 	if queueIndex == 0 && elem.ElemType == ocsd.GenElemEOTrace {
-		if !d.sawActivity && d.lastPacketIndex == 0 && d.lastElemIndex == 0 {
-			return nil
-		}
 		switch {
 		case d.lastElemIndex != 0:
 			queueIndex = d.lastElemIndex + 1
@@ -65,7 +55,6 @@ func (d *PktDecode) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *o
 
 type PktDecode struct {
 	inner           *etmv4.PktDecode
-	traceElemOut    ocsd.GenElemProcessor
 	pendingElements []traceElemEvent
 	lastPacketIndex ocsd.TrcIndex
 	lastElemIndex   ocsd.TrcIndex
@@ -85,7 +74,6 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 		return nil, err
 	}
 	decoder := &PktDecode{inner: inner}
-	inner.SetTraceElemOut(decoder)
 	return decoder, nil
 }
 
@@ -141,11 +129,21 @@ func (d *PktDecode) ApplyFlags(flags uint32) error {
 	return d.inner.ApplyFlags(flags)
 }
 
-func (d *PktDecode) SetTraceElemOut(out ocsd.GenElemProcessor) {
-	if d == nil {
-		return
+// drainInner pulls all buffered elements from the inner ETMv4 decoder and
+// processes them through TraceElemIn for index fixup and buffering.
+func (d *PktDecode) drainInner() error {
+	for {
+		idx, trcChanID, elem, err := d.inner.NextElement()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := d.TraceElemIn(idx, trcChanID, &elem); err != nil {
+			return err
+		}
 	}
-	d.traceElemOut = out
 }
 
 func (d *PktDecode) Write(indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket) error {
@@ -153,15 +151,24 @@ func (d *PktDecode) Write(indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket) error 
 	if indexSOP != 0 {
 		d.sawActivity = true
 	}
-	return d.inner.Write(indexSOP, pkt)
+	if err := d.inner.Write(indexSOP, pkt); err != nil {
+		return err
+	}
+	return d.drainInner()
 }
 
 func (d *PktDecode) Close() error {
-	return d.inner.Close()
+	if err := d.inner.Close(); err != nil {
+		return err
+	}
+	return d.drainInner()
 }
 
 func (d *PktDecode) Flush() error {
-	return d.inner.Flush()
+	if err := d.inner.Flush(); err != nil {
+		return err
+	}
+	return d.drainInner()
 }
 
 func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
@@ -173,7 +180,7 @@ func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 // sink is wired, it fetches the next packet, decodes it, and returns the first
 // resulting element.
 func (d *PktDecode) NextSequenced() (uint64, *ocsd.TraceElement, error) {
-	for len(d.pendingElements) == 0 && d.Source != nil && d.traceElemOut == nil {
+	for len(d.pendingElements) == 0 && d.Source != nil {
 		pkt, err := d.Source.NextPacket()
 		if errors.Is(err, io.EOF) {
 			d.Source = nil

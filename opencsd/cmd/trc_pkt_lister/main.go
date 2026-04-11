@@ -30,10 +30,6 @@ import (
 
 const defaultLogFile = "trc_pkt_lister.ppl"
 
-type traceElemOutSetter interface {
-	SetTraceElemOut(out ocsd.GenElemProcessor)
-}
-
 type options struct {
 	ssDir            string
 	ssVerbose        bool
@@ -90,30 +86,6 @@ type filteredGenElemPrinter struct {
 	printer      *printers.GenericElementPrinter
 	allSourceIDs bool
 	validIDs     [256]bool
-}
-
-type genElemSinkBridge struct {
-	sink      *filteredGenElemPrinter
-	ackSource *printers.GenericElementPrinter
-}
-
-func (b *genElemSinkBridge) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
-	if b == nil || b.sink == nil || elem == nil {
-		return nil
-	}
-	elem.Index = indexSOP
-	elem.TraceID = trcChanID
-	err := b.sink.PrintElement(elem)
-	if ocsd.IsDataWaitErr(err) {
-		if b.ackSource != nil && b.ackSource.NeedAckWait() {
-			b.ackSource.AckWait()
-		}
-		return nil
-	}
-	if ocsd.IsDataContErr(err) {
-		return nil
-	}
-	return err
 }
 
 func (g *filteredGenElemPrinter) PrintElement(elem *ocsd.TraceElement) error {
@@ -338,9 +310,6 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 	}
 
 	if !opts.multiSession {
-		if opts.decode {
-			bindTreeTraceElemSink(tree, &genElemSinkBridge{sink: genAdapter, ackSource: genPrinter})
-		}
 		return processInputFile(streamOut, tree, builder.BufferFileName(), genAdapter, genPrinter, opts)
 	}
 
@@ -353,9 +322,6 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 			break
 		}
 		binFile := filepath.Join(reader.SnapshotPath, srcTree.BufferInfo.DataFileName)
-		if opts.decode {
-			bindTreeTraceElemSink(tree, &genElemSinkBridge{sink: genAdapter, ackSource: genPrinter})
-		}
 		if err := processInputFile(streamOut, tree, binFile, genAdapter, genPrinter, opts); err != nil {
 			fmt.Fprintf(out, "Trace Packet Lister : ERROR : Multi-session decode for buffer %s failed. Aborting.\n\n", sourceName)
 			return err
@@ -609,22 +575,6 @@ func frameAlignment(tree *dcdtree.DecodeTree) int {
 		return 4
 	}
 	return 16
-}
-
-func bindTreeTraceElemSink(tree *dcdtree.DecodeTree, sink ocsd.GenElemProcessor) {
-	if tree == nil || sink == nil {
-		return
-	}
-
-	tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
-		if elem == nil || elem.Iterator == nil {
-			return
-		}
-		if setter, ok := elem.Iterator.(traceElemOutSetter); ok {
-			setter.SetTraceElemOut(sink)
-			return
-		}
-	})
 }
 
 func applyAdditionalFlags(tree *dcdtree.DecodeTree, flags uint32) error {
