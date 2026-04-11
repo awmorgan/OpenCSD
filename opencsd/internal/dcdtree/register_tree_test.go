@@ -20,6 +20,53 @@ func (f *fakeDataIn) Reset(index ocsd.TrcIndex) error {
 	return nil
 }
 
+type fakeControlDecoder struct {
+	closeCalls int
+	flushCalls int
+	resetCalls int
+}
+
+func (f *fakeControlDecoder) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+	return uint32(len(dataBlock)), nil
+}
+func (f *fakeControlDecoder) Close() error {
+	f.closeCalls++
+	return nil
+}
+func (f *fakeControlDecoder) Flush() error {
+	f.flushCalls++
+	return nil
+}
+func (f *fakeControlDecoder) Reset(index ocsd.TrcIndex) error {
+	f.resetCalls++
+	return nil
+}
+func (f *fakeControlDecoder) Next() (*ocsd.TraceElement, error) {
+	return nil, io.EOF
+}
+
+type fakeControlProcessor struct {
+	closeCalls int
+	flushCalls int
+	resetCalls int
+}
+
+func (f *fakeControlProcessor) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+	return uint32(len(dataBlock)), nil
+}
+func (f *fakeControlProcessor) Close() error {
+	f.closeCalls++
+	return nil
+}
+func (f *fakeControlProcessor) Flush() error {
+	f.flushCalls++
+	return nil
+}
+func (f *fakeControlProcessor) Reset(index ocsd.TrcIndex) error {
+	f.resetCalls++
+	return nil
+}
+
 type fakeManager struct{ appliedFlags uint32 }
 
 func (f *fakeManager) ApplyFlags(flags uint32) error {
@@ -138,6 +185,41 @@ func TestDecodeTreeAddPullDecoderCanAttachIteratorAfterProcessor(t *testing.T) {
 	}
 	if elem.Iterator != iter {
 		t.Fatal("expected iterator to be attached on second call")
+	}
+}
+
+func TestDecodeTreeRoutesControlToProcessorAndDecoder(t *testing.T) {
+	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)
+	if err != nil {
+		t.Fatalf("NewDecodeTree returned error: %v", err)
+	}
+	defer tree.Destroy()
+
+	proc := &fakeControlProcessor{}
+	dec := &fakeControlDecoder{}
+
+	if err := tree.AddPullDecoder(0x22, "pull", ocsd.ProtocolETMV4I, proc, nil, nil); err != nil {
+		t.Fatalf("initial AddPullDecoder failed: %v", err)
+	}
+	if err := tree.AddPullDecoder(0x22, "pull", ocsd.ProtocolETMV4I, nil, dec, nil); err != nil {
+		t.Fatalf("iterator AddPullDecoder failed: %v", err)
+	}
+
+	if err := tree.Flush(); err != nil {
+		t.Fatalf("Flush failed: %v", err)
+	}
+	if err := tree.Reset(123); err != nil {
+		t.Fatalf("Reset failed: %v", err)
+	}
+	if err := tree.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	if proc.flushCalls != 1 || proc.resetCalls != 1 || proc.closeCalls != 1 {
+		t.Fatalf("expected processor control calls 1/1/1, got flush=%d reset=%d close=%d", proc.flushCalls, proc.resetCalls, proc.closeCalls)
+	}
+	if dec.flushCalls != 1 || dec.resetCalls != 1 || dec.closeCalls != 1 {
+		t.Fatalf("expected decoder control calls 1/1/1, got flush=%d reset=%d close=%d", dec.flushCalls, dec.resetCalls, dec.closeCalls)
 	}
 }
 

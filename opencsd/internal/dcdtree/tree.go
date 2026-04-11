@@ -132,44 +132,23 @@ func (dt *DecodeTree) WriteContext(ctx context.Context, index ocsd.TrcIndex, dat
 
 // Flush forwards flush control directly to the decoder root.
 func (dt *DecodeTree) Flush() error {
-	if dt.decoderRoot != nil {
-		return dt.decoderRoot.Flush()
-	}
-	if dt.treeType == ocsd.TrcSrcSingle {
-		elem := dt.decodeElements[0]
-		if elem != nil && elem.DataIn != nil {
-			return elem.DataIn.Flush()
-		}
-	}
-	return ocsd.ErrNotInit
+	return dt.routeControl(func(dec ocsd.TraceDecoder) error {
+		return dec.Flush()
+	})
 }
 
 // Reset forwards reset control directly to the decoder root.
 func (dt *DecodeTree) Reset(index ocsd.TrcIndex) error {
-	if dt.decoderRoot != nil {
-		return dt.decoderRoot.Reset(index)
-	}
-	if dt.treeType == ocsd.TrcSrcSingle {
-		elem := dt.decodeElements[0]
-		if elem != nil && elem.DataIn != nil {
-			return elem.DataIn.Reset(index)
-		}
-	}
-	return ocsd.ErrNotInit
+	return dt.routeControl(func(dec ocsd.TraceDecoder) error {
+		return dec.Reset(index)
+	})
 }
 
 // Close forwards end-of-trace control directly to the decoder root.
 func (dt *DecodeTree) Close() error {
-	if dt.decoderRoot != nil {
-		return dt.decoderRoot.Close()
-	}
-	if dt.treeType == ocsd.TrcSrcSingle {
-		elem := dt.decodeElements[0]
-		if elem != nil && elem.DataIn != nil {
-			return elem.DataIn.Close()
-		}
-	}
-	return ocsd.ErrNotInit
+	return dt.routeControl(func(dec ocsd.TraceDecoder) error {
+		return dec.Close()
+	})
 }
 
 // AddPullDecoder registers decoder input routing and pull-based output iteration into the tree.
@@ -182,6 +161,11 @@ func (dt *DecodeTree) AddPullDecoder(routeID uint8, name string, protocol ocsd.T
 	}
 	if pktIn == nil && iter == nil {
 		return ocsd.ErrNotInit
+	}
+
+	controlIn, ok := iter.(ocsd.TraceDecoder)
+	if !ok {
+		controlIn = nil
 	}
 
 	if elem, exists := dt.decodeElements[routeID]; exists {
@@ -198,6 +182,9 @@ func (dt *DecodeTree) AddPullDecoder(routeID uint8, name string, protocol ocsd.T
 			}
 		}
 		elem.Iterator = iter
+		if controlIn != nil {
+			elem.ControlIn = controlIn
+		}
 		if elem.FlagApplier == nil {
 			elem.FlagApplier = flagApplier
 		}
@@ -211,7 +198,7 @@ func (dt *DecodeTree) AddPullDecoder(routeID uint8, name string, protocol ocsd.T
 	}
 
 	// No decoder manager is needed for direct injection.
-	elem := NewDecodeTreeElement(name, flagApplier, pktIn, iter, true)
+	elem := NewDecodeTreeElement(name, flagApplier, pktIn, controlIn, iter, true)
 	elem.Protocol = protocol
 
 	dt.decodeElements[routeID] = elem
@@ -303,4 +290,42 @@ func (dt *DecodeTree) sortedElementIDs() []uint8 {
 	}
 	slices.Sort(ids)
 	return ids
+}
+
+func (dt *DecodeTree) routeControl(dispatch func(dec ocsd.TraceDecoder) error) error {
+	hadTarget := false
+	var outErr error
+
+	if dt.decoderRoot != nil {
+		hadTarget = true
+		if err := dispatch(dt.decoderRoot); err != nil && outErr == nil {
+			outErr = err
+		}
+	}
+
+	for _, routeID := range dt.sortedElementIDs() {
+		elem := dt.decodeElements[routeID]
+		if elem == nil {
+			continue
+		}
+
+		if dt.decoderRoot == nil && elem.DataIn != nil {
+			hadTarget = true
+			if err := dispatch(elem.DataIn); err != nil && outErr == nil {
+				outErr = err
+			}
+		}
+
+		if elem.ControlIn != nil {
+			hadTarget = true
+			if err := dispatch(elem.ControlIn); err != nil && outErr == nil {
+				outErr = err
+			}
+		}
+	}
+
+	if !hadTarget {
+		return ocsd.ErrNotInit
+	}
+	return outErr
 }
