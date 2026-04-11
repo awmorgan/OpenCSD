@@ -124,9 +124,9 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 	if err != nil {
 		return nil, nil, err
 	}
-	// If using push mode, wire proc to decoder as sink
+	// If using push mode, wire proc to decoder as sink (use adapter)
 	if source == nil {
-		proc.SetPktOut(decoder)
+		proc.SetPktOut(&pushSink{d: decoder})
 	}
 	return proc, decoder, nil
 }
@@ -155,16 +155,27 @@ func (d *PktDecode) drainInner() error {
 	}
 }
 
-func (d *PktDecode) Write(indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket) error {
-	d.lastPacketIndex = indexSOP
+// pushSink adapts `PktDecode` to the `ocsd.PacketProcessor[etmv4.TracePacket]`
+// interface for push-mode pipelines without exposing a public `Write` on
+// `PktDecode` itself.
+type pushSink struct {
+	d *PktDecode
+}
+
+func (p *pushSink) Write(indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket) error {
+	p.d.lastPacketIndex = indexSOP
 	if indexSOP != 0 {
-		d.sawActivity = true
+		p.d.sawActivity = true
 	}
-	if err := d.inner.Write(indexSOP, pkt); err != nil {
+	if err := p.d.inner.Write(indexSOP, pkt); err != nil {
 		return err
 	}
-	return d.drainInner()
+	return p.d.drainInner()
 }
+
+func (p *pushSink) Close() error                       { return p.d.Close() }
+func (p *pushSink) Flush() error                       { return p.d.Flush() }
+func (p *pushSink) Reset(indexSOP ocsd.TrcIndex) error { return p.d.Reset(indexSOP) }
 
 func (d *PktDecode) Close() error {
 	if err := d.inner.Close(); err != nil {
