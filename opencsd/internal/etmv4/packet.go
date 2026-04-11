@@ -231,6 +231,8 @@ type Valid struct {
 
 // Trace packet element.
 type TracePacket struct {
+	Index ocsd.TrcIndex
+
 	Type      PktType
 	Err       error
 	ErrHdrVal uint8

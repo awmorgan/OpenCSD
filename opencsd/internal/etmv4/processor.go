@@ -2203,7 +2203,9 @@ func (p *Processor) clearStateTransient() {
 
 func (p *Processor) outputPacket(pkt *TracePacket, rawData []byte) error {
 	if p.collectPackets {
-		p.pendingPackets = append(p.pendingPackets, *pkt)
+		queuedPkt := *pkt
+		queuedPkt.Index = p.packetIndex
+		p.pendingPackets = append(p.pendingPackets, queuedPkt)
 		return nil
 	}
 	if p.PktRawMonI != nil {
@@ -2249,6 +2251,7 @@ func (p *Processor) outputUnsyncedRawPacket() error {
 	var err error
 	if !p.sentNotsyncPacket {
 		if p.collectPackets {
+			pkt.Index = p.packetIndex
 			p.pendingPackets = append(p.pendingPackets, pkt)
 		} else if p.pktOut != nil {
 			err = p.pktOut.Write(p.packetIndex, &pkt)
