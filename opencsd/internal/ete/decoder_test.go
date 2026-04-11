@@ -10,6 +10,31 @@ import (
 	"opencsd/internal/ocsd"
 )
 
+type stubPacketReader struct {
+	packets []etmv4.Packet
+	errs    []error
+	pos     int
+}
+
+func (r *stubPacketReader) NextPacket() (etmv4.Packet, error) {
+	if r.pos < len(r.errs) && r.errs[r.pos] != nil {
+		err := r.errs[r.pos]
+		r.pos++
+		return etmv4.Packet{}, err
+	}
+	if r.pos < len(r.packets) {
+		pkt := r.packets[r.pos]
+		r.pos++
+		return pkt, nil
+	}
+	if r.pos < len(r.errs) {
+		err := r.errs[r.pos]
+		r.pos++
+		return etmv4.Packet{}, err
+	}
+	return etmv4.Packet{}, io.EOF
+}
+
 func TestCreatePktProcAndDecode(t *testing.T) {
 	cfg := NewConfig()
 
@@ -76,5 +101,103 @@ func TestNewProcessorWithReaderSupportsNextPacket(t *testing.T) {
 	_, err = proc.NextPacket()
 	if !errors.Is(err, io.EOF) {
 		t.Fatalf("expected io.EOF after draining packet reader, got %v", err)
+	}
+}
+
+func TestNextSequencedReturnsErrWaitWithoutTearingDownSource(t *testing.T) {
+	d, err := NewPktDecode(NewConfig())
+	if err != nil {
+		t.Fatalf("NewPktDecode err=%v", err)
+	}
+	source := &stubPacketReader{errs: []error{ocsd.ErrWait}}
+	d.Source = source
+
+	seq, elem, err := d.NextSequenced()
+	if !errors.Is(err, ocsd.ErrWait) {
+		t.Fatalf("expected ErrWait, got seq=%d elem=%v err=%v", seq, elem, err)
+	}
+	if d.Source != source {
+		t.Fatalf("expected source to remain attached after ErrWait")
+	}
+	if d.pullEOFDone {
+		t.Fatalf("did not expect EOF teardown after ErrWait")
+	}
+	if len(d.pendingElements) != 0 {
+		t.Fatalf("expected no pending elements after ErrWait, got %d", len(d.pendingElements))
+	}
+}
+
+func TestNextSequencedEOFTeardownClosesSourceOnce(t *testing.T) {
+	d, err := NewPktDecode(NewConfig())
+	if err != nil {
+		t.Fatalf("NewPktDecode err=%v", err)
+	}
+	d.Source = &stubPacketReader{errs: []error{io.EOF}}
+
+	seq, elem, err := d.NextSequenced()
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("expected io.EOF, got seq=%d elem=%v err=%v", seq, elem, err)
+	}
+	if d.Source != nil {
+		t.Fatalf("expected source to be detached after EOF teardown")
+	}
+	if !d.pullEOFDone {
+		t.Fatalf("expected EOF teardown to mark pullEOFDone")
+	}
+	seq, elem, err = d.NextSequenced()
+	if err != nil {
+		t.Fatalf("expected close-generated element after teardown, got seq=%d elem=%v err=%v", seq, elem, err)
+	}
+	if seq == 0 || elem == nil {
+		t.Fatalf("expected close-generated element after teardown, got seq=%d elem=%v", seq, elem)
+	}
+	if elem.ElemType != ocsd.GenElemEOTrace {
+		t.Fatalf("expected GenElemEOTrace after teardown, got %v", elem.ElemType)
+	}
+
+	seq, elem, err = d.NextSequenced()
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("expected repeated io.EOF after draining teardown element, got seq=%d elem=%v err=%v", seq, elem, err)
+	}
+}
+
+func TestNextSequencedEOFReturnsBeforeDrainingQueuedElements(t *testing.T) {
+	d, err := NewPktDecode(NewConfig())
+	if err != nil {
+		t.Fatalf("NewPktDecode err=%v", err)
+	}
+	d.pendingElements = []traceElemEvent{{
+		seq:     7,
+		index:   11,
+		traceID: 3,
+		elem:    ocsd.TraceElement{ElemType: ocsd.GenElemEvent},
+	}}
+	d.Source = &stubPacketReader{errs: []error{io.EOF}}
+
+	seq, elem, err := d.NextSequenced()
+	if err != nil {
+		t.Fatalf("expected queued element before touching source EOF, got seq=%d elem=%v err=%v", seq, elem, err)
+	}
+	if seq != 7 || elem == nil || elem.Index != 11 || elem.TraceID != 3 || elem.ElemType != ocsd.GenElemEvent {
+		t.Fatalf("unexpected queued element after drain: seq=%d elem=%v", seq, elem)
+	}
+
+	seq, elem, err = d.NextSequenced()
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("expected io.EOF on source teardown, got seq=%d elem=%v err=%v", seq, elem, err)
+	}
+	if d.Source != nil {
+		t.Fatalf("expected source to be detached after EOF teardown")
+	}
+	if !d.pullEOFDone {
+		t.Fatalf("expected EOF teardown to mark pullEOFDone")
+	}
+
+	seq, elem, err = d.NextSequenced()
+	if err != nil {
+		t.Fatalf("expected teardown-generated element to remain queued after EOF, got seq=%d elem=%v err=%v", seq, elem, err)
+	}
+	if elem == nil || elem.ElemType != ocsd.GenElemEOTrace {
+		t.Fatalf("expected queued GenElemEOTrace after EOF, got seq=%d elem=%v", seq, elem)
 	}
 }

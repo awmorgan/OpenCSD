@@ -191,7 +191,10 @@ func (d *PktDecode) NextSequenced() (uint64, *ocsd.TraceElement, error) {
 					return 0, nil, closeErr
 				}
 			}
-			continue
+			return 0, nil, io.EOF
+		}
+		if errors.Is(err, ocsd.ErrWait) {
+			return 0, nil, ocsd.ErrWait
 		}
 		if err != nil {
 			d.Source = nil
