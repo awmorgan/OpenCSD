@@ -144,7 +144,7 @@ func (p *Processor) NextPacket() (Packet, error) {
 		}
 
 		if p.packetReader == nil {
-			return Packet{}, fmt.Errorf("%w: packet reader not configured", ocsd.ErrInvalidParamVal)
+			return Packet{}, ocsd.ErrWait
 		}
 
 		if p.packetReadEOF {

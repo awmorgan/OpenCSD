@@ -97,6 +97,32 @@ func TestProcessorNextPacketFromReader(t *testing.T) {
 	}
 }
 
+func TestProcessorNextPacketReturnsQueuedWritePacketBeforeWaiting(t *testing.T) {
+	p := NewProcessor(&Config{})
+	p.collectPackets = true
+
+	if _, err := p.Write(0, []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+	}); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+
+	p.collectPackets = false
+
+	pkt, err := p.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected queued packet error: %v", err)
+	}
+	if pkt.Type != PktAsync {
+		t.Fatalf("expected queued packet type %v, got %v", PktAsync, pkt.Type)
+	}
+
+	_, err = p.NextPacket()
+	if !errors.Is(err, ocsd.ErrWait) {
+		t.Fatalf("expected ErrWait once queued packets are drained without a reader, got %v", err)
+	}
+}
+
 func TestDecodeNextPacketAtomF1(t *testing.T) {
 	pkt, consumed, err := decodeNextPacket([]byte{0xF7}, 0)
 	if err != nil {
