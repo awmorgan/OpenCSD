@@ -31,7 +31,7 @@ func TestSendUnsyncPacket_EmitsNoSync(t *testing.T) {
 	pkt.Type = PktISync
 	pkt.Addr = 0x1000
 	pkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
-	dec.Write(0, pkt)
+	writeDecodedPacket(dec, 0, pkt)
 
 	found := false
 	for _, e := range drainDecodedElements(t, dec) {
@@ -53,7 +53,7 @@ func TestSendUnsyncPacket_UnsyncInfoPreserved(t *testing.T) {
 	pkt := &Packet{}
 	pkt.ResetState()
 	pkt.Type = PktASync
-	dec.Write(0, pkt)
+	writeDecodedPacket(dec, 0, pkt)
 
 	found := false
 	for _, e := range drainDecodedElements(t, dec) {
@@ -83,7 +83,7 @@ func TestProcessBranchAddr_NoException_SetsAddr(t *testing.T) {
 	pkt.ResetState()
 	pkt.Type = PktBranchAddress
 	pkt.Addr = 0x4000
-	dec.Write(2, pkt)
+	writeDecodedPacket(dec, 2, pkt)
 
 	// Branch should NOT emit any elements (no exception, just sets address)
 	_ = drainDecodedElements(t, dec)
@@ -112,7 +112,7 @@ func TestProcessBranchAddr_CancelPendElem(t *testing.T) {
 	phdrPkt.PHdrFmt = 1
 	phdrPkt.Atom.Num = 1
 	phdrPkt.Atom.EnBits = 0x1
-	dec.Write(2, phdrPkt)
+	writeDecodedPacket(dec, 2, phdrPkt)
 
 	// Now send BranchAddress with Cancel=true → CancelPendElem
 	brPkt := &Packet{}
@@ -120,7 +120,7 @@ func TestProcessBranchAddr_CancelPendElem(t *testing.T) {
 	brPkt.Type = PktBranchAddress
 	brPkt.Addr = 0x5000
 	brPkt.ExceptionCancel = true
-	dec.Write(3, brPkt)
+	writeDecodedPacket(dec, 3, brPkt)
 
 	_ = drainDecodedElements(t, dec)
 	if dec.iAddr != 0x5000 {
@@ -141,7 +141,7 @@ func TestProcessBranchAddr_ExcepContextUpdate_EmitsPeContext(t *testing.T) {
 	pkt.Context.Updated = true
 	pkt.Context.CurrNS = true // SecNonsecure, differs from default SecSecure → bUpdatePEContext=true
 
-	dec.Write(2, pkt)
+	writeDecodedPacket(dec, 2, pkt)
 
 	// Should have emitted at least PeContext + Exception elements
 	elems := drainDecodedElements(t, dec)
@@ -192,7 +192,7 @@ func TestProcessBranchAddr_ExcepPresent_SameSecuritySameEL(t *testing.T) {
 	pkt.Context.CurrNS = false  // sec=SecSecure (same as default)
 	pkt.Context.CurrHyp = false // el=ELUnknown (same as default)
 
-	dec.Write(2, pkt)
+	writeDecodedPacket(dec, 2, pkt)
 
 	// Exception element must be present
 	hasExcep := false
@@ -217,7 +217,7 @@ func TestProcessBranchAddr_ExcepPresent_NumberZero(t *testing.T) {
 	pkt.Exception.Present = true
 	pkt.Exception.Number = 0 // zero → no exception element emitted
 
-	dec.Write(2, pkt)
+	writeDecodedPacket(dec, 2, pkt)
 
 	for _, e := range drainDecodedElements(t, dec) {
 		if e.ElemType == ocsd.GenElemException {
@@ -242,7 +242,7 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 
 	dec.Reset(0)
 	asyncPkt := &Packet{Type: PktASync}
-	dec.Write(0, asyncPkt)
+	writeDecodedPacket(dec, 0, asyncPkt)
 
 	isyncPkt := &Packet{}
 	isyncPkt.ResetState()
@@ -250,7 +250,7 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 	isyncPkt.Addr = 0x1000
 	isyncPkt.CurrISA = ocsd.ISAArm
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
-	dec.Write(1, isyncPkt)
+	writeDecodedPacket(dec, 1, isyncPkt)
 
 	_ = drainDecodedElements(t, dec)
 
@@ -260,14 +260,14 @@ func TestProcessPHdr_EAtom_BranchTaken(t *testing.T) {
 	phdrPkt.PHdrFmt = 1
 	phdrPkt.Atom.Num = 1
 	phdrPkt.Atom.EnBits = 0x1 // E-atom
-	dec.Write(2, phdrPkt)
+	writeDecodedPacket(dec, 2, phdrPkt)
 
 	// processPHdr pends the last InstrRange element until the next non-branch packet commits it.
 	// Send a Trigger packet to call CommitAllPendElem, then flush to send.
 	trigPkt := &Packet{}
 	trigPkt.ResetState()
 	trigPkt.Type = PktTrigger
-	dec.Write(3, trigPkt)
+	writeDecodedPacket(dec, 3, trigPkt)
 	dec.Flush()
 
 	elems := drainDecodedElements(t, dec)
@@ -303,7 +303,7 @@ func TestProcessPHdr_NAtom_InstrOther(t *testing.T) {
 
 	dec.Reset(0)
 	asyncPkt := &Packet{Type: PktASync}
-	dec.Write(0, asyncPkt)
+	writeDecodedPacket(dec, 0, asyncPkt)
 
 	isyncPkt := &Packet{}
 	isyncPkt.ResetState()
@@ -311,7 +311,7 @@ func TestProcessPHdr_NAtom_InstrOther(t *testing.T) {
 	isyncPkt.Addr = 0x1000
 	isyncPkt.CurrISA = ocsd.ISAArm
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
-	dec.Write(1, isyncPkt)
+	writeDecodedPacket(dec, 1, isyncPkt)
 
 	_ = drainDecodedElements(t, dec)
 
@@ -321,7 +321,7 @@ func TestProcessPHdr_NAtom_InstrOther(t *testing.T) {
 	phdrPkt.PHdrFmt = 1
 	phdrPkt.Atom.Num = 1
 	phdrPkt.Atom.EnBits = 0x0 // N-atom
-	dec.Write(2, phdrPkt)
+	writeDecodedPacket(dec, 2, phdrPkt)
 
 	// No panic and decoder is still functional
 	dec.Flush()
@@ -340,7 +340,7 @@ func TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr(t *testing.T) {
 
 	dec.Reset(0)
 	asyncPkt := &Packet{Type: PktASync}
-	dec.Write(0, asyncPkt)
+	writeDecodedPacket(dec, 0, asyncPkt)
 
 	isyncPkt := &Packet{}
 	isyncPkt.ResetState()
@@ -348,7 +348,7 @@ func TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr(t *testing.T) {
 	isyncPkt.Addr = 0x1000
 	isyncPkt.CurrISA = ocsd.ISAArm
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
-	dec.Write(1, isyncPkt)
+	writeDecodedPacket(dec, 1, isyncPkt)
 
 	_ = drainDecodedElements(t, dec)
 
@@ -358,14 +358,14 @@ func TestProcessPHdr_EAtom_IndirectBr_SetsNeedAddr(t *testing.T) {
 	phdrPkt.PHdrFmt = 1
 	phdrPkt.Atom.Num = 1
 	phdrPkt.Atom.EnBits = 0x1 // E-atom
-	dec.Write(2, phdrPkt)
+	writeDecodedPacket(dec, 2, phdrPkt)
 
 	// Send Trigger to commit the pending InstrRange element (non-branch packets call CommitAllPendElem).
 	// processPHdr sets needAddr=true after IndirectBr E-atom.
 	trigPkt := &Packet{}
 	trigPkt.ResetState()
 	trigPkt.Type = PktTrigger
-	dec.Write(3, trigPkt)
+	writeDecodedPacket(dec, 3, trigPkt)
 	dec.Flush()
 	_ = drainDecodedElements(t, dec)
 
@@ -389,7 +389,7 @@ func TestProcessPHdr_CCFmt3_WithAtoms(t *testing.T) {
 
 	dec.Reset(0)
 	asyncPkt := &Packet{Type: PktASync}
-	dec.Write(0, asyncPkt)
+	writeDecodedPacket(dec, 0, asyncPkt)
 
 	isyncPkt := &Packet{}
 	isyncPkt.ResetState()
@@ -397,7 +397,7 @@ func TestProcessPHdr_CCFmt3_WithAtoms(t *testing.T) {
 	isyncPkt.Addr = 0x1000
 	isyncPkt.CurrISA = ocsd.ISAArm
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
-	dec.Write(1, isyncPkt)
+	writeDecodedPacket(dec, 1, isyncPkt)
 
 	_ = drainDecodedElements(t, dec)
 
@@ -408,13 +408,13 @@ func TestProcessPHdr_CCFmt3_WithAtoms(t *testing.T) {
 	phdrPkt.Atom.Num = 1
 	phdrPkt.Atom.EnBits = 0x1
 	phdrPkt.CycleCount = 5
-	dec.Write(2, phdrPkt)
+	writeDecodedPacket(dec, 2, phdrPkt)
 
 	// Send Trigger to commit the pending InstrRange element
 	trigPkt := &Packet{}
 	trigPkt.ResetState()
 	trigPkt.Type = PktTrigger
-	dec.Write(3, trigPkt)
+	writeDecodedPacket(dec, 3, trigPkt)
 	dec.Flush()
 
 	// Should emit element with CycleCount set
@@ -444,7 +444,7 @@ func TestProcessPHdr_CCOnly_ZeroAtoms(t *testing.T) {
 	phdrPkt.PHdrFmt = 3
 	phdrPkt.Atom.Num = 0
 	phdrPkt.CycleCount = 99
-	dec.Write(2, phdrPkt)
+	writeDecodedPacket(dec, 2, phdrPkt)
 	dec.Flush()
 
 	hasCCElem := false
@@ -479,7 +479,7 @@ func TestProcessPHdr_NeedAddr_EmitsAddrUnknown(t *testing.T) {
 	phdrPkt.PHdrFmt = 1
 	phdrPkt.Atom.Num = 1
 	phdrPkt.Atom.EnBits = 0x1
-	dec.Write(2, phdrPkt)
+	writeDecodedPacket(dec, 2, phdrPkt)
 	dec.Flush()
 
 	elems := drainDecodedElements(t, dec)
@@ -512,16 +512,16 @@ func TestProcessPHdr_NeedAddr_SentUnknown_Skips(t *testing.T) {
 	phdrPkt.PHdrFmt = 4
 	phdrPkt.Atom.Num = 1
 	phdrPkt.Atom.EnBits = 0x1
-	dec.Write(2, phdrPkt)
+	writeDecodedPacket(dec, 2, phdrPkt)
 	dec.Flush()
 	_ = drainDecodedElements(t, dec)
 
 	// No new AddrUnknown element should appear (skip path)
 	// Actually, the previous PHdr call set needAddr=true and reset sentUnknown=false.
 	// So we need to call it ONCE to set sentUnknown=true, then AGAIN to skip.
-	dec.Write(3, phdrPkt) // This one emits AddrUnknown and sets sentUnknown=true
+	writeDecodedPacket(dec, 3, phdrPkt) // This one emits AddrUnknown and sets sentUnknown=true
 	_ = drainDecodedElements(t, dec)
-	dec.Write(4, phdrPkt) // This one SHOULD skip
+	writeDecodedPacket(dec, 4, phdrPkt) // This one SHOULD skip
 	dec.Flush()
 
 	for _, e := range drainDecodedElements(t, dec) {
@@ -543,14 +543,14 @@ func TestProcessPHdr_Nacc_ZeroInstructions(t *testing.T) {
 
 	dec.Reset(0)
 	asyncPkt := &Packet{Type: PktASync}
-	dec.Write(0, asyncPkt)
+	writeDecodedPacket(dec, 0, asyncPkt)
 	isyncPkt := &Packet{}
 	isyncPkt.ResetState()
 	isyncPkt.Type = PktISync
 	isyncPkt.Addr = 0x1000
 	isyncPkt.CurrISA = ocsd.ISAArm
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
-	dec.Write(1, isyncPkt)
+	writeDecodedPacket(dec, 1, isyncPkt)
 
 	_ = drainDecodedElements(t, dec)
 
@@ -560,7 +560,7 @@ func TestProcessPHdr_Nacc_ZeroInstructions(t *testing.T) {
 	phdrPkt.PHdrFmt = 1
 	phdrPkt.Atom.Num = 1
 	phdrPkt.Atom.EnBits = 0x1
-	dec.Write(2, phdrPkt)
+	writeDecodedPacket(dec, 2, phdrPkt)
 	dec.Flush()
 
 	elems := drainDecodedElements(t, dec)
@@ -589,7 +589,7 @@ func TestProcessPHdr_MemSpaceSecure(t *testing.T) {
 
 	dec.Reset(0)
 	asyncPkt := &Packet{Type: PktASync}
-	dec.Write(0, asyncPkt)
+	writeDecodedPacket(dec, 0, asyncPkt)
 
 	// ISync with CurrNS=false → peContext remains SecSecure
 	isyncPkt := &Packet{}
@@ -600,7 +600,7 @@ func TestProcessPHdr_MemSpaceSecure(t *testing.T) {
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
 	isyncPkt.Context.Updated = true
 	isyncPkt.Context.CurrNS = false
-	dec.Write(1, isyncPkt)
+	writeDecodedPacket(dec, 1, isyncPkt)
 
 	// Verify peContext is SecSecure
 	if dec.peContext.SecurityLevel != ocsd.SecSecure {
@@ -614,7 +614,7 @@ func TestProcessPHdr_MemSpaceSecure(t *testing.T) {
 	phdrPkt.PHdrFmt = 1
 	phdrPkt.Atom.Num = 1
 	phdrPkt.Atom.EnBits = 0x1
-	dec.Write(2, phdrPkt)
+	writeDecodedPacket(dec, 2, phdrPkt)
 	dec.Flush()
 }
 
@@ -626,14 +626,14 @@ func TestProcessPHdr_MemSpaceSecure(t *testing.T) {
 func TestProcessISync_NonPeriodic_EmitsTraceOn(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, &Config{})
 	dec.Reset(0)
-	dec.Write(0, &Packet{Type: PktASync})
+	writeDecodedPacket(dec, 0, &Packet{Type: PktASync})
 	isyncPkt := &Packet{}
 	isyncPkt.ResetState()
 	isyncPkt.Type = PktISync
 	isyncPkt.Addr = 0x1000
 	isyncPkt.CurrISA = ocsd.ISAArm
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
-	dec.Write(1, isyncPkt)
+	writeDecodedPacket(dec, 1, isyncPkt)
 	elems := drainDecodedElements(t, dec)
 	found := false
 	for _, e := range elems {
@@ -656,7 +656,7 @@ func TestProcessISync_Periodic_NoTraceOn(t *testing.T) {
 	syncPkt2.Type = PktISync
 	syncPkt2.Addr = 0x2000
 	syncPkt2.ISyncInfo.Reason = ocsd.ISyncReason(0) // periodic
-	dec.Write(2, syncPkt2)
+	writeDecodedPacket(dec, 2, syncPkt2)
 	dec.Flush()
 
 	for _, e := range drainDecodedElements(t, dec) {
@@ -677,7 +677,7 @@ func TestProcessISync_WithCC_LSipAddr(t *testing.T) {
 
 	dec.Reset(0)
 	asyncPkt := &Packet{Type: PktASync}
-	dec.Write(0, asyncPkt)
+	writeDecodedPacket(dec, 0, asyncPkt)
 
 	syncPkt := &Packet{}
 	syncPkt.ResetState()
@@ -691,7 +691,7 @@ func TestProcessISync_WithCC_LSipAddr(t *testing.T) {
 	syncPkt.Data.Addr = 0xDEAD
 	syncPkt.Context.UpdatedC = true
 	syncPkt.Context.CtxtID = 0x42
-	dec.Write(1, syncPkt)
+	writeDecodedPacket(dec, 1, syncPkt)
 	dec.Flush()
 
 	// iAddr should use LSipAddr
@@ -727,7 +727,7 @@ func TestProcessISync_ContextUpdate_CtxAndVMID(t *testing.T) {
 	syncPkt2.Context.VMID = 9
 	syncPkt2.Context.Updated = true
 	syncPkt2.Context.CurrNS = true
-	dec.Write(2, syncPkt2)
+	writeDecodedPacket(dec, 2, syncPkt2)
 	dec.Flush()
 
 	hasPeCtx := false
@@ -761,7 +761,7 @@ func TestOnFlush_SendPktsState(t *testing.T) {
 	dec.Reset(0)
 
 	asyncPkt := &Packet{Type: PktASync}
-	dec.Write(0, asyncPkt)
+	writeDecodedPacket(dec, 0, asyncPkt)
 
 	isyncPkt := &Packet{}
 	isyncPkt.ResetState()
@@ -769,7 +769,7 @@ func TestOnFlush_SendPktsState(t *testing.T) {
 	isyncPkt.Addr = 0x1000
 	isyncPkt.CurrISA = ocsd.ISAArm
 	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
-	dec.Write(1, isyncPkt)
+	writeDecodedPacket(dec, 1, isyncPkt)
 
 	_ = drainDecodedElements(t, dec)
 
@@ -804,14 +804,14 @@ func TestOnFlush_SendPkts_WaitISync(t *testing.T) {
 
 	dec.Reset(0)
 	asyncPkt := &Packet{Type: PktASync}
-	dec.Write(0, asyncPkt)
+	writeDecodedPacket(dec, 0, asyncPkt)
 
 	// Now in waitISync. Send a Timestamp (preISync valid).
 	tsPkt := &Packet{}
 	tsPkt.ResetState()
 	tsPkt.Type = PktTimestamp
 	tsPkt.Timestamp = 0xABCD
-	dec.Write(1, tsPkt)
+	writeDecodedPacket(dec, 1, tsPkt)
 
 	// Manually put into sendPkts with waitISync=true
 	dec.currState = sendPkts
@@ -868,14 +868,14 @@ func TestPreISyncValid_CycleCount_Emitted(t *testing.T) {
 
 	dec.Reset(0)
 	asyncPkt := &Packet{Type: PktASync}
-	dec.Write(0, asyncPkt)
+	writeDecodedPacket(dec, 0, asyncPkt)
 	// Now in waitISync
 
 	ccPkt := &Packet{}
 	ccPkt.ResetState()
 	ccPkt.Type = PktCycleCount
 	ccPkt.CycleCount = 42
-	dec.Write(1, ccPkt)
+	writeDecodedPacket(dec, 1, ccPkt)
 	dec.Flush()
 
 	found := false
@@ -897,7 +897,7 @@ func TestPreISyncValid_CycleCount_Emitted(t *testing.T) {
 func TestDecoder_Trigger(t *testing.T) {
 	dec := buildDecInDecodePktsPull(t, &Config{})
 	pkt := &Packet{Type: PktTrigger}
-	dec.Write(1, pkt)
+	writeDecodedPacket(dec, 1, pkt)
 	dec.Flush()
 
 	found := false

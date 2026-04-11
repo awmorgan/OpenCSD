@@ -16,33 +16,12 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-// ---------------------------------------------------------------------------
-// Helper: capturing packet sink
-// ---------------------------------------------------------------------------
-
-type capturePktSink struct {
-	packets []Packet
-}
-
-func (c *capturePktSink) Write(indexSOP ocsd.TrcIndex, pkt *Packet) error {
-	if pkt != nil {
-		c.packets = append(c.packets, *pkt)
-	}
-	return nil
-}
-func (c *capturePktSink) Close() error { return nil }
-func (c *capturePktSink) Flush() error { return nil }
-func (c *capturePktSink) Reset(indexSOP ocsd.TrcIndex) error {
-	return nil
-}
-
-func newSyncedProc(config *Config) (*PktProc, *capturePktSink) {
+func newSyncedProc(config *Config) *PktProc {
 	proc := NewPktProc(nil)
 	proc.SetProtocolConfig(config)
-	sink := &capturePktSink{}
-	proc.SetPktOut(sink)
+	proc.collectPackets = true
 	proc.Write(0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
-	return proc, sink
+	return proc
 }
 
 // ---------------------------------------------------------------------------
@@ -52,7 +31,7 @@ func newSyncedProc(config *Config) (*PktProc, *capturePktSink) {
 // TestExtractException_ExcepByteNoCancel: header 0x41 (branch, 1-byte addr, excep follows).
 // Exception byte 0x40: bits[7:6]=01, bit5=0 (no cancel), exNum=0, bit7=0 → last.
 func TestExtractException_ExcepByteNoCancel(t *testing.T) {
-	proc, sink := newSyncedProc(&Config{})
+	proc := newSyncedProc(&Config{})
 	// header 0x41: bit0=1 branch, bit6=1 excep, bit7=0 no MORE addr bytes (single byte addr via header)
 	// → onBranchAddress immediately from processHeaderByte, then sink gets the packet
 	// But extractExceptionData is called INSIDE extractBrAddrPkt via onBranchAddress.
@@ -66,9 +45,9 @@ func TestExtractException_ExcepByteNoCancel(t *testing.T) {
 
 	// Find the branch address packet
 	var brPkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktBranchAddress {
-			brPkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktBranchAddress {
+			brPkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -85,14 +64,14 @@ func TestExtractException_ExcepByteNoCancel(t *testing.T) {
 
 // TestExtractException_ExcepByteWithCancel: 5-byte addr, exception byte 0x60 → cancel=true.
 func TestExtractException_ExcepByteWithCancel(t *testing.T) {
-	proc, sink := newSyncedProc(&Config{})
+	proc := newSyncedProc(&Config{})
 	// 0x60: bits[7:6]=01, bit5=1 (cancel), exNum=0, bit7=0 → last
 	proc.Write(6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x60})
 
 	var brPkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktBranchAddress {
-			brPkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktBranchAddress {
+			brPkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -112,16 +91,16 @@ func TestExtractException_ExcepByteWithCancel(t *testing.T) {
 // Note: extractBrAddrPkt sets p.currPacket.Context.CurrAltIsa = false AFTER extractExceptionData,
 // so CurrAltIsa set in the context byte path will be overwritten. We just verify NS and Hyp.
 func TestExtractException_ContextByte(t *testing.T) {
-	proc, sink := newSyncedProc(&Config{})
+	proc := newSyncedProc(&Config{})
 	// After 5-byte addr, branchNeedsEx=true.
 	// Exception byte 0x80 indicates continuation; byte1 0x30 carries context flags:
 	// Hyp=(bit5)=1, NS from byte0 bit0=0.
 	proc.Write(6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x80, 0x30})
 
 	var brPkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktBranchAddress {
-			brPkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktBranchAddress {
+			brPkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -143,13 +122,13 @@ func TestExtractException_ContextByte(t *testing.T) {
 // TestExtractException_ExcepNumNonZero: exception byte with cancel + exNum bits set.
 // 0x7F = 0111 1111: bits[7:6]=01 → exception byte, bit5=1(cancel), bits[4:0]=0x1F → exNum=31
 func TestExtractException_ExcepNumNonZero(t *testing.T) {
-	proc, sink := newSyncedProc(&Config{})
+	proc := newSyncedProc(&Config{})
 	proc.Write(6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x7F})
 
 	var brPkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktBranchAddress {
-			brPkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktBranchAddress {
+			brPkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -178,15 +157,15 @@ func TestExtractException_ExcepNumNonZero(t *testing.T) {
 func TestExtractDataValue_SizeCode1(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 
 	// OOO Data with size 1: header 0x24, then 1 data byte 0xAB
 	proc.Write(6, []byte{0x24, 0xAB})
 
 	var pkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktOOOData {
-			pkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktOOOData {
+			pkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -206,14 +185,14 @@ func TestExtractDataValue_SizeCode1(t *testing.T) {
 func TestExtractDataValue_SizeCode2(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 
 	proc.Write(6, []byte{0x28, 0x34, 0x12}) // value: 0x1234
 
 	var pkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktOOOData {
-			pkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktOOOData {
+			pkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -230,14 +209,14 @@ func TestExtractDataValue_SizeCode2(t *testing.T) {
 func TestExtractDataValue_SizeCode3(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 
 	proc.Write(6, []byte{0x2C, 0x78, 0x56, 0x34, 0x12}) // value: 0x12345678
 
 	var pkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktOOOData {
-			pkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktOOOData {
+			pkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -254,14 +233,14 @@ func TestExtractDataValue_SizeCode3(t *testing.T) {
 func TestExtractDataValue_SizeCode0(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 
 	proc.Write(6, []byte{0x20}) // size 0 → sendPkt immediately
 
 	var pkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktOOOData {
-			pkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktOOOData {
+			pkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -299,7 +278,7 @@ func TestExtractDataValue_SizeCode0(t *testing.T) {
 func TestExtractDataAddress_5ByteBETrue(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal | ctrlDataAddr // IsDataTrace=true, IsDataAddrTrace=true
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 
 	// 0x74: OOOAddrPlc with (0x74 & 0x20)=0x20 → expectDataAddr=true
 	// 5 addr bytes: 4x bit7=1 (continue), 5th=0x40 (bit7=0 stop, bit6=1 BE=true)
@@ -308,15 +287,15 @@ func TestExtractDataAddress_5ByteBETrue(t *testing.T) {
 	proc.Write(6, []byte{0x74, 0x80, 0x80, 0x80, 0x80, 0x40})
 
 	var pkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktOOOAddrPlc {
-			pkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktOOOAddrPlc {
+			pkt = &proc.pendingPackets[i]
 			break
 		}
 	}
 	if pkt == nil {
 		t.Logf("all packets received:")
-		for _, p := range sink.packets {
+		for _, p := range proc.pendingPackets {
 			t.Logf("  type=%v err=%v", p.Type, p.Err)
 		}
 		t.Fatal("expected PktOOOAddrPlc packet")
@@ -336,15 +315,15 @@ func TestExtractDataAddress_5ByteBETrue(t *testing.T) {
 func TestExtractDataAddress_5ByteBEFalse(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal | ctrlDataAddr
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 
 	// OOOAddrPlc 0x74: 5 addr bytes, 5th=0x00 (bit7=0 stop, bit6=0 BE=false)
 	proc.Write(6, []byte{0x74, 0x80, 0x80, 0x80, 0x80, 0x00})
 
 	var pkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktOOOAddrPlc {
-			pkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktOOOAddrPlc {
+			pkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -364,14 +343,14 @@ func TestExtractDataAddress_5ByteBEFalse(t *testing.T) {
 func TestExtractDataAddress_SingleByte(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal | ctrlDataAddr
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 
 	proc.Write(6, []byte{0x74, 0x10})
 
 	var pkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktOOOAddrPlc {
-			pkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktOOOAddrPlc {
+			pkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -400,14 +379,14 @@ func TestExtractDataAddress_SingleByte(t *testing.T) {
 func TestExtractNormDataValue_Size1(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal | ctrlDataAddr | ctrlDataOnly
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 
 	proc.Write(6, []byte{0x06, 0xCD})
 
 	var pkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktNormData {
-			pkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktNormData {
+			pkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -424,14 +403,14 @@ func TestExtractNormDataValue_Size1(t *testing.T) {
 func TestExtractNormDataValue_Size2(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal | ctrlDataAddr | ctrlDataOnly
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 
 	proc.Write(6, []byte{0x0A, 0x34, 0x12})
 
 	var pkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktNormData {
-			pkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktNormData {
+			pkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -449,7 +428,7 @@ func TestExtractNormDataValue_Size2(t *testing.T) {
 
 // TestASync_ExtraZero: ASync header 0x00 + 4 payload zeros (len=5, OK) + extra 0x00 (len=6 > 5 → error).
 func TestASync_ExtraZero(t *testing.T) {
-	proc, sink := newSyncedProc(&Config{})
+	proc := newSyncedProc(&Config{})
 
 	// After sync, inject: 0x00 (ASync header) then 4 zeros (payload, len≤5 OK)
 	// then 0x00 again (len=6 > 5 → PktBadSequence + setBytesPartPkt error path)
@@ -457,7 +436,7 @@ func TestASync_ExtraZero(t *testing.T) {
 
 	// The bad ASync triggers PktBadSequence
 	found := false
-	for _, p := range sink.packets {
+	for _, p := range proc.pendingPackets {
 		if p.Type == PktBadSequence || p.displayType() == PktBadSequence {
 			found = true
 			break
@@ -469,21 +448,20 @@ func TestASync_ExtraZero(t *testing.T) {
 // TestASync_UnexpectedByte: ASync header 0x00, then byte 0x42 (not 0x00 and not 0x80 at len==6).
 // This exercises the "unexpected byte in sequence" error path.
 func TestASync_UnexpectedByte(t *testing.T) {
-	proc, sink := newSyncedProc(&Config{})
+	proc := newSyncedProc(&Config{})
 
 	// 0x00 = ASync header, then 0x42 = unexpected byte (len=2, not 0x00 and not 0x80 at len==6)
 	proc.Write(6, []byte{0x00, 0x42})
 
 	// Verify ASync or PktBadSequence was emitted (error path)
 	found := false
-	for _, p := range sink.packets {
+	for _, p := range proc.pendingPackets {
 		if p.Type == PktASync || p.displayType() == PktBadSequence {
 			found = true
 			break
 		}
 	}
 	_ = found // Error path was exercised without panic
-	_ = sink
 }
 
 // ---------------------------------------------------------------------------
@@ -496,7 +474,7 @@ func TestISync_V7M_Thumb2ISA(t *testing.T) {
 	config.ArchVer = ocsd.ArchV7
 	config.CoreProf = ocsd.ProfileCortexM // IsV7MArch=true
 
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 
 	// ISync: header=0x08, then info byte 0x01 (Reason=0, J=0, LSiP=0), then 4 addr bytes.
 	// We set the T bit (bit 0) in the first address byte to indicate Thumb state.
@@ -504,9 +482,9 @@ func TestISync_V7M_Thumb2ISA(t *testing.T) {
 	proc.Write(6, []byte{0x08, 0x00, 0x01, 0x00, 0x00, 0x00})
 
 	var iSyncPkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktISync {
-			iSyncPkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktISync {
+			iSyncPkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -526,15 +504,15 @@ func TestISync_V7M_Thumb2ISA(t *testing.T) {
 func TestISync_JazelleISA(t *testing.T) {
 	config := &Config{}
 
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 
 	// info byte 0x10 has bit 4 (J) set.
 	proc.Write(6, []byte{0x08, 0x10, 0x00, 0x00, 0x00, 0x00})
 
 	var iSyncPkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktISync {
-			iSyncPkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktISync {
+			iSyncPkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -549,7 +527,7 @@ func TestISync_JazelleISA(t *testing.T) {
 // TestISync_LSiP_UsesBranchAddressDecode verifies LSIP compressed address uses
 // branch-address extraction semantics (matching C++), not plain LEB128 decoding.
 func TestISync_LSiP_UsesBranchAddressDecode(t *testing.T) {
-	proc, sink := newSyncedProc(&Config{})
+	proc := newSyncedProc(&Config{})
 
 	// ISync header(0x08), info byte with LSIP flag (0x80),
 	// 4-byte I-addr where final addr byte has bit7=1 to continue into LSIP bytes.
@@ -559,9 +537,9 @@ func TestISync_LSiP_UsesBranchAddressDecode(t *testing.T) {
 	proc.Write(6, []byte{0x08, 0x80, 0x00, 0x00, 0x00, 0x80, 0x03})
 
 	var iSyncPkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktISync {
-			iSyncPkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktISync {
+			iSyncPkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -579,7 +557,7 @@ func TestISync_LSiP_UsesBranchAddressDecode(t *testing.T) {
 // TestExtractException_V7MExtendedNum verifies 2-byte Cortex-M exception number decoding.
 func TestExtractException_V7MExtendedNum(t *testing.T) {
 	config := &Config{ArchVer: ocsd.ArchV7, CoreProf: ocsd.ProfileCortexM}
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 
 	// 5-byte branch with exception continuation, then:
 	// ex byte0 = 0x92 -> cont=1, ex low nibble=9
@@ -587,9 +565,9 @@ func TestExtractException_V7MExtendedNum(t *testing.T) {
 	proc.Write(6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x92, 0x01})
 
 	var brPkt *Packet
-	for i := range sink.packets {
-		if sink.packets[i].Type == PktBranchAddress {
-			brPkt = &sink.packets[i]
+	for i := range proc.pendingPackets {
+		if proc.pendingPackets[i].Type == PktBranchAddress {
+			brPkt = &proc.pendingPackets[i]
 			break
 		}
 	}
@@ -613,7 +591,7 @@ func TestExtractException_V7MExtendedNum(t *testing.T) {
 
 // TestWaitSync_13Zeros_Transition: 13 zero bytes while bStartOfSync=true → setBytesPartPkt(8, waitSync, PktNotSync).
 func TestWaitSync_13Zeros_Transition(t *testing.T) {
-	proc, sink := newSyncedProc(&Config{})
+	proc := newSyncedProc(&Config{})
 
 	// After sync, we're in procHdr state.
 	// 0x00 header → ASync. Then add 11 more zeros (len becomes 13) → triggers extra-zeros path.
@@ -629,7 +607,7 @@ func TestWaitSync_13Zeros_Transition(t *testing.T) {
 
 	// Should have emitted PktNotSync for the partial packet
 	found := false
-	for _, p := range sink.packets {
+	for _, p := range proc.pendingPackets {
 		if p.Type == PktNotSync {
 			found = true
 			break
@@ -645,15 +623,14 @@ func TestWaitSync_NonZeroFirst(t *testing.T) {
 	// Fresh proc (not yet synced) in waitSync
 	proc := NewPktProc(nil)
 	proc.SetProtocolConfig(&Config{})
-	sink := &capturePktSink{}
-	proc.SetPktOut(sink)
+	proc.collectPackets = true
 
 	// In waitSync, bStartOfSync=false, len=0:
 	// non-zero byte → currPacketData=[0xFF], then next 0x00 causes: len=1>0 → decrements bytesProcessed, PktNotSync
 	proc.Write(0, []byte{0xFF, 0x00})
 
 	found := false
-	for _, p := range sink.packets {
+	for _, p := range proc.pendingPackets {
 		if p.Type == PktNotSync {
 			found = true
 			break
@@ -674,14 +651,14 @@ func TestAltBranch_BranchNeedsExAlreadySet(t *testing.T) {
 	config := &Config{}
 	config.RegIDR = idrAltBranch | (4 << 4)
 
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 
 	// AltBranch: header 0xC1 (bit0=1 branch, bit6=1 branchNeedsEx, bit7=1 more addr)
 	// Payload 0x00: bit7=0 → packetDone, and no extra exception data continuation required.
 	proc.Write(6, []byte{0xC1, 0x00})
 
 	found := false
-	for _, p := range sink.packets {
+	for _, p := range proc.pendingPackets {
 		if p.Type == PktBranchAddress {
 			found = true
 			break
@@ -697,12 +674,12 @@ func TestAltBranch_BranchNeedsExAlreadySet(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestProcessor_VMID(t *testing.T) {
-	proc, sink := newSyncedProc(&Config{})
+	proc := newSyncedProc(&Config{})
 	proc.Write(6, []byte{0x3C, 0x55}) // VMID header 0x3C, value 0x55
-	if len(sink.packets) < 2 {
+	if len(proc.pendingPackets) < 2 {
 		t.Fatal("expected packets")
 	}
-	pkt := sink.packets[len(sink.packets)-1]
+	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
 	if pkt.Type != PktVMID || pkt.Context.VMID != 0x55 {
 		t.Errorf("expected PktVMID with 0x55, got %v with 0x%X", pkt.Type, pkt.Context.VMID)
 	}
@@ -711,26 +688,26 @@ func TestProcessor_VMID(t *testing.T) {
 func TestProcessor_ContextID(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = 2 << 14 // 2 bytes context ID
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 	proc.Write(6, []byte{0x6E, 0x11, 0x22})
-	pkt := sink.packets[len(sink.packets)-1]
+	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
 	if pkt.Type != PktContextID || pkt.Context.CtxtID != 0x2211 {
 		t.Errorf("expected PktContextID with 0x2211, got 0x%X", pkt.Context.CtxtID)
 	}
 }
 
 func TestProcessor_Timestamp(t *testing.T) {
-	proc, sink := newSyncedProc(&Config{})
+	proc := newSyncedProc(&Config{})
 	// Timestamp: 0x42 header, bit7=0 stop byte 0x10
 	proc.Write(6, []byte{0x42, 0x10})
-	pkt := sink.packets[len(sink.packets)-1]
+	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
 	if pkt.Type != PktTimestamp {
 		t.Errorf("expected PktTimestamp, got %v", pkt.Type)
 	}
 }
 
 func TestProcessor_ReservedHeader(t *testing.T) {
-	proc, _ := newSyncedProc(&Config{})
+	proc := newSyncedProc(&Config{})
 	// 0x3E is reserved
 	_, err := proc.Write(6, []byte{0x3E})
 	resp := ocsd.DataRespFromErr(err)
@@ -742,19 +719,19 @@ func TestProcessor_ReservedHeader(t *testing.T) {
 func TestProcessor_ContextID_4Bytes(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = 3 << 14 // 4 bytes context ID
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 	proc.Write(6, []byte{0x6E, 0x11, 0x22, 0x33, 0x44})
-	pkt := sink.packets[len(sink.packets)-1]
+	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
 	if pkt.Context.CtxtID != 0x44332211 {
 		t.Errorf("expected 0x44332211, got 0x%X", pkt.Context.CtxtID)
 	}
 }
 
 func TestProcessor_Timestamp_MultiByte(t *testing.T) {
-	proc, sink := newSyncedProc(&Config{})
+	proc := newSyncedProc(&Config{})
 	// Timestamp: 0x42 header, bit7=1 continues, bit7=0 stops
 	proc.Write(6, []byte{0x42, 0x81, 0x82, 0x03})
-	pkt := sink.packets[len(sink.packets)-1]
+	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
 	if pkt.Type != PktTimestamp || pkt.Timestamp == 0 {
 		t.Error("expected non-zero multip-byte timestamp")
 	}
@@ -1065,7 +1042,7 @@ func TestDecodeNextPacketASyncIncompleteFallsBack(t *testing.T) {
 
 func TestProcessDataFastPathTimestampLongTs64(t *testing.T) {
 	config := &Config{RegCCER: ccerTs64Bit}
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 	data := []byte{0x42, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x01}
 	consumed, err := proc.ProcessData(6, data)
 	if err != nil {
@@ -1074,10 +1051,10 @@ func TestProcessDataFastPathTimestampLongTs64(t *testing.T) {
 	if consumed != uint32(len(data)) {
 		t.Fatalf("expected %d bytes consumed, got %d", len(data), consumed)
 	}
-	if len(sink.packets) == 0 {
+	if len(proc.pendingPackets) == 0 {
 		t.Fatalf("expected output packet")
 	}
-	pkt := sink.packets[len(sink.packets)-1]
+	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
 	if pkt.Type != PktTimestamp {
 		t.Fatalf("expected PktTimestamp, got %v", pkt.Type)
 	}
@@ -1085,7 +1062,7 @@ func TestProcessDataFastPathTimestampLongTs64(t *testing.T) {
 
 func TestProcessDataFastPathContextID(t *testing.T) {
 	config := &Config{RegCtrl: 2 << 14}
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 	consumed, err := proc.ProcessData(6, []byte{0x6E, 0x11, 0x22})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1093,10 +1070,10 @@ func TestProcessDataFastPathContextID(t *testing.T) {
 	if consumed != 3 {
 		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
 	}
-	if len(sink.packets) == 0 {
+	if len(proc.pendingPackets) == 0 {
 		t.Fatalf("expected output packet")
 	}
-	pkt := sink.packets[len(sink.packets)-1]
+	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
 	if pkt.Type != PktContextID || pkt.Context.CtxtID != 0x2211 || !pkt.Context.UpdatedC {
 		t.Fatalf("unexpected context packet output: type=%v ctxt=0x%X updated=%v", pkt.Type, pkt.Context.CtxtID, pkt.Context.UpdatedC)
 	}
@@ -1104,7 +1081,7 @@ func TestProcessDataFastPathContextID(t *testing.T) {
 
 func TestProcessDataFastPathStoreFailAndDataSuppressed(t *testing.T) {
 	config := &Config{RegCtrl: ctrlDataVal | ctrlDataAddr}
-	proc, sink := newSyncedProc(config)
+	proc := newSyncedProc(config)
 
 	consumed, err := proc.ProcessData(6, []byte{0x50})
 	if err != nil {
@@ -1113,7 +1090,7 @@ func TestProcessDataFastPathStoreFailAndDataSuppressed(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed for store-fail, got %d", consumed)
 	}
-	if len(sink.packets) == 0 || sink.packets[len(sink.packets)-1].Type != PktStoreFail {
+	if len(proc.pendingPackets) == 0 || proc.pendingPackets[len(proc.pendingPackets)-1].Type != PktStoreFail {
 		t.Fatalf("expected PktStoreFail output")
 	}
 
@@ -1124,13 +1101,13 @@ func TestProcessDataFastPathStoreFailAndDataSuppressed(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed for data-suppressed, got %d", consumed)
 	}
-	if sink.packets[len(sink.packets)-1].Type != PktDataSuppressed {
+	if proc.pendingPackets[len(proc.pendingPackets)-1].Type != PktDataSuppressed {
 		t.Fatalf("expected PktDataSuppressed output")
 	}
 }
 
 func TestProcessDataFastPathPHdr(t *testing.T) {
-	proc, sink := newSyncedProc(&Config{})
+	proc := newSyncedProc(&Config{})
 	consumed, err := proc.ProcessData(6, []byte{0x84})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1138,10 +1115,10 @@ func TestProcessDataFastPathPHdr(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed, got %d", consumed)
 	}
-	if len(sink.packets) == 0 {
+	if len(proc.pendingPackets) == 0 {
 		t.Fatalf("expected output packet")
 	}
-	pkt := sink.packets[len(sink.packets)-1]
+	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
 	if pkt.Type != PktPHdr {
 		t.Fatalf("expected PktPHdr, got %v", pkt.Type)
 	}
@@ -1151,8 +1128,8 @@ func TestProcessDataFastPathPHdr(t *testing.T) {
 }
 
 func TestProcessDataFastPathISyncNoInstr(t *testing.T) {
-	proc, sink := newSyncedProc(&Config{RegCtrl: ctrlDataOnly})
-	before := len(sink.packets)
+	proc := newSyncedProc(&Config{RegCtrl: ctrlDataOnly})
+	before := len(proc.pendingPackets)
 	consumed, err := proc.ProcessData(6, []byte{0x08, 0x08})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1160,10 +1137,10 @@ func TestProcessDataFastPathISyncNoInstr(t *testing.T) {
 	if consumed != 2 {
 		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
 	}
-	if len(sink.packets) <= before {
+	if len(proc.pendingPackets) <= before {
 		t.Fatalf("expected output packet")
 	}
-	pkt := sink.packets[len(sink.packets)-1]
+	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
 	if pkt.Type != PktISync {
 		t.Fatalf("expected PktISync, got %v", pkt.Type)
 	}

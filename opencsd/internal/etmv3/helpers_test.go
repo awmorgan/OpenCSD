@@ -59,8 +59,8 @@ func TestETMv3TypedConstructors(t *testing.T) {
 	if err != nil || proc == nil || dec == nil {
 		t.Fatalf("NewConfiguredPipeline failed: proc=%v dec=%v err=%v", proc, dec, err)
 	}
-	if got := proc.PktOut(); got != dec {
-		t.Fatal("expected pipeline constructor to wire processor output to decoder")
+	if dec.Source != proc {
+		t.Fatal("expected pipeline constructor to wire processor as decoder source")
 	}
 
 	if proc, err := NewConfiguredPktProc(0, nil); proc != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
@@ -97,6 +97,17 @@ func mustNewConfiguredPktDecode(tb testing.TB, config *Config) *PktDecode {
 
 func isErrorCode(err error, code error) bool {
 	return errors.Is(err, code)
+}
+
+func writeDecodedPacket(dec *PktDecode, indexSOP ocsd.TrcIndex, pktIn *Packet) error {
+	if pktIn == nil {
+		return ocsd.ErrInvalidParamVal
+	}
+	dec.CurrPacketIn = pktIn
+	dec.IndexCurrPkt = indexSOP
+	err := dec.ProcessPacket()
+	dec.flushOutputElements()
+	return err
 }
 
 func drainDecodedElements(t *testing.T, dec *PktDecode) []ocsd.TraceElement {

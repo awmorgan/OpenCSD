@@ -143,7 +143,8 @@ type ISyncInfo struct {
 
 // Packet encapsulates an ETMv3 trace packet and intra-packet state
 type Packet struct {
-	Type PktType //!< Primary packet type.
+	Type  PktType //!< Primary packet type.
+	Index ocsd.TrcIndex
 
 	CurrISA ocsd.ISA //!< current ISA
 	PrevISA ocsd.ISA //!< ISA in previous packet
@@ -176,6 +177,7 @@ func (p *Packet) Clear() {
 	// Clears dynamic packet elements for a new packet but retains persistent state
 	// like Timestamp, Addr, Context, and ISA.
 	p.Type = PktNoError
+	p.Index = 0
 	p.Err = nil
 	p.PrevISA = p.CurrISA
 	p.Context.Updated = false

@@ -82,7 +82,6 @@ type PktDecode struct {
 	elemBufPos int
 
 	// Source is the pull-based packet reader injected at construction time.
-	// May be nil when the push-based Write path is used instead.
 	Source ocsd.PacketReader[Packet]
 }
 
@@ -181,18 +180,6 @@ func (d *PktDecode) InvalidateMemAccCache(traceID uint8) error {
 	return ocsd.ErrDcdInterfaceUnused
 }
 
-// Write is the explicit packet data entrypoint used by split interfaces.
-func (d *PktDecode) Write(indexSOP ocsd.TrcIndex, pktIn *Packet) error {
-	if pktIn == nil {
-		return ocsd.ErrInvalidParamVal
-	}
-	d.CurrPacketIn = pktIn
-	d.IndexCurrPkt = indexSOP
-	err := d.ProcessPacket()
-	d.flushOutputElements()
-	return err
-}
-
 // Close handles end-of-trace control.
 func (d *PktDecode) Close() error {
 	return d.OnEOT()
@@ -223,13 +210,19 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 			_ = d.Close()
 			break
 		}
+		if errors.Is(err, ocsd.ErrWait) || errors.Is(err, ocsd.ErrInvalidParamVal) {
+			break
+		}
 		if err != nil {
 			d.Source = nil
 			return 0, 0, ocsd.TraceElement{}, err
 		}
-		if wErr := d.Write(0, &pkt); wErr != nil {
+		d.CurrPacketIn = &pkt
+		d.IndexCurrPkt = pkt.Index
+		if wErr := d.ProcessPacket(); wErr != nil {
 			return 0, 0, ocsd.TraceElement{}, wErr
 		}
+		d.flushOutputElements()
 	}
 	if d.elemBufPos >= len(d.elemBuf) {
 		d.elemBuf = d.elemBuf[:0]
@@ -980,7 +973,7 @@ func NewConfiguredPktDecode(instID int, cfg *Config, mem common.TargetMemAccess,
 }
 
 // NewConfiguredPktDecodeWithDeps creates an ETMv3 decoder and injects dependencies.
-// source is the pull-based PacketReader to use; pass nil to use the push-based Write path.
+// source is the pull-based PacketReader to use.
 func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode, source ocsd.PacketReader[Packet]) (*PktDecode, error) {
 	dec, err := NewConfiguredPktDecode(instID, cfg, mem, instr)
 	if err != nil {
@@ -996,11 +989,10 @@ func NewConfiguredPipeline(instID int, cfg *Config, mem common.TargetMemAccess, 
 	if err != nil {
 		return nil, nil, err
 	}
-	dec, err := NewConfiguredPktDecode(instID, cfg, mem, instr)
+	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, proc)
 	if err != nil {
 		return nil, nil, err
 	}
-	proc.SetPktOut(dec)
 	return proc, dec, nil
 }
 
@@ -1010,11 +1002,10 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 	if err != nil {
 		return nil, nil, err
 	}
-	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, nil)
+	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, proc)
 	if err != nil {
 		return nil, nil, err
 	}
-	proc.SetPktOut(dec)
 	return proc, dec, nil
 }
 

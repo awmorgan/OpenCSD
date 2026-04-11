@@ -29,7 +29,6 @@ type PktProc struct {
 	Stats         ocsd.DecodeStats
 	statsInit     bool
 	Config        *Config
-	pktOut        ocsd.PacketProcessor[Packet]
 	PktRawMonI    ocsd.PacketMonitor
 	procErrReason error
 
@@ -89,12 +88,6 @@ func NewPktProc(cfg *Config, reader ...io.Reader) *PktProc {
 	return p
 }
 
-// SetPktOut attaches the downstream packet decoder.
-func (p *PktProc) SetPktOut(out ocsd.PacketProcessor[Packet]) { p.pktOut = out }
-
-// PktOut returns the downstream packet processor.
-func (p *PktProc) PktOut() ocsd.PacketProcessor[Packet] { return p.pktOut }
-
 // SetPktRawMonitor attaches a raw packet monitor.
 func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor) { p.PktRawMonI = mon }
 
@@ -148,13 +141,8 @@ func (p *PktProc) StatsAddBadSeqCount(count uint32) { p.Stats.BadSequenceErrs +=
 func (p *PktProc) StatsAddBadHdrCount(count uint32) { p.Stats.BadHeaderErrs += count }
 
 func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) error {
-	if p.collectPackets {
-		p.pendingPackets = append(p.pendingPackets, *pkt)
-		return nil
-	}
-	if p.pktOut != nil {
-		return p.pktOut.Write(indexSOP, pkt)
-	}
+	pkt.Index = indexSOP
+	p.pendingPackets = append(p.pendingPackets, *pkt)
 	return nil
 }
 
@@ -189,7 +177,10 @@ func (p *PktProc) NextPacket() (Packet, error) {
 		}
 
 		if p.packetReader == nil {
-			return Packet{}, fmt.Errorf("%w: packet reader not configured", ocsd.ErrInvalidParamVal)
+			if p.packetReadEOT {
+				return Packet{}, io.EOF
+			}
+			return Packet{}, ocsd.ErrWait
 		}
 
 		if p.packetReadEOF {
@@ -209,9 +200,7 @@ func (p *PktProc) NextPacket() (Packet, error) {
 		buf := make([]byte, packetReaderChunkSize)
 		n, err := p.packetReader.Read(buf)
 		if n > 0 {
-			p.collectPackets = true
 			processed, procErr := p.ProcessData(p.packetReadIndex, buf[:n])
-			p.collectPackets = false
 			p.packetReadIndex += ocsd.TrcIndex(processed)
 			if procErr != nil {
 				return Packet{}, procErr
@@ -238,11 +227,7 @@ func (p *PktProc) Close() error {
 	if err := p.OnEOT(); err != nil {
 		return err
 	}
-	if p.pktOut != nil {
-		if err := p.pktOut.Close(); err != nil && !errors.Is(err, ocsd.ErrWait) {
-			return err
-		}
-	}
+	p.packetReadEOT = true
 	if rawMon := p.PktRawMonI; rawMon != nil {
 		rawMon.MonitorEOT()
 	}
@@ -251,21 +236,11 @@ func (p *PktProc) Close() error {
 
 // Flush handles flush control without op multiplexing.
 func (p *PktProc) Flush() error {
-	if p.pktOut != nil {
-		if err := p.pktOut.Flush(); err != nil && !errors.Is(err, ocsd.ErrWait) {
-			return err
-		}
-	}
 	return nil
 }
 
 // Reset handles reset control without op multiplexing.
 func (p *PktProc) Reset(index ocsd.TrcIndex) error {
-	if p.pktOut != nil {
-		if err := p.pktOut.Reset(index); err != nil && !errors.Is(err, ocsd.ErrWait) {
-			return err
-		}
-	}
 	p.OnReset()
 	if rawMon := p.PktRawMonI; rawMon != nil {
 		rawMon.MonitorReset(index)
@@ -278,6 +253,7 @@ func (p *PktProc) resetProcessorState() {
 	p.processState = waitSync
 	p.bStartOfSync = false
 	p.procErrReason = nil
+	p.packetReadEOT = false
 	p.currPacket.ResetState()
 	p.resetPacketState()
 	p.bSendPartPkt = false
