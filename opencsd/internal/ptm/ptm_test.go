@@ -1,6 +1,7 @@
 package ptm
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,34 @@ import (
 	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
+
+func TestPTMPktProcNextPacketFromReader(t *testing.T) {
+	proc := NewPktProc(NewConfig(), bytes.NewReader([]byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
+		0x0C, // TRIGGER
+	}))
+
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected first packet error: %v", err)
+	}
+	if pkt.Type != PktASync {
+		t.Fatalf("expected first packet type %v, got %v", PktASync, pkt.Type)
+	}
+
+	pkt, err = proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected second packet error: %v", err)
+	}
+	if pkt.Type != PktTrigger {
+		t.Fatalf("expected second packet type %v, got %v", PktTrigger, pkt.Type)
+	}
+
+	_, err = proc.NextPacket()
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("expected io.EOF after draining packet reader, got %v", err)
+	}
+}
 
 func drainDecodedElements(t *testing.T, dec *PktDecode) []ocsd.TraceElement {
 	t.Helper()

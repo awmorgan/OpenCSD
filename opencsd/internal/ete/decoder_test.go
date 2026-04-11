@@ -1,9 +1,12 @@
 package ete
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"testing"
 
+	"opencsd/internal/etmv4"
 	"opencsd/internal/ocsd"
 )
 
@@ -46,4 +49,32 @@ func TestTypedPipelineConstructors(t *testing.T) {
 
 func isErrorCode(err error, code error) bool {
 	return errors.Is(err, code)
+}
+
+func TestNewProcessorWithReaderSupportsNextPacket(t *testing.T) {
+	proc := NewProcessor(NewConfig(), bytes.NewReader([]byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+		0x04,
+	}))
+
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected first packet error: %v", err)
+	}
+	if pkt.Type != etmv4.PktAsync {
+		t.Fatalf("expected first packet type %v, got %v", etmv4.PktAsync, pkt.Type)
+	}
+
+	pkt, err = proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected second packet error: %v", err)
+	}
+	if pkt.Type != etmv4.PktTraceOn {
+		t.Fatalf("expected second packet type %v, got %v", etmv4.PktTraceOn, pkt.Type)
+	}
+
+	_, err = proc.NextPacket()
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("expected io.EOF after draining packet reader, got %v", err)
+	}
 }

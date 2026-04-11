@@ -1,12 +1,44 @@
 package itm
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"testing"
 
 	"opencsd/internal/ocsd"
 )
+
+func TestITMPktProcNextPacketFromReader(t *testing.T) {
+	proc := NewPktProc(nil, bytes.NewReader([]byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x80, // ASYNC
+		0x70, // OVERFLOW
+	}))
+
+	seenAsync := false
+	seenOverflow := false
+	for {
+		pkt, err := proc.NextPacket()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("unexpected packet error: %v", err)
+		}
+		if pkt.Type == PktAsync {
+			seenAsync = true
+		}
+		if pkt.Type == PktOverflow {
+			seenOverflow = true
+		}
+	}
+	if !seenAsync {
+		t.Fatalf("expected pull stream to emit %v", PktAsync)
+	}
+	if !seenOverflow {
+		t.Fatalf("expected pull stream to emit %v", PktOverflow)
+	}
+}
 
 type ItmStreamBuilder struct {
 	data []byte

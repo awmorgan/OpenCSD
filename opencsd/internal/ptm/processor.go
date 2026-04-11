@@ -111,7 +111,7 @@ type PktProc struct {
 
 func (p *PktProc) ApplyFlags(flags uint32) error { return nil }
 
-func NewPktProc(cfg *Config) *PktProc {
+func NewPktProc(cfg *Config, reader ...io.Reader) *PktProc {
 	instIDNum := 0
 	if cfg != nil {
 		instIDNum = int(cfg.TraceID())
@@ -124,6 +124,9 @@ func NewPktProc(cfg *Config) *PktProc {
 	p.buildIPacketTable()
 	if cfg != nil {
 		_ = p.SetProtocolConfig(cfg)
+	}
+	if len(reader) > 0 {
+		p.SetReader(reader[0])
 	}
 	return p
 }

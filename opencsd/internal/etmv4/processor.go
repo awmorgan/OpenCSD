@@ -97,12 +97,16 @@ var _ ocsd.TraceDecoder = (*Processor)(nil)
 var _ ocsd.PacketReader[Packet] = (*Processor)(nil)
 
 // NewProcessor creates and initializes a new ETMv4 packet Processor.
-func NewProcessor(config *Config) *Processor {
+// When reader is provided, pull-mode packet reads are enabled via NextPacket().
+func NewProcessor(config *Config, reader ...io.Reader) *Processor {
 	p := &Processor{
 		config: *config,
 	}
 	p.statePacket.ProtocolVersion = config.FullVersion()
 	p.isInit = true
+	if len(reader) > 0 {
+		p.SetReader(reader[0])
+	}
 	return p
 }
 

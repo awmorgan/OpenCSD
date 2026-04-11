@@ -1,6 +1,7 @@
 package stm
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -8,6 +9,42 @@ import (
 
 	"opencsd/internal/ocsd"
 )
+
+func TestSTMPktProcNextPacketFromReader(t *testing.T) {
+	sb := &StmStreamBuilder{}
+	for range 21 {
+		sb.AddNibble(0xF)
+	}
+	sb.AddNibble(0x0) // ASYNC terminator
+	sb.AddNibble(0x0) // NULL packet
+	sb.Flush()
+
+	proc := NewPktProc(nil, bytes.NewReader(sb.data))
+
+	seenAsync := false
+	seenNull := false
+	for {
+		pkt, err := proc.NextPacket()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("unexpected packet error: %v", err)
+		}
+		if pkt.Type == PktAsync {
+			seenAsync = true
+		}
+		if pkt.Type == PktNull {
+			seenNull = true
+		}
+	}
+	if !seenAsync {
+		t.Fatalf("expected pull stream to emit %v", PktAsync)
+	}
+	if !seenNull {
+		t.Fatalf("expected pull stream to emit %v", PktNull)
+	}
+}
 
 type StmStreamBuilder struct {
 	data      []byte

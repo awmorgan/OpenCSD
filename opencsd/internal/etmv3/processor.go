@@ -68,8 +68,9 @@ func (p *PktProc) ApplyFlags(flags uint32) error { return nil }
 
 var _ ocsd.PacketReader[Packet] = (*PktProc)(nil)
 
-// NewPktProc creates a new ETMv3 packet processor
-func NewPktProc(cfg *Config) *PktProc {
+// NewPktProc creates a new ETMv3 packet processor.
+// When reader is provided, pull-mode packet reads are enabled via NextPacket().
+func NewPktProc(cfg *Config, reader ...io.Reader) *PktProc {
 	instID := 0
 	if cfg != nil {
 		instID = int(cfg.TraceID())
@@ -81,6 +82,9 @@ func NewPktProc(cfg *Config) *PktProc {
 	p.resetProcessorState()
 	if cfg != nil {
 		_ = p.SetProtocolConfig(cfg)
+	}
+	if len(reader) > 0 {
+		p.SetReader(reader[0])
 	}
 	return p
 }

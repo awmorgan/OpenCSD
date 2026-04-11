@@ -19,8 +19,8 @@ type PacketProcessor[P any] interface {
 	Reset(indexSOP TrcIndex) error
 }
 
-type PacketReader[Packet any] interface {
-	NextPacket() (Packet, error)
+type PacketReader[T any] interface {
+	NextPacket() (T, error)
 }
 
 type TraceElementReader interface {

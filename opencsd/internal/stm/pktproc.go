@@ -77,6 +77,8 @@ type procStateFn func(ocsd.TrcIndex) (error, bool)
 
 var errDecodeNotImplemented = errors.New("decodeNextPacket: packet type not implemented")
 
+const packetReaderChunkSize = 4096
+
 type packetEvent struct {
 	index ocsd.TrcIndex
 	pkt   Packet
@@ -125,6 +127,11 @@ type PktProc struct {
 	bWaitSyncSaveSuppressed bool
 	pendingPackets          []packetEvent
 	collectPackets          bool
+	packetReaderBuf         []Packet
+	packetReader            io.Reader
+	packetReadIndex         ocsd.TrcIndex
+	packetReadEOF           bool
+	packetReadEOT           bool
 
 	val8  uint8
 	val16 uint16
@@ -142,6 +149,8 @@ type PktProc struct {
 	syncIndex   ocsd.TrcIndex
 }
 
+var _ ocsd.PacketReader[Packet] = (*PktProc)(nil)
+
 func (p *PktProc) ApplyFlags(flags uint32) error {
 	if (flags & ocsd.OpflgPktprocErrBadPkts) != 0 {
 		p.errBadPkts = true
@@ -152,7 +161,7 @@ func (p *PktProc) ApplyFlags(flags uint32) error {
 	return nil
 }
 
-func NewPktProc(cfg *Config) *PktProc {
+func NewPktProc(cfg *Config, reader ...io.Reader) *PktProc {
 	instIDNum := 0
 	if cfg != nil {
 		instIDNum = int(cfg.TraceID())
@@ -167,6 +176,9 @@ func NewPktProc(cfg *Config) *PktProc {
 	p.buildOpTables()
 	if cfg != nil {
 		_ = p.SetProtocolConfig(cfg)
+	}
+	if len(reader) > 0 {
+		p.SetReader(reader[0])
 	}
 	return p
 }
@@ -241,18 +253,94 @@ func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pkt
 	return p.outputDecodedPacket(indexSOP, pkt)
 }
 
-// NextPacket returns the next queued packet event for pull-style consumption.
-func (p *PktProc) NextPacket() (ocsd.TrcIndex, Packet, []byte, error) {
+func (p *PktProc) nextPktEvent() (packetEvent, error) {
 	if len(p.pendingPackets) == 0 {
-		return 0, Packet{}, nil, io.EOF
+		return packetEvent{}, io.EOF
 	}
 	e := p.pendingPackets[0]
 	p.pendingPackets = p.pendingPackets[1:]
-	return e.index, e.pkt, e.data, nil
+	return e, nil
 }
 
-func (p *PktProc) putBackPacket(index ocsd.TrcIndex, pkt Packet, data []byte) {
-	p.pendingPackets = append([]packetEvent{{index: index, pkt: pkt, data: data}}, p.pendingPackets...)
+func (p *PktProc) putBackPktEvent(e packetEvent) {
+	p.pendingPackets = append([]packetEvent{e}, p.pendingPackets...)
+}
+
+func (p *PktProc) drainPendingDecodedPackets() {
+	for {
+		e, err := p.nextPktEvent()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		p.packetReaderBuf = append(p.packetReaderBuf, e.pkt)
+	}
+}
+
+// SetReader attaches a pull-style raw byte stream for PacketReader consumers.
+func (p *PktProc) SetReader(reader io.Reader) {
+	p.packetReader = reader
+	p.packetReadIndex = 0
+	p.packetReadEOF = false
+	p.packetReadEOT = false
+	p.packetReaderBuf = p.packetReaderBuf[:0]
+	p.pendingPackets = p.pendingPackets[:0]
+	p.resetProcessorState()
+}
+
+// NextPacket returns the next decoded packet from the attached reader.
+func (p *PktProc) NextPacket() (Packet, error) {
+	for {
+		if len(p.packetReaderBuf) > 0 {
+			pkt := p.packetReaderBuf[0]
+			p.packetReaderBuf = p.packetReaderBuf[1:]
+			return pkt, nil
+		}
+
+		if p.packetReader == nil {
+			return Packet{}, fmt.Errorf("%w: packet reader not configured", ocsd.ErrInvalidParamVal)
+		}
+
+		if p.packetReadEOF {
+			if p.packetReadEOT {
+				return Packet{}, io.EOF
+			}
+			p.collectPackets = true
+			err := p.OnEOT()
+			p.collectPackets = false
+			p.packetReadEOT = true
+			p.drainPendingDecodedPackets()
+			if err != nil {
+				return Packet{}, err
+			}
+			continue
+		}
+
+		buf := make([]byte, packetReaderChunkSize)
+		n, err := p.packetReader.Read(buf)
+		if n > 0 {
+			p.collectPackets = true
+			processed, procErr := p.ProcessData(p.packetReadIndex, buf[:n])
+			p.collectPackets = false
+			p.packetReadIndex += ocsd.TrcIndex(processed)
+			p.drainPendingDecodedPackets()
+			if procErr != nil {
+				return Packet{}, procErr
+			}
+			if processed != uint32(n) {
+				return Packet{}, fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, n)
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				p.packetReadEOF = true
+				continue
+			}
+			return Packet{}, err
+		}
+		if n == 0 {
+			return Packet{}, io.ErrNoProgress
+		}
+	}
 }
 
 // Write is the explicit data-path entrypoint used by split interfaces.
@@ -267,19 +355,19 @@ func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 		return processed, err
 	}
 	for {
-		evtIndex, evtPkt, evtData, nextErr := p.NextPacket()
+		e, nextErr := p.nextPktEvent()
 		if errors.Is(nextErr, io.EOF) {
 			break
 		}
 		if nextErr != nil {
 			return processed, nextErr
 		}
-		if len(evtData) > 0 {
-			p.outputRawPacketToMonitor(evtIndex, &evtPkt, evtData)
+		if len(e.data) > 0 {
+			p.outputRawPacketToMonitor(e.index, &e.pkt, e.data)
 		}
-		if outErr := p.outputDecodedPacket(evtIndex, &evtPkt); outErr != nil {
+		if outErr := p.outputDecodedPacket(e.index, &e.pkt); outErr != nil {
 			if errors.Is(outErr, ocsd.ErrWait) {
-				p.putBackPacket(evtIndex, evtPkt, evtData)
+				p.putBackPktEvent(e)
 			}
 			return processed, outErr
 		}
@@ -556,6 +644,7 @@ func (p *PktProc) resetProcessorState() {
 	p.bWaitSyncSaveSuppressed = false
 	p.pendingPackets = p.pendingPackets[:0]
 	p.collectPackets = false
+	p.packetReaderBuf = p.packetReaderBuf[:0]
 	if p.packetData == nil {
 		p.packetDataRef = stmGetPacketBufRef()
 		p.packetData = (*p.packetDataRef)[:0]
