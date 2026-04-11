@@ -99,6 +99,7 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*etmv4.Processor, *PktDecod
 	}
 
 	proc := NewProcessor(cfg)
+	// In the default pipeline, inject proc as the pull source.
 	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, nil, nil, proc)
 	if err != nil {
 		return nil, nil, err
@@ -114,11 +115,19 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 
 	proc := NewProcessor(cfg)
 
-	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, nil)
+	var source ocsd.PacketReader[etmv4.Packet]
+	// Only inject proc as pull source if both mem and instr are nil (default pipeline)
+	if mem == nil && instr == nil {
+		source = proc
+	}
+	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, source)
 	if err != nil {
 		return nil, nil, err
 	}
-	proc.SetPktOut(decoder)
+	// If using push mode, wire proc to decoder as sink
+	if source == nil {
+		proc.SetPktOut(decoder)
+	}
 	return proc, decoder, nil
 }
 
