@@ -3,9 +3,14 @@ package ptm
 import (
 	"errors"
 	"fmt"
+	"io"
 
 	"opencsd/internal/ocsd"
 )
+
+const packetReaderChunkSize = 4096
+
+var _ ocsd.PacketReader[Packet] = (*PktProc)(nil)
 
 type processState int
 
@@ -55,6 +60,13 @@ type PktProc struct {
 	Config     *Config
 	pktOut     ocsd.PacketProcessor[Packet]
 	PktRawMonI ocsd.PacketMonitor
+
+	collectPackets  bool
+	pendingPackets  []Packet
+	packetReader    io.Reader
+	packetReadIndex ocsd.TrcIndex
+	packetReadEOF   bool
+	packetReadEOT   bool
 
 	processState processState
 
@@ -165,10 +177,78 @@ func (p *PktProc) StatsAddBadSeqCount(count uint32) { p.Stats.BadSequenceErrs +=
 func (p *PktProc) StatsAddBadHdrCount(count uint32) { p.Stats.BadHeaderErrs += count }
 
 func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) error {
+	if p.collectPackets {
+		p.pendingPackets = append(p.pendingPackets, *pkt)
+		return nil
+	}
 	if p.pktOut != nil {
 		return p.pktOut.Write(indexSOP, pkt)
 	}
 	return nil
+}
+
+// SetReader attaches a pull-style raw byte stream for PacketReader consumers.
+func (p *PktProc) SetReader(reader io.Reader) {
+	p.packetReader = reader
+	p.packetReadIndex = 0
+	p.packetReadEOF = false
+	p.packetReadEOT = false
+	p.pendingPackets = p.pendingPackets[:0]
+	p.resetProcessorState()
+}
+
+// NextPacket returns the next packet from the attached reader.
+func (p *PktProc) NextPacket() (Packet, error) {
+	for {
+		if len(p.pendingPackets) > 0 {
+			pkt := p.pendingPackets[0]
+			p.pendingPackets = p.pendingPackets[1:]
+			return pkt, nil
+		}
+
+		if p.packetReader == nil {
+			return Packet{}, fmt.Errorf("%w: packet reader not configured", ocsd.ErrInvalidParamVal)
+		}
+
+		if p.packetReadEOF {
+			if p.packetReadEOT {
+				return Packet{}, io.EOF
+			}
+			p.collectPackets = true
+			err := p.OnEOT()
+			p.collectPackets = false
+			p.packetReadEOT = true
+			if err != nil {
+				return Packet{}, err
+			}
+			continue
+		}
+
+		buf := make([]byte, packetReaderChunkSize)
+		n, err := p.packetReader.Read(buf)
+		if n > 0 {
+			p.collectPackets = true
+			processed, procErr := p.ProcessData(p.packetReadIndex, buf[:n])
+			p.collectPackets = false
+			p.packetReadIndex += ocsd.TrcIndex(processed)
+			if procErr != nil {
+				return Packet{}, procErr
+			}
+			if processed != uint32(n) {
+				return Packet{}, fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, n)
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				p.packetReadEOF = true
+				continue
+			}
+			return Packet{}, err
+		}
+		if n == 0 {
+			return Packet{}, io.ErrNoProgress
+		}
+	}
 }
 
 func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, pData []byte) {
@@ -261,6 +341,8 @@ func (p *PktProc) resetProcessorState() {
 
 	p.currPacket.ResetState()
 	p.resetPacketState()
+	p.pendingPackets = p.pendingPackets[:0]
+	p.collectPackets = false
 }
 
 func (p *PktProc) resetPacketState() {

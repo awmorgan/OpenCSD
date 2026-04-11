@@ -83,6 +83,12 @@ type PktProc struct {
 	collectPackets    bool
 
 	decodeState packetDecodeState
+
+	packetReaderBuf []Packet
+	packetReader    io.Reader
+	packetReadIndex ocsd.TrcIndex
+	packetReadEOF   bool
+	packetReadEOT   bool
 }
 
 func (p *PktProc) ApplyFlags(flags uint32) error {
@@ -196,8 +202,8 @@ func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pkt
 	return p.outputDecodedPacket(indexSOP, pkt)
 }
 
-// NextPacket returns the next queued packet event for pull-style consumption.
-func (p *PktProc) NextPacket() (packetEvent, error) {
+// nextPktEvent returns the next queued packet event for internal Write dispatch.
+func (p *PktProc) nextPktEvent() (packetEvent, error) {
 	if len(p.pendingPackets) == 0 {
 		return packetEvent{}, io.EOF
 	}
@@ -206,7 +212,7 @@ func (p *PktProc) NextPacket() (packetEvent, error) {
 	return e, nil
 }
 
-func (p *PktProc) putBackPacket(e packetEvent) {
+func (p *PktProc) putBackPktEvent(e packetEvent) {
 	p.pendingPackets = append([]packetEvent{e}, p.pendingPackets...)
 }
 
@@ -222,7 +228,7 @@ func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 		return processed, err
 	}
 	for {
-		e, nextErr := p.NextPacket()
+		e, nextErr := p.nextPktEvent()
 		if errors.Is(nextErr, io.EOF) {
 			break
 		}
@@ -235,7 +241,7 @@ func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 		if e.emitDecoded {
 			if outErr := p.outputDecodedPacket(e.index, &e.pkt); outErr != nil {
 				if errors.Is(outErr, ocsd.ErrWait) {
-					p.putBackPacket(e)
+					p.putBackPktEvent(e)
 				}
 				return processed, outErr
 			}
@@ -292,6 +298,94 @@ func (p *PktProc) SetProtocolConfig(config *Config) error {
 	return ocsd.ErrInvalidParamVal
 }
 
+var _ ocsd.PacketReader[Packet] = (*PktProc)(nil)
+
+const packetReaderChunkSize = 4096
+
+// SetReader attaches a pull-style raw byte stream for PacketReader consumers.
+func (p *PktProc) SetReader(reader io.Reader) {
+	p.packetReader = reader
+	p.packetReadIndex = 0
+	p.packetReadEOF = false
+	p.packetReadEOT = false
+	p.packetReaderBuf = p.packetReaderBuf[:0]
+	p.pendingPackets = p.pendingPackets[:0]
+	p.resetProcessorState()
+}
+
+// NextPacket returns the next decoded Packet from the attached reader.
+// It implements ocsd.PacketReader[Packet] for use as a decoder source.
+func (p *PktProc) NextPacket() (Packet, error) {
+	for {
+		if len(p.packetReaderBuf) > 0 {
+			pkt := p.packetReaderBuf[0]
+			p.packetReaderBuf = p.packetReaderBuf[1:]
+			return pkt, nil
+		}
+
+		if p.packetReader == nil {
+			return Packet{}, fmt.Errorf("%w: packet reader not configured", ocsd.ErrInvalidParamVal)
+		}
+
+		if p.packetReadEOF {
+			if p.packetReadEOT {
+				return Packet{}, io.EOF
+			}
+			p.collectPackets = true
+			err := p.OnEOT()
+			p.collectPackets = false
+			p.packetReadEOT = true
+			for {
+				e, nextErr := p.nextPktEvent()
+				if errors.Is(nextErr, io.EOF) {
+					break
+				}
+				if e.emitDecoded {
+					p.packetReaderBuf = append(p.packetReaderBuf, e.pkt)
+				}
+			}
+			if err != nil {
+				return Packet{}, err
+			}
+			continue
+		}
+
+		buf := make([]byte, packetReaderChunkSize)
+		n, err := p.packetReader.Read(buf)
+		if n > 0 {
+			p.collectPackets = true
+			processed, procErr := p.ProcessData(p.packetReadIndex, buf[:n])
+			p.collectPackets = false
+			p.packetReadIndex += ocsd.TrcIndex(processed)
+			for {
+				e, nextErr := p.nextPktEvent()
+				if errors.Is(nextErr, io.EOF) {
+					break
+				}
+				if e.emitDecoded {
+					p.packetReaderBuf = append(p.packetReaderBuf, e.pkt)
+				}
+			}
+			if procErr != nil {
+				return Packet{}, procErr
+			}
+			if processed != uint32(n) {
+				return Packet{}, fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, n)
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				p.packetReadEOF = true
+				continue
+			}
+			return Packet{}, err
+		}
+		if n == 0 {
+			return Packet{}, io.ErrNoProgress
+		}
+	}
+}
+
 func (p *PktProc) resetProcessorState() {
 	p.setProcUnsynced()
 	p.resetNextPacket()
@@ -300,6 +394,9 @@ func (p *PktProc) resetProcessorState() {
 	p.dumpUnsyncedBytes = 0
 	p.pendingPackets = p.pendingPackets[:0]
 	p.collectPackets = false
+	p.packetReaderBuf = p.packetReaderBuf[:0]
+	p.packetReadEOF = false
+	p.packetReadEOT = false
 }
 
 func (p *PktProc) resetNextPacket() {
