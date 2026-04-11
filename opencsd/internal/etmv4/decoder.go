@@ -139,6 +139,12 @@ type elemRes struct {
 	Discard    bool
 }
 
+// etmv4DecodeCtx holds the per-packet-decode output staging state.
+type etmv4DecodeCtx struct {
+	outElems    []ocsd.TraceElement
+	outElemsIdx []ocsd.TrcIndex
+}
+
 // PktDecode decodes ETMv4 trace packets into generic trace elements.
 type PktDecode struct {
 	Name         string
@@ -157,8 +163,7 @@ type PktDecode struct {
 	p0Stack     []*p0Elem
 	poppedElems []*p0Elem // kept to avoid excessive allocations
 	elemRes     elemRes
-	outElems    []ocsd.TraceElement
-	outElemsIdx []ocsd.TrcIndex
+	ctx         etmv4DecodeCtx
 	outElemBase ocsd.TraceElement
 
 	// Address and Context State
@@ -376,10 +381,10 @@ func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
 // putBackElement unreads an element to the front of the pending queue.
 func (d *PktDecode) flushOutputElements() {
 	traceID := d.TraceID()
-	for i := range d.outElems {
-		elem := cloneQueuedElem(&d.outElems[i])
+	for i := range d.ctx.outElems {
+		elem := cloneQueuedElem(&d.ctx.outElems[i])
 		elem.TraceID = traceID
-		_ = d.pushOutputElement(d.outElemsIdx[i], traceID, &elem)
+		_ = d.pushOutputElement(d.ctx.outElemsIdx[i], traceID, &elem)
 	}
 	d.resetOutElems()
 }
@@ -2222,51 +2227,51 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 }
 
 func (d *PktDecode) addOutElem(index ocsd.TrcIndex) error {
-	if len(d.outElems) > 0 {
+	if len(d.ctx.outElems) > 0 {
 		var next ocsd.TraceElement
 		next.Init()
-		next.CopyPersistentData(&d.outElems[len(d.outElems)-1])
-		d.outElems = append(d.outElems, next)
-		d.outElemsIdx = append(d.outElemsIdx, index)
+		next.CopyPersistentData(&d.ctx.outElems[len(d.ctx.outElems)-1])
+		d.ctx.outElems = append(d.ctx.outElems, next)
+		d.ctx.outElemsIdx = append(d.ctx.outElemsIdx, index)
 	} else {
 		var next ocsd.TraceElement
 		next.Init()
 		next.CopyPersistentData(&d.outElemBase)
-		d.outElems = append(d.outElems, next)
-		d.outElemsIdx = append(d.outElemsIdx, index)
+		d.ctx.outElems = append(d.ctx.outElems, next)
+		d.ctx.outElemsIdx = append(d.ctx.outElemsIdx, index)
 	}
 	return nil
 }
 
 func (d *PktDecode) addOutElemType(index ocsd.TrcIndex, elemType ocsd.GenElemType) error {
 	_ = d.addOutElem(index)
-	d.outElems[len(d.outElems)-1].SetType(elemType)
+	d.ctx.outElems[len(d.ctx.outElems)-1].SetType(elemType)
 	return nil
 }
 
 func (d *PktDecode) currOutElem() *ocsd.TraceElement {
-	return &d.outElems[len(d.outElems)-1]
+	return &d.ctx.outElems[len(d.ctx.outElems)-1]
 }
 
 func (d *PktDecode) numOutElemToSend() int {
-	return len(d.outElems)
+	return len(d.ctx.outElems)
 }
 
 func (d *PktDecode) resetOutElems() error {
-	if len(d.outElems) > 0 {
+	if len(d.ctx.outElems) > 0 {
 		var base ocsd.TraceElement
 		base.Init()
-		base.CopyPersistentData(&d.outElems[len(d.outElems)-1])
+		base.CopyPersistentData(&d.ctx.outElems[len(d.ctx.outElems)-1])
 		d.outElemBase = base
 	}
-	d.outElems = d.outElems[:0]
-	d.outElemsIdx = d.outElemsIdx[:0]
+	d.ctx.outElems = d.ctx.outElems[:0]
+	d.ctx.outElemsIdx = d.ctx.outElemsIdx[:0]
 	return nil
 }
 
 func (d *PktDecode) setOutElemCSID(csID uint8) {
 	d.outElemBase.TraceID = csID
-	for i := range d.outElems {
-		d.outElems[i].TraceID = csID
+	for i := range d.ctx.outElems {
+		d.ctx.outElems[i].TraceID = csID
 	}
 }

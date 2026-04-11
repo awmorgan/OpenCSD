@@ -52,6 +52,19 @@ var isyncOnReasonMap = [...]ocsd.TraceOnReason{
 
 // PktDecode implements the ETMv3 packet decoder converting packets to generic TraceElements
 // Ported from trc_pkt_decode_etmv3.cpp
+// etmv3DecodeCtx holds speculation and output staging state that is
+// logically local to a single packet-decode call.
+type etmv3DecodeCtx struct {
+	outElems        []ocsd.TraceElement
+	outElemsIdx     []ocsd.TrcIndex
+	pendOutElems    []ocsd.TraceElement
+	pendOutElemsIdx []ocsd.TrcIndex
+	pendingNacc     bool
+	pendingNaccIdx  ocsd.TrcIndex
+	pendingNaccAdr  uint64
+	pendingNaccMem  ocsd.MemSpaceAcc
+}
+
 type PktDecode struct {
 	Name         string
 	traceElemOut ocsd.GenElemProcessor
@@ -71,15 +84,9 @@ type PktDecode struct {
 	SentUnknown bool
 	waitISync   bool
 
-	peContext       *ocsd.PEContext
-	outElems        []ocsd.TraceElement
-	outElemsIdx     []ocsd.TrcIndex
-	pendOutElems    []ocsd.TraceElement
-	pendOutElemsIdx []ocsd.TrcIndex
-	pendingNacc     bool
-	pendingNaccIdx  ocsd.TrcIndex
-	pendingNaccAdr  uint64
-	pendingNaccMem  ocsd.MemSpaceAcc
+	peContext *ocsd.PEContext
+	// ctx holds per-decode-call speculation and output staging state.
+	ctx etmv3DecodeCtx
 
 	csID       uint8
 	elemBuf    []traceElemEvent
@@ -289,13 +296,13 @@ func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
 // putBackElement unreads an element to the front of the pending queue.
 func (d *PktDecode) flushOutputElements() {
 	traceID := d.csID
-	for i := range d.outElems {
-		elem := cloneQueuedElem(&d.outElems[i])
+	for i := range d.ctx.outElems {
+		elem := cloneQueuedElem(&d.ctx.outElems[i])
 		elem.TraceID = traceID
-		_ = d.pushOutputElement(d.outElemsIdx[i], traceID, &elem)
+		_ = d.pushOutputElement(d.ctx.outElemsIdx[i], traceID, &elem)
 	}
-	d.outElems = d.outElems[:0]
-	d.outElemsIdx = d.outElemsIdx[:0]
+	d.ctx.outElems = d.ctx.outElems[:0]
+	d.ctx.outElemsIdx = d.ctx.outElemsIdx[:0]
 }
 
 func (d *PktDecode) configureDecoder() {
@@ -309,13 +316,9 @@ func (d *PktDecode) resetDecoder() {
 	d.NeedAddr = true
 	d.SentUnknown = false
 	d.waitISync = false
-	d.pendingNacc = false
-	d.pendingNaccIdx = 0
-	d.pendingNaccAdr = 0
-	d.pendingNaccMem = ocsd.MemSpaceNone
+	d.ctx = etmv3DecodeCtx{}
 	d.elemBuf = d.elemBuf[:0]
 	d.elemBufPos = 0
-	d.resetOutElems()
 }
 
 func (d *PktDecode) nextDecodeState() decoderState {
@@ -355,7 +358,7 @@ func (d *PktDecode) OnReset() {
 }
 
 func (d *PktDecode) OnFlush() error {
-	if d.numOutElem() == 0 && len(d.pendOutElems) == 0 && !d.pendingNacc {
+	if d.numOutElem() == 0 && len(d.ctx.pendOutElems) == 0 && !d.ctx.pendingNacc {
 		return nil
 	}
 
@@ -478,25 +481,25 @@ func (d *PktDecode) getNextOpElemAt(index ocsd.TrcIndex) (*ocsd.TraceElement, er
 }
 
 func (d *PktDecode) queuePendingNacc(addr uint64, memSpace ocsd.MemSpaceAcc) {
-	d.pendingNacc = true
-	d.pendingNaccIdx = d.IndexCurrPkt
-	d.pendingNaccAdr = addr
-	d.pendingNaccMem = memSpace
+	d.ctx.pendingNacc = true
+	d.ctx.pendingNaccIdx = d.IndexCurrPkt
+	d.ctx.pendingNaccAdr = addr
+	d.ctx.pendingNaccMem = memSpace
 }
 
 func (d *PktDecode) clearPendingNacc() {
-	d.pendingNacc = false
-	d.pendingNaccIdx = 0
-	d.pendingNaccAdr = 0
-	d.pendingNaccMem = ocsd.MemSpaceNone
+	d.ctx.pendingNacc = false
+	d.ctx.pendingNaccIdx = 0
+	d.ctx.pendingNaccAdr = 0
+	d.ctx.pendingNaccMem = ocsd.MemSpaceNone
 }
 
 func (d *PktDecode) emitPendingNacc() error {
-	if !d.pendingNacc {
+	if !d.ctx.pendingNacc {
 		return nil
 	}
 
-	elem, err := d.getNextOpElemAt(d.pendingNaccIdx)
+	elem, err := d.getNextOpElemAt(d.ctx.pendingNaccIdx)
 	if err != nil {
 		d.unsyncInfo = ocsd.UnsyncBadPacket
 		d.resetDecoder()
@@ -504,8 +507,8 @@ func (d *PktDecode) emitPendingNacc() error {
 	}
 
 	elem.SetType(ocsd.GenElemAddrNacc)
-	elem.StartAddr = ocsd.VAddr(d.pendingNaccAdr)
-	elem.Payload.ExceptionNum = uint32(d.pendingNaccMem)
+	elem.StartAddr = ocsd.VAddr(d.ctx.pendingNaccAdr)
+	elem.Payload.ExceptionNum = uint32(d.ctx.pendingNaccMem)
 	d.clearPendingNacc()
 	return nil
 }
@@ -1049,62 +1052,55 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 func (d *PktDecode) nextOutElem(index ocsd.TrcIndex) *ocsd.TraceElement {
 	var e ocsd.TraceElement
 	e.Init()
-	d.outElems = append(d.outElems, e)
-	d.outElemsIdx = append(d.outElemsIdx, index)
-	elem := &d.outElems[len(d.outElems)-1]
+	d.ctx.outElems = append(d.ctx.outElems, e)
+	d.ctx.outElemsIdx = append(d.ctx.outElemsIdx, index)
+	elem := &d.ctx.outElems[len(d.ctx.outElems)-1]
 	elem.TraceID = d.csID
 	return elem
 }
 
 func (d *PktDecode) pendLastNOutElem(n int) {
-	if n > 0 && n <= len(d.outElems) {
-		start := len(d.outElems) - n
+	if n > 0 && n <= len(d.ctx.outElems) {
+		start := len(d.ctx.outElems) - n
 		// Always allocate a fresh backing array to keep pendOutElems and outElems distinct.
-		d.pendOutElems = make([]ocsd.TraceElement, n)
-		copy(d.pendOutElems, d.outElems[start:])
-		d.pendOutElemsIdx = make([]ocsd.TrcIndex, n)
-		copy(d.pendOutElemsIdx, d.outElemsIdx[start:])
-		d.outElems = d.outElems[:start]
-		d.outElemsIdx = d.outElemsIdx[:start]
+		d.ctx.pendOutElems = make([]ocsd.TraceElement, n)
+		copy(d.ctx.pendOutElems, d.ctx.outElems[start:])
+		d.ctx.pendOutElemsIdx = make([]ocsd.TrcIndex, n)
+		copy(d.ctx.pendOutElemsIdx, d.ctx.outElemsIdx[start:])
+		d.ctx.outElems = d.ctx.outElems[:start]
+		d.ctx.outElemsIdx = d.ctx.outElemsIdx[:start]
 	}
 }
 
 func (d *PktDecode) commitAllPendOutElem() {
-	if len(d.pendOutElems) == 0 {
+	if len(d.ctx.pendOutElems) == 0 {
 		return
 	}
 	// Extend pendOutElems with the current output elements, then swap so that
 	// outElems uses pendOutElems' backing array and pendOutElems gets outElems'
 	// old backing.  This keeps the two slice headers pointing at distinct arrays.
-	d.pendOutElems = append(d.pendOutElems, d.outElems...)
-	d.pendOutElemsIdx = append(d.pendOutElemsIdx, d.outElemsIdx...)
-	d.outElems, d.pendOutElems = d.pendOutElems, d.outElems[:0]
-	d.outElemsIdx, d.pendOutElemsIdx = d.pendOutElemsIdx, d.outElemsIdx[:0]
+	d.ctx.pendOutElems = append(d.ctx.pendOutElems, d.ctx.outElems...)
+	d.ctx.pendOutElemsIdx = append(d.ctx.pendOutElemsIdx, d.ctx.outElemsIdx...)
+	d.ctx.outElems, d.ctx.pendOutElems = d.ctx.pendOutElems, d.ctx.outElems[:0]
+	d.ctx.outElemsIdx, d.ctx.pendOutElemsIdx = d.ctx.pendOutElemsIdx, d.ctx.outElemsIdx[:0]
 }
 
 func (d *PktDecode) cancelPendOutElem() {
-	d.pendOutElems = d.pendOutElems[:0]
-	d.pendOutElemsIdx = d.pendOutElemsIdx[:0]
+	d.ctx.pendOutElems = d.ctx.pendOutElems[:0]
+	d.ctx.pendOutElemsIdx = d.ctx.pendOutElemsIdx[:0]
 }
 
 func (d *PktDecode) outElemToSend() bool {
-	return len(d.outElems) > 0
+	return len(d.ctx.outElems) > 0
 }
 
 func (d *PktDecode) numOutElem() int {
-	return len(d.outElems)
+	return len(d.ctx.outElems)
 }
 
 func (d *PktDecode) outElemType(entryN int) ocsd.GenElemType {
-	if entryN >= 0 && entryN < len(d.outElems) {
-		return d.outElems[entryN].ElemType
+	if entryN >= 0 && entryN < len(d.ctx.outElems) {
+		return d.ctx.outElems[entryN].ElemType
 	}
 	return ocsd.GenElemUnknown
-}
-
-func (d *PktDecode) resetOutElems() {
-	d.outElems = d.outElems[:0]
-	d.outElemsIdx = d.outElemsIdx[:0]
-	d.pendOutElems = d.pendOutElems[:0]
-	d.pendOutElemsIdx = d.pendOutElemsIdx[:0]
 }
