@@ -197,7 +197,7 @@ func (d *PktDecode) NextSequenced() (uint64, *ocsd.TraceElement, error) {
 			d.Source = nil
 			return 0, nil, err
 		}
-		if wErr := d.inner.Write(0, &pkt); wErr != nil {
+		if wErr := d.inner.Write(pkt.Index, &pkt); wErr != nil {
 			return 0, nil, wErr
 		}
 		if drainErr := d.drainInner(); drainErr != nil {
