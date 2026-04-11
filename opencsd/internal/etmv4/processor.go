@@ -2202,14 +2202,14 @@ func (p *Processor) clearStateTransient() {
 }
 
 func (p *Processor) outputPacket(pkt *TracePacket, rawData []byte) error {
+	if p.PktRawMonI != nil {
+		p.PktRawMonI.MonitorRawData(p.packetIndex, pkt, rawData)
+	}
 	if p.collectPackets {
 		queuedPkt := *pkt
 		queuedPkt.Index = p.packetIndex
 		p.pendingPackets = append(p.pendingPackets, queuedPkt)
 		return nil
-	}
-	if p.PktRawMonI != nil {
-		p.PktRawMonI.MonitorRawData(p.packetIndex, pkt, rawData)
 	}
 	if p.pktOut == nil {
 		return nil
@@ -2243,7 +2243,7 @@ func (p *Processor) outputUnsyncedRawPacket() error {
 	pkt := p.statePacket
 	pkt.Type = p.pendingUnsyncedPacketType(p.stream.data)
 
-	if !p.collectPackets && p.PktRawMonI != nil && n > 0 && len(p.stream.data) > 0 {
+	if p.PktRawMonI != nil && n > 0 && len(p.stream.data) > 0 {
 		monBytes := min(n, len(p.stream.data))
 		p.PktRawMonI.MonitorRawData(p.packetIndex, &pkt, p.stream.data[:monBytes])
 	}
