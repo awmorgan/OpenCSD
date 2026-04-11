@@ -10,29 +10,18 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-type capturePktOut struct {
-	count int
-	last  TracePacket
-}
-
 type captureRawMon struct {
 	indexes []ocsd.TrcIndex
 	lengths []int
 }
 
-func (c *capturePktOut) Write(_ ocsd.TrcIndex, pkt *TracePacket) error {
-	c.count++
-	if pkt != nil {
-		c.last = *pkt
+func lastPendingPacket(t *testing.T, p *Processor) TracePacket {
+	t.Helper()
+	if len(p.pendingPackets) == 0 {
+		t.Fatal("expected at least one pending packet")
 	}
-	return nil
+	return p.pendingPackets[len(p.pendingPackets)-1]
 }
-
-func (c *capturePktOut) Close() error { return nil }
-
-func (c *capturePktOut) Flush() error { return nil }
-
-func (c *capturePktOut) Reset(_ ocsd.TrcIndex) error { return nil }
 
 func (c *captureRawMon) MonitorRawData(indexSOP ocsd.TrcIndex, _ fmt.Stringer, rawData []byte) {
 	c.indexes = append(c.indexes, indexSOP)
@@ -309,8 +298,7 @@ func TestDecodeNextPacketWithConfigAllHeadersDoNotUseSentinel(t *testing.T) {
 func TestProcessDataFastPathExceptionEteResetAndTransFail(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr1: 0x0500})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x06, 0x00, 0x00})
 	if err != nil {
@@ -319,8 +307,8 @@ func TestProcessDataFastPathExceptionEteResetAndTransFail(t *testing.T) {
 	if consumed != 3 {
 		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != ETE_PktPeReset {
-		t.Fatalf("unexpected first output packet: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != ETE_PktPeReset {
+		t.Fatalf("unexpected first output packet: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
 
 	consumed, err = p.processData(3, []byte{0x06, 0x30, 0x00})
@@ -330,8 +318,8 @@ func TestProcessDataFastPathExceptionEteResetAndTransFail(t *testing.T) {
 	if consumed != 3 {
 		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
 	}
-	if out.count != 2 || out.last.Type != ETE_PktTransFail {
-		t.Fatalf("unexpected second output packet: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 2 || lastPendingPacket(t, p).Type != ETE_PktTransFail {
+		t.Fatalf("unexpected second output packet: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
 }
 
@@ -386,8 +374,7 @@ func TestDecodeNextPacketTimestampIncompleteNeedsMoreData(t *testing.T) {
 func TestProcessDataFastPathTimestampAcrossBlocks(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x02})
 	if err != nil {
@@ -396,7 +383,7 @@ func TestProcessDataFastPathTimestampAcrossBlocks(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected first block fully consumed, got %d", consumed)
 	}
-	if out.count != 0 {
+	if len(p.pendingPackets) != 0 {
 		t.Fatalf("did not expect output packet from incomplete timestamp")
 	}
 
@@ -407,19 +394,18 @@ func TestProcessDataFastPathTimestampAcrossBlocks(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected second block consumed bytes 1, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != PktTimestamp {
-		t.Fatalf("unexpected output packet after timestamp reassembly: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktTimestamp {
+		t.Fatalf("unexpected output packet after timestamp reassembly: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.Timestamp != 0x2A || !out.last.Valid.Timestamp {
-		t.Fatalf("unexpected timestamp payload after reassembly: ts=0x%X valid=%v", out.last.Timestamp, out.last.Valid.Timestamp)
+	if lastPendingPacket(t, p).Timestamp != 0x2A || !lastPendingPacket(t, p).Valid.Timestamp {
+		t.Fatalf("unexpected timestamp payload after reassembly: ts=0x%X valid=%v", lastPendingPacket(t, p).Timestamp, lastPendingPacket(t, p).Valid.Timestamp)
 	}
 }
 
 func TestTraceDataEOTIncompleteBufferedPacketKeepsHeaderType(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x9A})
 	if err != nil {
@@ -435,14 +421,14 @@ func TestTraceDataEOTIncompleteBufferedPacketKeepsHeaderType(t *testing.T) {
 	if err := p.Close(); err != nil {
 		t.Fatalf("unexpected EOT error: %v", err)
 	}
-	if out.count != 1 {
-		t.Fatalf("expected one emitted incomplete packet, got %d", out.count)
+	if len(p.pendingPackets) != 1 {
+		t.Fatalf("expected one emitted incomplete packet, got %d", len(p.pendingPackets))
 	}
-	if out.last.Type != PktAddrL_32IS0 {
-		t.Fatalf("expected incomplete packet type PktAddrL_32IS0, got %v", out.last.Type)
+	if lastPendingPacket(t, p).Type != PktAddrL_32IS0 {
+		t.Fatalf("expected incomplete packet type PktAddrL_32IS0, got %v", lastPendingPacket(t, p).Type)
 	}
-	if !errors.Is(out.last.Err, errIncompleteEOT) {
-		t.Fatalf("expected errIncompleteEOT, got %v", out.last.Err)
+	if !errors.Is(lastPendingPacket(t, p).Err, errIncompleteEOT) {
+		t.Fatalf("expected errIncompleteEOT, got %v", lastPendingPacket(t, p).Err)
 	}
 }
 
@@ -623,9 +609,8 @@ func TestDecodeCycleCntF1PacketWithConfigCommitOpt0NoCount(t *testing.T) {
 func TestProcessDataFastPathCycleCntF3CommitOpt0(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
+	p.collectPackets = true
 	p.statePacket.CCThreshold = 10
-	out := &capturePktOut{}
-	p.SetPktOut(out)
 
 	consumed, err := p.processData(0, []byte{0x1B})
 	if err != nil {
@@ -634,19 +619,19 @@ func TestProcessDataFastPathCycleCntF3CommitOpt0(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed, got %d", consumed)
 	}
-	if out.count != 1 {
-		t.Fatalf("expected one output packet, got %d", out.count)
+	if len(p.pendingPackets) != 1 {
+		t.Fatalf("expected one output packet, got %d", len(p.pendingPackets))
 	}
-	if out.last.Type != PktCcntF3 {
-		t.Fatalf("expected output type PktCcntF3, got %v", out.last.Type)
+	if lastPendingPacket(t, p).Type != PktCcntF3 {
+		t.Fatalf("expected output type PktCcntF3, got %v", lastPendingPacket(t, p).Type)
 	}
-	if out.last.CycleCount != 13 {
-		t.Fatalf("expected cycle count 13, got %d", out.last.CycleCount)
+	if lastPendingPacket(t, p).CycleCount != 13 {
+		t.Fatalf("expected cycle count 13, got %d", lastPendingPacket(t, p).CycleCount)
 	}
-	if !out.last.Valid.CommitElem || out.last.CommitElements != 3 {
-		t.Fatalf("unexpected commit elem decode: valid=%v value=%d", out.last.Valid.CommitElem, out.last.CommitElements)
+	if !lastPendingPacket(t, p).Valid.CommitElem || lastPendingPacket(t, p).CommitElements != 3 {
+		t.Fatalf("unexpected commit elem decode: valid=%v value=%d", lastPendingPacket(t, p).Valid.CommitElem, lastPendingPacket(t, p).CommitElements)
 	}
-	if out.last.Valid.CCExactMatch {
+	if lastPendingPacket(t, p).Valid.CCExactMatch {
 		t.Fatalf("did not expect CCExactMatch for threshold 10 and count 13")
 	}
 }
@@ -654,9 +639,8 @@ func TestProcessDataFastPathCycleCntF3CommitOpt0(t *testing.T) {
 func TestProcessDataFastPathCycleCntF3CommitOpt1(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: (1 << 29) | (1 << 7)})
 	p.isSync = true
+	p.collectPackets = true
 	p.statePacket.CCThreshold = 5
-	out := &capturePktOut{}
-	p.SetPktOut(out)
 
 	consumed, err := p.processData(0, []byte{0x10})
 	if err != nil {
@@ -665,13 +649,13 @@ func TestProcessDataFastPathCycleCntF3CommitOpt1(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed, got %d", consumed)
 	}
-	if out.count != 1 {
-		t.Fatalf("expected one output packet, got %d", out.count)
+	if len(p.pendingPackets) != 1 {
+		t.Fatalf("expected one output packet, got %d", len(p.pendingPackets))
 	}
-	if out.last.CycleCount != 5 || !out.last.Valid.CCExactMatch {
-		t.Fatalf("expected exact CC match at threshold, got count=%d exact=%v", out.last.CycleCount, out.last.Valid.CCExactMatch)
+	if lastPendingPacket(t, p).CycleCount != 5 || !lastPendingPacket(t, p).Valid.CCExactMatch {
+		t.Fatalf("expected exact CC match at threshold, got count=%d exact=%v", lastPendingPacket(t, p).CycleCount, lastPendingPacket(t, p).Valid.CCExactMatch)
 	}
-	if out.last.Valid.CommitElem {
+	if lastPendingPacket(t, p).Valid.CommitElem {
 		t.Fatalf("did not expect commit elements when CommitOpt1 is enabled")
 	}
 }
@@ -679,9 +663,8 @@ func TestProcessDataFastPathCycleCntF3CommitOpt1(t *testing.T) {
 func TestProcessDataFastPathCycleCntF2CommitOpt1(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: (1 << 29) | (1 << 7)})
 	p.isSync = true
+	p.collectPackets = true
 	p.statePacket.CCThreshold = 9
-	out := &capturePktOut{}
-	p.SetPktOut(out)
 
 	consumed, err := p.processData(0, []byte{0x0C, 0xA5})
 	if err != nil {
@@ -690,13 +673,13 @@ func TestProcessDataFastPathCycleCntF2CommitOpt1(t *testing.T) {
 	if consumed != 2 {
 		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != PktCcntF2 {
-		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktCcntF2 {
+		t.Fatalf("unexpected output packet: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.CycleCount != 14 {
-		t.Fatalf("expected cycle count 14, got %d", out.last.CycleCount)
+	if lastPendingPacket(t, p).CycleCount != 14 {
+		t.Fatalf("expected cycle count 14, got %d", lastPendingPacket(t, p).CycleCount)
 	}
-	if out.last.Valid.CCExactMatch {
+	if lastPendingPacket(t, p).Valid.CCExactMatch {
 		t.Fatalf("did not expect CCExactMatch for threshold 9 and count 14")
 	}
 }
@@ -704,9 +687,8 @@ func TestProcessDataFastPathCycleCntF2CommitOpt1(t *testing.T) {
 func TestProcessDataCycleCntF2CommitOpt1Off(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
+	p.collectPackets = true
 	p.statePacket.CCThreshold = 0
-	out := &capturePktOut{}
-	p.SetPktOut(out)
 
 	consumed, err := p.processData(0, []byte{0x0C, 0xA5})
 	if err != nil {
@@ -715,23 +697,22 @@ func TestProcessDataCycleCntF2CommitOpt1Off(t *testing.T) {
 	if consumed != 2 {
 		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != PktCcntF2 {
-		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktCcntF2 {
+		t.Fatalf("unexpected output packet: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if !out.last.Valid.CommitElem {
+	if !lastPendingPacket(t, p).Valid.CommitElem {
 		t.Fatalf("expected commit elements for F2 when CommitOpt1 is off")
 	}
-	if out.last.CommitElements != 11 {
-		t.Fatalf("expected commit elements 11, got %d", out.last.CommitElements)
+	if lastPendingPacket(t, p).CommitElements != 11 {
+		t.Fatalf("expected commit elements 11, got %d", lastPendingPacket(t, p).CommitElements)
 	}
 }
 
 func TestProcessDataFastPathCycleCntF1CommitOpt1WithCount(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: (1 << 29) | (1 << 7)})
 	p.isSync = true
+	p.collectPackets = true
 	p.statePacket.CCThreshold = 7
-	out := &capturePktOut{}
-	p.SetPktOut(out)
 
 	consumed, err := p.processData(0, []byte{0x0E, 0x02})
 	if err != nil {
@@ -740,13 +721,13 @@ func TestProcessDataFastPathCycleCntF1CommitOpt1WithCount(t *testing.T) {
 	if consumed != 2 {
 		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != PktCcntF1 {
-		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktCcntF1 {
+		t.Fatalf("unexpected output packet: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.CycleCount != 9 {
-		t.Fatalf("expected cycle count 9, got %d", out.last.CycleCount)
+	if lastPendingPacket(t, p).CycleCount != 9 {
+		t.Fatalf("expected cycle count 9, got %d", lastPendingPacket(t, p).CycleCount)
 	}
-	if out.last.Valid.CCExactMatch {
+	if lastPendingPacket(t, p).Valid.CCExactMatch {
 		t.Fatalf("did not expect CCExactMatch for threshold 7 and count 9")
 	}
 }
@@ -754,9 +735,8 @@ func TestProcessDataFastPathCycleCntF1CommitOpt1WithCount(t *testing.T) {
 func TestProcessDataFastPathCycleCntF1CommitOpt1NoCount(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: (1 << 29) | (1 << 7)})
 	p.isSync = true
+	p.collectPackets = true
 	p.statePacket.CCThreshold = 7
-	out := &capturePktOut{}
-	p.SetPktOut(out)
 
 	consumed, err := p.processData(0, []byte{0x0F})
 	if err != nil {
@@ -765,20 +745,19 @@ func TestProcessDataFastPathCycleCntF1CommitOpt1NoCount(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != PktCcntF1 {
-		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktCcntF1 {
+		t.Fatalf("unexpected output packet: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.CycleCount != 0 || out.last.Valid.CCExactMatch {
-		t.Fatalf("expected zero cycle and no exact match for no-count F1, got count=%d exact=%v", out.last.CycleCount, out.last.Valid.CCExactMatch)
+	if lastPendingPacket(t, p).CycleCount != 0 || lastPendingPacket(t, p).Valid.CCExactMatch {
+		t.Fatalf("expected zero cycle and no exact match for no-count F1, got count=%d exact=%v", lastPendingPacket(t, p).CycleCount, lastPendingPacket(t, p).Valid.CCExactMatch)
 	}
 }
 
 func TestProcessDataCycleCntF1CommitOpt1Off(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
+	p.collectPackets = true
 	p.statePacket.CCThreshold = 0
-	out := &capturePktOut{}
-	p.SetPktOut(out)
 
 	consumed, err := p.processData(0, []byte{0x0E, 0x02, 0x03})
 	if err != nil {
@@ -787,14 +766,14 @@ func TestProcessDataCycleCntF1CommitOpt1Off(t *testing.T) {
 	if consumed != 3 {
 		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != PktCcntF1 {
-		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktCcntF1 {
+		t.Fatalf("unexpected output packet: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if !out.last.Valid.CommitElem {
+	if !lastPendingPacket(t, p).Valid.CommitElem {
 		t.Fatalf("expected commit elements for F1 when CommitOpt1 is off")
 	}
-	if out.last.CommitElements != 2 {
-		t.Fatalf("expected commit elements 2, got %d", out.last.CommitElements)
+	if lastPendingPacket(t, p).CommitElements != 2 {
+		t.Fatalf("expected commit elements 2, got %d", lastPendingPacket(t, p).CommitElements)
 	}
 }
 
@@ -836,8 +815,7 @@ func TestDecodeNextPacketSpecResSimplePackets(t *testing.T) {
 func TestProcessDataFastPathSpecResSimplePacket(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x3D})
 	if err != nil {
@@ -846,11 +824,11 @@ func TestProcessDataFastPathSpecResSimplePacket(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != PktCancelF3 {
-		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktCancelF3 {
+		t.Fatalf("unexpected output packet: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.Atom.Num != 1 || out.last.Atom.EnBits != 0x1 || out.last.CancelElements != 4 {
-		t.Fatalf("unexpected output payload: atom=%+v cancel=%d", out.last.Atom, out.last.CancelElements)
+	if lastPendingPacket(t, p).Atom.Num != 1 || lastPendingPacket(t, p).Atom.EnBits != 0x1 || lastPendingPacket(t, p).CancelElements != 4 {
+		t.Fatalf("unexpected output payload: atom=%+v cancel=%d", lastPendingPacket(t, p).Atom, lastPendingPacket(t, p).CancelElements)
 	}
 }
 
@@ -1010,37 +988,35 @@ func TestDecodeNextPacketCondResF1IncompleteNeedsMoreData(t *testing.T) {
 func TestProcessDataFastPathSpecResVariablePackets(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x2D, 0x07})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if consumed != 2 || out.count != 1 || out.last.Type != PktCommit {
-		t.Fatalf("unexpected commit output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	if consumed != 2 || len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktCommit {
+		t.Fatalf("unexpected commit output: consumed=%d count=%d type=%v", consumed, len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.CommitElements != 7 {
-		t.Fatalf("expected commit elements 7, got %d", out.last.CommitElements)
+	if lastPendingPacket(t, p).CommitElements != 7 {
+		t.Fatalf("expected commit elements 7, got %d", lastPendingPacket(t, p).CommitElements)
 	}
 
 	consumed, err = p.processData(2, []byte{0x2F, 0x05})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if consumed != 2 || out.count != 2 || out.last.Type != PktCancelF1Mispred {
-		t.Fatalf("unexpected cancel output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	if consumed != 2 || len(p.pendingPackets) != 2 || lastPendingPacket(t, p).Type != PktCancelF1Mispred {
+		t.Fatalf("unexpected cancel output: consumed=%d count=%d type=%v", consumed, len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.CancelElements != 5 {
-		t.Fatalf("expected cancel elements 5, got %d", out.last.CancelElements)
+	if lastPendingPacket(t, p).CancelElements != 5 {
+		t.Fatalf("expected cancel elements 5, got %d", lastPendingPacket(t, p).CancelElements)
 	}
 }
 
 func TestProcessDataFastPathSpecResVariableAcrossBlocks(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x2D})
 	if err != nil {
@@ -1049,7 +1025,7 @@ func TestProcessDataFastPathSpecResVariableAcrossBlocks(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected first block fully consumed, got %d", consumed)
 	}
-	if out.count != 0 {
+	if len(p.pendingPackets) != 0 {
 		t.Fatalf("did not expect output packet from incomplete commit packet")
 	}
 
@@ -1060,103 +1036,101 @@ func TestProcessDataFastPathSpecResVariableAcrossBlocks(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected second block consumed bytes 1, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != PktCommit {
-		t.Fatalf("unexpected output packet after commit reassembly: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktCommit {
+		t.Fatalf("unexpected output packet after commit reassembly: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.CommitElements != 7 {
-		t.Fatalf("unexpected commit elements after reassembly: %d", out.last.CommitElements)
+	if lastPendingPacket(t, p).CommitElements != 7 {
+		t.Fatalf("unexpected commit elements after reassembly: %d", lastPendingPacket(t, p).CommitElements)
 	}
 }
 
 func TestProcessDataFastPathConditionalPackets(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: 0x40, RegConfigr: 1 << 8})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x42})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if consumed != 1 || out.count != 1 || out.last.Type != PktCondIF2 {
-		t.Fatalf("unexpected CondIF2 output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	if consumed != 1 || len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktCondIF2 {
+		t.Fatalf("unexpected CondIF2 output: consumed=%d count=%d type=%v", consumed, len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.CondInstr.CondCKey != 0x2 {
-		t.Fatalf("expected CondCKey 2, got %d", out.last.CondInstr.CondCKey)
+	if lastPendingPacket(t, p).CondInstr.CondCKey != 0x2 {
+		t.Fatalf("expected CondCKey 2, got %d", lastPendingPacket(t, p).CondInstr.CondCKey)
 	}
 
 	consumed, err = p.processData(1, []byte{0x5A, 0xBC})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if consumed != 2 || out.count != 2 || out.last.Type != PktCondResF3 {
-		t.Fatalf("unexpected CondResF3 output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	if consumed != 2 || len(p.pendingPackets) != 2 || lastPendingPacket(t, p).Type != PktCondResF3 {
+		t.Fatalf("unexpected CondResF3 output: consumed=%d count=%d type=%v", consumed, len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.CondResult.F3Tokens != 0xABC {
-		t.Fatalf("expected F3Tokens 0xABC, got 0x%X", out.last.CondResult.F3Tokens)
+	if lastPendingPacket(t, p).CondResult.F3Tokens != 0xABC {
+		t.Fatalf("expected F3Tokens 0xABC, got 0x%X", lastPendingPacket(t, p).CondResult.F3Tokens)
 	}
 
 	consumed, err = p.processData(3, []byte{0x6D, 0x07})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if consumed != 2 || out.count != 3 || out.last.Type != PktCondIF3 {
-		t.Fatalf("unexpected CondIF3 output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	if consumed != 2 || len(p.pendingPackets) != 3 || lastPendingPacket(t, p).Type != PktCondIF3 {
+		t.Fatalf("unexpected CondIF3 output: consumed=%d count=%d type=%v", consumed, len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.CondInstr.NumCElem != 4 || !out.last.CondInstr.F3FinalElem {
-		t.Fatalf("unexpected CondIF3 output payload: num=%d final=%v", out.last.CondInstr.NumCElem, out.last.CondInstr.F3FinalElem)
+	if lastPendingPacket(t, p).CondInstr.NumCElem != 4 || !lastPendingPacket(t, p).CondInstr.F3FinalElem {
+		t.Fatalf("unexpected CondIF3 output payload: num=%d final=%v", lastPendingPacket(t, p).CondInstr.NumCElem, lastPendingPacket(t, p).CondInstr.F3FinalElem)
 	}
 
 	consumed, err = p.processData(5, []byte{0x4E})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if consumed != 1 || out.count != 4 || out.last.Type != PktCondResF2 {
-		t.Fatalf("unexpected CondResF2 output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	if consumed != 1 || len(p.pendingPackets) != 4 || lastPendingPacket(t, p).Type != PktCondResF2 {
+		t.Fatalf("unexpected CondResF2 output: consumed=%d count=%d type=%v", consumed, len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.CondResult.F2KeyIncr != 2 || out.last.CondResult.Res0 != 0x2 {
-		t.Fatalf("unexpected CondResF2 output payload: incr=%d res=%d", out.last.CondResult.F2KeyIncr, out.last.CondResult.Res0)
+	if lastPendingPacket(t, p).CondResult.F2KeyIncr != 2 || lastPendingPacket(t, p).CondResult.Res0 != 0x2 {
+		t.Fatalf("unexpected CondResF2 output payload: incr=%d res=%d", lastPendingPacket(t, p).CondResult.F2KeyIncr, lastPendingPacket(t, p).CondResult.Res0)
 	}
 
 	consumed, err = p.processData(6, []byte{0x46})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if consumed != 1 || out.count != 5 || out.last.Type != PktCondResF4 {
-		t.Fatalf("unexpected CondResF4 output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	if consumed != 1 || len(p.pendingPackets) != 5 || lastPendingPacket(t, p).Type != PktCondResF4 {
+		t.Fatalf("unexpected CondResF4 output: consumed=%d count=%d type=%v", consumed, len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.CondResult.Res0 != 0x2 {
-		t.Fatalf("unexpected CondResF4 output payload: res=%d", out.last.CondResult.Res0)
+	if lastPendingPacket(t, p).CondResult.Res0 != 0x2 {
+		t.Fatalf("unexpected CondResF4 output payload: res=%d", lastPendingPacket(t, p).CondResult.Res0)
 	}
 
 	consumed, err = p.processData(7, []byte{0x6C, 0x8A, 0x01})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if consumed != 3 || out.count != 6 || out.last.Type != PktCondIF1 {
-		t.Fatalf("unexpected CondIF1 output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	if consumed != 3 || len(p.pendingPackets) != 6 || lastPendingPacket(t, p).Type != PktCondIF1 {
+		t.Fatalf("unexpected CondIF1 output: consumed=%d count=%d type=%v", consumed, len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if !out.last.CondInstr.CondKeySet || out.last.CondInstr.CondCKey != 0x8A {
-		t.Fatalf("unexpected CondIF1 output payload: keySet=%v key=%d", out.last.CondInstr.CondKeySet, out.last.CondInstr.CondCKey)
+	if !lastPendingPacket(t, p).CondInstr.CondKeySet || lastPendingPacket(t, p).CondInstr.CondCKey != 0x8A {
+		t.Fatalf("unexpected CondIF1 output payload: keySet=%v key=%d", lastPendingPacket(t, p).CondInstr.CondKeySet, lastPendingPacket(t, p).CondInstr.CondCKey)
 	}
 
 	consumed, err = p.processData(10, []byte{0x68, 0x5A, 0x34})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if consumed != 3 || out.count != 7 || out.last.Type != PktCondResF1 {
-		t.Fatalf("unexpected CondResF1 output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	if consumed != 3 || len(p.pendingPackets) != 7 || lastPendingPacket(t, p).Type != PktCondResF1 {
+		t.Fatalf("unexpected CondResF1 output: consumed=%d count=%d type=%v", consumed, len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if !out.last.CondResult.KeyRes0Set || !out.last.CondResult.KeyRes1Set {
-		t.Fatalf("expected CondResF1 output key/result pairs set: %+v", out.last.CondResult)
+	if !lastPendingPacket(t, p).CondResult.KeyRes0Set || !lastPendingPacket(t, p).CondResult.KeyRes1Set {
+		t.Fatalf("expected CondResF1 output key/result pairs set: %+v", lastPendingPacket(t, p).CondResult)
 	}
 }
 
 func TestProcessDataFastPathConditionalAcrossBlocks(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: 0x40, RegConfigr: 1 << 8})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x6C})
 	if err != nil {
@@ -1165,7 +1139,7 @@ func TestProcessDataFastPathConditionalAcrossBlocks(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected first block fully consumed, got %d", consumed)
 	}
-	if out.count != 0 {
+	if len(p.pendingPackets) != 0 {
 		t.Fatalf("did not expect output packet from incomplete CondIF1 packet")
 	}
 
@@ -1176,11 +1150,11 @@ func TestProcessDataFastPathConditionalAcrossBlocks(t *testing.T) {
 	if consumed != 2 {
 		t.Fatalf("expected second block consumed bytes 2, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != PktCondIF1 {
-		t.Fatalf("unexpected CondIF1 packet after reassembly: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktCondIF1 {
+		t.Fatalf("unexpected CondIF1 packet after reassembly: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if !out.last.CondInstr.CondKeySet || out.last.CondInstr.CondCKey != 0x8A {
-		t.Fatalf("unexpected CondIF1 payload after reassembly: keySet=%v key=%d", out.last.CondInstr.CondKeySet, out.last.CondInstr.CondCKey)
+	if !lastPendingPacket(t, p).CondInstr.CondKeySet || lastPendingPacket(t, p).CondInstr.CondCKey != 0x8A {
+		t.Fatalf("unexpected CondIF1 payload after reassembly: keySet=%v key=%d", lastPendingPacket(t, p).CondInstr.CondKeySet, lastPendingPacket(t, p).CondInstr.CondCKey)
 	}
 
 	consumed, err = p.processData(3, []byte{0x68, 0x5A})
@@ -1190,7 +1164,7 @@ func TestProcessDataFastPathConditionalAcrossBlocks(t *testing.T) {
 	if consumed != 2 {
 		t.Fatalf("expected third block consumed bytes 2, got %d", consumed)
 	}
-	if out.count != 1 {
+	if len(p.pendingPackets) != 1 {
 		t.Fatalf("did not expect output packet from incomplete CondResF1 packet")
 	}
 
@@ -1201,48 +1175,46 @@ func TestProcessDataFastPathConditionalAcrossBlocks(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected fourth block consumed bytes 1, got %d", consumed)
 	}
-	if out.count != 2 || out.last.Type != PktCondResF1 {
-		t.Fatalf("unexpected CondResF1 packet after reassembly: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 2 || lastPendingPacket(t, p).Type != PktCondResF1 {
+		t.Fatalf("unexpected CondResF1 packet after reassembly: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if !out.last.CondResult.KeyRes0Set || !out.last.CondResult.KeyRes1Set {
-		t.Fatalf("expected CondResF1 key/result pairs after reassembly: %+v", out.last.CondResult)
+	if !lastPendingPacket(t, p).CondResult.KeyRes0Set || !lastPendingPacket(t, p).CondResult.KeyRes1Set {
+		t.Fatalf("expected CondResF1 key/result pairs after reassembly: %+v", lastPendingPacket(t, p).CondResult)
 	}
 }
 
 func TestProcessDataConditionalPacketsFallbackWhenCondTraceDisabled(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x42})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if consumed != 1 || out.count != 1 || out.last.Type != PktCondIF2 {
-		t.Fatalf("unexpected CondIF2 fallback output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	if consumed != 1 || len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktCondIF2 {
+		t.Fatalf("unexpected CondIF2 fallback output: consumed=%d count=%d type=%v", consumed, len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if !errors.Is(out.last.Err, errReservedCfg) {
-		t.Fatalf("expected reserved-cfg error for CondIF2 fallback, got %v", out.last.Err)
+	if !errors.Is(lastPendingPacket(t, p).Err, errReservedCfg) {
+		t.Fatalf("expected reserved-cfg error for CondIF2 fallback, got %v", lastPendingPacket(t, p).Err)
 	}
 
 	consumed, err = p.processData(1, []byte{0x6C})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if consumed != 1 || out.count != 2 || out.last.Type != PktCondIF1 {
-		t.Fatalf("unexpected CondIF1 fallback output: consumed=%d count=%d type=%v", consumed, out.count, out.last.Type)
+	if consumed != 1 || len(p.pendingPackets) != 2 || lastPendingPacket(t, p).Type != PktCondIF1 {
+		t.Fatalf("unexpected CondIF1 fallback output: consumed=%d count=%d type=%v", consumed, len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if !errors.Is(out.last.Err, errReservedCfg) {
-		t.Fatalf("expected reserved-cfg error for CondIF1 fallback, got %v", out.last.Err)
+	if !errors.Is(lastPendingPacket(t, p).Err, errReservedCfg) {
+		t.Fatalf("expected reserved-cfg error for CondIF1 fallback, got %v", lastPendingPacket(t, p).Err)
 	}
 }
 
 func TestProcessDataFastPathInvalidCfgHeaderConsumesOneByte(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x42})
 	if err != nil {
@@ -1251,25 +1223,24 @@ func TestProcessDataFastPathInvalidCfgHeaderConsumesOneByte(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed, got %d", consumed)
 	}
-	if out.count != 1 {
-		t.Fatalf("expected one output packet, got %d", out.count)
+	if len(p.pendingPackets) != 1 {
+		t.Fatalf("expected one output packet, got %d", len(p.pendingPackets))
 	}
-	if out.last.Type != PktCondIF2 {
-		t.Fatalf("expected PktCondIF2 output, got %v", out.last.Type)
+	if lastPendingPacket(t, p).Type != PktCondIF2 {
+		t.Fatalf("expected PktCondIF2 output, got %v", lastPendingPacket(t, p).Type)
 	}
-	if !errors.Is(out.last.Err, errReservedCfg) {
-		t.Fatalf("expected errReservedCfg output, got %v", out.last.Err)
+	if !errors.Is(lastPendingPacket(t, p).Err, errReservedCfg) {
+		t.Fatalf("expected errReservedCfg output, got %v", lastPendingPacket(t, p).Err)
 	}
-	if out.last.ErrHdrVal != 0x42 {
-		t.Fatalf("expected header value 0x42, got 0x%X", out.last.ErrHdrVal)
+	if lastPendingPacket(t, p).ErrHdrVal != 0x42 {
+		t.Fatalf("expected header value 0x42, got 0x%X", lastPendingPacket(t, p).ErrHdrVal)
 	}
 }
 
 func TestProcessDataFastPathReservedHeader(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x08})
 	if err != nil {
@@ -1278,25 +1249,24 @@ func TestProcessDataFastPathReservedHeader(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed, got %d", consumed)
 	}
-	if out.count != 1 {
-		t.Fatalf("expected one output packet, got %d", out.count)
+	if len(p.pendingPackets) != 1 {
+		t.Fatalf("expected one output packet, got %d", len(p.pendingPackets))
 	}
-	if out.last.Type != PktReserved {
-		t.Fatalf("expected PktReserved output, got %v", out.last.Type)
+	if lastPendingPacket(t, p).Type != PktReserved {
+		t.Fatalf("expected PktReserved output, got %v", lastPendingPacket(t, p).Type)
 	}
-	if !errors.Is(out.last.Err, errReservedHeader) {
-		t.Fatalf("expected errReservedHeader output, got %v", out.last.Err)
+	if !errors.Is(lastPendingPacket(t, p).Err, errReservedHeader) {
+		t.Fatalf("expected errReservedHeader output, got %v", lastPendingPacket(t, p).Err)
 	}
-	if out.last.ErrHdrVal != 0x08 {
-		t.Fatalf("expected output header value 0x08, got 0x%X", out.last.ErrHdrVal)
+	if lastPendingPacket(t, p).ErrHdrVal != 0x08 {
+		t.Fatalf("expected output header value 0x08, got 0x%X", lastPendingPacket(t, p).ErrHdrVal)
 	}
 }
 
 func TestProcessDataFastPathReservedHeaderConsumesOneByte(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x08})
 	if err != nil {
@@ -1305,11 +1275,11 @@ func TestProcessDataFastPathReservedHeaderConsumesOneByte(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != PktReserved {
-		t.Fatalf("unexpected reserved output: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktReserved {
+		t.Fatalf("unexpected reserved output: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if !errors.Is(out.last.Err, errReservedHeader) {
-		t.Fatalf("expected errReservedHeader output, got %v", out.last.Err)
+	if !errors.Is(lastPendingPacket(t, p).Err, errReservedHeader) {
+		t.Fatalf("expected errReservedHeader output, got %v", lastPendingPacket(t, p).Err)
 	}
 }
 
@@ -1518,8 +1488,7 @@ func TestDecodeNextPacketTraceInfoIncompleteNeedsMoreData(t *testing.T) {
 func TestProcessDataFastPathTraceInfoAcrossBlocks(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x01, 0x01})
 	if err != nil {
@@ -1528,7 +1497,7 @@ func TestProcessDataFastPathTraceInfoAcrossBlocks(t *testing.T) {
 	if consumed != 2 {
 		t.Fatalf("expected first block fully consumed, got %d", consumed)
 	}
-	if out.count != 0 {
+	if len(p.pendingPackets) != 0 {
 		t.Fatalf("did not expect output packet from incomplete trace-info")
 	}
 
@@ -1539,13 +1508,13 @@ func TestProcessDataFastPathTraceInfoAcrossBlocks(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected second block consumed bytes 1, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != PktTraceInfo {
-		t.Fatalf("unexpected output packet after trace-info reassembly: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktTraceInfo {
+		t.Fatalf("unexpected output packet after trace-info reassembly: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if !out.last.Valid.TInfo || out.last.TraceInfo.Val != 0x43 {
-		t.Fatalf("unexpected trace-info payload after reassembly: valid=%v val=0x%X", out.last.Valid.TInfo, out.last.TraceInfo.Val)
+	if !lastPendingPacket(t, p).Valid.TInfo || lastPendingPacket(t, p).TraceInfo.Val != 0x43 {
+		t.Fatalf("unexpected trace-info payload after reassembly: valid=%v val=0x%X", lastPendingPacket(t, p).Valid.TInfo, lastPendingPacket(t, p).TraceInfo.Val)
 	}
-	if !out.last.TraceInfo.InitialTInfo {
+	if !lastPendingPacket(t, p).TraceInfo.InitialTInfo {
 		t.Fatalf("expected InitialTInfo flag on first trace-info packet")
 	}
 }
@@ -1787,6 +1756,7 @@ func TestDecodeNextPacketShortAddrIncompleteNeedsMoreData(t *testing.T) {
 func TestProcessDataFastPathShortAddrMergesWithExistingAddress(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
+	p.collectPackets = true
 	p.statePacket.VAddr = 0xFFFF0000
 	p.statePacket.VAddrValidBits = 32
 
@@ -1811,8 +1781,7 @@ func TestProcessDataFastPathShortAddrMergesWithExistingAddress(t *testing.T) {
 func TestProcessDataFastPathShortAddrAcrossBlocks(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x96, 0x81})
 	if err != nil {
@@ -1821,7 +1790,7 @@ func TestProcessDataFastPathShortAddrAcrossBlocks(t *testing.T) {
 	if consumed != 2 {
 		t.Fatalf("expected first block fully consumed, got %d", consumed)
 	}
-	if out.count != 0 {
+	if len(p.pendingPackets) != 0 {
 		t.Fatalf("did not expect output packet from incomplete short address")
 	}
 
@@ -1832,17 +1801,18 @@ func TestProcessDataFastPathShortAddrAcrossBlocks(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected second block consumed bytes 1, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != PktAddrS_IS1 {
-		t.Fatalf("unexpected output packet after short-address reassembly: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktAddrS_IS1 {
+		t.Fatalf("unexpected output packet after short-address reassembly: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.VAddr != 0x2302 {
-		t.Fatalf("unexpected short address after reassembly: 0x%X", out.last.VAddr)
+	if lastPendingPacket(t, p).VAddr != 0x2302 {
+		t.Fatalf("unexpected short address after reassembly: 0x%X", lastPendingPacket(t, p).VAddr)
 	}
 }
 
 func TestProcessDataFastPathLongAddr32KeepsUpperWhenContext64Bit(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
+	p.collectPackets = true
 	p.statePacket.VAddr = 0x11223344AABBCCDD
 	p.statePacket.VAddrValidBits = 64
 	p.statePacket.Valid.Context = true
@@ -1869,6 +1839,7 @@ func TestProcessDataFastPathLongAddr32KeepsUpperWhenContext64Bit(t *testing.T) {
 func TestProcessDataFastPathQShortAddrMergesWithExistingAddress(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: 0x1 << 15})
 	p.isSync = true
+	p.collectPackets = true
 	p.statePacket.VAddr = 0xFFFF0000
 	p.statePacket.VAddrValidBits = 32
 
@@ -1890,6 +1861,7 @@ func TestProcessDataFastPathQShortAddrMergesWithExistingAddress(t *testing.T) {
 func TestProcessDataFastPathQLongAddrKeepsUpperWhenContext64Bit(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: 0x1 << 15})
 	p.isSync = true
+	p.collectPackets = true
 	p.statePacket.VAddr = 0x11223344AABBCCDD
 	p.statePacket.VAddrValidBits = 64
 	p.statePacket.Valid.Context = true
@@ -1913,8 +1885,7 @@ func TestProcessDataFastPathQLongAddrKeepsUpperWhenContext64Bit(t *testing.T) {
 func TestProcessDataFastPathQAcrossBlocks(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: 0x1 << 15})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0xA5, 0x15})
 	if err != nil {
@@ -1923,7 +1894,7 @@ func TestProcessDataFastPathQAcrossBlocks(t *testing.T) {
 	if consumed != 2 {
 		t.Fatalf("expected first block fully consumed, got %d", consumed)
 	}
-	if out.count != 0 {
+	if len(p.pendingPackets) != 0 {
 		t.Fatalf("did not expect output packet from incomplete Q packet")
 	}
 
@@ -1934,11 +1905,11 @@ func TestProcessDataFastPathQAcrossBlocks(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected second block consumed bytes 1, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != PktQ {
-		t.Fatalf("unexpected output packet after Q reassembly: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktQ {
+		t.Fatalf("unexpected output packet after Q reassembly: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.QPkt.QType != 0x5 || out.last.QPkt.QCount != 0x3 {
-		t.Fatalf("unexpected Q metadata after reassembly: %+v", out.last.QPkt)
+	if lastPendingPacket(t, p).QPkt.QType != 0x5 || lastPendingPacket(t, p).QPkt.QCount != 0x3 {
+		t.Fatalf("unexpected Q metadata after reassembly: %+v", lastPendingPacket(t, p).QPkt)
 	}
 }
 
@@ -2030,8 +2001,7 @@ func TestDecodeNextPacketExtensionUnknownSubtypeProducesPacketError(t *testing.T
 func TestProcessDataFastPathExtensionUnknownSubtypeProducesPacketError(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x00, 0x7A})
 	if err != nil {
@@ -2040,14 +2010,14 @@ func TestProcessDataFastPathExtensionUnknownSubtypeProducesPacketError(t *testin
 	if consumed != 2 {
 		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
 	}
-	if out.count != 1 {
-		t.Fatalf("expected one output packet, got %d", out.count)
+	if len(p.pendingPackets) != 1 {
+		t.Fatalf("expected one output packet, got %d", len(p.pendingPackets))
 	}
-	if out.last.Type != PktExtension {
-		t.Fatalf("expected PktExtension output, got %v", out.last.Type)
+	if lastPendingPacket(t, p).Type != PktExtension {
+		t.Fatalf("expected PktExtension output, got %v", lastPendingPacket(t, p).Type)
 	}
-	if !errors.Is(out.last.Err, ocsd.ErrBadPacketSeq) {
-		t.Fatalf("expected ErrBadPacketSeq output, got %v", out.last.Err)
+	if !errors.Is(lastPendingPacket(t, p).Err, ocsd.ErrBadPacketSeq) {
+		t.Fatalf("expected ErrBadPacketSeq output, got %v", lastPendingPacket(t, p).Err)
 	}
 }
 
@@ -2192,8 +2162,7 @@ func TestDecodeNextPacketQReservedSubtype(t *testing.T) {
 func TestProcessDataFastPathQReservedSubtype(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: 0x8000})
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0xA3})
 	if err != nil {
@@ -2202,11 +2171,11 @@ func TestProcessDataFastPathQReservedSubtype(t *testing.T) {
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed, got %d", consumed)
 	}
-	if out.count != 1 || out.last.Type != PktQ {
-		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktQ {
+		t.Fatalf("unexpected output packet: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if !errors.Is(out.last.Err, errReservedHeader) || out.last.ErrHdrVal != 0xA3 {
-		t.Fatalf("unexpected reserved packet metadata: err=%v hdr=0x%X", out.last.Err, out.last.ErrHdrVal)
+	if !errors.Is(lastPendingPacket(t, p).Err, errReservedHeader) || lastPendingPacket(t, p).ErrHdrVal != 0xA3 {
+		t.Fatalf("unexpected reserved packet metadata: err=%v hdr=0x%X", lastPendingPacket(t, p).Err, lastPendingPacket(t, p).ErrHdrVal)
 	}
 }
 
@@ -2408,6 +2377,7 @@ func TestDecodeNextPacketDataSyncMarkers(t *testing.T) {
 func TestProcessDataFastPathContextNoIDUpdatePreservesIDs(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
+	p.collectPackets = true
 	p.statePacket.Context.VMID = 0xAA
 	p.statePacket.Context.CtxtID = 0xBBCC
 
@@ -2434,8 +2404,7 @@ func TestProcessDataFastPathContextWithIDs(t *testing.T) {
 	config := &Config{RegIdr2: (0x4 << 5) | (0x1 << 10)}
 	p := NewProcessor(config)
 	p.isSync = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
+	p.collectPackets = true
 
 	data := []byte{0x81, 0xD9, 0xAB, 0x44, 0x33, 0x22, 0x11}
 	consumed, err := p.processData(0, data)
@@ -2445,20 +2414,21 @@ func TestProcessDataFastPathContextWithIDs(t *testing.T) {
 	if consumed != uint32(len(data)) {
 		t.Fatalf("expected %d bytes consumed, got %d", len(data), consumed)
 	}
-	if out.count != 1 || out.last.Type != PktCtxt {
-		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktCtxt {
+		t.Fatalf("unexpected output packet: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if !out.last.Valid.Context || !out.last.Context.UpdatedV || !out.last.Context.UpdatedC {
-		t.Fatalf("unexpected context flags in output: %+v", out.last.Context)
+	if !lastPendingPacket(t, p).Valid.Context || !lastPendingPacket(t, p).Context.UpdatedV || !lastPendingPacket(t, p).Context.UpdatedC {
+		t.Fatalf("unexpected context flags in output: %+v", lastPendingPacket(t, p).Context)
 	}
-	if out.last.Context.VMID != 0xAB || out.last.Context.CtxtID != 0x11223344 {
-		t.Fatalf("unexpected context IDs in output: vmid=0x%X ctxt=0x%X", out.last.Context.VMID, out.last.Context.CtxtID)
+	if lastPendingPacket(t, p).Context.VMID != 0xAB || lastPendingPacket(t, p).Context.CtxtID != 0x11223344 {
+		t.Fatalf("unexpected context IDs in output: vmid=0x%X ctxt=0x%X", lastPendingPacket(t, p).Context.VMID, lastPendingPacket(t, p).Context.CtxtID)
 	}
 }
 
 func TestProcessDataFastPathDataSyncMarkerSetsDsmVal(t *testing.T) {
 	p := NewProcessor(&Config{RegIdr0: 0x18, RegConfigr: 0x2 | (1 << 16)})
 	p.isSync = true
+	p.collectPackets = true
 
 	consumed, err := p.processData(0, []byte{0x23})
 	if err != nil {
@@ -2475,6 +2445,7 @@ func TestProcessDataFastPathDataSyncMarkerSetsDsmVal(t *testing.T) {
 func TestProcessDataFastPathAddrContext32PreservesUpperIn64BitContext(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.isSync = true
+	p.collectPackets = true
 	p.statePacket.VAddr = 0x11223344AABBCCDD
 	p.statePacket.VAddrValidBits = 64
 	p.statePacket.Valid.Context = true
@@ -2500,12 +2471,11 @@ func TestProcessDataFastPathAddrContextWithIDs(t *testing.T) {
 	config := &Config{RegIdr2: (0x4 << 5) | (0x1 << 10)}
 	p := NewProcessor(config)
 	p.isSync = true
+	p.collectPackets = true
 	p.statePacket.VAddr = 0x11223344AABBCCDD
 	p.statePacket.VAddrValidBits = 64
 	p.statePacket.Valid.Context = true
 	p.statePacket.Context.SF = true
-	out := &capturePktOut{}
-	p.SetPktOut(out)
 
 	data := []byte{0x82, 0x04, 0x00, 0x34, 0x12, 0xC1, 0x7E, 0xDD, 0xCC, 0xBB, 0xAA}
 	consumed, err := p.processData(0, data)
@@ -2515,16 +2485,16 @@ func TestProcessDataFastPathAddrContextWithIDs(t *testing.T) {
 	if consumed != uint32(len(data)) {
 		t.Fatalf("expected %d bytes consumed, got %d", len(data), consumed)
 	}
-	if out.count != 1 || out.last.Type != PktAddrCtxtL_32IS0 {
-		t.Fatalf("unexpected output packet: count=%d type=%v", out.count, out.last.Type)
+	if len(p.pendingPackets) != 1 || lastPendingPacket(t, p).Type != PktAddrCtxtL_32IS0 {
+		t.Fatalf("unexpected output packet: count=%d type=%v", len(p.pendingPackets), lastPendingPacket(t, p).Type)
 	}
-	if out.last.VAddr != 0x1122334412340010 {
-		t.Fatalf("expected merged address 0x1122334412340010, got 0x%X", out.last.VAddr)
+	if lastPendingPacket(t, p).VAddr != 0x1122334412340010 {
+		t.Fatalf("expected merged address 0x1122334412340010, got 0x%X", lastPendingPacket(t, p).VAddr)
 	}
-	if !out.last.Valid.Context || !out.last.Context.UpdatedV || !out.last.Context.UpdatedC {
-		t.Fatalf("unexpected context flags in output: %+v", out.last.Context)
+	if !lastPendingPacket(t, p).Valid.Context || !lastPendingPacket(t, p).Context.UpdatedV || !lastPendingPacket(t, p).Context.UpdatedC {
+		t.Fatalf("unexpected context flags in output: %+v", lastPendingPacket(t, p).Context)
 	}
-	if out.last.Context.VMID != 0x7E || out.last.Context.CtxtID != 0xAABBCCDD {
-		t.Fatalf("unexpected context IDs in output: vmid=0x%X ctxt=0x%X", out.last.Context.VMID, out.last.Context.CtxtID)
+	if lastPendingPacket(t, p).Context.VMID != 0x7E || lastPendingPacket(t, p).Context.CtxtID != 0xAABBCCDD {
+		t.Fatalf("unexpected context IDs in output: vmid=0x%X ctxt=0x%X", lastPendingPacket(t, p).Context.VMID, lastPendingPacket(t, p).Context.CtxtID)
 	}
 }
