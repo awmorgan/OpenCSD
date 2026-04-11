@@ -547,8 +547,9 @@ func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericEl
 		elem ocsd.TraceElement
 	}
 	drained := make([]drainedElem, 0)
+	var drainErr error
 	tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
-		if elem == nil || elem.Iterator == nil {
+		if drainErr != nil || elem == nil || elem.Iterator == nil {
 			return
 		}
 		iter, ok := elem.Iterator.(ete.SequencedTraceIterator)
@@ -561,15 +562,17 @@ func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericEl
 				break
 			}
 			if nextErr != nil {
-				drained = append(drained, drainedElem{seq: -1, elem: ocsd.TraceElement{Index: 0}})
+				drainErr = nextErr
 				return
 			}
-			copyElem := *trcElem
-			drained = append(drained, drainedElem{seq: len(drained), qseq: qseq, elem: copyElem})
+			if trcElem == nil {
+				continue
+			}
+			drained = append(drained, drainedElem{seq: len(drained), qseq: qseq, elem: *trcElem})
 		}
 	})
-	if len(drained) > 0 && drained[0].seq == -1 {
-		return io.ErrUnexpectedEOF
+	if drainErr != nil {
+		return drainErr
 	}
 	sort.SliceStable(drained, func(i, j int) bool {
 		if drained[i].elem.Index != drained[j].elem.Index {
