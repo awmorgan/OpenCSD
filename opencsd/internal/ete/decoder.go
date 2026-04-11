@@ -59,6 +59,7 @@ type PktDecode struct {
 	lastPacketIndex ocsd.TrcIndex
 	lastElemIndex   ocsd.TrcIndex
 	sawActivity     bool
+	pullEOFDone     bool
 
 	// Source is the pull-based packet reader injected at construction time.
 	// May be nil when the push-based Write path is used instead.
@@ -171,6 +172,7 @@ func (d *PktDecode) Flush() error {
 }
 
 func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
+	d.pullEOFDone = false
 	return d.inner.Reset(indexSOP)
 }
 
@@ -183,8 +185,13 @@ func (d *PktDecode) NextSequenced() (uint64, *ocsd.TraceElement, error) {
 		pkt, err := d.Source.NextPacket()
 		if errors.Is(err, io.EOF) {
 			d.Source = nil
-			_ = d.Close()
-			break
+			if !d.pullEOFDone {
+				d.pullEOFDone = true
+				if closeErr := d.Close(); closeErr != nil {
+					return 0, nil, closeErr
+				}
+			}
+			continue
 		}
 		if err != nil {
 			d.Source = nil

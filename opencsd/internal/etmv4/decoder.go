@@ -203,6 +203,9 @@ type PktDecode struct {
 	// Source is the pull-based packet reader injected at construction time.
 	// May be nil when the push-based Write path is used instead.
 	Source ocsd.PacketReader[Packet]
+
+	// pullEOFDone tracks whether pull EOF handling has already emitted EOT.
+	pullEOFDone bool
 }
 
 func (d *PktDecode) ApplyFlags(flags uint32) error {
@@ -292,6 +295,7 @@ func (d *PktDecode) Flush() error {
 func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 	_ = indexSOP
 	d.OnReset()
+	d.pullEOFDone = false
 	return nil
 }
 
@@ -305,8 +309,13 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 		pkt, err := d.Source.NextPacket()
 		if errors.Is(err, io.EOF) {
 			d.Source = nil
-			_ = d.Close()
-			break
+			if !d.pullEOFDone {
+				d.pullEOFDone = true
+				if closeErr := d.Close(); closeErr != nil {
+					return 0, 0, ocsd.TraceElement{}, closeErr
+				}
+			}
+			continue
 		}
 		if err != nil {
 			d.Source = nil
