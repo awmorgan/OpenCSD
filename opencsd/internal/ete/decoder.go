@@ -98,11 +98,10 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*etmv4.Processor, *PktDecod
 	}
 
 	proc := NewProcessor(cfg)
-	decoder, err := NewPktDecode(cfg)
+	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, nil, nil, proc)
 	if err != nil {
 		return nil, nil, err
 	}
-	proc.SetPktOut(decoder)
 	return proc, decoder, nil
 }
 

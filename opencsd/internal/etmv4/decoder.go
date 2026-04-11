@@ -2175,11 +2175,10 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, err
 	if err != nil {
 		return nil, nil, err
 	}
-	decoder, err := NewConfiguredPktDecode(instID, cfg)
+	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, nil, nil, proc)
 	if err != nil {
 		return nil, nil, err
 	}
-	proc.SetPktOut(decoder)
 	return proc, decoder, nil
 }
 
