@@ -562,6 +562,9 @@ func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericEl
 				break
 			}
 			if nextErr != nil {
+				if errors.Is(nextErr, ocsd.ErrWait) {
+					break
+				}
 				drainErr = nextErr
 				return
 			}

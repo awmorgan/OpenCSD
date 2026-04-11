@@ -555,12 +555,16 @@ func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericEl
 			return nil
 		}
 		if err != nil {
+			if errors.Is(err, ocsd.ErrWait) {
+				break
+			}
 			return err
 		}
 		if printErr := printer.PrintElement(elem); printErr != nil && !ocsd.IsDataWaitErr(printErr) {
 			return printErr
 		}
 	}
+	return nil
 }
 
 func sanitizePPL(s string, traceIDs []string, includeGenElems bool) string {
