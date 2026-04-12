@@ -993,8 +993,6 @@ func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMe
 	if err != nil {
 		return nil, err
 	}
-	// keep public Source set for compatibility
-	dec.Source = source
 	return dec, nil
 }
 
