@@ -14,6 +14,9 @@ type traceElemEvent struct {
 	elem    ocsd.TraceElement
 }
 
+// ElementCallback is called for each output trace element when an output sink is set.
+type ElementCallback func(*ocsd.TraceElement) error
+
 func (d *PktDecode) pushOutputElement(index ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
 	if d == nil || elem == nil {
 		return nil
@@ -82,7 +85,11 @@ type PktDecode struct {
 	elemBufPos int
 
 	// Source is the pull-based packet reader injected at construction time.
+	// Public Source is retained for backwards compatibility.
 	Source ocsd.PacketReader[Packet]
+	// Internal source and output sink (new, private).
+	source  ocsd.PacketReader[Packet]
+	outSink ElementCallback
 }
 
 func (d *PktDecode) ApplyFlags(flags uint32) error { return nil }
