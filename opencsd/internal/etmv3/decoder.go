@@ -126,36 +126,25 @@ func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDec
 	d.source = source
 	d.outSink = outSink
 	d.configureDecoder()
-	if err := d.SetProtocolConfig(cfg); err != nil {
-		return nil, err
+
+	d.Config = cfg
+	d.csID = d.Config.TraceID()
+
+	if d.Config.TraceMode() != TMInstrOnly {
+		err := ocsd.ErrHWCfgUnsupp
+		return nil, fmt.Errorf("%w: ETMv3 trace decoder: data trace decode not yet supported", err)
 	}
+
+	archProfile := ocsd.ArchProfile{
+		Arch:    d.Config.ArchVer,
+		Profile: d.Config.CoreProf,
+	}
+
+	d.codeFollower.Arch = archProfile
+	d.codeFollower.InstrInfo.PeType = archProfile
+	d.codeFollower.TraceID = d.csID
+
 	return d, nil
-}
-
-func (d *PktDecode) SetMemAccess(mem common.TargetMemAccess) error {
-	if mem == nil {
-		return fmt.Errorf("%w: ETMv3 mem access cannot be nil", ocsd.ErrInvalidParamVal)
-	}
-	if d.codeFollower != nil {
-		if err := d.codeFollower.SetInterfaces(mem, d.InstrDecode); err != nil {
-			return err
-		}
-	}
-	d.MemAccess = mem
-	return nil
-}
-
-func (d *PktDecode) SetInstrDecode(decoder common.InstrDecode) error {
-	if decoder == nil {
-		return fmt.Errorf("%w: ETMv3 instruction decoder cannot be nil", ocsd.ErrInvalidParamVal)
-	}
-	if d.codeFollower != nil {
-		if err := d.codeFollower.SetInterfaces(d.MemAccess, decoder); err != nil {
-			return err
-		}
-	}
-	d.InstrDecode = decoder
-	return nil
 }
 
 // OutputTraceElement sends an element using IndexCurrPkt.
@@ -303,30 +292,6 @@ func (d *PktDecode) nextDecodeState() decoderState {
 		return waitISync
 	}
 	return decodePkts
-}
-
-func (d *PktDecode) SetProtocolConfig(config *Config) error {
-	d.Config = config
-	if d.Config == nil {
-		return ocsd.ErrNotInit
-	}
-	d.csID = d.Config.TraceID()
-
-	if d.Config.TraceMode() != TMInstrOnly {
-		err := ocsd.ErrHWCfgUnsupp
-		return fmt.Errorf("%w: ETMv3 trace decoder: data trace decode not yet supported", err)
-	}
-
-	archProfile := ocsd.ArchProfile{
-		Arch:    d.Config.ArchVer,
-		Profile: d.Config.CoreProf,
-	}
-
-	d.codeFollower.Arch = archProfile
-	d.codeFollower.InstrInfo.PeType = archProfile
-	d.codeFollower.TraceID = d.csID
-
-	return nil
 }
 
 func (d *PktDecode) OnReset() {

@@ -106,10 +106,8 @@ func TestDecoderBranchWithException(t *testing.T) {
 
 func TestDecoderMemNacc(t *testing.T) {
 	config := &Config{}
-	dec := setupDecFast(config)
 	mem := &mockMemAcc{failAfter: 1, hitAfter: -1} // fail on 2nd read, never find branch
-	dec.SetMemAccess(mem)
-	dec.SetInstrDecode(idec.NewDecoder())
+	dec := mustNewPktDecode(t, config, mem, idec.NewDecoder())
 
 	dec.Reset(0)
 
@@ -245,10 +243,8 @@ func TestDecoderPHeaderVariations(t *testing.T) {
 
 func TestDecoderAtomUsage(t *testing.T) {
 	config := &Config{}
-	dec := setupDecFast(config)
 	mem := &mockMemAcc{failAfter: 10, hitAfter: 0, instrType: ocsd.InstrBr}
-	dec.SetMemAccess(mem)
-	dec.SetInstrDecode(idec.NewDecoder()) // conditional branch consumes atoms!
+	dec := mustNewPktDecode(t, config, mem, idec.NewDecoder()) // conditional branch consumes atoms!
 
 	dec.Reset(0)
 

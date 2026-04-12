@@ -3,6 +3,7 @@ package etmv3
 import (
 	"testing"
 
+	"opencsd/internal/common"
 	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
@@ -12,6 +13,32 @@ func buildDecInDecodePktsPull(t *testing.T, config *Config) *PktDecode {
 	dec, err := NewConfiguredPktDecode(0, config, &mockMemAcc{failAfter: -1}, idec.NewDecoder())
 	if err != nil {
 		t.Fatalf("NewConfiguredPktDecode failed: %v", err)
+	}
+
+	dec.Reset(0)
+
+	asyncPkt := &Packet{}
+	asyncPkt.ResetState()
+	asyncPkt.Type = PktASync
+	writeDecodedPacket(dec, 0, asyncPkt)
+
+	isyncPkt := &Packet{}
+	isyncPkt.ResetState()
+	isyncPkt.Type = PktISync
+	isyncPkt.Addr = 0x1000
+	isyncPkt.CurrISA = ocsd.ISAArm
+	isyncPkt.ISyncInfo.Reason = ocsd.ISyncReason(1)
+	writeDecodedPacket(dec, 1, isyncPkt)
+
+	_ = drainDecodedElements(t, dec)
+	return dec
+}
+
+func buildDecInDecodePktsPullWithDeps(t *testing.T, config *Config, mem common.TargetMemAccess, instr common.InstrDecode) *PktDecode {
+	t.Helper()
+	dec, err := NewPktDecode(config, mem, instr, nil, nil)
+	if err != nil {
+		t.Fatalf("NewPktDecode failed: %v", err)
 	}
 
 	dec.Reset(0)

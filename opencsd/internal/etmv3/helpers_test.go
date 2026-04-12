@@ -5,6 +5,7 @@ import (
 	"io"
 	"testing"
 
+	"opencsd/internal/common"
 	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
@@ -91,6 +92,15 @@ func mustNewConfiguredPktDecode(tb testing.TB, config *Config) *PktDecode {
 	dec, err := NewPktDecode(config, &mockMemAcc{failAfter: -1}, idec.NewDecoder(), nil, nil)
 	if err != nil {
 		tb.Fatalf("NewConfiguredPktDecode failed: %v", err)
+	}
+	return dec
+}
+
+func mustNewPktDecode(tb testing.TB, config *Config, mem common.TargetMemAccess, instr common.InstrDecode) *PktDecode {
+	tb.Helper()
+	dec, err := NewPktDecode(config, mem, instr, nil, nil)
+	if err != nil {
+		tb.Fatalf("NewPktDecode failed: %v", err)
 	}
 	return dec
 }
