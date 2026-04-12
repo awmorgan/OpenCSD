@@ -88,7 +88,7 @@ func mustNewConfiguredPktProc(tb testing.TB, config *Config) *PktProc {
 
 func mustNewConfiguredPktDecode(tb testing.TB, config *Config) *PktDecode {
 	tb.Helper()
-	dec, err := NewConfiguredPktDecode(0, config, &mockMemAcc{failAfter: -1}, idec.NewDecoder())
+	dec, err := NewPktDecode(config, &mockMemAcc{failAfter: -1}, idec.NewDecoder(), nil, nil)
 	if err != nil {
 		tb.Fatalf("NewConfiguredPktDecode failed: %v", err)
 	}

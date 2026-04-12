@@ -95,7 +95,7 @@ type PktDecode struct {
 func (d *PktDecode) ApplyFlags(flags uint32) error { return nil }
 
 // NewPktDecode creates a new ETMv3 trace decoder.
-func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
+func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode, source ocsd.PacketReader[Packet], outSink ElementCallback) (*PktDecode, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("%w: ETMv3 config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
@@ -119,6 +119,11 @@ func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDec
 		peContext:    &ocsd.PEContext{},
 		codeFollower: codeFollower,
 	}
+	// wire-in optional dependencies
+	d.source = source
+	d.outSink = outSink
+	// keep public Source for backwards compatibility
+	d.Source = source
 	d.configureDecoder()
 	if err := d.SetProtocolConfig(cfg); err != nil {
 		return nil, err
@@ -976,16 +981,19 @@ func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, error) {
 // NewConfiguredPktDecode creates an ETMv3 packet decoder with a typed config.
 func NewConfiguredPktDecode(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
 	_ = instID
-	return NewPktDecode(cfg, mem, instr)
+	// No explicit source/outSink provided for typed constructor.
+	return NewPktDecode(cfg, mem, instr, nil, nil)
 }
 
 // NewConfiguredPktDecodeWithDeps creates an ETMv3 decoder and injects dependencies.
 // source is the pull-based PacketReader to use.
 func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode, source ocsd.PacketReader[Packet]) (*PktDecode, error) {
-	dec, err := NewConfiguredPktDecode(instID, cfg, mem, instr)
+	_ = instID
+	dec, err := NewPktDecode(cfg, mem, instr, source, nil)
 	if err != nil {
 		return nil, err
 	}
+	// keep public Source set for compatibility
 	dec.Source = source
 	return dec, nil
 }
