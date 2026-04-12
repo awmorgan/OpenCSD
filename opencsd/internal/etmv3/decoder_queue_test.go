@@ -14,12 +14,12 @@ func TestDecoderQueueFlushFromLegacyList(t *testing.T) {
 
 	dec.flushOutputElements()
 
-	idx, _, out, err := dec.NextElement()
-	if err != nil {
-		t.Fatalf("NextElement failed: %v", err)
+	if len(dec.capturedOutput) != 1 {
+		t.Fatalf("expected 1 flushed element, got %d", len(dec.capturedOutput))
 	}
-	if idx != 11 {
-		t.Fatalf("index=%d, want 11", idx)
+	out := dec.capturedOutput[0]
+	if out.Index != 11 {
+		t.Fatalf("index=%d, want 11", out.Index)
 	}
 	if out.ElemType != ocsd.GenElemTimestamp {
 		t.Fatalf("elem type=%v, want %v", out.ElemType, ocsd.GenElemTimestamp)

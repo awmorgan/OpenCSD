@@ -2,7 +2,6 @@ package etmv3
 
 import (
 	"errors"
-	"io"
 	"testing"
 
 	"opencsd/internal/common"
@@ -125,16 +124,8 @@ func writeDecodedPacket(dec *PktDecode, indexSOP ocsd.TrcIndex, pktIn *Packet) e
 
 func drainDecodedElements(t *testing.T, dec *PktDecode) []ocsd.TraceElement {
 	t.Helper()
-	elems := make([]ocsd.TraceElement, 0)
-	for {
-		elem, err := dec.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			t.Fatalf("decoder next failed: %v", err)
-		}
-		elems = append(elems, *elem)
-	}
+	elems := make([]ocsd.TraceElement, len(dec.capturedOutput))
+	copy(elems, dec.capturedOutput)
+	dec.capturedOutput = dec.capturedOutput[:0]
 	return elems
 }

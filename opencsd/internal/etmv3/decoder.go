@@ -67,10 +67,8 @@ type PktDecode struct {
 	pendingNaccAdr uint64
 	pendingNaccMem ocsd.MemSpaceAcc
 
-	csID uint8
-
-	// pullBuf is used only to support the legacy NextElement() API.
-	pullBuf []ocsd.TraceElement
+	csID           uint8
+	capturedOutput []ocsd.TraceElement
 
 	// Internal source and output sink.
 	source  ocsd.PacketReader[Packet]
@@ -113,7 +111,7 @@ func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDec
 			if elem == nil {
 				return nil
 			}
-			d.pullBuf = append(d.pullBuf, cloneQueuedElem(elem))
+			d.capturedOutput = append(d.capturedOutput, cloneQueuedElem(elem))
 			return nil
 		}
 	}
@@ -201,49 +199,21 @@ func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 	return nil
 }
 
-// NextElement returns the next queued trace element or EOF if none available.
-// When a pull-based Source is set and no push sink is wired, it fetches the
-// next packet from Source, decodes it, and yields elements one at a time.
-func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
-	if d == nil {
-		return 0, 0, ocsd.TraceElement{}, io.EOF
-	}
-	if len(d.pullBuf) > 0 {
-		e := d.pullBuf[0]
-		d.pullBuf = d.pullBuf[1:]
-		return e.Index, e.TraceID, e, nil
-	}
-	if d.source == nil {
-		return 0, 0, ocsd.TraceElement{}, io.EOF
-	}
-
-	for len(d.pullBuf) == 0 && d.source != nil {
-		pkt, err := d.source.NextPacket()
-		if errors.Is(err, io.EOF) {
-			d.source = nil
-			_ = d.Close()
-			break
-		}
+// Next returns one decoded trace element at a time for pull-based consumers.
+func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
+	for len(d.capturedOutput) == 0 {
+		err := d.ProcessNext()
 		if errors.Is(err, ocsd.ErrWait) || errors.Is(err, ocsd.ErrInvalidParamVal) {
-			break
+			return nil, io.EOF
 		}
 		if err != nil {
-			d.source = nil
-			return 0, 0, ocsd.TraceElement{}, err
+			return nil, err
 		}
-		d.CurrPacketIn = &pkt
-		d.IndexCurrPkt = pkt.Index
-		if wErr := d.ProcessPacket(); wErr != nil {
-			return 0, 0, ocsd.TraceElement{}, wErr
-		}
-		d.flushOutputElements()
 	}
-	if len(d.pullBuf) == 0 {
-		return 0, 0, ocsd.TraceElement{}, io.EOF
-	}
-	e := d.pullBuf[0]
-	d.pullBuf = d.pullBuf[1:]
-	return e.Index, e.TraceID, e, nil
+
+	e := d.capturedOutput[0]
+	d.capturedOutput = d.capturedOutput[1:]
+	return &e, nil
 }
 
 // ProcessNext pulls the next packet from the bound source and immediately decodes it into the output sink.
@@ -254,6 +224,12 @@ func (d *PktDecode) ProcessNext() error {
 
 	pkt, err := d.source.NextPacket()
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			d.source = nil
+			_ = d.Close()
+			d.flushOutputElements()
+			return nil
+		}
 		return err
 	}
 
@@ -281,18 +257,6 @@ func cloneQueuedElem(elem *ocsd.TraceElement) ocsd.TraceElement {
 	return copyElem
 }
 
-// Next returns one decoded trace element at a time for pull-based consumers.
-func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
-	idx, traceID, elem, err := d.NextElement()
-	if err != nil {
-		return nil, err
-	}
-	e := elem
-	e.Index = idx
-	e.TraceID = traceID
-	return &e, nil
-}
-
 // putBackElement unreads an element to the front of the pending queue.
 func (d *PktDecode) flushOutputElements() {
 	for i := 0; i < d.outCount; i++ {
@@ -317,7 +281,6 @@ func (d *PktDecode) resetDecoder() {
 	d.waitISync = false
 	d.outCount = 0
 	d.pendCount = 0
-	d.pullBuf = d.pullBuf[:0]
 	d.pendingNacc = false
 	d.pendingNaccIdx = 0
 	d.pendingNaccAdr = 0
