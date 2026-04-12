@@ -140,10 +140,9 @@ func (p *PktProc) StatsAddBadSeqCount(count uint32) { p.Stats.BadSequenceErrs +=
 // StatsAddBadHdrCount adds to the bad-header-error counter.
 func (p *PktProc) StatsAddBadHdrCount(count uint32) { p.Stats.BadHeaderErrs += count }
 
-func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) error {
+func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) (Packet, error) {
 	pkt.Index = indexSOP
-	p.pendingPackets = append(p.pendingPackets, *pkt)
-	return nil
+	return *pkt, nil
 }
 
 func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, pData []byte) {
@@ -152,7 +151,7 @@ func (p *PktProc) outputRawPacketToMonitor(indexSOP ocsd.TrcIndex, pkt *Packet, 
 	}
 }
 
-func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pktData []byte) error {
+func (p *PktProc) outputOnAllInterfaces(indexSOP ocsd.TrcIndex, pkt *Packet, pktData []byte) (Packet, error) {
 	if len(pktData) > 0 {
 		p.outputRawPacketToMonitor(indexSOP, pkt, pktData)
 	}
@@ -164,7 +163,11 @@ func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if len(dataBlock) == 0 {
 		return 0, fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
 	}
-	return p.ProcessData(index, dataBlock)
+	processed, pkts, err := p.ProcessData(index, dataBlock)
+	if len(pkts) > 0 {
+		p.pendingPackets = append(p.pendingPackets, pkts...)
+	}
+	return processed, err
 }
 
 // NextPacket returns the next packet from the attached reader.
@@ -190,13 +193,16 @@ func (p *PktProc) NextPacket() (Packet, error) {
 
 	// process any bytes read
 	if n > 0 {
-		processed, procErr := p.ProcessData(p.packetReadIndex, buf[:n])
+		processed, pkts, procErr := p.ProcessData(p.packetReadIndex, buf[:n])
 		p.packetReadIndex += ocsd.TrcIndex(processed)
 		if procErr != nil {
 			return Packet{}, procErr
 		}
 		if processed != uint32(n) {
 			return Packet{}, fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, n)
+		}
+		if len(pkts) > 0 {
+			p.pendingPackets = append(p.pendingPackets, pkts...)
 		}
 		// if processing produced packets, return one
 		if len(p.pendingPackets) > 0 {
@@ -307,15 +313,19 @@ func (p *PktProc) OnFlush() error {
 func (p *PktProc) OnEOT() error {
 	if len(p.currPacketData) != 0 {
 		p.currPacket.Err = errIncompleteEOT
-		err := p.outputPacket()
+		pkt, err := p.outputPacket()
+		if err == nil {
+			p.pendingPackets = append(p.pendingPackets, pkt)
+		}
 		p.resetPacketState()
 		return err
 	}
 	return nil
 }
 
-func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, []Packet, error) {
 	var outErr error
+	produced := make([]Packet, 0)
 	p.bytesProcessed = 0
 	dataBlockSize := len(dataBlock)
 
@@ -354,13 +364,18 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 					p.currPacket.UpdateTimestamp(pkt.Timestamp, pkt.TsUpdateBits)
 				}
 				fastPkt := p.currPacket
-				outErr = p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+consumed])
+				outPkt, err2 := p.outputOnAllInterfaces(packetIndex, &fastPkt, dataBlock[p.bytesProcessed:p.bytesProcessed+consumed])
+				if err2 != nil {
+					outErr = err2
+				} else {
+					produced = append(produced, outPkt)
+				}
 				p.bytesProcessed += consumed
 				continue
 			case errors.Is(err, errDecodeNotImplemented):
 				// Fall back to legacy state-machine decode while migration is in progress.
 			default:
-				return uint32(p.bytesProcessed), err
+				return uint32(p.bytesProcessed), produced, err
 			}
 		}
 
@@ -380,7 +395,12 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 			p.bytesProcessed++
 			p.processPayloadByte(b)
 		case sendPkt:
-			outErr = p.outputPacket()
+			outPkt, err2 := p.outputPacket()
+			if err2 != nil {
+				outErr = err2
+			} else {
+				produced = append(produced, outPkt)
+			}
 		case procErr:
 			outErr = p.procErrReason
 			if outErr == nil {
@@ -396,7 +416,7 @@ func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, er
 		}
 	}
 
-	return uint32(p.bytesProcessed), outErr
+	return uint32(p.bytesProcessed), produced, outErr
 }
 
 // decodeNextPacket decodes one ETMv3 packet at offset without using PktProc state.
@@ -1132,26 +1152,26 @@ func (p *PktProc) processPayloadByte(by uint8) {
 	}
 }
 
-func (p *PktProc) outputPacket() error {
+func (p *PktProc) outputPacket() (Packet, error) {
 	if true { // assuming p.isInit=true conceptually
 		if !p.bSendPartPkt {
-			err := p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, p.currPacketData)
+			pkt, err := p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, p.currPacketData)
 			if p.streamSync {
 				p.processState = procHdr
 			} else {
 				p.processState = waitSync
 			}
 			p.currPacketData = p.currPacketData[:0]
-			return err
+			return pkt, err
 		}
-		err := p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, p.partPktData)
+		pkt, err := p.outputOnAllInterfaces(p.packetIndex, &p.currPacket, p.partPktData)
 		p.processState = p.postPartPktState
 		p.packetIndex += ocsd.TrcIndex(len(p.partPktData))
 		p.bSendPartPkt = false
 		p.currPacket.Type = p.postPartPktType
-		return err
+		return pkt, err
 	}
-	return nil
+	return Packet{}, nil
 }
 
 func (p *PktProc) setBytesPartPkt(numBytes int, nextState processState, nextType PktType) {
