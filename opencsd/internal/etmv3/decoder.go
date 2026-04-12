@@ -37,10 +37,6 @@ type etmv3DecodeCtx struct {
 	outElemsIdx     []ocsd.TrcIndex
 	pendOutElems    []ocsd.TraceElement
 	pendOutElemsIdx []ocsd.TrcIndex
-	pendingNacc     bool
-	pendingNaccIdx  ocsd.TrcIndex
-	pendingNaccAdr  uint64
-	pendingNaccMem  ocsd.MemSpaceAcc
 }
 
 type PktDecode struct {
@@ -64,6 +60,11 @@ type PktDecode struct {
 	peContext *ocsd.PEContext
 	// ctx holds per-decode-call speculation and output staging state.
 	ctx etmv3DecodeCtx
+
+	pendingNacc    bool
+	pendingNaccIdx ocsd.TrcIndex
+	pendingNaccAdr uint64
+	pendingNaccMem ocsd.MemSpaceAcc
 
 	csID uint8
 
@@ -292,6 +293,10 @@ func (d *PktDecode) resetDecoder() {
 	d.waitISync = false
 	d.ctx = etmv3DecodeCtx{}
 	d.pullBuf = d.pullBuf[:0]
+	d.pendingNacc = false
+	d.pendingNaccIdx = 0
+	d.pendingNaccAdr = 0
+	d.pendingNaccMem = ocsd.MemSpaceNone
 }
 
 func (d *PktDecode) nextDecodeState() decoderState {
@@ -307,7 +312,7 @@ func (d *PktDecode) OnReset() {
 }
 
 func (d *PktDecode) OnFlush() error {
-	if d.numOutElem() == 0 && len(d.ctx.pendOutElems) == 0 && !d.ctx.pendingNacc {
+	if d.numOutElem() == 0 && len(d.ctx.pendOutElems) == 0 && !d.pendingNacc {
 		return nil
 	}
 
@@ -430,25 +435,25 @@ func (d *PktDecode) getNextOpElemAt(index ocsd.TrcIndex) (*ocsd.TraceElement, er
 }
 
 func (d *PktDecode) queuePendingNacc(addr uint64, memSpace ocsd.MemSpaceAcc) {
-	d.ctx.pendingNacc = true
-	d.ctx.pendingNaccIdx = d.IndexCurrPkt
-	d.ctx.pendingNaccAdr = addr
-	d.ctx.pendingNaccMem = memSpace
+	d.pendingNacc = true
+	d.pendingNaccIdx = d.IndexCurrPkt
+	d.pendingNaccAdr = addr
+	d.pendingNaccMem = memSpace
 }
 
 func (d *PktDecode) clearPendingNacc() {
-	d.ctx.pendingNacc = false
-	d.ctx.pendingNaccIdx = 0
-	d.ctx.pendingNaccAdr = 0
-	d.ctx.pendingNaccMem = ocsd.MemSpaceNone
+	d.pendingNacc = false
+	d.pendingNaccIdx = 0
+	d.pendingNaccAdr = 0
+	d.pendingNaccMem = ocsd.MemSpaceNone
 }
 
 func (d *PktDecode) emitPendingNacc() error {
-	if !d.ctx.pendingNacc {
+	if !d.pendingNacc {
 		return nil
 	}
 
-	elem, err := d.getNextOpElemAt(d.ctx.pendingNaccIdx)
+	elem, err := d.getNextOpElemAt(d.pendingNaccIdx)
 	if err != nil {
 		d.unsyncInfo = ocsd.UnsyncBadPacket
 		d.resetDecoder()
@@ -456,8 +461,8 @@ func (d *PktDecode) emitPendingNacc() error {
 	}
 
 	elem.SetType(ocsd.GenElemAddrNacc)
-	elem.StartAddr = ocsd.VAddr(d.ctx.pendingNaccAdr)
-	elem.Payload.ExceptionNum = uint32(d.ctx.pendingNaccMem)
+	elem.StartAddr = ocsd.VAddr(d.pendingNaccAdr)
+	elem.Payload.ExceptionNum = uint32(d.pendingNaccMem)
 	d.clearPendingNacc()
 	return nil
 }

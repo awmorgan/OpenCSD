@@ -157,10 +157,10 @@ func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 	elem := dec.nextOutElem(3)
 	elem.SetType(ocsd.GenElemInstrRange)
 	dec.pendLastNOutElem(1)
-	dec.ctx.pendingNacc = true
-	dec.ctx.pendingNaccIdx = 3
-	dec.ctx.pendingNaccAdr = 0x3300
-	dec.ctx.pendingNaccMem = ocsd.MemSpaceN
+	dec.pendingNacc = true
+	dec.pendingNaccIdx = 3
+	dec.pendingNaccAdr = 0x3300
+	dec.pendingNaccMem = ocsd.MemSpaceN
 
 	pkt := &Packet{}
 	pkt.ResetState()
@@ -187,7 +187,7 @@ func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 	if elems[2].ElemType != ocsd.GenElemEvent {
 		t.Fatalf("expected third element to be GenElemEvent, got %v", elems[2].ElemType)
 	}
-	if dec.ctx.pendingNacc {
+	if dec.pendingNacc {
 		t.Fatal("expected pending NACC state to be cleared after emission")
 	}
 }
@@ -198,10 +198,10 @@ func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 	elem := dec.nextOutElem(5)
 	elem.SetType(ocsd.GenElemInstrRange)
 	dec.pendLastNOutElem(1)
-	dec.ctx.pendingNacc = true
-	dec.ctx.pendingNaccIdx = 5
-	dec.ctx.pendingNaccAdr = 0x5500
-	dec.ctx.pendingNaccMem = ocsd.MemSpaceN
+	dec.pendingNacc = true
+	dec.pendingNaccIdx = 5
+	dec.pendingNaccAdr = 0x5500
+	dec.pendingNaccMem = ocsd.MemSpaceN
 
 	pkt := &Packet{}
 	pkt.ResetState()
@@ -223,7 +223,7 @@ func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 	if len(elems) != 0 {
 		t.Fatalf("expected cancel to suppress speculative range and NACC, got %v", elems)
 	}
-	if dec.ctx.pendingNacc {
+	if dec.pendingNacc {
 		t.Fatal("expected pending NACC state to be cleared by exception cancel")
 	}
 	if dec.numOutElem() != 0 {
