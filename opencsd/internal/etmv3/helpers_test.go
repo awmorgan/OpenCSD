@@ -113,11 +113,14 @@ func writeDecodedPacket(dec *PktDecode, indexSOP ocsd.TrcIndex, pktIn *Packet) e
 	if pktIn == nil {
 		return ocsd.ErrInvalidParamVal
 	}
-	dec.CurrPacketIn = pktIn
-	dec.IndexCurrPkt = indexSOP
-	err := dec.ProcessPacket()
-	dec.flushOutputElements()
-	return err
+	packet := *pktIn
+	packet.Index = indexSOP
+
+	oldSource := dec.source
+	dec.source = &fakePacketReader{packet: packet}
+	defer func() { dec.source = oldSource }()
+
+	return dec.ProcessNext()
 }
 
 func drainDecodedElements(t *testing.T, dec *PktDecode) []ocsd.TraceElement {
