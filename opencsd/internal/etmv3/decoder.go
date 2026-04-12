@@ -21,6 +21,12 @@ func (d *PktDecode) pushOutputElement(index ocsd.TrcIndex, traceID uint8, elem *
 	if d == nil || elem == nil {
 		return nil
 	}
+	if d.outSink != nil {
+		outElem := cloneQueuedElem(elem)
+		outElem.Index = index
+		outElem.TraceID = traceID
+		return d.outSink(&outElem)
+	}
 	e := traceElemEvent{index, traceID, cloneQueuedElem(elem)}
 	d.elemBuf = append(d.elemBuf, e)
 	return nil
@@ -84,10 +90,7 @@ type PktDecode struct {
 	elemBuf    []traceElemEvent
 	elemBufPos int
 
-	// Source is the pull-based packet reader injected at construction time.
-	// Public Source is retained for backwards compatibility.
-	Source ocsd.PacketReader[Packet]
-	// Internal source and output sink (new, private).
+	// Internal source and output sink.
 	source  ocsd.PacketReader[Packet]
 	outSink ElementCallback
 }
@@ -122,8 +125,6 @@ func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDec
 	// wire-in optional dependencies
 	d.source = source
 	d.outSink = outSink
-	// keep public Source for backwards compatibility
-	d.Source = source
 	d.configureDecoder()
 	if err := d.SetProtocolConfig(cfg); err != nil {
 		return nil, err
@@ -213,12 +214,12 @@ func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 // When a pull-based Source is set and no push sink is wired, it fetches the
 // next packet from Source, decodes it, and yields elements one at a time.
 func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
-	for d.elemBufPos >= len(d.elemBuf) && d.Source != nil {
+	for d.elemBufPos >= len(d.elemBuf) && d.source != nil {
 		d.elemBuf = d.elemBuf[:0]
 		d.elemBufPos = 0
-		pkt, err := d.Source.NextPacket()
+		pkt, err := d.source.NextPacket()
 		if errors.Is(err, io.EOF) {
-			d.Source = nil
+			d.source = nil
 			_ = d.Close()
 			break
 		}
@@ -226,7 +227,7 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 			break
 		}
 		if err != nil {
-			d.Source = nil
+			d.source = nil
 			return 0, 0, ocsd.TraceElement{}, err
 		}
 		d.CurrPacketIn = &pkt

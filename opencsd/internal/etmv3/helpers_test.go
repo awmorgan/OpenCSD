@@ -59,7 +59,7 @@ func TestETMv3TypedConstructors(t *testing.T) {
 	if err != nil || proc == nil || dec == nil {
 		t.Fatalf("NewConfiguredPipeline failed: proc=%v dec=%v err=%v", proc, dec, err)
 	}
-	if dec.Source != proc {
+	if dec.source != proc {
 		t.Fatal("expected pipeline constructor to wire processor as decoder source")
 	}
 
