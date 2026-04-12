@@ -34,11 +34,6 @@ type PacketMonitor interface {
 	MonitorReset(indexSOP TrcIndex)
 }
 
-// GenElemProcessor is the input interface for generic trace elements.
-type GenElemProcessor interface {
-	TraceElemIn(indexSOP TrcIndex, trcChanID uint8, elem *TraceElement) error
-}
-
 // RawFrameProcessor is the input interface for raw frame bytes.
 type RawFrameProcessor interface {
 	WriteRawFrame(index TrcIndex, frameElem RawframeElem, data []byte, traceID uint8) error
@@ -46,3 +41,7 @@ type RawFrameProcessor interface {
 	ResetRawFrames() error
 	CloseRawFrames() error
 }
+
+// ElementCallback is the synchronous sink for decoded trace elements.
+// It is called immediately when an element is ready.
+type ElementCallback func(index TrcIndex, traceID uint8, elem *TraceElement) error
