@@ -17,6 +17,8 @@ type traceElemEvent struct {
 	elem    ocsd.TraceElement
 }
 
+type ElementCallback func(seq uint64, index ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error
+
 var queuedTraceElemSeq atomic.Uint64
 
 type SequencedTraceIterator interface {
@@ -60,6 +62,7 @@ type PktDecode struct {
 	lastElemIndex   ocsd.TrcIndex
 	sawActivity     bool
 	pullEOFDone     bool
+	OutSink         ElementCallback
 
 	// Source is the pull-based packet reader injected at construction time.
 	// May be nil when the push-based Write path is used instead.
@@ -80,7 +83,7 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 
 // NewConfiguredPktDecodeWithDeps creates an ETE decoder and injects dependencies.
 // source is the pull-based PacketReader to use; pass nil to use the push-based Write path.
-func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode, source ocsd.PacketReader[etmv4.Packet]) (*PktDecode, error) {
+func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode, source ocsd.PacketReader[etmv4.Packet], outSink ElementCallback) (*PktDecode, error) {
 	_ = instID
 	decoder, err := NewPktDecode(cfg)
 	if err != nil {
@@ -89,6 +92,7 @@ func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMe
 	decoder.inner.MemAccess = mem
 	decoder.inner.InstrDecode = instr
 	decoder.Source = source
+	decoder.OutSink = outSink
 	return decoder, nil
 }
 
@@ -100,7 +104,7 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*etmv4.Processor, *PktDecod
 
 	proc := NewProcessor(cfg)
 	// In the default pipeline, inject proc as the pull source.
-	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, nil, nil, proc)
+	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, nil, nil, proc, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -120,7 +124,7 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 	if mem == nil && instr == nil {
 		source = proc
 	}
-	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, source)
+	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, source, nil)
 	if err != nil {
 		return nil, nil, err
 	}
