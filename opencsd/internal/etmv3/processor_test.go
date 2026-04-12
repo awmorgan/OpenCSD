@@ -16,7 +16,6 @@ func newSyncedProc(config *Config) *PktProc {
 	syncData := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80}
 	proc.SetReader(bytes.NewReader(syncData))
 	_, _ = proc.NextPacket()
-	proc.collectPackets = true
 	return proc
 }
 
@@ -27,7 +26,6 @@ func newSyncedProc(config *Config) *PktProc {
 func newSyncedProcFromReader(config *Config, payload []byte) *PktProc {
 	proc := NewPktProc(nil)
 	_ = proc.SetProtocolConfig(config)
-	proc.collectPackets = true
 	full := append([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80}, payload...)
 	proc.SetReader(bytes.NewReader(full))
 	// consume initial ASync
@@ -312,12 +310,14 @@ func TestExtractNormDataValue_Size2(t *testing.T) {
 	config.RegCtrl = ctrlDataVal | ctrlDataAddr | ctrlDataOnly
 	proc := newSyncedProc(config)
 
-	proc.Write(6, []byte{0x0A, 0x34, 0x12})
-
+	_, pkts, err := proc.processData(6, []byte{0x0A, 0x34, 0x12})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	var pkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktNormData {
-			pkt = &proc.pendingPackets[i]
+	for i := range pkts {
+		if pkts[i].Type == PktNormData {
+			pkt = &pkts[i]
 			break
 		}
 	}
@@ -473,7 +473,6 @@ func TestExtractException_V7MExtendedNum(t *testing.T) {
 func TestWaitSync_13Zeros_Transition(t *testing.T) {
 	proc := NewPktProc(nil)
 	proc.SetProtocolConfig(&Config{})
-	proc.collectPackets = true
 
 	// Reset to force waitSync state.
 	proc.Reset(0)
@@ -506,7 +505,6 @@ func TestWaitSync_NonZeroFirst(t *testing.T) {
 	// Fresh proc (not yet synced) in waitSync
 	proc := NewPktProc(nil)
 	proc.SetProtocolConfig(&Config{})
-	proc.collectPackets = true
 
 	proc.SetReader(bytes.NewReader([]byte{0xFF, 0x00}))
 
@@ -931,19 +929,16 @@ func TestProcessDataFastPathTimestampLongTs64(t *testing.T) {
 	proc := newSyncedProc(config)
 	data := []byte{0x42, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x01}
 	consumed, pkts, err := proc.processData(6, data)
-	if len(pkts) > 0 {
-		proc.pendingPackets = append(proc.pendingPackets, pkts...)
-	}
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if consumed != uint32(len(data)) {
 		t.Fatalf("expected %d bytes consumed, got %d", len(data), consumed)
 	}
-	if len(proc.pendingPackets) == 0 {
+	if len(pkts) == 0 {
 		t.Fatalf("expected output packet")
 	}
-	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
+	pkt := pkts[len(pkts)-1]
 	if pkt.Type != PktTimestamp {
 		t.Fatalf("expected PktTimestamp, got %v", pkt.Type)
 	}
@@ -953,19 +948,16 @@ func TestProcessDataFastPathContextID(t *testing.T) {
 	config := &Config{RegCtrl: 2 << 14}
 	proc := newSyncedProc(config)
 	consumed, pkts, err := proc.processData(6, []byte{0x6E, 0x11, 0x22})
-	if len(pkts) > 0 {
-		proc.pendingPackets = append(proc.pendingPackets, pkts...)
-	}
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if consumed != 3 {
 		t.Fatalf("expected 3 bytes consumed, got %d", consumed)
 	}
-	if len(proc.pendingPackets) == 0 {
+	if len(pkts) == 0 {
 		t.Fatalf("expected output packet")
 	}
-	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
+	pkt := pkts[len(pkts)-1]
 	if pkt.Type != PktContextID || pkt.Context.CtxtID != 0x2211 || !pkt.Context.UpdatedC {
 		t.Fatalf("unexpected context packet output: type=%v ctxt=0x%X updated=%v", pkt.Type, pkt.Context.CtxtID, pkt.Context.UpdatedC)
 	}
@@ -975,31 +967,28 @@ func TestProcessDataFastPathStoreFailAndDataSuppressed(t *testing.T) {
 	config := &Config{RegCtrl: ctrlDataVal | ctrlDataAddr}
 	proc := newSyncedProc(config)
 
+	outPkts := make([]Packet, 0)
 	consumed, pkts, err := proc.processData(6, []byte{0x50})
-	if len(pkts) > 0 {
-		proc.pendingPackets = append(proc.pendingPackets, pkts...)
-	}
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	outPkts = append(outPkts, pkts...)
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed for store-fail, got %d", consumed)
 	}
-	if len(proc.pendingPackets) == 0 || proc.pendingPackets[len(proc.pendingPackets)-1].Type != PktStoreFail {
+	if len(outPkts) == 0 || outPkts[len(outPkts)-1].Type != PktStoreFail {
 		t.Fatalf("expected PktStoreFail output")
 	}
 
 	consumed, pkts, err = proc.processData(7, []byte{0x62})
-	if len(pkts) > 0 {
-		proc.pendingPackets = append(proc.pendingPackets, pkts...)
-	}
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	outPkts = append(outPkts, pkts...)
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed for data-suppressed, got %d", consumed)
 	}
-	if proc.pendingPackets[len(proc.pendingPackets)-1].Type != PktDataSuppressed {
+	if outPkts[len(outPkts)-1].Type != PktDataSuppressed {
 		t.Fatalf("expected PktDataSuppressed output")
 	}
 }
@@ -1007,19 +996,16 @@ func TestProcessDataFastPathStoreFailAndDataSuppressed(t *testing.T) {
 func TestProcessDataFastPathPHdr(t *testing.T) {
 	proc := newSyncedProc(&Config{})
 	consumed, pkts, err := proc.processData(6, []byte{0x84})
-	if len(pkts) > 0 {
-		proc.pendingPackets = append(proc.pendingPackets, pkts...)
-	}
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if consumed != 1 {
 		t.Fatalf("expected 1 byte consumed, got %d", consumed)
 	}
-	if len(proc.pendingPackets) == 0 {
+	if len(pkts) == 0 {
 		t.Fatalf("expected output packet")
 	}
-	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
+	pkt := pkts[len(pkts)-1]
 	if pkt.Type != PktPHdr {
 		t.Fatalf("expected PktPHdr, got %v", pkt.Type)
 	}
@@ -1030,21 +1016,17 @@ func TestProcessDataFastPathPHdr(t *testing.T) {
 
 func TestProcessDataFastPathISyncNoInstr(t *testing.T) {
 	proc := newSyncedProc(&Config{RegCtrl: ctrlDataOnly})
-	before := len(proc.pendingPackets)
 	consumed, pkts, err := proc.processData(6, []byte{0x08, 0x08})
-	if len(pkts) > 0 {
-		proc.pendingPackets = append(proc.pendingPackets, pkts...)
-	}
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if consumed != 2 {
 		t.Fatalf("expected 2 bytes consumed, got %d", consumed)
 	}
-	if len(proc.pendingPackets) <= before {
+	if len(pkts) == 0 {
 		t.Fatalf("expected output packet")
 	}
-	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
+	pkt := pkts[len(pkts)-1]
 	if pkt.Type != PktISync {
 		t.Fatalf("expected PktISync, got %v", pkt.Type)
 	}

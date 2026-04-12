@@ -59,8 +59,7 @@ type PktProc struct {
 	packetReadIndex ocsd.TrcIndex
 	packetReadEOF   bool
 	packetReadEOT   bool
-	pendingPackets  []Packet
-	collectPackets  bool
+	localPending    []Packet
 }
 
 func (p *PktProc) ApplyFlags(flags uint32) error { return nil }
@@ -97,7 +96,7 @@ func (p *PktProc) SetReader(reader io.Reader) {
 	p.packetReadIndex = 0
 	p.packetReadEOF = false
 	p.packetReadEOT = false
-	p.pendingPackets = p.pendingPackets[:0]
+	p.localPending = p.localPending[:0]
 	p.resetProcessorState()
 }
 
@@ -163,9 +162,11 @@ func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if len(dataBlock) == 0 {
 		return 0, fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
 	}
+	// Drive the state machine and return produced packets so legacy
+	// push-style callers can still consume via NextPacket().
 	processed, pkts, err := p.processData(index, dataBlock)
 	if len(pkts) > 0 {
-		p.pendingPackets = append(p.pendingPackets, pkts...)
+		p.localPending = append(p.localPending, pkts...)
 	}
 	return processed, err
 }
@@ -173,9 +174,9 @@ func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 // NextPacket returns the next packet from the attached reader.
 func (p *PktProc) NextPacket() (Packet, error) {
 	// if any packets already decoded, return the first
-	if len(p.pendingPackets) > 0 {
-		pkt := p.pendingPackets[0]
-		p.pendingPackets = p.pendingPackets[1:]
+	if len(p.localPending) > 0 {
+		pkt := p.localPending[0]
+		p.localPending = p.localPending[1:]
 		return pkt, nil
 	}
 
@@ -202,12 +203,12 @@ func (p *PktProc) NextPacket() (Packet, error) {
 			return Packet{}, fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, n)
 		}
 		if len(pkts) > 0 {
-			p.pendingPackets = append(p.pendingPackets, pkts...)
+			p.localPending = append(p.localPending, pkts...)
 		}
 		// if processing produced packets, return one
-		if len(p.pendingPackets) > 0 {
-			pkt := p.pendingPackets[0]
-			p.pendingPackets = p.pendingPackets[1:]
+		if len(p.localPending) > 0 {
+			pkt := p.localPending[0]
+			p.localPending = p.localPending[1:]
 			return pkt, nil
 		}
 	}
@@ -217,18 +218,19 @@ func (p *PktProc) NextPacket() (Packet, error) {
 		if errors.Is(err, io.EOF) {
 			// flush any final packet(s)
 			p.packetReadEOF = true
-			p.collectPackets = true
-			eotErr := p.OnEOT()
-			p.collectPackets = false
+			pkts, eotErr := p.OnEOT()
 			// mark end-of-trace delivered
 			p.packetReadEOT = true
 			if eotErr != nil {
 				return Packet{}, eotErr
 			}
 			// if OnEOT produced packets, return one
-			if len(p.pendingPackets) > 0 {
-				pkt := p.pendingPackets[0]
-				p.pendingPackets = p.pendingPackets[1:]
+			if len(pkts) > 0 {
+				p.localPending = append(p.localPending, pkts...)
+			}
+			if len(p.localPending) > 0 {
+				pkt := p.localPending[0]
+				p.localPending = p.localPending[1:]
 				return pkt, nil
 			}
 			return Packet{}, io.EOF
@@ -242,7 +244,11 @@ func (p *PktProc) NextPacket() (Packet, error) {
 
 // Close handles end-of-trace control without op multiplexing.
 func (p *PktProc) Close() error {
-	if err := p.OnEOT(); err != nil {
+	pkts, err := p.OnEOT()
+	if len(pkts) > 0 {
+		p.localPending = append(p.localPending, pkts...)
+	}
+	if err != nil {
 		return err
 	}
 	p.packetReadEOT = true
@@ -275,8 +281,7 @@ func (p *PktProc) resetProcessorState() {
 	p.currPacket.ResetState()
 	p.resetPacketState()
 	p.bSendPartPkt = false
-	p.pendingPackets = p.pendingPackets[:0]
-	p.collectPackets = false
+	p.localPending = p.localPending[:0]
 }
 
 func (p *PktProc) resetPacketState() {
@@ -310,17 +315,18 @@ func (p *PktProc) OnFlush() error {
 	return nil
 }
 
-func (p *PktProc) OnEOT() error {
+func (p *PktProc) OnEOT() ([]Packet, error) {
+	produced := make([]Packet, 0)
 	if len(p.currPacketData) != 0 {
 		p.currPacket.Err = errIncompleteEOT
 		pkt, err := p.outputPacket()
 		if err == nil {
-			p.pendingPackets = append(p.pendingPackets, pkt)
+			produced = append(produced, pkt)
 		}
 		p.resetPacketState()
-		return err
+		return produced, err
 	}
-	return nil
+	return produced, nil
 }
 
 func (p *PktProc) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, []Packet, error) {
