@@ -45,6 +45,11 @@ func (d *PktDecode) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *o
 	queued.TraceID = trcChanID
 
 	seq := queuedTraceElemSeq.Add(1)
+	if d.OutSink != nil {
+		if err := d.OutSink(seq, queueIndex, trcChanID, &queued); err != nil {
+			return err
+		}
+	}
 	d.pendingElements = append(d.pendingElements, traceElemEvent{
 		seq:     seq,
 		index:   queueIndex,
