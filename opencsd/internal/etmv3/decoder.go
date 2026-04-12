@@ -8,29 +8,8 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-type traceElemEvent struct {
-	index   ocsd.TrcIndex
-	traceID uint8
-	elem    ocsd.TraceElement
-}
-
 // ElementCallback is called for each output trace element when an output sink is set.
 type ElementCallback func(*ocsd.TraceElement) error
-
-func (d *PktDecode) pushOutputElement(index ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
-	if d == nil || elem == nil {
-		return nil
-	}
-	if d.outSink != nil {
-		outElem := cloneQueuedElem(elem)
-		outElem.Index = index
-		outElem.TraceID = traceID
-		return d.outSink(&outElem)
-	}
-	e := traceElemEvent{index, traceID, cloneQueuedElem(elem)}
-	d.elemBuf = append(d.elemBuf, e)
-	return nil
-}
 
 type decoderState int
 
@@ -86,9 +65,10 @@ type PktDecode struct {
 	// ctx holds per-decode-call speculation and output staging state.
 	ctx etmv3DecodeCtx
 
-	csID       uint8
-	elemBuf    []traceElemEvent
-	elemBufPos int
+	csID uint8
+
+	// pullBuf is used only to support the legacy NextElement() API.
+	pullBuf []ocsd.TraceElement
 
 	// Internal source and output sink.
 	source  ocsd.PacketReader[Packet]
@@ -124,7 +104,17 @@ func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDec
 	}
 	// wire-in optional dependencies
 	d.source = source
-	d.outSink = outSink
+	if outSink != nil {
+		d.outSink = outSink
+	} else {
+		d.outSink = func(elem *ocsd.TraceElement) error {
+			if elem == nil {
+				return nil
+			}
+			d.pullBuf = append(d.pullBuf, cloneQueuedElem(elem))
+			return nil
+		}
+	}
 	d.configureDecoder()
 
 	d.Config = cfg
@@ -149,12 +139,22 @@ func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDec
 
 // OutputTraceElement sends an element using IndexCurrPkt.
 func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error {
-	return d.pushOutputElement(d.IndexCurrPkt, traceID, elem)
+	if d == nil || elem == nil || d.outSink == nil {
+		return nil
+	}
+	elem.Index = d.IndexCurrPkt
+	elem.TraceID = traceID
+	return d.outSink(elem)
 }
 
 // OutputTraceElementIdx sends an element at an explicit index.
 func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
-	return d.pushOutputElement(idx, traceID, elem)
+	if d == nil || elem == nil || d.outSink == nil {
+		return nil
+	}
+	elem.Index = idx
+	elem.TraceID = traceID
+	return d.outSink(elem)
 }
 
 // AccessMemory reads target memory.
@@ -203,9 +203,19 @@ func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 // When a pull-based Source is set and no push sink is wired, it fetches the
 // next packet from Source, decodes it, and yields elements one at a time.
 func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
-	for d.elemBufPos >= len(d.elemBuf) && d.source != nil {
-		d.elemBuf = d.elemBuf[:0]
-		d.elemBufPos = 0
+	if d == nil {
+		return 0, 0, ocsd.TraceElement{}, io.EOF
+	}
+	if len(d.pullBuf) > 0 {
+		e := d.pullBuf[0]
+		d.pullBuf = d.pullBuf[1:]
+		return e.Index, e.TraceID, e, nil
+	}
+	if d.source == nil {
+		return 0, 0, ocsd.TraceElement{}, io.EOF
+	}
+
+	for len(d.pullBuf) == 0 && d.source != nil {
 		pkt, err := d.source.NextPacket()
 		if errors.Is(err, io.EOF) {
 			d.source = nil
@@ -226,14 +236,12 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 		}
 		d.flushOutputElements()
 	}
-	if d.elemBufPos >= len(d.elemBuf) {
-		d.elemBuf = d.elemBuf[:0]
-		d.elemBufPos = 0
+	if len(d.pullBuf) == 0 {
 		return 0, 0, ocsd.TraceElement{}, io.EOF
 	}
-	e := d.elemBuf[d.elemBufPos]
-	d.elemBufPos++
-	return e.index, e.traceID, e.elem, nil
+	e := d.pullBuf[0]
+	d.pullBuf = d.pullBuf[1:]
+	return e.Index, e.TraceID, e, nil
 }
 
 func cloneQueuedElem(elem *ocsd.TraceElement) ocsd.TraceElement {
@@ -265,7 +273,7 @@ func (d *PktDecode) flushOutputElements() {
 	for i := range d.ctx.outElems {
 		elem := cloneQueuedElem(&d.ctx.outElems[i])
 		elem.TraceID = traceID
-		_ = d.pushOutputElement(d.ctx.outElemsIdx[i], traceID, &elem)
+		_ = d.OutputTraceElementIdx(d.ctx.outElemsIdx[i], traceID, &elem)
 	}
 	d.ctx.outElems = d.ctx.outElems[:0]
 	d.ctx.outElemsIdx = d.ctx.outElemsIdx[:0]
@@ -283,8 +291,7 @@ func (d *PktDecode) resetDecoder() {
 	d.SentUnknown = false
 	d.waitISync = false
 	d.ctx = etmv3DecodeCtx{}
-	d.elemBuf = d.elemBuf[:0]
-	d.elemBufPos = 0
+	d.pullBuf = d.pullBuf[:0]
 }
 
 func (d *PktDecode) nextDecodeState() decoderState {
