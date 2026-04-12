@@ -281,6 +281,7 @@ func (d *PktDecode) resetDecoder() {
 	d.waitISync = false
 	d.outCount = 0
 	d.pendCount = 0
+	d.capturedOutput = d.capturedOutput[:0]
 	d.pendingNacc = false
 	d.pendingNaccIdx = 0
 	d.pendingNaccAdr = 0
