@@ -10,10 +10,13 @@ import (
 )
 
 func newSyncedProc(config *Config) *PktProc {
-	proc := NewPktProc(nil)
-	proc.SetProtocolConfig(config)
+	proc := NewPktProc(config)
+	// Instead of proc.Write, provide the sync bytes via a reader and
+	// consume the ASync packet to reach a synced state for tests.
+	syncData := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80}
+	proc.SetReader(bytes.NewReader(syncData))
+	_, _ = proc.NextPacket()
 	proc.collectPackets = true
-	proc.Write(0, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80})
 	return proc
 }
 
