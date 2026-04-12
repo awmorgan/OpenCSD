@@ -930,7 +930,7 @@ func TestProcessDataFastPathTimestampLongTs64(t *testing.T) {
 	config := &Config{RegCCER: ccerTs64Bit}
 	proc := newSyncedProc(config)
 	data := []byte{0x42, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x01}
-	consumed, pkts, err := proc.ProcessData(6, data)
+	consumed, pkts, err := proc.processData(6, data)
 	if len(pkts) > 0 {
 		proc.pendingPackets = append(proc.pendingPackets, pkts...)
 	}
@@ -952,7 +952,7 @@ func TestProcessDataFastPathTimestampLongTs64(t *testing.T) {
 func TestProcessDataFastPathContextID(t *testing.T) {
 	config := &Config{RegCtrl: 2 << 14}
 	proc := newSyncedProc(config)
-	consumed, pkts, err := proc.ProcessData(6, []byte{0x6E, 0x11, 0x22})
+	consumed, pkts, err := proc.processData(6, []byte{0x6E, 0x11, 0x22})
 	if len(pkts) > 0 {
 		proc.pendingPackets = append(proc.pendingPackets, pkts...)
 	}
@@ -975,7 +975,7 @@ func TestProcessDataFastPathStoreFailAndDataSuppressed(t *testing.T) {
 	config := &Config{RegCtrl: ctrlDataVal | ctrlDataAddr}
 	proc := newSyncedProc(config)
 
-	consumed, pkts, err := proc.ProcessData(6, []byte{0x50})
+	consumed, pkts, err := proc.processData(6, []byte{0x50})
 	if len(pkts) > 0 {
 		proc.pendingPackets = append(proc.pendingPackets, pkts...)
 	}
@@ -989,7 +989,7 @@ func TestProcessDataFastPathStoreFailAndDataSuppressed(t *testing.T) {
 		t.Fatalf("expected PktStoreFail output")
 	}
 
-	consumed, pkts, err = proc.ProcessData(7, []byte{0x62})
+	consumed, pkts, err = proc.processData(7, []byte{0x62})
 	if len(pkts) > 0 {
 		proc.pendingPackets = append(proc.pendingPackets, pkts...)
 	}
@@ -1006,7 +1006,7 @@ func TestProcessDataFastPathStoreFailAndDataSuppressed(t *testing.T) {
 
 func TestProcessDataFastPathPHdr(t *testing.T) {
 	proc := newSyncedProc(&Config{})
-	consumed, pkts, err := proc.ProcessData(6, []byte{0x84})
+	consumed, pkts, err := proc.processData(6, []byte{0x84})
 	if len(pkts) > 0 {
 		proc.pendingPackets = append(proc.pendingPackets, pkts...)
 	}
@@ -1031,7 +1031,7 @@ func TestProcessDataFastPathPHdr(t *testing.T) {
 func TestProcessDataFastPathISyncNoInstr(t *testing.T) {
 	proc := newSyncedProc(&Config{RegCtrl: ctrlDataOnly})
 	before := len(proc.pendingPackets)
-	consumed, pkts, err := proc.ProcessData(6, []byte{0x08, 0x08})
+	consumed, pkts, err := proc.processData(6, []byte{0x08, 0x08})
 	if len(pkts) > 0 {
 		proc.pendingPackets = append(proc.pendingPackets, pkts...)
 	}

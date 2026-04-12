@@ -163,7 +163,7 @@ func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if len(dataBlock) == 0 {
 		return 0, fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
 	}
-	processed, pkts, err := p.ProcessData(index, dataBlock)
+	processed, pkts, err := p.processData(index, dataBlock)
 	if len(pkts) > 0 {
 		p.pendingPackets = append(p.pendingPackets, pkts...)
 	}
@@ -193,7 +193,7 @@ func (p *PktProc) NextPacket() (Packet, error) {
 
 	// process any bytes read
 	if n > 0 {
-		processed, pkts, procErr := p.ProcessData(p.packetReadIndex, buf[:n])
+		processed, pkts, procErr := p.processData(p.packetReadIndex, buf[:n])
 		p.packetReadIndex += ocsd.TrcIndex(processed)
 		if procErr != nil {
 			return Packet{}, procErr
@@ -323,7 +323,7 @@ func (p *PktProc) OnEOT() error {
 	return nil
 }
 
-func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, []Packet, error) {
+func (p *PktProc) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, []Packet, error) {
 	var outErr error
 	produced := make([]Packet, 0)
 	p.bytesProcessed = 0
