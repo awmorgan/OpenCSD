@@ -30,13 +30,11 @@ var isyncOnReasonMap = [...]ocsd.TraceOnReason{
 
 // PktDecode implements the ETMv3 packet decoder converting packets to generic TraceElements
 // Ported from trc_pkt_decode_etmv3.cpp
-// etmv3DecodeCtx holds speculation and output staging state that is
-// logically local to a single packet-decode call.
-type etmv3DecodeCtx struct {
-	outElems        []ocsd.TraceElement
-	outElemsIdx     []ocsd.TrcIndex
-	pendOutElems    []ocsd.TraceElement
-	pendOutElemsIdx []ocsd.TrcIndex
+// Speculative decoding uses a tiny fixed-size element buffer for per-packet output staging.
+type traceElemEvent struct {
+	index   ocsd.TrcIndex
+	traceID uint8
+	elem    ocsd.TraceElement
 }
 
 type PktDecode struct {
@@ -58,8 +56,11 @@ type PktDecode struct {
 	waitISync   bool
 
 	peContext *ocsd.PEContext
-	// ctx holds per-decode-call speculation and output staging state.
-	ctx etmv3DecodeCtx
+
+	outBuf    [16]traceElemEvent
+	outCount  int
+	pendBuf   [16]traceElemEvent
+	pendCount int
 
 	pendingNacc    bool
 	pendingNaccIdx ocsd.TrcIndex
@@ -270,14 +271,13 @@ func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
 
 // putBackElement unreads an element to the front of the pending queue.
 func (d *PktDecode) flushOutputElements() {
-	traceID := d.csID
-	for i := range d.ctx.outElems {
-		elem := cloneQueuedElem(&d.ctx.outElems[i])
-		elem.TraceID = traceID
-		_ = d.OutputTraceElementIdx(d.ctx.outElemsIdx[i], traceID, &elem)
+	for i := 0; i < d.outCount; i++ {
+		queued := &d.outBuf[i]
+		elem := cloneQueuedElem(&queued.elem)
+		elem.TraceID = queued.traceID
+		_ = d.OutputTraceElementIdx(queued.index, queued.traceID, &elem)
 	}
-	d.ctx.outElems = d.ctx.outElems[:0]
-	d.ctx.outElemsIdx = d.ctx.outElemsIdx[:0]
+	d.outCount = 0
 }
 
 func (d *PktDecode) configureDecoder() {
@@ -291,7 +291,8 @@ func (d *PktDecode) resetDecoder() {
 	d.NeedAddr = true
 	d.SentUnknown = false
 	d.waitISync = false
-	d.ctx = etmv3DecodeCtx{}
+	d.outCount = 0
+	d.pendCount = 0
 	d.pullBuf = d.pullBuf[:0]
 	d.pendingNacc = false
 	d.pendingNaccIdx = 0
@@ -312,7 +313,7 @@ func (d *PktDecode) OnReset() {
 }
 
 func (d *PktDecode) OnFlush() error {
-	if d.numOutElem() == 0 && len(d.ctx.pendOutElems) == 0 && !d.pendingNacc {
+	if d.numOutElem() == 0 && d.pendCount == 0 && !d.pendingNacc {
 		return nil
 	}
 
@@ -1003,57 +1004,70 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 // --- ElemList replacements ---
 
 func (d *PktDecode) nextOutElem(index ocsd.TrcIndex) *ocsd.TraceElement {
-	var e ocsd.TraceElement
-	e.Init()
-	d.ctx.outElems = append(d.ctx.outElems, e)
-	d.ctx.outElemsIdx = append(d.ctx.outElemsIdx, index)
-	elem := &d.ctx.outElems[len(d.ctx.outElems)-1]
-	elem.TraceID = d.csID
-	return elem
+	if d.outCount >= len(d.outBuf) {
+		panic("etmv3: outBuf overflow")
+	}
+	e := &d.outBuf[d.outCount]
+	e.index = index
+	e.traceID = d.csID
+
+	// FIX: hard-zero the reused element to prevent state bleeding across packets.
+	e.elem = ocsd.TraceElement{}
+	e.elem.Init()
+	e.elem.TraceID = d.csID
+
+	d.outCount++
+	return &e.elem
 }
 
 func (d *PktDecode) pendLastNOutElem(n int) {
-	if n > 0 && n <= len(d.ctx.outElems) {
-		start := len(d.ctx.outElems) - n
-		// Always allocate a fresh backing array to keep pendOutElems and outElems distinct.
-		d.ctx.pendOutElems = make([]ocsd.TraceElement, n)
-		copy(d.ctx.pendOutElems, d.ctx.outElems[start:])
-		d.ctx.pendOutElemsIdx = make([]ocsd.TrcIndex, n)
-		copy(d.ctx.pendOutElemsIdx, d.ctx.outElemsIdx[start:])
-		d.ctx.outElems = d.ctx.outElems[:start]
-		d.ctx.outElemsIdx = d.ctx.outElemsIdx[:start]
+	if n > 0 && n <= d.outCount {
+		start := d.outCount - n
+		for i := range n {
+			d.pendBuf[i] = d.outBuf[start+i]
+		}
+		d.pendCount = n
+		d.outCount = start
 	}
 }
 
 func (d *PktDecode) commitAllPendOutElem() {
-	if len(d.ctx.pendOutElems) == 0 {
+	if d.pendCount == 0 {
 		return
 	}
-	// Extend pendOutElems with the current output elements, then swap so that
-	// outElems uses pendOutElems' backing array and pendOutElems gets outElems'
-	// old backing.  This keeps the two slice headers pointing at distinct arrays.
-	d.ctx.pendOutElems = append(d.ctx.pendOutElems, d.ctx.outElems...)
-	d.ctx.pendOutElemsIdx = append(d.ctx.pendOutElemsIdx, d.ctx.outElemsIdx...)
-	d.ctx.outElems, d.ctx.pendOutElems = d.ctx.pendOutElems, d.ctx.outElems[:0]
-	d.ctx.outElemsIdx, d.ctx.pendOutElemsIdx = d.ctx.pendOutElemsIdx, d.ctx.outElemsIdx[:0]
+	if d.outCount+d.pendCount > len(d.outBuf) {
+		panic("etmv3: outBuf overflow on commit")
+	}
+
+	if d.outCount > 0 {
+		for i := d.outCount - 1; i >= 0; i-- {
+			d.outBuf[i+d.pendCount] = d.outBuf[i]
+		}
+	}
+
+	for i := 0; i < d.pendCount; i++ {
+		d.outBuf[i] = d.pendBuf[i]
+	}
+
+	d.outCount += d.pendCount
+	d.pendCount = 0
 }
 
 func (d *PktDecode) cancelPendOutElem() {
-	d.ctx.pendOutElems = d.ctx.pendOutElems[:0]
-	d.ctx.pendOutElemsIdx = d.ctx.pendOutElemsIdx[:0]
+	d.pendCount = 0
 }
 
 func (d *PktDecode) outElemToSend() bool {
-	return len(d.ctx.outElems) > 0
+	return d.outCount > 0
 }
 
 func (d *PktDecode) numOutElem() int {
-	return len(d.ctx.outElems)
+	return d.outCount
 }
 
 func (d *PktDecode) outElemType(entryN int) ocsd.GenElemType {
-	if entryN >= 0 && entryN < len(d.ctx.outElems) {
-		return d.ctx.outElems[entryN].ElemType
+	if entryN >= 0 && entryN < d.outCount {
+		return d.outBuf[entryN].elem.ElemType
 	}
 	return ocsd.GenElemUnknown
 }
