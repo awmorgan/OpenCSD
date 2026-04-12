@@ -1,16 +1,9 @@
 package etmv3
 
-// proc_assertions_test.go – properly asserted tests for the ETMv3 packet processor.
-// Tests here verify correctness of:
-//   - extractExceptionData (processor-level)
-//   - extractDataAddress (5-byte address with big-endian flag)
-//   - extractDataValue (all size codes)
-//   - waitForSync edge cases
-//   - processPayloadByte edge cases (ASync extra zero, unexpected byte)
-//   - onISyncPacket V7M path
-
 import (
+	"bytes"
 	"errors"
+	"io"
 	"testing"
 
 	"opencsd/internal/ocsd"
@@ -24,6 +17,21 @@ func newSyncedProc(config *Config) *PktProc {
 	return proc
 }
 
+// newSyncedProcFromReader creates a proc configured for pull-mode testing
+// with an initial sync sequence prepended to the provided payload and
+// consumes the initial ASync packet so tests can call NextPacket() to
+// receive the first meaningful packet.
+func newSyncedProcFromReader(config *Config, payload []byte) *PktProc {
+	proc := NewPktProc(nil)
+	_ = proc.SetProtocolConfig(config)
+	proc.collectPackets = true
+	full := append([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80}, payload...)
+	proc.SetReader(bytes.NewReader(full))
+	// consume initial ASync
+	_, _ = proc.NextPacket()
+	return proc
+}
+
 // ---------------------------------------------------------------------------
 // extractExceptionData – via 1-byte header address (header 0x41)
 // ---------------------------------------------------------------------------
@@ -31,57 +39,39 @@ func newSyncedProc(config *Config) *PktProc {
 // TestExtractException_ExcepByteNoCancel: header 0x41 (branch, 1-byte addr, excep follows).
 // Exception byte 0x40: bits[7:6]=01, bit5=0 (no cancel), exNum=0, bit7=0 → last.
 func TestExtractException_ExcepByteNoCancel(t *testing.T) {
-	proc := newSyncedProc(&Config{})
-	// header 0x41: bit0=1 branch, bit6=1 excep, bit7=0 no MORE addr bytes (single byte addr via header)
-	// → onBranchAddress immediately from processHeaderByte, then sink gets the packet
-	// But extractExceptionData is called INSIDE extractBrAddrPkt via onBranchAddress.
-	// After the header, branchNeedsEx=true; extractExceptionData called but currPacketData=[0x41] only → loop 0 times.
-	// To pass an exception byte we need to use a multi-byte address approach.
-	// Use 5th-byte branchNeedsEx trigger:
-	// hdr=0x81, b1=0x82, b2=0x83, b3=0x84, b4=0x45 → 5th byte (0x45 & 0xC0)=0x40 → branchNeedsEx=true
-	// b5=0x40 (bit7=0 → packetDone; extractBrAddrPkt runs; then extractExceptionData: byte[5]=0x40)
-	// 0x40 & 0xC0 == 0x40 → exception byte: exNum=0, cancel=false
-	proc.Write(6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x40})
+	// Use pull-reader + NextPacket: prepend ASync and skip it
+	proc := newSyncedProcFromReader(&Config{}, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x40})
 
-	// Find the branch address packet
-	var brPkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktBranchAddress {
-			brPkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if brPkt == nil {
+	if pkt.Type != PktBranchAddress {
 		t.Fatal("expected PktBranchAddress packet")
 	}
-	if !brPkt.Exception.Present {
+	if !pkt.Exception.Present {
 		t.Error("exception should be present")
 	}
-	if brPkt.ExceptionCancel {
+	if pkt.ExceptionCancel {
 		t.Error("cancel should be false")
 	}
 }
 
 // TestExtractException_ExcepByteWithCancel: 5-byte addr, exception byte 0x60 → cancel=true.
 func TestExtractException_ExcepByteWithCancel(t *testing.T) {
-	proc := newSyncedProc(&Config{})
-	// 0x60: bits[7:6]=01, bit5=1 (cancel), exNum=0, bit7=0 → last
-	proc.Write(6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x60})
+	proc := newSyncedProcFromReader(&Config{}, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x60})
 
-	var brPkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktBranchAddress {
-			brPkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if brPkt == nil {
+	if pkt.Type != PktBranchAddress {
 		t.Fatal("expected PktBranchAddress packet")
 	}
-	if !brPkt.Exception.Present {
+	if !pkt.Exception.Present {
 		t.Error("exception should be present")
 	}
-	if !brPkt.ExceptionCancel {
+	if !pkt.ExceptionCancel {
 		t.Error("cancel should be true for byte 0x60")
 	}
 }
@@ -91,59 +81,42 @@ func TestExtractException_ExcepByteWithCancel(t *testing.T) {
 // Note: extractBrAddrPkt sets p.currPacket.Context.CurrAltIsa = false AFTER extractExceptionData,
 // so CurrAltIsa set in the context byte path will be overwritten. We just verify NS and Hyp.
 func TestExtractException_ContextByte(t *testing.T) {
-	proc := newSyncedProc(&Config{})
-	// After 5-byte addr, branchNeedsEx=true.
-	// Exception byte 0x80 indicates continuation; byte1 0x30 carries context flags:
-	// Hyp=(bit5)=1, NS from byte0 bit0=0.
-	proc.Write(6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x80, 0x30})
+	proc := newSyncedProcFromReader(&Config{}, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x80, 0x30})
 
-	var brPkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktBranchAddress {
-			brPkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if brPkt == nil {
+	if pkt.Type != PktBranchAddress {
 		t.Fatal("expected PktBranchAddress packet")
 	}
-	// The context byte sets NS and Hyp (visible in the packet context before extractBrAddrPkt overwrites)
-	// In practice: extractExceptionData runs first, sets the context fields,
-	// then extractBrAddrPkt sets CurrAltIsa=false in the non-altbranch else path.
-	if brPkt.Context.CurrNS {
+	if pkt.Context.CurrNS {
 		t.Error("CurrNS should be false (from exception byte0 bit0=0)")
 	}
-	if !brPkt.Context.CurrHyp {
+	if !pkt.Context.CurrHyp {
 		t.Error("CurrHyp should be true (byte1 bit5=1)")
 	}
-	// CurrAltIsa is overwritten to false by extractBrAddrPkt (non-altBranch path), so don't assert it
 }
 
 // TestExtractException_ExcepNumNonZero: exception byte with cancel + exNum bits set.
 // 0x7F = 0111 1111: bits[7:6]=01 → exception byte, bit5=1(cancel), bits[4:0]=0x1F → exNum=31
 func TestExtractException_ExcepNumNonZero(t *testing.T) {
-	proc := newSyncedProc(&Config{})
-	proc.Write(6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x7F})
+	proc := newSyncedProcFromReader(&Config{}, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x7F})
 
-	var brPkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktBranchAddress {
-			brPkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if brPkt == nil {
+	if pkt.Type != PktBranchAddress {
 		t.Fatal("expected PktBranchAddress packet")
 	}
-	// 0x7F = 0111 1111: bits[7:6]=01 → exception byte
-	// bit5=1 → cancel=true, bits[4:1]=1111=15 → exNum=15, bit0=1 → NS=true
-	if brPkt.Exception.Number != 15 {
-		t.Errorf("expected exNum=15, got %d", brPkt.Exception.Number)
+	if pkt.Exception.Number != 15 {
+		t.Errorf("expected exNum=15, got %d", pkt.Exception.Number)
 	}
-	if !brPkt.Context.CurrNS {
+	if !pkt.Context.CurrNS {
 		t.Error("expected NS=true (bit0 set in 0x7F)")
 	}
-	if !brPkt.ExceptionCancel {
+	if !pkt.ExceptionCancel {
 		t.Error("cancel should be true for byte 0x7F (bit5=1)")
 	}
 }
@@ -157,19 +130,13 @@ func TestExtractException_ExcepNumNonZero(t *testing.T) {
 func TestExtractDataValue_SizeCode1(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal
-	proc := newSyncedProc(config)
+	proc := newSyncedProcFromReader(config, []byte{0x24, 0xAB})
 
-	// OOO Data with size 1: header 0x24, then 1 data byte 0xAB
-	proc.Write(6, []byte{0x24, 0xAB})
-
-	var pkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktOOOData {
-			pkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if pkt == nil {
+	if pkt.Type != PktOOOData {
 		t.Fatal("expected PktOOOData packet")
 	}
 	if !pkt.Data.UpdateDVal {
@@ -185,18 +152,13 @@ func TestExtractDataValue_SizeCode1(t *testing.T) {
 func TestExtractDataValue_SizeCode2(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal
-	proc := newSyncedProc(config)
+	proc := newSyncedProcFromReader(config, []byte{0x28, 0x34, 0x12})
 
-	proc.Write(6, []byte{0x28, 0x34, 0x12}) // value: 0x1234
-
-	var pkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktOOOData {
-			pkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if pkt == nil {
+	if pkt.Type != PktOOOData {
 		t.Fatal("expected PktOOOData packet")
 	}
 	if pkt.Data.Value != 0x1234 {
@@ -209,18 +171,13 @@ func TestExtractDataValue_SizeCode2(t *testing.T) {
 func TestExtractDataValue_SizeCode3(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal
-	proc := newSyncedProc(config)
+	proc := newSyncedProcFromReader(config, []byte{0x2C, 0x78, 0x56, 0x34, 0x12})
 
-	proc.Write(6, []byte{0x2C, 0x78, 0x56, 0x34, 0x12}) // value: 0x12345678
-
-	var pkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktOOOData {
-			pkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if pkt == nil {
+	if pkt.Type != PktOOOData {
 		t.Fatal("expected PktOOOData packet")
 	}
 	if pkt.Data.Value != 0x12345678 {
@@ -233,18 +190,13 @@ func TestExtractDataValue_SizeCode3(t *testing.T) {
 func TestExtractDataValue_SizeCode0(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal
-	proc := newSyncedProc(config)
+	proc := newSyncedProcFromReader(config, []byte{0x20})
 
-	proc.Write(6, []byte{0x20}) // size 0 → sendPkt immediately
-
-	var pkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktOOOData {
-			pkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if pkt == nil {
+	if pkt.Type != PktOOOData {
 		t.Fatal("expected PktOOOData packet")
 	}
 	if pkt.Data.Value != 0 {
@@ -256,49 +208,17 @@ func TestExtractDataValue_SizeCode0(t *testing.T) {
 // extractDataAddress – 5-byte path (big-endian flag extraction)
 // ---------------------------------------------------------------------------
 
-// TestExtractDataAddress_5ByteBETrue: 5 address bytes where 5th byte has bit6=1 → BE=true.
-// OOOAddrPlc header 0x54 = 0101_0100:
-//
-//	(0x54 & 0xD3) = 0101_0000 & 1101_0011 = 0101_0000 = 0x50 → OOOAddrPlc path
-//	(0x54 & 0x20) = 0000_0000 = 0 → expectDataAddr=false... try 0x74
-//	0x74 = 0111_0100: (0x74 & 0xD3) = 0x50 → OOOAddrPlc
-//	(0x74 & 0x20) = 0010_0000 = 0x20 → expectDataAddr=true if IsDataAddrTrace
-//
-// But wait: (0x74 & 0x93) = 0111_0100 & 1001_0011 = 0001_0000 = 0x10 ≠ 0x00 so not OOOData
-// OOOAddrPlc check: (by & 0x03)==0x00 and (by & 0x93)==0x00 is OOOData. Otherwise falls through.
-// In the processHeaderByte: if (by & 0xD3)==0x50 → that's a specific check for OOOAddrPlc.
-// Let's use 0x54: (0x54 & 0xD3) = 0101_0100 & 1101_0011 = 0101_0000 = 0x50 → OOOAddrPlc!
-// (0x54 & 0x20) = 0001_0000 & 0010_0000 = 0 → expectDataAddr=false
-// We need expectDataAddr=true. Need bit5 set: 0x74 = 0111_0100.
-// (0x74 & 0xD3) = 0111_0100 & 1101_0011 = 0101_0000 = 0x50 → OOOAddrPlc!
-// OK so 0x74 IS OOOAddrPlc. The earlier test had the right header.
-// But the earlier test failed with "expected PktOOOAddrPlc packet".
-// The issue: IsDataTrace() must be true for OOOAddrPlc to not error.
-// We need `config.RegCtrl` to include some data trace flag.
 func TestExtractDataAddress_5ByteBETrue(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal | ctrlDataAddr // IsDataTrace=true, IsDataAddrTrace=true
-	proc := newSyncedProc(config)
+	proc := newSyncedProcFromReader(config, []byte{0x74, 0x80, 0x80, 0x80, 0x80, 0x40})
 
-	// 0x74: OOOAddrPlc with (0x74 & 0x20)=0x20 → expectDataAddr=true
-	// 5 addr bytes: 4x bit7=1 (continue), 5th=0x40 (bit7=0 stop, bit6=1 BE=true)
-	// NOTE: Final address byte must have bit7=0 (to trigger extraction in processPayloadByte)
-	// and bit6=1 (to set BE=true in extractDataAddress when nBits==35)
-	proc.Write(6, []byte{0x74, 0x80, 0x80, 0x80, 0x80, 0x40})
-
-	var pkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktOOOAddrPlc {
-			pkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if pkt == nil {
-		t.Logf("all packets received:")
-		for _, p := range proc.pendingPackets {
-			t.Logf("  type=%v err=%v", p.Type, p.Err)
-		}
-		t.Fatal("expected PktOOOAddrPlc packet")
+	if pkt.Type != PktOOOAddrPlc {
+		t.Fatalf("expected PktOOOAddrPlc packet, got %v", pkt.Type)
 	}
 	if !pkt.Data.UpdateAddr {
 		t.Error("UpdateAddr should be true")
@@ -315,20 +235,14 @@ func TestExtractDataAddress_5ByteBETrue(t *testing.T) {
 func TestExtractDataAddress_5ByteBEFalse(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal | ctrlDataAddr
-	proc := newSyncedProc(config)
+	proc := newSyncedProcFromReader(config, []byte{0x74, 0x80, 0x80, 0x80, 0x80, 0x00})
 
-	// OOOAddrPlc 0x74: 5 addr bytes, 5th=0x00 (bit7=0 stop, bit6=0 BE=false)
-	proc.Write(6, []byte{0x74, 0x80, 0x80, 0x80, 0x80, 0x00})
-
-	var pkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktOOOAddrPlc {
-			pkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if pkt == nil {
-		t.Fatal("expected PktOOOAddrPlc packet")
+	if pkt.Type != PktOOOAddrPlc {
+		t.Fatalf("expected PktOOOAddrPlc packet, got %v", pkt.Type)
 	}
 	if !pkt.Data.UpdateBE {
 		t.Error("UpdateBE should be true with 5-byte address")
@@ -343,19 +257,14 @@ func TestExtractDataAddress_5ByteBEFalse(t *testing.T) {
 func TestExtractDataAddress_SingleByte(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal | ctrlDataAddr
-	proc := newSyncedProc(config)
+	proc := newSyncedProcFromReader(config, []byte{0x74, 0x10})
 
-	proc.Write(6, []byte{0x74, 0x10})
-
-	var pkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktOOOAddrPlc {
-			pkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if pkt == nil {
-		t.Fatal("expected PktOOOAddrPlc packet")
+	if pkt.Type != PktOOOAddrPlc {
+		t.Fatalf("expected PktOOOAddrPlc packet, got %v", pkt.Type)
 	}
 	if !pkt.Data.UpdateAddr {
 		t.Error("UpdateAddr should be true")
@@ -379,19 +288,14 @@ func TestExtractDataAddress_SingleByte(t *testing.T) {
 func TestExtractNormDataValue_Size1(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = ctrlDataVal | ctrlDataAddr | ctrlDataOnly
-	proc := newSyncedProc(config)
+	proc := newSyncedProcFromReader(config, []byte{0x06, 0xCD})
 
-	proc.Write(6, []byte{0x06, 0xCD})
-
-	var pkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktNormData {
-			pkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if pkt == nil {
-		t.Fatal("expected PktNormData packet")
+	if pkt.Type != PktNormData {
+		t.Fatalf("expected PktNormData packet, got %v", pkt.Type)
 	}
 	if pkt.Data.Value != 0xCD {
 		t.Errorf("expected value 0xCD, got 0x%X", pkt.Data.Value)
@@ -428,16 +332,19 @@ func TestExtractNormDataValue_Size2(t *testing.T) {
 
 // TestASync_ExtraZero: ASync header 0x00 + 4 payload zeros (len=5, OK) + extra 0x00 (len=6 > 5 → error).
 func TestASync_ExtraZero(t *testing.T) {
-	proc := newSyncedProc(&Config{})
+	proc := newSyncedProcFromReader(&Config{}, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
-	// After sync, inject: 0x00 (ASync header) then 4 zeros (payload, len≤5 OK)
-	// then 0x00 again (len=6 > 5 → PktBadSequence + setBytesPartPkt error path)
-	proc.Write(6, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
-
-	// The bad ASync triggers PktBadSequence
+	// The bad ASync triggers PktBadSequence; consume decoded packets
 	found := false
-	for _, p := range proc.pendingPackets {
-		if p.Type == PktBadSequence || p.displayType() == PktBadSequence {
+	for {
+		pkt, err := proc.NextPacket()
+		if err != nil {
+			if errors.Is(err, ocsd.ErrWait) || errors.Is(err, io.EOF) {
+				break
+			}
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if pkt.Type == PktBadSequence || pkt.displayType() == PktBadSequence {
 			found = true
 			break
 		}
@@ -448,15 +355,19 @@ func TestASync_ExtraZero(t *testing.T) {
 // TestASync_UnexpectedByte: ASync header 0x00, then byte 0x42 (not 0x00 and not 0x80 at len==6).
 // This exercises the "unexpected byte in sequence" error path.
 func TestASync_UnexpectedByte(t *testing.T) {
-	proc := newSyncedProc(&Config{})
-
-	// 0x00 = ASync header, then 0x42 = unexpected byte (len=2, not 0x00 and not 0x80 at len==6)
-	proc.Write(6, []byte{0x00, 0x42})
+	proc := newSyncedProcFromReader(&Config{}, []byte{0x00, 0x42})
 
 	// Verify ASync or PktBadSequence was emitted (error path)
 	found := false
-	for _, p := range proc.pendingPackets {
-		if p.Type == PktASync || p.displayType() == PktBadSequence {
+	for {
+		pkt, err := proc.NextPacket()
+		if err != nil {
+			if errors.Is(err, ocsd.ErrWait) || errors.Is(err, io.EOF) {
+				break
+			}
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if pkt.Type == PktASync || pkt.displayType() == PktBadSequence {
 			found = true
 			break
 		}
@@ -473,115 +384,81 @@ func TestISync_V7M_Thumb2ISA(t *testing.T) {
 	config := &Config{}
 	config.ArchVer = ocsd.ArchV7
 	config.CoreProf = ocsd.ProfileCortexM // IsV7MArch=true
+	proc := newSyncedProcFromReader(config, []byte{0x08, 0x00, 0x01, 0x00, 0x00, 0x00})
 
-	proc := newSyncedProc(config)
-
-	// ISync: header=0x08, then info byte 0x01 (Reason=0, J=0, LSiP=0), then 4 addr bytes.
-	// We set the T bit (bit 0) in the first address byte to indicate Thumb state.
-	// [hdr][info][addr_0][addr_1][addr_2][addr_3]
-	proc.Write(6, []byte{0x08, 0x00, 0x01, 0x00, 0x00, 0x00})
-
-	var iSyncPkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktISync {
-			iSyncPkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if iSyncPkt == nil {
-		t.Fatal("expected PktISync packet")
+	if pkt.Type != PktISync {
+		t.Fatalf("expected PktISync packet, got %v", pkt.Type)
 	}
-	if iSyncPkt.CurrISA != ocsd.ISAThumb2 {
-		t.Errorf("expected ISAThumb2 for T=1, got %v", iSyncPkt.CurrISA)
+	if pkt.CurrISA != ocsd.ISAThumb2 {
+		t.Errorf("expected ISAThumb2 for T=1, got %v", pkt.CurrISA)
 	}
 	// Addr extracted without the T bit.
-	if iSyncPkt.Addr != 0 {
-		t.Errorf("expected Addr=0 when address bits [31:1] are 0, got 0x%X", iSyncPkt.Addr)
+	if pkt.Addr != 0 {
+		t.Errorf("expected Addr=0 when address bits [31:1] are 0, got 0x%X", pkt.Addr)
 	}
 }
 
 // TestISync_JazelleISA: infoByte bit 4 (J bit) = 1 → ISAJazelle.
 func TestISync_JazelleISA(t *testing.T) {
 	config := &Config{}
+	proc := newSyncedProcFromReader(config, []byte{0x08, 0x10, 0x00, 0x00, 0x00, 0x00})
 
-	proc := newSyncedProc(config)
-
-	// info byte 0x10 has bit 4 (J) set.
-	proc.Write(6, []byte{0x08, 0x10, 0x00, 0x00, 0x00, 0x00})
-
-	var iSyncPkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktISync {
-			iSyncPkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if iSyncPkt == nil {
-		t.Fatal("expected PktISync packet")
+	if pkt.Type != PktISync {
+		t.Fatalf("expected PktISync packet, got %v", pkt.Type)
 	}
-	if iSyncPkt.CurrISA != ocsd.ISAJazelle {
-		t.Errorf("expected ISAJazelle for J=1, got %v", iSyncPkt.CurrISA)
+	if pkt.CurrISA != ocsd.ISAJazelle {
+		t.Errorf("expected ISAJazelle for J=1, got %v", pkt.CurrISA)
 	}
 }
 
 // TestISync_LSiP_UsesBranchAddressDecode verifies LSIP compressed address uses
 // branch-address extraction semantics (matching C++), not plain LEB128 decoding.
 func TestISync_LSiP_UsesBranchAddressDecode(t *testing.T) {
-	proc := newSyncedProc(&Config{})
+	proc := newSyncedProcFromReader(&Config{}, []byte{0x08, 0x80, 0x00, 0x00, 0x00, 0x80, 0x03})
 
-	// ISync header(0x08), info byte with LSIP flag (0x80),
-	// 4-byte I-addr where final addr byte has bit7=1 to continue into LSIP bytes.
-	// Then LSIP byte(0x03) terminates LSIP sequence.
-	// For ARM ISA, extractBrAddrPkt decodes 0x03 to low bits 0x4 (not 0x3),
-	// overlaid onto the current instruction address.
-	proc.Write(6, []byte{0x08, 0x80, 0x00, 0x00, 0x00, 0x80, 0x03})
-
-	var iSyncPkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktISync {
-			iSyncPkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if iSyncPkt == nil {
+	if pkt.Type != PktISync {
 		t.Fatal("expected PktISync packet")
 	}
-	if !iSyncPkt.ISyncInfo.HasLSipAddr {
+	if !pkt.ISyncInfo.HasLSipAddr {
 		t.Fatal("expected ISync to include LSIP address")
 	}
-	if iSyncPkt.Data.Addr != 0x80000004 {
-		t.Errorf("expected LSIP-derived data addr 0x80000004, got 0x%X", iSyncPkt.Data.Addr)
+	if pkt.Data.Addr != 0x80000004 {
+		t.Errorf("expected LSIP-derived data addr 0x80000004, got 0x%X", pkt.Data.Addr)
 	}
 }
 
 // TestExtractException_V7MExtendedNum verifies 2-byte Cortex-M exception number decoding.
 func TestExtractException_V7MExtendedNum(t *testing.T) {
 	config := &Config{ArchVer: ocsd.ArchV7, CoreProf: ocsd.ProfileCortexM}
-	proc := newSyncedProc(config)
+	proc := newSyncedProcFromReader(config, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x92, 0x01})
 
-	// 5-byte branch with exception continuation, then:
-	// ex byte0 = 0x92 -> cont=1, ex low nibble=9
-	// ex byte1 = 0x01 -> ex high bits=1 => exception number 0x19 (Cortex-M IRQn class)
-	proc.Write(6, []byte{0x81, 0x82, 0x83, 0x84, 0x45, 0x92, 0x01})
-
-	var brPkt *Packet
-	for i := range proc.pendingPackets {
-		if proc.pendingPackets[i].Type == PktBranchAddress {
-			brPkt = &proc.pendingPackets[i]
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if brPkt == nil {
+	if pkt.Type != PktBranchAddress {
 		t.Fatal("expected PktBranchAddress packet")
 	}
-	if !brPkt.Exception.Present {
+	if !pkt.Exception.Present {
 		t.Fatal("expected exception to be present")
 	}
-	if brPkt.Exception.Number != 0x19 {
-		t.Fatalf("expected exception number 0x19, got 0x%X", brPkt.Exception.Number)
+	if pkt.Exception.Number != 0x19 {
+		t.Fatalf("expected exception number 0x19, got 0x%X", pkt.Exception.Number)
 	}
-	if brPkt.Exception.Type != ocsd.ExcpCMIRQn {
-		t.Fatalf("expected Cortex-M IRQn exception type, got %v", brPkt.Exception.Type)
+	if pkt.Exception.Type != ocsd.ExcpCMIRQn {
+		t.Fatalf("expected Cortex-M IRQn exception type, got %v", pkt.Exception.Type)
 	}
 }
 
@@ -591,24 +468,27 @@ func TestExtractException_V7MExtendedNum(t *testing.T) {
 
 // TestWaitSync_13Zeros_Transition: 13 zero bytes while bStartOfSync=true → setBytesPartPkt(8, waitSync, PktNotSync).
 func TestWaitSync_13Zeros_Transition(t *testing.T) {
-	proc := newSyncedProc(&Config{})
+	proc := NewPktProc(nil)
+	proc.SetProtocolConfig(&Config{})
+	proc.collectPackets = true
 
-	// After sync, we're in procHdr state.
-	// 0x00 header → ASync. Then add 11 more zeros (len becomes 13) → triggers extra-zeros path.
-	// Actually we need to be in waitSync state with bStartOfSync=true.
-	// Reset to force waitSync:
+	// Reset to force waitSync state.
 	proc.Reset(0)
 
-	// Now in waitSync, bStartOfSync=false, streamSync=false.
-	// First 0x00: len=0 → len==0 so bStartOfSync=true, currPacketData=[0x00]
-	// Then 12 more 0x00: len grows to 13 → triggers setBytesPartPkt(8, waitSync, PktNotSync)
+	// Now supply 13 zero bytes directly via reader (no initial ASync).
 	data := make([]byte, 13)
-	proc.Write(0, data)
+	proc.SetReader(bytes.NewReader(data))
 
-	// Should have emitted PktNotSync for the partial packet
 	found := false
-	for _, p := range proc.pendingPackets {
-		if p.Type == PktNotSync {
+	for {
+		pkt, err := proc.NextPacket()
+		if err != nil {
+			if errors.Is(err, ocsd.ErrWait) || errors.Is(err, io.EOF) {
+				break
+			}
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if pkt.Type == PktNotSync {
 			found = true
 			break
 		}
@@ -625,13 +505,18 @@ func TestWaitSync_NonZeroFirst(t *testing.T) {
 	proc.SetProtocolConfig(&Config{})
 	proc.collectPackets = true
 
-	// In waitSync, bStartOfSync=false, len=0:
-	// non-zero byte → currPacketData=[0xFF], then next 0x00 causes: len=1>0 → decrements bytesProcessed, PktNotSync
-	proc.Write(0, []byte{0xFF, 0x00})
+	proc.SetReader(bytes.NewReader([]byte{0xFF, 0x00}))
 
 	found := false
-	for _, p := range proc.pendingPackets {
-		if p.Type == PktNotSync {
+	for {
+		pkt, err := proc.NextPacket()
+		if err != nil {
+			if errors.Is(err, ocsd.ErrWait) || errors.Is(err, io.EOF) {
+				break
+			}
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if pkt.Type == PktNotSync {
 			found = true
 			break
 		}
@@ -650,21 +535,14 @@ func TestWaitSync_NonZeroFirst(t *testing.T) {
 func TestAltBranch_BranchNeedsExAlreadySet(t *testing.T) {
 	config := &Config{}
 	config.RegIDR = idrAltBranch | (4 << 4)
+	// Use reader: initial ASync + alt-branch payload
+	proc := newSyncedProcFromReader(config, []byte{0xC1, 0x00})
 
-	proc := newSyncedProc(config)
-
-	// AltBranch: header 0xC1 (bit0=1 branch, bit6=1 branchNeedsEx, bit7=1 more addr)
-	// Payload 0x00: bit7=0 → packetDone, and no extra exception data continuation required.
-	proc.Write(6, []byte{0xC1, 0x00})
-
-	found := false
-	for _, p := range proc.pendingPackets {
-		if p.Type == PktBranchAddress {
-			found = true
-			break
-		}
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	if !found {
+	if pkt.Type != PktBranchAddress {
 		t.Error("expected PktBranchAddress from altBranch with branchNeedsEx set")
 	}
 }
@@ -674,12 +552,11 @@ func TestAltBranch_BranchNeedsExAlreadySet(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestProcessor_VMID(t *testing.T) {
-	proc := newSyncedProc(&Config{})
-	proc.Write(6, []byte{0x3C, 0x55}) // VMID header 0x3C, value 0x55
-	if len(proc.pendingPackets) < 2 {
-		t.Fatal("expected packets")
+	proc := newSyncedProcFromReader(&Config{}, []byte{0x3C, 0x55})
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
 	}
-	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
 	if pkt.Type != PktVMID || pkt.Context.VMID != 0x55 {
 		t.Errorf("expected PktVMID with 0x55, got %v with 0x%X", pkt.Type, pkt.Context.VMID)
 	}
@@ -688,19 +565,22 @@ func TestProcessor_VMID(t *testing.T) {
 func TestProcessor_ContextID(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = 2 << 14 // 2 bytes context ID
-	proc := newSyncedProc(config)
-	proc.Write(6, []byte{0x6E, 0x11, 0x22})
-	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
+	proc := newSyncedProcFromReader(config, []byte{0x6E, 0x11, 0x22})
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
+	}
 	if pkt.Type != PktContextID || pkt.Context.CtxtID != 0x2211 {
 		t.Errorf("expected PktContextID with 0x2211, got 0x%X", pkt.Context.CtxtID)
 	}
 }
 
 func TestProcessor_Timestamp(t *testing.T) {
-	proc := newSyncedProc(&Config{})
-	// Timestamp: 0x42 header, bit7=0 stop byte 0x10
-	proc.Write(6, []byte{0x42, 0x10})
-	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
+	proc := newSyncedProcFromReader(&Config{}, []byte{0x42, 0x10})
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
+	}
 	if pkt.Type != PktTimestamp {
 		t.Errorf("expected PktTimestamp, got %v", pkt.Type)
 	}
@@ -719,19 +599,22 @@ func TestProcessor_ReservedHeader(t *testing.T) {
 func TestProcessor_ContextID_4Bytes(t *testing.T) {
 	config := &Config{}
 	config.RegCtrl = 3 << 14 // 4 bytes context ID
-	proc := newSyncedProc(config)
-	proc.Write(6, []byte{0x6E, 0x11, 0x22, 0x33, 0x44})
-	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
+	proc := newSyncedProcFromReader(config, []byte{0x6E, 0x11, 0x22, 0x33, 0x44})
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
+	}
 	if pkt.Context.CtxtID != 0x44332211 {
 		t.Errorf("expected 0x44332211, got 0x%X", pkt.Context.CtxtID)
 	}
 }
 
 func TestProcessor_Timestamp_MultiByte(t *testing.T) {
-	proc := newSyncedProc(&Config{})
-	// Timestamp: 0x42 header, bit7=1 continues, bit7=0 stops
-	proc.Write(6, []byte{0x42, 0x81, 0x82, 0x03})
-	pkt := proc.pendingPackets[len(proc.pendingPackets)-1]
+	proc := newSyncedProcFromReader(&Config{}, []byte{0x42, 0x81, 0x82, 0x03})
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
+	}
 	if pkt.Type != PktTimestamp || pkt.Timestamp == 0 {
 		t.Error("expected non-zero multip-byte timestamp")
 	}
