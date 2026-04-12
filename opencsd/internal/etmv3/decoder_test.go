@@ -10,11 +10,74 @@ package etmv3
 //   - OnEOT (GenElemEOTrace emission)
 
 import (
+	"io"
 	"testing"
 
 	"opencsd/internal/idec"
 	"opencsd/internal/ocsd"
 )
+
+type fakePacketReader struct {
+	packet Packet
+	called bool
+}
+
+func (r *fakePacketReader) NextPacket() (Packet, error) {
+	if r.called {
+		return Packet{}, io.EOF
+	}
+	r.called = true
+	return r.packet, nil
+}
+
+func TestPktDecodeProcessNext_EmitsCallbackForPacket(t *testing.T) {
+	cfg := &Config{}
+	mem := &mockMemAcc{failAfter: -1}
+	instr := idec.NewDecoder()
+
+	packet := Packet{}
+	packet.ResetState()
+	packet.Type = PktISync
+	packet.Index = 7
+	packet.Addr = 0x1000
+	packet.ISyncInfo.Reason = ocsd.ISyncReason(1)
+
+	reader := &fakePacketReader{packet: packet}
+	var received []ocsd.TraceElement
+	outSink := func(elem *ocsd.TraceElement) error {
+		if elem == nil {
+			return nil
+		}
+		copyElem := *elem
+		received = append(received, copyElem)
+		return nil
+	}
+
+	dec, err := NewPktDecode(cfg, mem, instr, reader, outSink)
+	if err != nil {
+		t.Fatalf("NewPktDecode failed: %v", err)
+	}
+
+	if err := dec.ProcessNext(); err != nil {
+		t.Fatalf("ProcessNext failed: %v", err)
+	}
+
+	if dec.CurrPacketIn == nil {
+		t.Fatal("expected CurrPacketIn to be set")
+	}
+	if dec.IndexCurrPkt != packet.Index {
+		t.Fatalf("expected IndexCurrPkt=%d, got %d", packet.Index, dec.IndexCurrPkt)
+	}
+	if len(received) == 0 {
+		t.Fatal("expected output sink to receive at least one element")
+	}
+	if received[0].ElemType != ocsd.GenElemNoSync {
+		t.Fatalf("expected first emitted element to be GenElemNoSync, got %v", received[0].ElemType)
+	}
+	if received[0].Index != packet.Index {
+		t.Fatalf("expected emitted element index %d, got %d", packet.Index, received[0].Index)
+	}
+}
 
 // ---------------------------------------------------------------------------
 // sendUnsyncPacket

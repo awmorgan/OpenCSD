@@ -246,6 +246,30 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 	return e.Index, e.TraceID, e, nil
 }
 
+// ProcessNext pulls the next packet from the bound source and immediately decodes it into the output sink.
+func (d *PktDecode) ProcessNext() error {
+	if d.source == nil {
+		return io.EOF
+	}
+
+	pkt, err := d.source.NextPacket()
+	if err != nil {
+		return err
+	}
+
+	d.CurrPacketIn = &pkt
+	d.IndexCurrPkt = pkt.Index
+
+	err = d.ProcessPacket()
+	if err != nil {
+		return err
+	}
+
+	d.flushOutputElements()
+
+	return nil
+}
+
 func cloneQueuedElem(elem *ocsd.TraceElement) ocsd.TraceElement {
 	if elem == nil {
 		return ocsd.TraceElement{}
