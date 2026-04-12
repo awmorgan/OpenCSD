@@ -169,57 +169,69 @@ func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 
 // NextPacket returns the next packet from the attached reader.
 func (p *PktProc) NextPacket() (Packet, error) {
-	for {
+	// if any packets already decoded, return the first
+	if len(p.pendingPackets) > 0 {
+		pkt := p.pendingPackets[0]
+		p.pendingPackets = p.pendingPackets[1:]
+		return pkt, nil
+	}
+
+	// no reader attached: either wait or EOF if already at EOT
+	if p.packetReader == nil {
+		if p.packetReadEOT {
+			return Packet{}, io.EOF
+		}
+		return Packet{}, ocsd.ErrWait
+	}
+
+	// read a chunk from the attached reader
+	buf := make([]byte, packetReaderChunkSize)
+	n, err := p.packetReader.Read(buf)
+
+	// process any bytes read
+	if n > 0 {
+		processed, procErr := p.ProcessData(p.packetReadIndex, buf[:n])
+		p.packetReadIndex += ocsd.TrcIndex(processed)
+		if procErr != nil {
+			return Packet{}, procErr
+		}
+		if processed != uint32(n) {
+			return Packet{}, fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, n)
+		}
+		// if processing produced packets, return one
 		if len(p.pendingPackets) > 0 {
 			pkt := p.pendingPackets[0]
 			p.pendingPackets = p.pendingPackets[1:]
 			return pkt, nil
 		}
-
-		if p.packetReader == nil {
-			if p.packetReadEOT {
-				return Packet{}, io.EOF
-			}
-			return Packet{}, ocsd.ErrWait
-		}
-
-		if p.packetReadEOF {
-			if p.packetReadEOT {
-				return Packet{}, io.EOF
-			}
-			p.collectPackets = true
-			err := p.OnEOT()
-			p.collectPackets = false
-			p.packetReadEOT = true
-			if err != nil {
-				return Packet{}, err
-			}
-			continue
-		}
-
-		buf := make([]byte, packetReaderChunkSize)
-		n, err := p.packetReader.Read(buf)
-		if n > 0 {
-			processed, procErr := p.ProcessData(p.packetReadIndex, buf[:n])
-			p.packetReadIndex += ocsd.TrcIndex(processed)
-			if procErr != nil {
-				return Packet{}, procErr
-			}
-			if processed != uint32(n) {
-				return Packet{}, fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, n)
-			}
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				p.packetReadEOF = true
-				continue
-			}
-			return Packet{}, err
-		}
-		if n == 0 {
-			return Packet{}, io.ErrNoProgress
-		}
 	}
+
+	// handle read error (including EOF)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			// flush any final packet(s)
+			p.packetReadEOF = true
+			p.collectPackets = true
+			eotErr := p.OnEOT()
+			p.collectPackets = false
+			// mark end-of-trace delivered
+			p.packetReadEOT = true
+			if eotErr != nil {
+				return Packet{}, eotErr
+			}
+			// if OnEOT produced packets, return one
+			if len(p.pendingPackets) > 0 {
+				pkt := p.pendingPackets[0]
+				p.pendingPackets = p.pendingPackets[1:]
+				return pkt, nil
+			}
+			return Packet{}, io.EOF
+		}
+		return Packet{}, err
+	}
+
+	// no progress made - avoid spinning forever
+	return Packet{}, ocsd.ErrWait
 }
 
 // Close handles end-of-trace control without op multiplexing.
