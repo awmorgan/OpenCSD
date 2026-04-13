@@ -233,6 +233,8 @@ func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) error
 	if p.pktOut != nil {
 		return p.pktOut.Write(indexSOP, pkt)
 	}
+	// Bridge push-to-pull
+	p.packetReaderBuf = append(p.packetReaderBuf, *pkt)
 	return nil
 }
 

@@ -2232,6 +2232,10 @@ func (p *Processor) outputPacket(pkt *TracePacket, rawData []byte) error {
 		return nil
 	}
 	if p.pktOut == nil {
+		// Bridge push-to-pull
+		queuedPkt := *pkt
+		queuedPkt.Index = p.packetIndex
+		p.pendingPackets = append(p.pendingPackets, queuedPkt)
 		return nil
 	}
 	pktCopy := *pkt
