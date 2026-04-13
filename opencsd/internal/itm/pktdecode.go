@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 
 	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
@@ -289,6 +290,25 @@ func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
 	e.Index = idx
 	e.TraceID = traceID
 	return &e, nil
+}
+
+// Elements provides a standard Go 1.23 iterator over the trace elements.
+// It wraps the legacy pull-based Next() method.
+func (d *PktDecode) Elements() iter.Seq2[*ocsd.TraceElement, error] {
+	return func(yield func(*ocsd.TraceElement, error) bool) {
+		for {
+			elem, err := d.Next()
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					yield(nil, err)
+				}
+				return
+			}
+			if !yield(elem, nil) {
+				return
+			}
+		}
+	}
 }
 
 func cloneQueuedElem(elem *ocsd.TraceElement) ocsd.TraceElement {
