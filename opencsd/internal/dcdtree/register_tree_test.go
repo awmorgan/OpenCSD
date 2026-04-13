@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"iter"
 	"testing"
 
 	"opencsd/internal/ocsd"
@@ -45,6 +46,10 @@ func (f *fakeControlDecoder) Next() (*ocsd.TraceElement, error) {
 	return nil, io.EOF
 }
 
+func (f *fakeControlDecoder) Elements() iter.Seq2[*ocsd.TraceElement, error] {
+	return func(yield func(*ocsd.TraceElement, error) bool) {}
+}
+
 type fakeControlProcessor struct {
 	closeCalls int
 	flushCalls int
@@ -78,6 +83,11 @@ type fakeIterator struct{}
 
 func (f *fakeIterator) Next() (*ocsd.TraceElement, error) {
 	return nil, io.EOF
+}
+
+// Elements returns an empty iterator, mimicking an empty io.EOF sequence.
+func (f *fakeIterator) Elements() iter.Seq2[*ocsd.TraceElement, error] {
+	return func(yield func(*ocsd.TraceElement, error) bool) {}
 }
 
 func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
