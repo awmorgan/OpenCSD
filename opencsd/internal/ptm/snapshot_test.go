@@ -292,18 +292,18 @@ func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericEl
 	if tree == nil || printer == nil {
 		return nil
 	}
-	for {
-		elem, err := tree.Next()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
+	for elem, err := range tree.Elements() {
 		if err != nil {
+			if errors.Is(err, ocsd.ErrWait) {
+				break
+			}
 			return err
 		}
 		if printErr := printer.PrintElement(elem); printErr != nil && !ocsd.IsDataWaitErr(printErr) {
 			return printErr
 		}
 	}
+	return nil
 }
 
 func sanitizePPL(s string, traceIDs []string) string {
