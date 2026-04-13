@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"opencsd/internal/common"
 	"opencsd/internal/demux"
 
@@ -280,6 +281,27 @@ func (dt *DecodeTree) ForEachElement(fn func(csID uint8, elem *DecodeTreeElement
 	for _, csID := range dt.sortedElementIDs() {
 		elem := dt.decodeElements[csID]
 		fn(csID, elem)
+	}
+}
+
+// Elements provides a standard Go 1.23 iterator over the trace elements.
+// It wraps the legacy pull-based Next() method.
+func (dt *DecodeTree) Elements() iter.Seq2[*ocsd.TraceElement, error] {
+	return func(yield func(*ocsd.TraceElement, error) bool) {
+		for {
+			elem, err := dt.Next()
+			if err != nil {
+				// Don't yield EOF as an error, it just means iteration is done
+				if !errors.Is(err, io.EOF) {
+					yield(nil, err)
+				}
+				return
+			}
+			// Yield the element. If the consumer breaks the loop, yield returns false
+			if !yield(elem, nil) {
+				return
+			}
+		}
 	}
 }
 
