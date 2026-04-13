@@ -11,6 +11,7 @@ package etmv3
 
 import (
 	"io"
+	"iter"
 	"testing"
 
 	"opencsd/internal/idec"
@@ -28,6 +29,11 @@ func (r *fakePacketReader) NextPacket() (Packet, error) {
 	}
 	r.called = true
 	return r.packet, nil
+}
+
+// Packets returns an empty iterator when no packets are available.
+func (r *fakePacketReader) Packets() iter.Seq2[Packet, error] {
+	return func(yield func(Packet, error) bool) {}
 }
 
 func TestPktDecodeProcessNext_EmitsCallbackForPacket(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"iter"
 	"testing"
 
 	"opencsd/internal/etmv4"
@@ -45,6 +46,11 @@ func (r *stubPacketReader) NextPacket() (etmv4.Packet, error) {
 		return etmv4.Packet{}, err
 	}
 	return etmv4.Packet{}, io.EOF
+}
+
+// Packets returns an empty iterator when no packets are available.
+func (r *stubPacketReader) Packets() iter.Seq2[etmv4.Packet, error] {
+	return func(yield func(etmv4.Packet, error) bool) {}
 }
 
 func TestCreatePktProcAndDecode(t *testing.T) {

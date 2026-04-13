@@ -1,6 +1,9 @@
 package ocsd
 
-import "fmt"
+import (
+	"fmt"
+	"iter"
+)
 
 type MemAccessor func(address VAddr, memSpace MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32
 
@@ -21,6 +24,7 @@ type PacketProcessor[P any] interface {
 
 type PacketReader[T any] interface {
 	NextPacket() (T, error)
+	Packets() iter.Seq2[T, error]
 }
 
 type TraceElementReader interface {
