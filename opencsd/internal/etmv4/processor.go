@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 
 	"opencsd/internal/ocsd"
 )
@@ -184,6 +185,25 @@ func (p *Processor) NextPacket() (Packet, error) {
 		}
 		if n == 0 {
 			return Packet{}, io.ErrNoProgress
+		}
+	}
+}
+
+// Packets provides a standard Go 1.23 iterator over the trace packets.
+// It wraps the legacy pull-based NextPacket() method.
+func (p *Processor) Packets() iter.Seq2[Packet, error] {
+	return func(yield func(Packet, error) bool) {
+		for {
+			pkt, err := p.NextPacket()
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					yield(Packet{}, err)
+				}
+				return
+			}
+			if !yield(pkt, nil) {
+				return
+			}
 		}
 	}
 }

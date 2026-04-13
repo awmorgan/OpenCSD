@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"sync"
 
 	"opencsd/internal/ocsd"
@@ -292,6 +293,25 @@ func (p *PktProc) Reset(index ocsd.TrcIndex) error {
 		rawMon.MonitorReset(index)
 	}
 	return nil
+}
+
+// Packets provides a standard Go 1.23 iterator over the trace packets.
+// It wraps the legacy pull-based NextPacket() method.
+func (p *PktProc) Packets() iter.Seq2[Packet, error] {
+	return func(yield func(Packet, error) bool) {
+		for {
+			pkt, err := p.NextPacket()
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					yield(Packet{}, err)
+				}
+				return
+			}
+			if !yield(pkt, nil) {
+				return
+			}
+		}
+	}
 }
 
 func (p *PktProc) SetProtocolConfig(config *Config) error {
