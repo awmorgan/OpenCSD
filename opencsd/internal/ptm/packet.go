@@ -57,7 +57,8 @@ type Excep struct {
 
 // Packet represents a parsed PTM packet element.
 type Packet struct {
-	Type PktType
+	Index ocsd.TrcIndex
+	Type  PktType
 
 	CurrISA ocsd.ISA
 	PrevISA ocsd.ISA
