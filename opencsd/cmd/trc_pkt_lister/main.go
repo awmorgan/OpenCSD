@@ -572,7 +572,10 @@ func processInputFilePullReader(out io.Writer, tree *dcdtree.DecodeTree, in io.R
 }
 
 func processInputFilePullReaderBody(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
-	_ = findTraceDataReaderSetters(tree)
+	setters := findTraceDataReaderSetters(tree)
+	if len(setters) == 0 {
+		// fall through to existing shared pipeline
+	}
 	start := time.Now()
 	var traceIndex uint32
 	dataPathResp := ocsd.RespCont
