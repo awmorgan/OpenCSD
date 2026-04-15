@@ -204,9 +204,6 @@ func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
 	for len(d.capturedOutput) == 0 {
 		err := d.ProcessNext()
-		if errors.Is(err, ocsd.ErrWait) || errors.Is(err, ocsd.ErrInvalidParamVal) {
-			return nil, io.EOF
-		}
 		if err != nil {
 			return nil, err
 		}
