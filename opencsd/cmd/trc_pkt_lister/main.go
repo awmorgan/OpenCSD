@@ -585,11 +585,7 @@ func runSharedReaderPending(tree *dcdtree.DecodeTree, sink *filteredGenElemPrint
 			return pending, traceIndex, dataPathResp, dataPathErr
 		}
 
-		if used > 0 {
-			n := copy(pending, pending[used:])
-			pending = pending[:n]
-			traceIndex += used
-		}
+		pending, traceIndex = consumeSharedPendingChunk(pending, traceIndex, used)
 
 		if ocsd.DataRespIsFatal(dataPathResp) {
 			return pending, traceIndex, dataPathResp, dataPathErr
@@ -612,6 +608,15 @@ func runSharedReaderPending(tree *dcdtree.DecodeTree, sink *filteredGenElemPrint
 	}
 
 	return pending, traceIndex, dataPathResp, dataPathErr
+}
+
+func consumeSharedPendingChunk(pending []byte, traceIndex uint32, used uint32) ([]byte, uint32) {
+	if used > 0 {
+		n := copy(pending, pending[used:])
+		pending = pending[:n]
+		traceIndex += used
+	}
+	return pending, traceIndex
 }
 
 func drainSharedPendingOutput(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter) error {
