@@ -434,18 +434,7 @@ func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, i
 		}
 
 		if opts.dstreamFormat {
-			_, ferr := io.ReadFull(in, footer[:])
-			if ferr == nil && opts.outRawPacked {
-				fmt.Fprint(out, "DSTREAM footer [")
-				for _, b := range footer {
-					fmt.Fprintf(out, "0x%x ", b)
-				}
-				fmt.Fprintln(out, "]")
-			}
-			if ferr == io.EOF || ferr == io.ErrUnexpectedEOF {
-				break
-			}
-			if ferr != nil {
+			if err = readLegacyDStreamFooter(out, in, footer[:], opts); err != nil {
 				break
 			}
 		}
@@ -495,6 +484,21 @@ func reportProcessedInput(out io.Writer, traceIndex uint32, start time.Time, gen
 	if opts.profile {
 		genPrinter.PrintStats()
 	}
+}
+
+func readLegacyDStreamFooter(out io.Writer, in io.Reader, footer []byte, opts options) error {
+	_, ferr := io.ReadFull(in, footer)
+	if ferr == nil && opts.outRawPacked {
+		fmt.Fprint(out, "DSTREAM footer [")
+		for _, b := range footer {
+			fmt.Fprintf(out, "0x%x ", b)
+		}
+		fmt.Fprintln(out, "]")
+	}
+	if ferr == io.EOF || ferr == io.ErrUnexpectedEOF {
+		return ferr
+	}
+	return ferr
 }
 
 func processInputFilePull(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
