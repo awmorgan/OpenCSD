@@ -55,7 +55,7 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 	if err != nil {
 		return nil, nil, err
 	}
-	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, nil)
+	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, proc)
 	if err != nil {
 		return nil, nil, err
 	}
