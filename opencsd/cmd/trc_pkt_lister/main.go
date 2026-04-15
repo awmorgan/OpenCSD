@@ -346,7 +346,7 @@ func framedTailError(traceIndex uint32, pendingLen, align int) error {
 }
 
 func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
-	return processInputFileProducer(out, tree, fileName, sink, genPrinter, opts)
+	return processInputFilePush(out, tree, fileName, sink, genPrinter, opts)
 }
 
 func drainTreeElementsToSink(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter) error {
@@ -384,7 +384,7 @@ func drainTreeElementsToSink(tree *dcdtree.DecodeTree, sink *filteredGenElemPrin
 	return nil
 }
 
-func processInputFileProducer(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
+func processInputFilePush(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
 	file, err := os.Open(fileName)
 	if err != nil {
 		return fmt.Errorf("trace packet lister: error: unable to open trace buffer %s: %w", fileName, err)
