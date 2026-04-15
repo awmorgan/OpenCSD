@@ -183,11 +183,7 @@ func TestSTMEndToEndDecode(t *testing.T) {
 	}
 
 	elemCount := 0
-	for {
-		_, pullErr := dec.Next()
-		if errors.Is(pullErr, io.EOF) {
-			break
-		}
+	for _, pullErr := range dec.Elements() {
 		if pullErr != nil {
 			t.Fatalf("pull decode failed: %v", pullErr)
 		}
