@@ -476,7 +476,7 @@ func runSharedReaderLoop(out io.Writer, in io.Reader, buf []byte, footer []byte,
 
 func flushLegacyPendingTail(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool) ([]byte, uint32, ocsd.DatapathResp, error) {
 	if !ocsd.DataRespIsFatal(dataPathResp) && len(pending) > 0 && !isFramed {
-		pending, traceIndex, dataPathResp, dataPathErr = processInputFileLegacyPushReaderPending(tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
+		pending, traceIndex, dataPathResp, dataPathErr = runSharedReaderPending(tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
 	}
 	return pending, traceIndex, dataPathResp, dataPathErr
 }
@@ -507,7 +507,7 @@ func runSharedReaderIteration(out io.Writer, in io.Reader, buf []byte, footer []
 
 	if n > 0 {
 		pending = append(pending, buf[:n]...)
-		pending, traceIndex, dataPathResp, dataPathErr = processInputFileLegacyPushReaderPending(tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
+		pending, traceIndex, dataPathResp, dataPathErr = runSharedReaderPending(tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
 		if dataPathErr != nil || ocsd.DataRespIsFatal(dataPathResp) {
 			return pending, traceIndex, dataPathResp, dataPathErr, true, nil
 		}
@@ -562,7 +562,7 @@ func drainPreInputElements(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinte
 	return nil
 }
 
-func processInputFileLegacyPushReaderPending(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool) ([]byte, uint32, ocsd.DatapathResp, error) {
+func runSharedReaderPending(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool) ([]byte, uint32, ocsd.DatapathResp, error) {
 	for len(pending) > 0 && !ocsd.DataRespIsFatal(dataPathResp) {
 		sendLen := len(pending)
 		if isFramed {
