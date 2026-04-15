@@ -427,7 +427,7 @@ func runSharedReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Read
 		return err
 	}
 
-	pending, traceIndex, dataPathResp, dataPathErr = flushLegacyPendingTail(tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
+	pending, traceIndex, dataPathResp, dataPathErr = flushSharedPendingTail(tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
 
 	if err := validateLegacyReadState(pending, traceIndex, dataPathResp, dataPathErr, align, isFramed); err != nil {
 		return err
@@ -474,7 +474,7 @@ func runSharedReaderLoop(out io.Writer, in io.Reader, buf []byte, footer []byte,
 	return pending, traceIndex, dataPathResp, dataPathErr, nil
 }
 
-func flushLegacyPendingTail(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool) ([]byte, uint32, ocsd.DatapathResp, error) {
+func flushSharedPendingTail(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool) ([]byte, uint32, ocsd.DatapathResp, error) {
 	if !ocsd.DataRespIsFatal(dataPathResp) && len(pending) > 0 && !isFramed {
 		pending, traceIndex, dataPathResp, dataPathErr = runSharedReaderPending(tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
 	}
