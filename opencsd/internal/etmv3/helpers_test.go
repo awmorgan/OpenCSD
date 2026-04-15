@@ -119,7 +119,7 @@ func writeDecodedPacket(dec *PktDecode, indexSOP ocsd.TrcIndex, pktIn *Packet) e
 	dec.Source = &fakePacketReader{packet: packet}
 	defer func() { dec.Source = oldSource }()
 
-	return dec.ProcessNext()
+	return dec.processNext()
 }
 
 func drainDecodedElements(t *testing.T, dec *PktDecode) []ocsd.TraceElement {

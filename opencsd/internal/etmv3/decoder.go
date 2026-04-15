@@ -194,7 +194,7 @@ func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 // NextElement returns the next queued trace element or pulls from Source.
 func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
 	for len(d.pendingElements) == 0 {
-		err := d.ProcessNext()
+		err := d.processNext()
 		if err != nil {
 			return 0, 0, ocsd.TraceElement{}, err
 		}
@@ -217,8 +217,8 @@ func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
 	return &e, nil
 }
 
-// ProcessNext pulls the next packet from the bound source and immediately decodes it into the output sink.
-func (d *PktDecode) ProcessNext() error {
+// processNext pulls the next packet from the bound source and immediately decodes it into the output sink.
+func (d *PktDecode) processNext() error {
 	if d.Source == nil {
 		return io.EOF
 	}
@@ -237,7 +237,7 @@ func (d *PktDecode) ProcessNext() error {
 	d.CurrPacketIn = &pkt
 	d.IndexCurrPkt = pkt.Index
 
-	err = d.ProcessPacket()
+	err = d.processPacket()
 	if err != nil {
 		return err
 	}
@@ -358,7 +358,7 @@ func (d *PktDecode) OnEOT() error {
 	return nil
 }
 
-func (d *PktDecode) ProcessPacket() error {
+func (d *PktDecode) processPacket() error {
 	if d.Config == nil {
 		return ocsd.ErrNotInit
 	}

@@ -54,8 +54,8 @@ func TestPktDecodeProcessNext_EmitsCallbackForPacket(t *testing.T) {
 		t.Fatalf("NewPktDecode failed: %v", err)
 	}
 
-	if err := dec.ProcessNext(); err != nil {
-		t.Fatalf("ProcessNext failed: %v", err)
+	if err := dec.processNext(); err != nil {
+		t.Fatalf("processNext failed: %v", err)
 	}
 
 	if dec.CurrPacketIn == nil {
