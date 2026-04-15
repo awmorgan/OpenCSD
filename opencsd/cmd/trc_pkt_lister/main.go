@@ -380,7 +380,7 @@ func drainTreeElementsToSink(tree *dcdtree.DecodeTree, sink *filteredGenElemPrin
 	return retErr
 }
 
-func processInputFilePush(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
+func processInputFileLegacyPush(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
 	file, err := os.Open(fileName)
 	if err != nil {
 		return fmt.Errorf("trace packet lister: error: unable to open trace buffer %s: %w", fileName, err)
@@ -564,7 +564,7 @@ func processInputFilePush(out io.Writer, tree *dcdtree.DecodeTree, fileName stri
 }
 
 func processInputFilePull(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
-	return processInputFilePush(out, tree, fileName, sink, genPrinter, opts)
+	return processInputFileLegacyPush(out, tree, fileName, sink, genPrinter, opts)
 }
 
 func frameAlignment(tree *dcdtree.DecodeTree) int {
