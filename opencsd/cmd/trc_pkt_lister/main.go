@@ -412,8 +412,8 @@ func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, i
 	isFramed := tree.FrameDeformatter() != nil
 	var footer [8]byte
 
-	if err := drainTreeElementsToSink(tree, sink, genPrinter); err != nil {
-		return fmt.Errorf("trace packet lister: pre-data element drain error: %w", err)
+	if err := drainPreInputElements(tree, sink, genPrinter); err != nil {
+		return err
 	}
 
 	pushPending := func() {
@@ -580,6 +580,13 @@ func processInputFilePull(out io.Writer, tree *dcdtree.DecodeTree, fileName stri
 
 func processInputFilePullReader(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
 	return processInputFileLegacyPushReader(out, tree, in, sink, genPrinter, opts)
+}
+
+func drainPreInputElements(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter) error {
+	if err := drainTreeElementsToSink(tree, sink, genPrinter); err != nil {
+		return fmt.Errorf("trace packet lister: pre-data element drain error: %w", err)
+	}
+	return nil
 }
 
 func frameAlignment(tree *dcdtree.DecodeTree) int {
