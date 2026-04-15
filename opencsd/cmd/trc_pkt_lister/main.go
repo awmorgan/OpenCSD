@@ -416,12 +416,9 @@ func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, i
 		return err
 	}
 
-	for dataPathResp < ocsd.RespFatalNotInit {
-		var done bool
-		pending, traceIndex, dataPathResp, dataPathErr, done, err = processInputFileLegacyPushReaderIteration(out, in, buf, footer[:], opts, tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
-		if done || err != nil {
-			break
-		}
+	pending, traceIndex, dataPathResp, dataPathErr, err = processInputFileLegacyPushReaderLoop(out, in, buf, footer[:], opts, tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
+	if err != nil {
+		return err
 	}
 
 	if !ocsd.DataRespIsFatal(dataPathResp) && len(pending) > 0 && !isFramed {
@@ -479,6 +476,24 @@ func readLegacyDStreamFooter(out io.Writer, in io.Reader, footer []byte, opts op
 		return ferr
 	}
 	return ferr
+}
+
+func processInputFileLegacyPushReaderLoop(out io.Writer, in io.Reader, buf []byte, footer []byte, opts options, tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool) ([]byte, uint32, ocsd.DatapathResp, error, error) {
+	for dataPathResp < ocsd.RespFatalNotInit {
+		var done bool
+		var err error
+		pending, traceIndex, dataPathResp, dataPathErr, done, err = processInputFileLegacyPushReaderIteration(out, in, buf, footer, opts, tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
+		if done {
+			return pending, traceIndex, dataPathResp, dataPathErr, nil
+		}
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return pending, traceIndex, dataPathResp, dataPathErr, nil
+		}
+		if err != nil {
+			return pending, traceIndex, dataPathResp, dataPathErr, err
+		}
+	}
+	return pending, traceIndex, dataPathResp, dataPathErr, nil
 }
 
 func processInputFileLegacyPushReaderIteration(out io.Writer, in io.Reader, buf []byte, footer []byte, opts options, tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool) ([]byte, uint32, ocsd.DatapathResp, error, bool, error) {
