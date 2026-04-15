@@ -3,6 +3,8 @@ package itm
 import (
 	"fmt"
 	"strings"
+
+	"opencsd/internal/ocsd"
 )
 
 // PktType represents the ITM packet type.
@@ -42,7 +44,8 @@ const (
 
 // Packet represents an incoming ITM packet.
 type Packet struct {
-	Type PktType /**< ITM packet type */
+	Index ocsd.TrcIndex /**< packet trace index */
+	Type  PktType       /**< ITM packet type */
 	/**! Source ID uses:
 		 - SWIT: value of source channel [4:0],
 	     - DWT: value of discriminator   [4:0],

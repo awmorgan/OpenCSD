@@ -174,6 +174,7 @@ func (p *PktProc) StatsAddBadSeqCount(count uint32) { p.Stats.BadSequenceErrs +=
 func (p *PktProc) StatsAddBadHdrCount(count uint32) { p.Stats.BadHeaderErrs += count }
 
 func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) error {
+	pkt.Index = indexSOP
 	if p.collectPackets {
 		p.pendingPackets = append(p.pendingPackets, packetEvent{index: indexSOP, pkt: *pkt, emitDecoded: true})
 		return nil
@@ -262,6 +263,7 @@ func (p *PktProc) Close() error {
 	if err := p.OnEOT(); err != nil {
 		return err
 	}
+	p.packetReadEOT = true
 	if p.pktOut != nil {
 		if err := p.pktOut.Close(); err != nil && !errors.Is(err, ocsd.ErrWait) {
 			return err
@@ -350,7 +352,10 @@ func (p *PktProc) NextPacket() (Packet, error) {
 		}
 
 		if p.packetReader == nil {
-			return Packet{}, fmt.Errorf("%w: packet reader not configured", ocsd.ErrInvalidParamVal)
+			if p.packetReadEOT {
+				return Packet{}, io.EOF
+			}
+			return Packet{}, ocsd.ErrWait
 		}
 
 		if p.packetReadEOF {

@@ -270,7 +270,7 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 			}
 			return 0, 0, ocsd.TraceElement{}, err
 		}
-		if wErr := d.Write(0, &pkt); wErr != nil {
+		if wErr := d.Write(pkt.Index, &pkt); wErr != nil {
 			return 0, 0, ocsd.TraceElement{}, wErr
 		}
 	}
