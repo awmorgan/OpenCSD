@@ -580,7 +580,8 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	pkt.ISyncReason = ocsd.ISyncTraceEnable
 	pkt.Context.UpdatedC = true
 	pkt.Context.CtxtID = 0x42
-	dec.Write(0, pkt)
+	pkt.Index = 0
+	dec.processPacket(pkt)
 
 	// Atom: E (taken branch)
 	pkt2 := &Packet{}
@@ -588,7 +589,8 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	resp := ocsd.DataRespFromErr(dec.Write(1, pkt2))
+	pkt2.Index = 1
+	resp := ocsd.DataRespFromErr(dec.processPacket(pkt2))
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Atom E failed: %v", resp)
 	}
@@ -599,7 +601,8 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	pkt3.Type = PktAtom
 	pkt3.Atom.EnBits = 0x0
 	pkt3.Atom.Num = 1
-	dec.Write(2, pkt3)
+	pkt3.Index = 2
+	dec.processPacket(pkt3)
 
 	// Multiple atoms
 	pkt4 := &Packet{}
@@ -607,7 +610,8 @@ func TestDecoderAtomProcessing(t *testing.T) {
 	pkt4.Type = PktAtom
 	pkt4.Atom.EnBits = 0x5 // E, N, E
 	pkt4.Atom.Num = 3
-	dec.Write(3, pkt4)
+	pkt4.Index = 3
+	dec.processPacket(pkt4)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements from atom processing")
@@ -631,14 +635,16 @@ func TestDecoderWPUpdate(t *testing.T) {
 	pkt.AddrVal = 0x2000
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceEnable
-	dec.Write(0, pkt)
+	pkt.Index = 0
+	dec.processPacket(pkt)
 
 	// WP Update: set addr to exactly instrAddr+4 so traceToAddrIncl matches immediately
 	pkt2 := &Packet{}
 	pkt2.ResetState()
 	pkt2.Type = PktWPointUpdate
 	pkt2.AddrVal = 0x2000 // matches start addr-> currOpAddress == nextAddrMatch on first iter
-	dec.Write(1, pkt2)
+	pkt2.Index = 1
+	dec.processPacket(pkt2)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements from WP update")
@@ -662,7 +668,8 @@ func TestDecoderBranchWithAtomRange(t *testing.T) {
 	pkt.AddrVal = 0x1000
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceRestartAfterOverflow
-	dec.Write(0, pkt)
+	pkt.Index = 0
+	dec.processPacket(pkt)
 
 	// Branch without exception (exercises processAtomRange via processBranch)
 	pkt2 := &Packet{}
@@ -672,7 +679,8 @@ func TestDecoderBranchWithAtomRange(t *testing.T) {
 	pkt2.CurrISA = ocsd.ISAArm
 	pkt2.CCValid = true
 	pkt2.CycleCount = 5
-	dec.Write(1, pkt2)
+	pkt2.Index = 1
+	dec.processPacket(pkt2)
 
 	// Branch with exception
 	pkt3 := &Packet{}
@@ -684,7 +692,8 @@ func TestDecoderBranchWithAtomRange(t *testing.T) {
 	pkt3.AddrVal = 0x4000
 	pkt3.CCValid = true
 	pkt3.CycleCount = 10
-	dec.Write(2, pkt3)
+	pkt3.Index = 2
+	dec.processPacket(pkt3)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements")
@@ -708,7 +717,8 @@ func TestDecoderMemNacc(t *testing.T) {
 	pkt.AddrVal = 0x1000
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceEnable
-	dec.Write(0, pkt)
+	pkt.Index = 0
+	dec.processPacket(pkt)
 
 	// Atom -> will trigger traceInstrToWP -> memNaccPending on 2nd read
 	pkt2 := &Packet{}
@@ -716,7 +726,8 @@ func TestDecoderMemNacc(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	dec.Write(1, pkt2)
+	pkt2.Index = 1
+	dec.processPacket(pkt2)
 
 	// Branch -> checkPendingNacc will emit GenElemAddrNacc
 	pkt3 := &Packet{}
@@ -724,7 +735,8 @@ func TestDecoderMemNacc(t *testing.T) {
 	pkt3.Type = PktBranchAddress
 	pkt3.AddrVal = 0x5000
 	pkt3.CurrISA = ocsd.ISAArm
-	dec.Write(2, pkt3)
+	pkt3.Index = 2
+	dec.processPacket(pkt3)
 
 	// Check that we got nacc element
 	if len(drainDecodedElements(t, dec)) == 0 {
@@ -750,7 +762,8 @@ func TestDecoderMemNaccSecure(t *testing.T) {
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceEnable
 	pkt.Context.CurrNS = false // secure
-	dec.Write(0, pkt)
+	pkt.Index = 0
+	dec.processPacket(pkt)
 
 	// Atom -> memNacc in secure context
 	pkt2 := &Packet{}
@@ -758,7 +771,8 @@ func TestDecoderMemNaccSecure(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	dec.Write(1, pkt2)
+	pkt2.Index = 1
+	dec.processPacket(pkt2)
 }
 
 func TestDecoderIndirectBranch(t *testing.T) {
@@ -779,7 +793,8 @@ func TestDecoderIndirectBranch(t *testing.T) {
 	pkt.AddrVal = 0x1000
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceEnable
-	dec.Write(0, pkt)
+	pkt.Index = 0
+	dec.processPacket(pkt)
 
 	// Atom with E -> indirect branch -> return stack pop
 	pkt2 := &Packet{}
@@ -787,7 +802,8 @@ func TestDecoderIndirectBranch(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	dec.Write(1, pkt2)
+	pkt2.Index = 1
+	dec.processPacket(pkt2)
 }
 
 func TestDecoderLinkBranch(t *testing.T) {
@@ -807,8 +823,8 @@ func TestDecoderLinkBranch(t *testing.T) {
 	pkt.Type = PktISync
 	pkt.AddrVal = 0x1000
 	pkt.CurrISA = ocsd.ISAArm
-	pkt.ISyncReason = ocsd.ISyncTraceEnable
-	dec.Write(0, pkt)
+	pkt.Index = 0
+	dec.processPacket(pkt)
 
 	// Branch E with IsLink -> push to return stack
 	pkt2 := &Packet{}
@@ -816,7 +832,8 @@ func TestDecoderLinkBranch(t *testing.T) {
 	pkt2.Type = PktBranchAddress
 	pkt2.AddrVal = 0x5000
 	pkt2.CurrISA = ocsd.ISAArm
-	dec.Write(1, pkt2)
+	pkt2.Index = 1
+	dec.processPacket(pkt2)
 }
 
 func TestDecoderContProcess(t *testing.T) {
@@ -832,65 +849,78 @@ func TestDecoderContProcess(t *testing.T) {
 	pkt := &Packet{}
 	pkt.ResetState()
 	pkt.Type = PktASync
-	dec.Write(0, pkt)
+	pkt.Index = 0
+	dec.processPacket(pkt)
 
 	// Non-ISync while waiting
 	pkt.ResetState()
 	pkt.Type = PktTrigger
-	dec.Write(1, pkt)
+	pkt.Index = 1
+	dec.processPacket(pkt)
 
 	// ISYNC to move to decodePkts
 	pkt.ResetState()
 	pkt.Type = PktISync
 	pkt.AddrVal = 0x1000
-	dec.Write(2, pkt)
+	pkt.Index = 2
+	dec.processPacket(pkt)
 
 	// BadSequence
 	pkt.ResetState()
 	pkt.Type = PktASync
 	pkt.Type = PktBadSequence
-	dec.Write(3, pkt)
+	pkt.Index = 3
+	dec.processPacket(pkt)
 
 	// ExceptionRet
 	pkt.ResetState()
 	pkt.Type = PktASync
-	dec.Write(4, pkt)
+	pkt.Index = 4
+	dec.processPacket(pkt)
 	pkt.ResetState()
 	pkt.Type = PktISync
 	pkt.AddrVal = 0x2000
-	dec.Write(5, pkt)
+	pkt.Index = 5
+	dec.processPacket(pkt)
 	pkt.ResetState()
 	pkt.Type = PktExceptionRet
-	dec.Write(6, pkt)
+	pkt.Index = 6
+	dec.processPacket(pkt)
 
 	// VMID no-update path (same value)
 	pkt.ResetState()
 	pkt.Type = PktVMID
 	pkt.Context.VMID = 0x10
-	dec.Write(7, pkt)
+	pkt.Index = 7
+	dec.processPacket(pkt)
 	// Same VMID again -> bUpdate=false
 	pkt.ResetState()
 	pkt.Type = PktVMID
 	pkt.Context.VMID = 0x10
-	dec.Write(8, pkt)
+	pkt.Index = 8
+	dec.processPacket(pkt)
 
 	// ContextID no-update path
 	pkt.ResetState()
 	pkt.Type = PktContextID
 	pkt.Context.CtxtID = 0x20
-	dec.Write(9, pkt)
+	pkt.Index = 9
+	dec.processPacket(pkt)
 	pkt.ResetState()
 	pkt.Type = PktContextID
 	pkt.Context.CtxtID = 0x20
-	dec.Write(10, pkt)
+	pkt.Index = 10
+	dec.processPacket(pkt)
 
 	// Ignored packet types
 	pkt.ResetState()
 	pkt.Type = PktNotSync
-	dec.Write(11, pkt)
+	pkt.Index = 11
+	dec.processPacket(pkt)
 	pkt.ResetState()
 	pkt.Type = PktIgnore
-	dec.Write(12, pkt)
+	pkt.Index = 12
+	dec.processPacket(pkt)
 
 	// ISync periodic (needIsync=false)
 	pkt.ResetState()
@@ -899,7 +929,8 @@ func TestDecoderContProcess(t *testing.T) {
 	pkt.AddrVal = 0x3000
 	pkt.Context.UpdatedV = true
 	pkt.Context.VMID = 0x99
-	dec.Write(13, pkt)
+	pkt.Index = 13
+	dec.processPacket(pkt)
 
 	dec.Close()
 }
@@ -1085,7 +1116,8 @@ func syncDec(dec *PktDecode, addr ocsd.VAddr) {
 	async := &Packet{}
 	async.ResetState()
 	async.Type = PktASync
-	dec.Write(0, async)
+	async.Index = 0
+	dec.processPacket(async)
 
 	isync := &Packet{}
 	isync.ResetState()
@@ -1093,7 +1125,8 @@ func syncDec(dec *PktDecode, addr ocsd.VAddr) {
 	isync.AddrVal = addr
 	isync.CurrISA = ocsd.ISAArm
 	isync.ISyncReason = ocsd.ISyncTraceEnable
-	dec.Write(1, isync)
+	isync.Index = 1
+	dec.processPacket(isync)
 }
 
 // newTestDec creates a PktDecode with mockMemAcc and real InstrDecode attached.
@@ -1154,7 +1187,8 @@ func TestDecoderAtomMultiStep(t *testing.T) {
 	pkt.Type = PktAtom
 	pkt.Atom.EnBits = 0x1 // E
 	pkt.Atom.Num = 1
-	resp := ocsd.DataRespFromErr(dec.Write(2, pkt))
+	pkt.Index = 2
+	resp := ocsd.DataRespFromErr(dec.processPacket(pkt))
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("multiStep atom failed: %v", resp)
 	}
@@ -1180,7 +1214,8 @@ func TestDecoderAtomRange_NoWPFound(t *testing.T) {
 	pkt.Type = PktAtom
 	pkt.Atom.EnBits = 0x1
 	pkt.Atom.Num = 1
-	dec.Write(2, pkt)
+	pkt.Index = 2
+	dec.processPacket(pkt)
 	dec.Close()
 }
 
@@ -1200,7 +1235,8 @@ func TestDecoderProcessBranch_ExceptionCCValid(t *testing.T) {
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.CCValid = true
 	pkt.CycleCount = 7
-	dec.Write(2, pkt)
+	pkt.Index = 2
+	dec.processPacket(pkt)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected elements from branch with exception")
@@ -1219,7 +1255,8 @@ func TestDecoderProcessWPUpdate_traceToAddrIncl(t *testing.T) {
 	pkt.ResetState()
 	pkt.Type = PktWPointUpdate
 	pkt.AddrVal = 0x3000
-	dec.Write(2, pkt)
+	pkt.Index = 2
+	dec.processPacket(pkt)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected elements from WP update")
@@ -1237,15 +1274,14 @@ func TestDecoderProcessAtom_MultiAtomLoop(t *testing.T) {
 	pkt.Type = PktAtom
 	pkt.Atom.EnBits = 0x5 // E,N,E,N
 	pkt.Atom.Num = 4
-	dec.Write(2, pkt)
+	pkt.Index = 2
+	dec.processPacket(pkt)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected trace elements from multi-atom loop")
 	}
 }
 
-// TestDecoderCheckPendingNacc_Nonsecure verifies checkPendingNacc emits AddrNacc
-// with MemSpaceEL1N when security level is non-secure (CurrNS=true).
 func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	config := NewConfig()
 	dec := mustNewPktDecode(t, config)
@@ -1258,7 +1294,8 @@ func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	async := &Packet{}
 	async.ResetState()
 	async.Type = PktASync
-	dec.Write(0, async)
+	async.Index = 0
+	dec.processPacket(async)
 
 	isync := &Packet{}
 	isync.ResetState()
@@ -1267,7 +1304,8 @@ func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	isync.CurrISA = ocsd.ISAArm
 	isync.ISyncReason = ocsd.ISyncTraceEnable
 	isync.Context.CurrNS = true // non-secure
-	dec.Write(1, isync)
+	isync.Index = 1
+	dec.processPacket(isync)
 
 	// Atom -> memNacc -> memNaccPending=true
 	pkt2 := &Packet{}
@@ -1275,7 +1313,8 @@ func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	dec.Write(2, pkt2)
+	pkt2.Index = 2
+	dec.processPacket(pkt2)
 
 	// Branch -> checkPendingNacc emits AddrNacc
 	pkt3 := &Packet{}
@@ -1283,7 +1322,8 @@ func TestDecoderCheckPendingNacc_Nonsecure(t *testing.T) {
 	pkt3.Type = PktBranchAddress
 	pkt3.AddrVal = 0x9000
 	pkt3.CurrISA = ocsd.ISAArm
-	dec.Write(3, pkt3)
+	pkt3.Index = 3
+	dec.processPacket(pkt3)
 }
 
 // TestDecoderContProcess_AllStates exercises all four contProcess state branches.
@@ -1301,7 +1341,8 @@ func TestDecoderContProcess_AllStates(t *testing.T) {
 		pkt.Type = PktAtom
 		pkt.Atom.EnBits = 0x3
 		pkt.Atom.Num = 2
-		dec.Write(2, pkt)
+		pkt.Index = 2
+		dec.processPacket(pkt)
 		dec.Flush()
 	}
 
@@ -1314,7 +1355,8 @@ func TestDecoderContProcess_AllStates(t *testing.T) {
 		pkt.ResetState()
 		pkt.Type = PktWPointUpdate
 		pkt.AddrVal = 0x1000
-		dec.Write(2, pkt)
+		pkt.Index = 2
+		dec.processPacket(pkt)
 		dec.Flush()
 	}
 
@@ -1328,7 +1370,8 @@ func TestDecoderContProcess_AllStates(t *testing.T) {
 		pkt.Type = PktBranchAddress
 		pkt.AddrVal = 0x9000
 		pkt.CurrISA = ocsd.ISAArm
-		dec.Write(2, pkt)
+		pkt.Index = 2
+		dec.processPacket(pkt)
 		dec.Flush()
 	}
 
@@ -1347,7 +1390,8 @@ func TestDecoderContProcess_AllStates(t *testing.T) {
 		pkt.ISyncReason = ocsd.ISyncTraceEnable
 		pkt.Context.UpdatedC = true
 		pkt.Context.CtxtID = 0xBEEF
-		dec.Write(2, pkt)
+		pkt.Index = 2
+		dec.processPacket(pkt)
 		dec.Flush()
 	}
 }
@@ -1362,7 +1406,8 @@ func TestDecoderDecodePacket_RemainingBranches(t *testing.T) {
 	pkt := &Packet{}
 	pkt.ResetState()
 	pkt.Type = PktASync
-	dec.Write(0, pkt)
+	pkt.Index = 0
+	dec.processPacket(pkt)
 
 	pkt.ResetState()
 	pkt.Type = PktISync
@@ -1371,7 +1416,8 @@ func TestDecoderDecodePacket_RemainingBranches(t *testing.T) {
 	pkt.ISyncReason = ocsd.ISyncDebugExit
 	pkt.CCValid = true
 	pkt.CycleCount = 3
-	dec.Write(1, pkt)
+	pkt.Index = 1
+	dec.processPacket(pkt)
 
 	// N Atom while peState is valid
 	pkt2 := &Packet{}
@@ -1379,7 +1425,8 @@ func TestDecoderDecodePacket_RemainingBranches(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x0 // N
 	pkt2.Atom.Num = 1
-	dec.Write(2, pkt2)
+	pkt2.Index = 2
+	dec.processPacket(pkt2)
 
 	// Timestamp with CCValid
 	pkt3 := &Packet{}
@@ -1388,14 +1435,16 @@ func TestDecoderDecodePacket_RemainingBranches(t *testing.T) {
 	pkt3.Timestamp = 0x1234
 	pkt3.CCValid = true
 	pkt3.CycleCount = 99
-	dec.Write(3, pkt3)
+	pkt3.Index = 3
+	dec.processPacket(pkt3)
 
 	// Ignored types in decodePacket
 	for _, tp := range []PktType{PktIncompleteEOT, PktASync, PktIgnore} {
 		p := &Packet{}
 		p.ResetState()
 		p.Type = tp
-		dec.Write(4, p)
+		p.Index = 4
+		dec.processPacket(p)
 	}
 
 	dec.Close()
@@ -1420,7 +1469,8 @@ func TestDecoderIndirectBranch_ActiveRetStack(t *testing.T) {
 	pkt.Type = PktAtom
 	pkt.Atom.EnBits = 0x1
 	pkt.Atom.Num = 1
-	dec.Write(2, pkt)
+	pkt.Index = 2
+	dec.processPacket(pkt)
 
 	// Resync
 	syncDec(dec, 0x2000)
@@ -1431,7 +1481,8 @@ func TestDecoderIndirectBranch_ActiveRetStack(t *testing.T) {
 	pkt2.Type = PktAtom
 	pkt2.Atom.EnBits = 0x1
 	pkt2.Atom.Num = 1
-	dec.Write(5, pkt2)
+	pkt2.Index = 5
+	dec.processPacket(pkt2)
 }
 
 // TestDecoderISyncPeriodic_WithVMIDUpdate exercises ISyncPeriodic with UpdatedV=true.
@@ -1448,7 +1499,8 @@ func TestDecoderISyncPeriodic_WithVMIDUpdate(t *testing.T) {
 	pkt.ISyncReason = ocsd.ISyncPeriodic
 	pkt.Context.UpdatedV = true
 	pkt.Context.VMID = 0xAB
-	dec.Write(2, pkt)
+	pkt.Index = 2
+	dec.processPacket(pkt)
 }
 
 // TestDecoderWaitISync_NonISyncPacket exercises the decodeWaitISync state where
@@ -1461,13 +1513,15 @@ func TestDecoderWaitISync_NonISyncPacket(t *testing.T) {
 	pkt := &Packet{}
 	pkt.ResetState()
 	pkt.Type = PktASync
-	dec.Write(0, pkt)
+	pkt.Index = 0
+	dec.processPacket(pkt)
 
 	// Non-ISync packet while in decodeWaitISync -> dropped silently
 	pkt.ResetState()
 	pkt.Type = PktTimestamp
 	pkt.Timestamp = 0xFF
-	dec.Write(1, pkt)
+	pkt.Index = 1
+	dec.processPacket(pkt)
 
 	// ISync to advance to decodePkts
 	pkt.ResetState()
@@ -1475,7 +1529,8 @@ func TestDecoderWaitISync_NonISyncPacket(t *testing.T) {
 	pkt.AddrVal = 0xD000
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceEnable
-	dec.Write(2, pkt)
+	pkt.Index = 2
+	dec.processPacket(pkt)
 }
 
 // TestDecoderISyncOverflow exercises ISyncTraceRestartAfterOverflow -> TraceOnOverflow.
@@ -1486,14 +1541,16 @@ func TestDecoderISyncOverflow(t *testing.T) {
 	pkt := &Packet{}
 	pkt.ResetState()
 	pkt.Type = PktASync
-	dec.Write(0, pkt)
+	pkt.Index = 0
+	dec.processPacket(pkt)
 
 	pkt.ResetState()
 	pkt.Type = PktISync
 	pkt.AddrVal = 0xE000
 	pkt.CurrISA = ocsd.ISAArm
 	pkt.ISyncReason = ocsd.ISyncTraceRestartAfterOverflow
-	dec.Write(1, pkt)
+	pkt.Index = 1
+	dec.processPacket(pkt)
 }
 
 // TestDecoderBranchNoException_ValidPeState exercises processBranch without exception
@@ -1508,7 +1565,8 @@ func TestDecoderBranchNoException_ValidPeState(t *testing.T) {
 	pkt.Type = PktBranchAddress
 	pkt.AddrVal = 0xF200
 	pkt.CurrISA = ocsd.ISAArm
-	dec.Write(2, pkt)
+	pkt.Index = 2
+	dec.processPacket(pkt)
 
 	if len(drainDecodedElements(t, dec)) == 0 {
 		t.Errorf("Expected elements from branch without exception")
