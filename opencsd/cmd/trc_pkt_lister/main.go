@@ -418,22 +418,11 @@ func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, i
 
 	for dataPathResp < ocsd.RespFatalNotInit {
 		var n int
-		if opts.dstreamFormat {
-			n, err = io.ReadFull(in, buf[:512-8])
-			if err == io.ErrUnexpectedEOF || err == io.EOF {
-				n = max(n, 0)
-			} else if err != nil {
-				break
-			}
-		} else {
-			n, err = in.Read(buf)
-			if err == io.EOF {
-				if n == 0 {
-					break
-				}
-			} else if err != nil {
-				break
-			}
+		n, err = readLegacyInputChunk(in, buf, opts)
+		if err == io.ErrUnexpectedEOF || err == io.EOF {
+			n = max(n, 0)
+		} else if err != nil {
+			break
 		}
 
 		if n > 0 {
@@ -593,6 +582,19 @@ func processInputFileLegacyPushReaderPending(tree *dcdtree.DecodeTree, sink *fil
 	}
 
 	return pending, traceIndex, dataPathResp, dataPathErr
+}
+
+func readLegacyInputChunk(in io.Reader, buf []byte, opts options) (int, error) {
+	if opts.dstreamFormat {
+		n, err := io.ReadFull(in, buf[:512-8])
+		if err == io.ErrUnexpectedEOF || err == io.EOF {
+			return max(n, 0), err
+		}
+		return n, err
+	}
+
+	n, err := in.Read(buf)
+	return n, err
 }
 
 func frameAlignment(tree *dcdtree.DecodeTree) int {
