@@ -422,7 +422,7 @@ func runSharedReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Read
 		return err
 	}
 
-	pending, traceIndex, dataPathResp, dataPathErr, err := processInputFileLegacyPushReaderLoop(out, in, buf, footer, opts, tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
+	pending, traceIndex, dataPathResp, dataPathErr, err := runSharedReaderLoop(out, in, buf, footer, opts, tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
 	if err != nil {
 		return err
 	}
@@ -456,7 +456,7 @@ func readLegacyDStreamFooter(out io.Writer, in io.Reader, footer []byte, opts op
 	return ferr
 }
 
-func processInputFileLegacyPushReaderLoop(out io.Writer, in io.Reader, buf []byte, footer []byte, opts options, tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool) ([]byte, uint32, ocsd.DatapathResp, error, error) {
+func runSharedReaderLoop(out io.Writer, in io.Reader, buf []byte, footer []byte, opts options, tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool) ([]byte, uint32, ocsd.DatapathResp, error, error) {
 	for dataPathResp < ocsd.RespFatalNotInit {
 		var done bool
 		var err error
