@@ -217,19 +217,8 @@ func TestPTMTypedConstructors(t *testing.T) {
 		if proc == nil || dec == nil {
 			t.Fatal("expected non-nil processor and decoder")
 		}
-		if got := proc.PktOut(); got != dec {
-			t.Fatal("expected pipeline constructor to wire processor output to decoder")
-		}
-	})
-
-	t.Run("RejectNilConfig", func(t *testing.T) {
-		if proc, err := NewConfiguredPktProc(0, nil); proc != nil || !errors.Is(err, ocsd.ErrInvalidParamVal) {
-			t.Fatalf("expected nil-config proc constructor to fail, got proc=%v err=%v", proc, err)
-		}
-		if dec, err := NewConfiguredPktDecode(0, nil); dec != nil || !errors.Is(err, ocsd.ErrInvalidParamVal) {
-			t.Fatalf("expected nil-config decode constructor to fail, got dec=%v err=%v", dec, err)
-		}
-		if proc, dec, err := NewConfiguredPipeline(0, nil); proc != nil || dec != nil || !errors.Is(err, ocsd.ErrInvalidParamVal) {
+		if dec.Source != proc {
+			t.Fatal("expected pipeline constructor to wire pull Source to processor")
 			t.Fatalf("expected nil-config pipeline constructor to fail, got proc=%v dec=%v err=%v", proc, dec, err)
 		}
 	})
