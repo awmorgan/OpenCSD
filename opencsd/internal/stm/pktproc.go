@@ -230,6 +230,7 @@ func (p *PktProc) StatsAddBadSeqCount(count uint32) { p.Stats.BadSequenceErrs +=
 func (p *PktProc) StatsAddBadHdrCount(count uint32) { p.Stats.BadHeaderErrs += count }
 
 func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) error {
+	pkt.Index = indexSOP
 	if p.pktOut != nil {
 		return p.pktOut.Write(indexSOP, pkt)
 	}

@@ -45,7 +45,10 @@ func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, error
 	if err != nil {
 		return nil, nil, err
 	}
-	proc.SetPktOut(dec)
+
+	// ADD THIS LINE to connect the pull pipeline:
+	dec.Source = proc
+
 	return proc, dec, nil
 }
 
@@ -55,10 +58,11 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 	if err != nil {
 		return nil, nil, err
 	}
-	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, nil)
+
+	// CHANGE 'nil' to 'proc' here to inject the dependency:
+	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, proc)
 	if err != nil {
 		return nil, nil, err
 	}
-	proc.SetPktOut(dec)
 	return proc, dec, nil
 }

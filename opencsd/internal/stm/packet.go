@@ -3,6 +3,8 @@ package stm
 import (
 	"fmt"
 	"strings"
+
+	"opencsd/internal/ocsd"
 )
 
 // PktType represents STM protocol packet types.
@@ -53,6 +55,7 @@ const (
 
 // Packet represents a trace packet with packet printing functionality
 type Packet struct {
+	Index    ocsd.TrcIndex
 	Type     PktType
 	OrigType PktType
 
