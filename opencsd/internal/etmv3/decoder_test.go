@@ -49,17 +49,7 @@ func TestPktDecodeProcessNext_EmitsCallbackForPacket(t *testing.T) {
 	packet.ISyncInfo.Reason = ocsd.ISyncReason(1)
 
 	reader := &fakePacketReader{packet: packet}
-	var received []ocsd.TraceElement
-	outSink := func(elem *ocsd.TraceElement) error {
-		if elem == nil {
-			return nil
-		}
-		copyElem := *elem
-		received = append(received, copyElem)
-		return nil
-	}
-
-	dec, err := NewPktDecode(cfg, mem, instr, reader, outSink)
+	dec, err := NewPktDecode(cfg, mem, instr, reader)
 	if err != nil {
 		t.Fatalf("NewPktDecode failed: %v", err)
 	}
@@ -74,6 +64,7 @@ func TestPktDecodeProcessNext_EmitsCallbackForPacket(t *testing.T) {
 	if dec.IndexCurrPkt != packet.Index {
 		t.Fatalf("expected IndexCurrPkt=%d, got %d", packet.Index, dec.IndexCurrPkt)
 	}
+	received := drainDecodedElements(t, dec)
 	if len(received) == 0 {
 		t.Fatal("expected output sink to receive at least one element")
 	}

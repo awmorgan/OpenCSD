@@ -68,18 +68,17 @@ type PktDecode struct {
 	pendingNaccAdr uint64
 	pendingNaccMem ocsd.MemSpaceAcc
 
-	csID           uint8
-	capturedOutput []ocsd.TraceElement
+	csID            uint8
+	pendingElements []traceElemEvent
 
-	// Internal source and output sink.
-	Source  ocsd.PacketReader[Packet]
-	outSink ElementCallback
+	// Internal source.
+	Source ocsd.PacketReader[Packet]
 }
 
 func (d *PktDecode) ApplyFlags(flags uint32) error { return nil }
 
 // NewPktDecode creates a new ETMv3 trace decoder.
-func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode, source ocsd.PacketReader[Packet], outSink ElementCallback) (*PktDecode, error) {
+func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode, source ocsd.PacketReader[Packet]) (*PktDecode, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("%w: ETMv3 config cannot be nil", ocsd.ErrInvalidParamVal)
 	}
@@ -105,17 +104,6 @@ func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDec
 	}
 	// wire-in optional dependencies
 	d.Source = source
-	if outSink != nil {
-		d.outSink = outSink
-	} else {
-		d.outSink = func(elem *ocsd.TraceElement) error {
-			if elem == nil {
-				return nil
-			}
-			d.capturedOutput = append(d.capturedOutput, cloneQueuedElem(elem))
-			return nil
-		}
-	}
 	d.configureDecoder()
 
 	d.Config = cfg
@@ -140,22 +128,25 @@ func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDec
 
 // OutputTraceElement sends an element using IndexCurrPkt.
 func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error {
-	if d == nil || elem == nil || d.outSink == nil {
+	if d == nil || elem == nil {
 		return nil
 	}
-	elem.Index = d.IndexCurrPkt
-	elem.TraceID = traceID
-	return d.outSink(elem)
+	return d.OutputTraceElementIdx(d.IndexCurrPkt, traceID, elem)
 }
 
 // OutputTraceElementIdx sends an element at an explicit index.
 func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
-	if d == nil || elem == nil || d.outSink == nil {
+	if d == nil || elem == nil {
 		return nil
 	}
 	elem.Index = idx
 	elem.TraceID = traceID
-	return d.outSink(elem)
+	d.pendingElements = append(d.pendingElements, traceElemEvent{
+		index:   idx,
+		traceID: traceID,
+		elem:    cloneQueuedElem(elem),
+	})
+	return nil
 }
 
 // AccessMemory reads target memory.
@@ -200,17 +191,29 @@ func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 	return nil
 }
 
-// Next returns one decoded trace element at a time for pull-based consumers.
-func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
-	for len(d.capturedOutput) == 0 {
+// NextElement returns the next queued trace element or pulls from Source.
+func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
+	for len(d.pendingElements) == 0 {
 		err := d.ProcessNext()
 		if err != nil {
-			return nil, err
+			return 0, 0, ocsd.TraceElement{}, err
 		}
 	}
 
-	e := d.capturedOutput[0]
-	d.capturedOutput = d.capturedOutput[1:]
+	e := d.pendingElements[0]
+	d.pendingElements = d.pendingElements[1:]
+	return e.index, e.traceID, e.elem, nil
+}
+
+// Next returns one decoded trace element at a time for pull-based consumers.
+func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
+	idx, traceID, elem, err := d.NextElement()
+	if err != nil {
+		return nil, err
+	}
+	e := elem
+	e.Index = idx
+	e.TraceID = traceID
 	return &e, nil
 }
 
@@ -298,7 +301,7 @@ func (d *PktDecode) resetDecoder() {
 	d.waitISync = false
 	d.outCount = 0
 	d.pendCount = 0
-	d.capturedOutput = d.capturedOutput[:0]
+	d.pendingElements = d.pendingElements[:0]
 	d.pendingNacc = false
 	d.pendingNaccIdx = 0
 	d.pendingNaccAdr = 0
@@ -965,15 +968,15 @@ func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, error) {
 // NewConfiguredPktDecode creates an ETMv3 packet decoder with a typed config.
 func NewConfiguredPktDecode(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktDecode, error) {
 	_ = instID
-	// No explicit source/outSink provided for typed constructor.
-	return NewPktDecode(cfg, mem, instr, nil, nil)
+	// No explicit source provided for typed constructor.
+	return NewPktDecode(cfg, mem, instr, nil)
 }
 
 // NewConfiguredPktDecodeWithDeps creates an ETMv3 decoder and injects dependencies.
 // source is the pull-based PacketReader to use.
 func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode, source ocsd.PacketReader[Packet]) (*PktDecode, error) {
 	_ = instID
-	dec, err := NewPktDecode(cfg, mem, instr, source, nil)
+	dec, err := NewPktDecode(cfg, mem, instr, source)
 	if err != nil {
 		return nil, err
 	}

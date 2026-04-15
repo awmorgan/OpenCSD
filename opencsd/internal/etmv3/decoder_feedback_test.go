@@ -36,7 +36,7 @@ func buildDecInDecodePktsPull(t *testing.T, config *Config) *PktDecode {
 
 func buildDecInDecodePktsPullWithDeps(t *testing.T, config *Config, mem common.TargetMemAccess, instr common.InstrDecode) *PktDecode {
 	t.Helper()
-	dec, err := NewPktDecode(config, mem, instr, nil, nil)
+	dec, err := NewPktDecode(config, mem, instr, nil)
 	if err != nil {
 		t.Fatalf("NewPktDecode failed: %v", err)
 	}

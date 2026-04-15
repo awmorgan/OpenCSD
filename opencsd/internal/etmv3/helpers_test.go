@@ -88,7 +88,7 @@ func mustNewConfiguredPktProc(tb testing.TB, config *Config) *PktProc {
 
 func mustNewConfiguredPktDecode(tb testing.TB, config *Config) *PktDecode {
 	tb.Helper()
-	dec, err := NewPktDecode(config, &mockMemAcc{failAfter: -1}, idec.NewDecoder(), nil, nil)
+	dec, err := NewPktDecode(config, &mockMemAcc{failAfter: -1}, idec.NewDecoder(), nil)
 	if err != nil {
 		tb.Fatalf("NewConfiguredPktDecode failed: %v", err)
 	}
@@ -97,7 +97,7 @@ func mustNewConfiguredPktDecode(tb testing.TB, config *Config) *PktDecode {
 
 func mustNewPktDecode(tb testing.TB, config *Config, mem common.TargetMemAccess, instr common.InstrDecode) *PktDecode {
 	tb.Helper()
-	dec, err := NewPktDecode(config, mem, instr, nil, nil)
+	dec, err := NewPktDecode(config, mem, instr, nil)
 	if err != nil {
 		tb.Fatalf("NewPktDecode failed: %v", err)
 	}
@@ -124,8 +124,13 @@ func writeDecodedPacket(dec *PktDecode, indexSOP ocsd.TrcIndex, pktIn *Packet) e
 
 func drainDecodedElements(t *testing.T, dec *PktDecode) []ocsd.TraceElement {
 	t.Helper()
-	elems := make([]ocsd.TraceElement, len(dec.capturedOutput))
-	copy(elems, dec.capturedOutput)
-	dec.capturedOutput = dec.capturedOutput[:0]
-	return elems
+	out := make([]ocsd.TraceElement, 0, len(dec.pendingElements))
+	for _, e := range dec.pendingElements {
+		elem := e.elem
+		elem.Index = e.index
+		elem.TraceID = e.traceID
+		out = append(out, elem)
+	}
+	dec.pendingElements = dec.pendingElements[:0]
+	return out
 }
