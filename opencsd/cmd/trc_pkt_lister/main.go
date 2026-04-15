@@ -417,29 +417,9 @@ func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, i
 	}
 
 	for dataPathResp < ocsd.RespFatalNotInit {
-		var n int
-		n, err = readLegacyInputChunk(in, buf, opts)
-		if err == io.ErrUnexpectedEOF || err == io.EOF {
-			n = max(n, 0)
-		} else if err != nil {
-			break
-		}
-
-		if n > 0 {
-			pending = append(pending, buf[:n]...)
-			pending, traceIndex, dataPathResp, dataPathErr = processInputFileLegacyPushReaderPending(tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
-			if dataPathErr != nil || ocsd.DataRespIsFatal(dataPathResp) {
-				break
-			}
-		}
-
-		if opts.dstreamFormat {
-			if err = readLegacyDStreamFooter(out, in, footer[:], opts); err != nil {
-				break
-			}
-		}
-
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
+		var done bool
+		pending, traceIndex, dataPathResp, dataPathErr, done, err = processInputFileLegacyPushReaderIteration(out, in, buf, footer[:], opts, tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
+		if done || err != nil {
 			break
 		}
 	}
@@ -499,6 +479,35 @@ func readLegacyDStreamFooter(out io.Writer, in io.Reader, footer []byte, opts op
 		return ferr
 	}
 	return ferr
+}
+
+func processInputFileLegacyPushReaderIteration(out io.Writer, in io.Reader, buf []byte, footer []byte, opts options, tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool) ([]byte, uint32, ocsd.DatapathResp, error, bool, error) {
+	n, err := readLegacyInputChunk(in, buf, opts)
+	if err == io.ErrUnexpectedEOF || err == io.EOF {
+		n = max(n, 0)
+	} else if err != nil {
+		return pending, traceIndex, dataPathResp, dataPathErr, false, err
+	}
+
+	if n > 0 {
+		pending = append(pending, buf[:n]...)
+		pending, traceIndex, dataPathResp, dataPathErr = processInputFileLegacyPushReaderPending(tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
+		if dataPathErr != nil || ocsd.DataRespIsFatal(dataPathResp) {
+			return pending, traceIndex, dataPathResp, dataPathErr, true, nil
+		}
+	}
+
+	if opts.dstreamFormat {
+		if err = readLegacyDStreamFooter(out, in, footer, opts); err != nil {
+			return pending, traceIndex, dataPathResp, dataPathErr, false, err
+		}
+	}
+
+	if err == io.EOF || err == io.ErrUnexpectedEOF {
+		return pending, traceIndex, dataPathResp, dataPathErr, false, err
+	}
+
+	return pending, traceIndex, dataPathResp, dataPathErr, false, nil
 }
 
 func processInputFilePull(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
