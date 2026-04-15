@@ -572,10 +572,9 @@ func runSharedReaderPending(tree *dcdtree.DecodeTree, sink *filteredGenElemPrint
 			}
 		}
 
-		used, dpErr := tree.Write(ocsd.TrcIndex(traceIndex), pending[:sendLen])
-		dataPathResp = ocsd.DataRespFromErr(dpErr)
-		if dpErr != nil {
-			dataPathErr = dpErr
+		var used uint32
+		used, dataPathResp, dataPathErr = writeSharedPendingChunk(tree, traceIndex, pending[:sendLen])
+		if dataPathErr != nil {
 			if !ocsd.DataRespIsFatal(dataPathResp) {
 				return pending, traceIndex, dataPathResp, dataPathErr
 			}
@@ -622,6 +621,15 @@ func runSharedReaderPending(tree *dcdtree.DecodeTree, sink *filteredGenElemPrint
 	}
 
 	return pending, traceIndex, dataPathResp, dataPathErr
+}
+
+func writeSharedPendingChunk(tree *dcdtree.DecodeTree, traceIndex uint32, chunk []byte) (uint32, ocsd.DatapathResp, error) {
+	used, dpErr := tree.Write(ocsd.TrcIndex(traceIndex), chunk)
+	dataPathResp := ocsd.DataRespFromErr(dpErr)
+	if dpErr != nil {
+		return used, dataPathResp, dpErr
+	}
+	return used, dataPathResp, nil
 }
 
 func readLegacyInputChunk(in io.Reader, buf []byte, opts options) (int, error) {
