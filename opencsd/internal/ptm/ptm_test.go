@@ -43,11 +43,7 @@ func TestPTMPktProcNextPacketFromReader(t *testing.T) {
 func drainDecodedElements(t *testing.T, dec *PktDecode) []ocsd.TraceElement {
 	t.Helper()
 	elems := make([]ocsd.TraceElement, 0)
-	for {
-		elem, err := dec.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
+	for elem, err := range dec.Elements() {
 		if err != nil {
 			t.Fatalf("decoder next failed: %v", err)
 		}
