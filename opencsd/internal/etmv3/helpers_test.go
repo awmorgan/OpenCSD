@@ -59,7 +59,7 @@ func TestETMv3TypedConstructors(t *testing.T) {
 	if err != nil || proc == nil || dec == nil {
 		t.Fatalf("NewConfiguredPipeline failed: proc=%v dec=%v err=%v", proc, dec, err)
 	}
-	if dec.source != proc {
+	if dec.Source != proc {
 		t.Fatal("expected pipeline constructor to wire processor as decoder source")
 	}
 
@@ -115,9 +115,9 @@ func writeDecodedPacket(dec *PktDecode, indexSOP ocsd.TrcIndex, pktIn *Packet) e
 	packet := *pktIn
 	packet.Index = indexSOP
 
-	oldSource := dec.source
-	dec.source = &fakePacketReader{packet: packet}
-	defer func() { dec.source = oldSource }()
+	oldSource := dec.Source
+	dec.Source = &fakePacketReader{packet: packet}
+	defer func() { dec.Source = oldSource }()
 
 	return dec.ProcessNext()
 }

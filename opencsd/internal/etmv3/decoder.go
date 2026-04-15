@@ -72,7 +72,7 @@ type PktDecode struct {
 	capturedOutput []ocsd.TraceElement
 
 	// Internal source and output sink.
-	source  ocsd.PacketReader[Packet]
+	Source  ocsd.PacketReader[Packet]
 	outSink ElementCallback
 }
 
@@ -104,7 +104,7 @@ func NewPktDecode(cfg *Config, mem common.TargetMemAccess, instr common.InstrDec
 		codeFollower: codeFollower,
 	}
 	// wire-in optional dependencies
-	d.source = source
+	d.Source = source
 	if outSink != nil {
 		d.outSink = outSink
 	} else {
@@ -216,14 +216,14 @@ func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
 
 // ProcessNext pulls the next packet from the bound source and immediately decodes it into the output sink.
 func (d *PktDecode) ProcessNext() error {
-	if d.source == nil {
+	if d.Source == nil {
 		return io.EOF
 	}
 
-	pkt, err := d.source.NextPacket()
+	pkt, err := d.Source.NextPacket()
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			d.source = nil
+			d.Source = nil
 			_ = d.Close()
 			d.flushOutputElements()
 			return nil
