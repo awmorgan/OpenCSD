@@ -300,7 +300,11 @@ func (p *PktProc) NextPacket() (Packet, error) {
 		}
 
 		if p.packetReader == nil {
-			return Packet{}, fmt.Errorf("%w: packet reader not configured", ocsd.ErrInvalidParamVal)
+			// Act as a push-to-pull bridge when not configured with a reader.
+			if p.packetReadEOT {
+				return Packet{}, io.EOF
+			}
+			return Packet{}, ocsd.ErrWait
 		}
 
 		if p.packetReadEOF {
@@ -383,6 +387,7 @@ func (p *PktProc) Close() error {
 	if err := p.OnEOT(); err != nil {
 		return err
 	}
+	p.packetReadEOT = true
 	if p.pktOut != nil {
 		if err := p.pktOut.Close(); err != nil && !errors.Is(err, ocsd.ErrWait) {
 			return err
@@ -667,6 +672,8 @@ func (p *PktProc) resetProcessorState() {
 	p.pendingPackets = p.pendingPackets[:0]
 	p.collectPackets = false
 	p.packetReaderBuf = p.packetReaderBuf[:0]
+	p.packetReadEOF = false
+	p.packetReadEOT = false
 	if p.packetData == nil {
 		p.packetDataRef = stmGetPacketBufRef()
 		p.packetData = (*p.packetDataRef)[:0]
