@@ -194,11 +194,7 @@ func TestITMEndToEndDecode(t *testing.T) {
 		proc.Close()
 
 		elems := make([]ocsd.TraceElement, 0)
-		for {
-			elem, nextErr := dec.Next()
-			if errors.Is(nextErr, io.EOF) {
-				break
-			}
+		for elem, nextErr := range dec.Elements() {
 			if nextErr != nil {
 				t.Fatalf("decoder next failed: %v", nextErr)
 			}
