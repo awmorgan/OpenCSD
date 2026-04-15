@@ -399,21 +399,6 @@ func finalizeProcessedInput(tree *dcdtree.DecodeTree, sink *filteredGenElemPrint
 	return nil
 }
 
-func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
-	start := time.Now()
-	var traceIndex uint32
-	dataPathResp := ocsd.RespCont
-	var dataPathErr error
-
-	buf := make([]byte, 1024)
-	pending := make([]byte, 0, 2048)
-	align := frameAlignment(tree)
-	isFramed := tree.FrameDeformatter() != nil
-	var footer [8]byte
-
-	return runLegacyPushReaderPipeline(out, tree, in, sink, genPrinter, opts, start, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed, buf, footer[:])
-}
-
 func reportProcessedInput(out io.Writer, traceIndex uint32, start time.Time, genPrinter *printers.GenericElementPrinter, opts options) {
 	fmt.Fprintf(out, "Trace Packet Lister : Trace buffer done, processed %d bytes", traceIndex)
 	if opts.noTimePrint {
@@ -556,7 +541,18 @@ func processInputFilePullReader(out io.Writer, tree *dcdtree.DecodeTree, in io.R
 }
 
 func processInputFilePullReaderBody(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
-	return processInputFileLegacyPushReader(out, tree, in, sink, genPrinter, opts)
+	start := time.Now()
+	var traceIndex uint32
+	dataPathResp := ocsd.RespCont
+	var dataPathErr error
+
+	buf := make([]byte, 1024)
+	pending := make([]byte, 0, 2048)
+	align := frameAlignment(tree)
+	isFramed := tree.FrameDeformatter() != nil
+	var footer [8]byte
+
+	return runLegacyPushReaderPipeline(out, tree, in, sink, genPrinter, opts, start, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed, buf, footer[:])
 }
 
 func drainPreInputElements(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter) error {
