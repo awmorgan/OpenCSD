@@ -94,7 +94,7 @@ type traceDataReaderSetter interface {
 
 func findTraceDataReaderSetters(tree *dcdtree.DecodeTree) []traceDataReaderSetter {
 	setters := []traceDataReaderSetter{}
-	if tree == nil {
+	if tree == nil || tree.FrameDeformatter() != nil {
 		return setters
 	}
 
