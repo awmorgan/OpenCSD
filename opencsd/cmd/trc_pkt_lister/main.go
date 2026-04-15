@@ -380,16 +380,6 @@ func drainTreeElementsToSink(tree *dcdtree.DecodeTree, sink *filteredGenElemPrin
 	return retErr
 }
 
-func processInputFileLegacyPush(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
-	file, err := os.Open(fileName)
-	if err != nil {
-		return fmt.Errorf("trace packet lister: error: unable to open trace buffer %s: %w", fileName, err)
-	}
-	defer file.Close()
-
-	return processInputFileLegacyPushReader(out, tree, file, sink, genPrinter, opts)
-}
-
 func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
 	start := time.Now()
 	var traceIndex uint32
@@ -569,7 +559,13 @@ func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, i
 }
 
 func processInputFilePull(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
-	return processInputFileLegacyPush(out, tree, fileName, sink, genPrinter, opts)
+	file, err := os.Open(fileName)
+	if err != nil {
+		return fmt.Errorf("trace packet lister: error: unable to open trace buffer %s: %w", fileName, err)
+	}
+	defer file.Close()
+
+	return processInputFileLegacyPushReader(out, tree, file, sink, genPrinter, opts)
 }
 
 func frameAlignment(tree *dcdtree.DecodeTree) int {
