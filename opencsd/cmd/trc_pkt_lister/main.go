@@ -380,6 +380,25 @@ func drainTreeElementsToSink(tree *dcdtree.DecodeTree, sink *filteredGenElemPrin
 	return retErr
 }
 
+func finalizeProcessedInput(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
+	if err := tree.Close(); err != nil {
+		return fmt.Errorf("trace packet lister: OpEOT error: %w", err)
+	}
+	if err := drainTreeElementsToSink(tree, sink, genPrinter); err != nil {
+		return fmt.Errorf("trace packet lister: post-EOT element drain error: %w", err)
+	}
+
+	if opts.multiSession {
+		if err := tree.Reset(0); err != nil {
+			return fmt.Errorf("trace packet lister: OpReset error: %w", err)
+		}
+		if err := drainTreeElementsToSink(tree, sink, genPrinter); err != nil {
+			return fmt.Errorf("trace packet lister: post-reset element drain error: %w", err)
+		}
+	}
+	return nil
+}
+
 func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
 	start := time.Now()
 	var traceIndex uint32
@@ -523,20 +542,8 @@ func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, i
 		return framedTailError(traceIndex, len(pending), align)
 	}
 
-	if err := tree.Close(); err != nil {
-		return fmt.Errorf("trace packet lister: OpEOT error: %w", err)
-	}
-	if err := drainTreeElementsToSink(tree, sink, genPrinter); err != nil {
-		return fmt.Errorf("trace packet lister: post-EOT element drain error: %w", err)
-	}
-
-	if opts.multiSession {
-		if err := tree.Reset(0); err != nil {
-			return fmt.Errorf("trace packet lister: OpReset error: %w", err)
-		}
-		if err := drainTreeElementsToSink(tree, sink, genPrinter); err != nil {
-			return fmt.Errorf("trace packet lister: post-reset element drain error: %w", err)
-		}
+	if err := finalizeProcessedInput(tree, sink, genPrinter, opts); err != nil {
+		return err
 	}
 
 	fmt.Fprintf(out, "Trace Packet Lister : Trace buffer done, processed %d bytes", traceIndex)
