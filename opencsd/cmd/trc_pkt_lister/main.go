@@ -596,17 +596,8 @@ func runSharedReaderPending(tree *dcdtree.DecodeTree, sink *filteredGenElemPrint
 		}
 
 		if ocsd.DataRespIsWait(dataPathResp) {
-			dpErr := tree.Flush()
-			dataPathResp = ocsd.DataRespFromErr(dpErr)
-			if dpErr != nil {
-				dataPathErr = fmt.Errorf("flush after wait: %w", dpErr)
-				return pending, traceIndex, dataPathResp, dataPathErr
-			}
-			if sinkErr := drainTreeElementsToSink(tree, sink, genPrinter); sinkErr != nil {
-				dataPathErr = fmt.Errorf("drain generic elements after flush: %w", sinkErr)
-				return pending, traceIndex, dataPathResp, dataPathErr
-			}
-			if ocsd.DataRespIsFatal(dataPathResp) {
+			pending, traceIndex, dataPathResp, dataPathErr, err := flushSharedPendingWait(tree, sink, genPrinter, pending, traceIndex, dataPathErr)
+			if err != nil {
 				return pending, traceIndex, dataPathResp, dataPathErr
 			}
 			continue
@@ -621,6 +612,23 @@ func runSharedReaderPending(tree *dcdtree.DecodeTree, sink *filteredGenElemPrint
 	}
 
 	return pending, traceIndex, dataPathResp, dataPathErr
+}
+
+func flushSharedPendingWait(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathErr error) ([]byte, uint32, ocsd.DatapathResp, error, error) {
+	dpErr := tree.Flush()
+	dataPathResp := ocsd.DataRespFromErr(dpErr)
+	if dpErr != nil {
+		dataPathErr = fmt.Errorf("flush after wait: %w", dpErr)
+		return pending, traceIndex, dataPathResp, dataPathErr, dpErr
+	}
+	if sinkErr := drainTreeElementsToSink(tree, sink, genPrinter); sinkErr != nil {
+		dataPathErr = fmt.Errorf("drain generic elements after flush: %w", sinkErr)
+		return pending, traceIndex, dataPathResp, dataPathErr, sinkErr
+	}
+	if ocsd.DataRespIsFatal(dataPathResp) {
+		return pending, traceIndex, dataPathResp, dataPathErr, fmt.Errorf("flush after wait: fatal datapath response %d", dataPathResp)
+	}
+	return pending, traceIndex, dataPathResp, dataPathErr, nil
 }
 
 func writeSharedPendingChunk(tree *dcdtree.DecodeTree, traceIndex uint32, chunk []byte) (uint32, ocsd.DatapathResp, error) {
