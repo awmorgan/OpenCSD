@@ -149,11 +149,10 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 			_ = d.Close()
 			break
 		}
-		if errors.Is(err, ocsd.ErrWait) {
-			break
-		}
 		if err != nil {
-			d.Source = nil
+			if !errors.Is(err, ocsd.ErrWait) {
+				d.Source = nil
+			}
 			return 0, 0, ocsd.TraceElement{}, err
 		}
 		if wErr := d.Write(pkt.Index, &pkt); wErr != nil {
