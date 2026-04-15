@@ -416,66 +416,6 @@ func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, i
 		return err
 	}
 
-	pushPending := func() {
-		for len(pending) > 0 && !ocsd.DataRespIsFatal(dataPathResp) {
-			sendLen := len(pending)
-			if isFramed {
-				sendLen -= sendLen % align
-				if sendLen == 0 {
-					break
-				}
-			}
-
-			used, dpErr := tree.Write(ocsd.TrcIndex(traceIndex), pending[:sendLen])
-			dataPathResp = ocsd.DataRespFromErr(dpErr)
-			if dpErr != nil {
-				dataPathErr = dpErr
-				if !ocsd.DataRespIsFatal(dataPathResp) {
-					return
-				}
-			}
-
-			if sinkErr := drainTreeElementsToSink(tree, sink, genPrinter); sinkErr != nil {
-				dataPathErr = fmt.Errorf("drain generic elements: %w", sinkErr)
-				return
-			}
-
-			if used > 0 {
-				n := copy(pending, pending[used:])
-				pending = pending[:n]
-				traceIndex += used
-			}
-
-			if ocsd.DataRespIsFatal(dataPathResp) {
-				return
-			}
-
-			if ocsd.DataRespIsWait(dataPathResp) {
-				dpErr := tree.Flush()
-				dataPathResp = ocsd.DataRespFromErr(dpErr)
-				if dpErr != nil {
-					dataPathErr = fmt.Errorf("flush after wait: %w", dpErr)
-					return
-				}
-				if sinkErr := drainTreeElementsToSink(tree, sink, genPrinter); sinkErr != nil {
-					dataPathErr = fmt.Errorf("drain generic elements after flush: %w", sinkErr)
-					return
-				}
-				if ocsd.DataRespIsFatal(dataPathResp) {
-					return
-				}
-				continue
-			}
-
-			if used == 0 {
-				break
-			}
-			if !isFramed {
-				continue
-			}
-		}
-	}
-
 	for dataPathResp < ocsd.RespFatalNotInit {
 		var n int
 		if opts.dstreamFormat {
@@ -498,7 +438,7 @@ func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, i
 
 		if n > 0 {
 			pending = append(pending, buf[:n]...)
-			pushPending()
+			pending, traceIndex, dataPathResp, dataPathErr = processInputFileLegacyPushReaderPending(tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
 			if dataPathErr != nil || ocsd.DataRespIsFatal(dataPathResp) {
 				break
 			}
@@ -527,7 +467,7 @@ func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, i
 	}
 
 	if !ocsd.DataRespIsFatal(dataPathResp) && len(pending) > 0 && !isFramed {
-		pushPending()
+		pending, traceIndex, dataPathResp, dataPathErr = processInputFileLegacyPushReaderPending(tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
 	}
 
 	if ocsd.DataRespIsFatal(dataPathResp) {
@@ -591,6 +531,68 @@ func drainPreInputElements(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinte
 		return fmt.Errorf("trace packet lister: pre-data element drain error: %w", err)
 	}
 	return nil
+}
+
+func processInputFileLegacyPushReaderPending(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool) ([]byte, uint32, ocsd.DatapathResp, error) {
+	for len(pending) > 0 && !ocsd.DataRespIsFatal(dataPathResp) {
+		sendLen := len(pending)
+		if isFramed {
+			sendLen -= sendLen % align
+			if sendLen == 0 {
+				break
+			}
+		}
+
+		used, dpErr := tree.Write(ocsd.TrcIndex(traceIndex), pending[:sendLen])
+		dataPathResp = ocsd.DataRespFromErr(dpErr)
+		if dpErr != nil {
+			dataPathErr = dpErr
+			if !ocsd.DataRespIsFatal(dataPathResp) {
+				return pending, traceIndex, dataPathResp, dataPathErr
+			}
+		}
+
+		if sinkErr := drainTreeElementsToSink(tree, sink, genPrinter); sinkErr != nil {
+			dataPathErr = fmt.Errorf("drain generic elements: %w", sinkErr)
+			return pending, traceIndex, dataPathResp, dataPathErr
+		}
+
+		if used > 0 {
+			n := copy(pending, pending[used:])
+			pending = pending[:n]
+			traceIndex += used
+		}
+
+		if ocsd.DataRespIsFatal(dataPathResp) {
+			return pending, traceIndex, dataPathResp, dataPathErr
+		}
+
+		if ocsd.DataRespIsWait(dataPathResp) {
+			dpErr := tree.Flush()
+			dataPathResp = ocsd.DataRespFromErr(dpErr)
+			if dpErr != nil {
+				dataPathErr = fmt.Errorf("flush after wait: %w", dpErr)
+				return pending, traceIndex, dataPathResp, dataPathErr
+			}
+			if sinkErr := drainTreeElementsToSink(tree, sink, genPrinter); sinkErr != nil {
+				dataPathErr = fmt.Errorf("drain generic elements after flush: %w", sinkErr)
+				return pending, traceIndex, dataPathResp, dataPathErr
+			}
+			if ocsd.DataRespIsFatal(dataPathResp) {
+				return pending, traceIndex, dataPathResp, dataPathErr
+			}
+			continue
+		}
+
+		if used == 0 {
+			break
+		}
+		if !isFramed {
+			continue
+		}
+	}
+
+	return pending, traceIndex, dataPathResp, dataPathErr
 }
 
 func frameAlignment(tree *dcdtree.DecodeTree) int {
