@@ -546,6 +546,11 @@ func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, i
 		return err
 	}
 
+	reportProcessedInput(out, traceIndex, start, genPrinter, opts)
+	return nil
+}
+
+func reportProcessedInput(out io.Writer, traceIndex uint32, start time.Time, genPrinter *printers.GenericElementPrinter, opts options) {
 	fmt.Fprintf(out, "Trace Packet Lister : Trace buffer done, processed %d bytes", traceIndex)
 	if opts.noTimePrint {
 		fmt.Fprintln(out, ".")
@@ -561,8 +566,6 @@ func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, i
 	if opts.profile {
 		genPrinter.PrintStats()
 	}
-
-	return nil
 }
 
 func processInputFilePull(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
