@@ -134,13 +134,12 @@ func (d *PktDecode) SetProtocolConfig(config *Config) error {
 	return nil
 }
 
-// Write is the explicit packet data entrypoint used by split interfaces.
-func (d *PktDecode) Write(indexSOP ocsd.TrcIndex, pktIn *Packet) error {
-	if pktIn == nil {
+func (d *PktDecode) processPacket(pkt *Packet) error {
+	if pkt == nil {
 		return ocsd.ErrInvalidParamVal
 	}
-	d.CurrPacketIn = pktIn
-	d.IndexCurrPkt = indexSOP
+	d.CurrPacketIn = pkt
+	d.IndexCurrPkt = pkt.Index
 	return d.ProcessPacket()
 }
 
@@ -283,7 +282,7 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 			}
 			return 0, 0, ocsd.TraceElement{}, err
 		}
-		if wErr := d.Write(pkt.Index, &pkt); wErr != nil {
+		if wErr := d.processPacket(&pkt); wErr != nil {
 			return 0, 0, ocsd.TraceElement{}, wErr
 		}
 	}
