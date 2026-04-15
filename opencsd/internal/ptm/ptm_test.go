@@ -117,21 +117,12 @@ func makeAsyncBlock() []byte {
 	return []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x80}
 }
 
-// noopPktSink is a no-op packet receiver that just swallows packets without decoding.
-type noopPktSink struct{}
-
-func (n *noopPktSink) Write(indexSOP ocsd.TrcIndex, pkt *Packet) error { return nil }
-func (n *noopPktSink) Close() error                                    { return nil }
-func (n *noopPktSink) Flush() error                                    { return nil }
-func (n *noopPktSink) Reset(indexSOP ocsd.TrcIndex) error              { return nil }
-
-// setupProcOnly creates a processor with a no-op sink (doesn't decode packets)
+// setupProcOnly creates a processor without a downstream decoder.
 func setupProcOnly(config *Config) *PktProc {
 	proc, err := NewConfiguredPktProc(0, config)
 	if err != nil {
 		panic(err)
 	}
-	proc.SetPktOut(&noopPktSink{})
 	return proc
 }
 
@@ -1125,8 +1116,8 @@ func TestAtomDataMethods(t *testing.T) {
 	if a.numAtoms() != 3 {
 		t.Errorf("numAtoms: want 3, got %d", a.numAtoms())
 	}
-	if a.pktIndex() != 42 {
-		t.Errorf("pktIndex: want 42, got %d", a.pktIndex())
+	if a.rootIndex != 42 {
+		t.Errorf("rootIndex: want 42, got %d", a.rootIndex)
 	}
 	if v := a.getCurrAtomVal(); v != ocsd.AtomE {
 		t.Errorf("getCurrAtomVal: want AtomE, got %v", v)

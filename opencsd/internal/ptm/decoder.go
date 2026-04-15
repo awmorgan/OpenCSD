@@ -66,10 +66,6 @@ func (a *PtmAtoms) numAtoms() int {
 	return int(a.atom.Num)
 }
 
-func (a *PtmAtoms) pktIndex() ocsd.TrcIndex {
-	return a.rootIndex
-}
-
 func (a *PtmAtoms) clearAtom() {
 	if a.atom.Num > 0 {
 		a.atom.Num--

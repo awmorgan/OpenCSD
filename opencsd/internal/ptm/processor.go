@@ -59,7 +59,6 @@ type PktProc struct {
 	Stats      ocsd.DecodeStats
 	statsInit  bool
 	Config     *Config
-	pktOut     ocsd.PacketProcessor[Packet]
 	PktRawMonI ocsd.PacketMonitor
 
 	collectPackets  bool
@@ -132,12 +131,6 @@ func NewPktProc(cfg *Config, reader ...io.Reader) *PktProc {
 	return p
 }
 
-// SetPktOut attaches the downstream packet decoder.
-func (p *PktProc) SetPktOut(out ocsd.PacketProcessor[Packet]) { p.pktOut = out }
-
-// PktOut returns the downstream packet processor.
-func (p *PktProc) PktOut() ocsd.PacketProcessor[Packet] { return p.pktOut }
-
 // SetPktRawMonitor attaches a raw packet monitor.
 func (p *PktProc) SetPktRawMonitor(mon ocsd.PacketMonitor) { p.PktRawMonI = mon }
 
@@ -185,9 +178,6 @@ func (p *PktProc) outputDecodedPacket(indexSOP ocsd.TrcIndex, pkt *Packet) error
 	if p.collectPackets {
 		p.pendingPackets = append(p.pendingPackets, *pkt)
 		return nil
-	}
-	if p.pktOut != nil {
-		return p.pktOut.Write(indexSOP, pkt)
 	}
 	// Bridge push-to-pull
 	p.pendingPackets = append(p.pendingPackets, *pkt)
@@ -292,11 +282,6 @@ func (p *PktProc) Close() error {
 	if err := p.OnEOT(); err != nil {
 		return err
 	}
-	if p.pktOut != nil {
-		if err := p.pktOut.Close(); err != nil && !errors.Is(err, ocsd.ErrWait) {
-			return err
-		}
-	}
 	if rawMon := p.PktRawMonI; rawMon != nil {
 		rawMon.MonitorEOT()
 	}
@@ -305,21 +290,11 @@ func (p *PktProc) Close() error {
 
 // Flush handles flush control.
 func (p *PktProc) Flush() error {
-	if p.pktOut != nil {
-		if err := p.pktOut.Flush(); err != nil && !errors.Is(err, ocsd.ErrWait) {
-			return err
-		}
-	}
 	return nil
 }
 
 // Reset handles reset control.
 func (p *PktProc) Reset(index ocsd.TrcIndex) error {
-	if p.pktOut != nil {
-		if err := p.pktOut.Reset(index); err != nil && !errors.Is(err, ocsd.ErrWait) {
-			return err
-		}
-	}
 	p.OnReset()
 	if rawMon := p.PktRawMonI; rawMon != nil {
 		rawMon.MonitorReset(index)
