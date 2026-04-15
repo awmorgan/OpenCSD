@@ -310,7 +310,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 	}
 
 	if !opts.multiSession {
-		return processInputFilePush(streamOut, tree, builder.BufferFileName(), genAdapter, genPrinter, opts)
+		return processInputFilePull(streamOut, tree, builder.BufferFileName(), genAdapter, genPrinter, opts)
 	}
 
 	total := len(sourceNames)
@@ -561,6 +561,10 @@ func processInputFilePush(out io.Writer, tree *dcdtree.DecodeTree, fileName stri
 	}
 
 	return nil
+}
+
+func processInputFilePull(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
+	return processInputFilePush(out, tree, fileName, sink, genPrinter, opts)
 }
 
 func frameAlignment(tree *dcdtree.DecodeTree) int {
