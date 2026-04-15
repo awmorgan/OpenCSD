@@ -387,10 +387,15 @@ func processInputFileLegacyPush(out io.Writer, tree *dcdtree.DecodeTree, fileNam
 	}
 	defer file.Close()
 
+	return processInputFileLegacyPushReader(out, tree, file, sink, genPrinter, opts)
+}
+
+func processInputFileLegacyPushReader(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
 	start := time.Now()
 	var traceIndex uint32
 	dataPathResp := ocsd.RespCont
 	var dataPathErr error
+	var err error
 
 	buf := make([]byte, 1024)
 	pending := make([]byte, 0, 2048)
@@ -465,14 +470,14 @@ func processInputFileLegacyPush(out io.Writer, tree *dcdtree.DecodeTree, fileNam
 	for dataPathResp < ocsd.RespFatalNotInit {
 		var n int
 		if opts.dstreamFormat {
-			n, err = io.ReadFull(file, buf[:512-8])
+			n, err = io.ReadFull(in, buf[:512-8])
 			if err == io.ErrUnexpectedEOF || err == io.EOF {
 				n = max(n, 0)
 			} else if err != nil {
 				break
 			}
 		} else {
-			n, err = file.Read(buf)
+			n, err = in.Read(buf)
 			if err == io.EOF {
 				if n == 0 {
 					break
@@ -491,7 +496,7 @@ func processInputFileLegacyPush(out io.Writer, tree *dcdtree.DecodeTree, fileNam
 		}
 
 		if opts.dstreamFormat {
-			_, ferr := io.ReadFull(file, footer[:])
+			_, ferr := io.ReadFull(in, footer[:])
 			if ferr == nil && opts.outRawPacked {
 				fmt.Fprint(out, "DSTREAM footer [")
 				for _, b := range footer {
