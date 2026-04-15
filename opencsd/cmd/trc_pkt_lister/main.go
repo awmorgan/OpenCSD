@@ -460,7 +460,7 @@ func runSharedReaderLoop(out io.Writer, in io.Reader, buf []byte, footer []byte,
 	for dataPathResp < ocsd.RespFatalNotInit {
 		var done bool
 		var err error
-		pending, traceIndex, dataPathResp, dataPathErr, done, err = processInputFileLegacyPushReaderIteration(out, in, buf, footer, opts, tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
+		pending, traceIndex, dataPathResp, dataPathErr, done, err = runSharedReaderIteration(out, in, buf, footer, opts, tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
 		if done {
 			return pending, traceIndex, dataPathResp, dataPathErr, nil
 		}
@@ -497,7 +497,7 @@ func validateLegacyReadState(pending []byte, traceIndex uint32, dataPathResp ocs
 	return nil
 }
 
-func processInputFileLegacyPushReaderIteration(out io.Writer, in io.Reader, buf []byte, footer []byte, opts options, tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool) ([]byte, uint32, ocsd.DatapathResp, error, bool, error) {
+func runSharedReaderIteration(out io.Writer, in io.Reader, buf []byte, footer []byte, opts options, tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool) ([]byte, uint32, ocsd.DatapathResp, error, bool, error) {
 	n, err := readLegacyInputChunk(in, buf, opts)
 	if err == io.ErrUnexpectedEOF || err == io.EOF {
 		n = max(n, 0)
