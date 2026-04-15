@@ -322,7 +322,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 			break
 		}
 		binFile := filepath.Join(reader.SnapshotPath, srcTree.BufferInfo.DataFileName)
-		if err := processInputFilePush(streamOut, tree, binFile, genAdapter, genPrinter, opts); err != nil {
+		if err := processInputFilePull(streamOut, tree, binFile, genAdapter, genPrinter, opts); err != nil {
 			fmt.Fprintf(out, "Trace Packet Lister : ERROR : Multi-session decode for buffer %s failed. Aborting.\n\n", sourceName)
 			return err
 		}
