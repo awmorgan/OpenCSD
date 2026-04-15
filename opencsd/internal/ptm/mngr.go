@@ -59,6 +59,5 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 	if err != nil {
 		return nil, nil, err
 	}
-	proc.SetPktOut(dec)
 	return proc, dec, nil
 }

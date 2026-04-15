@@ -214,6 +214,9 @@ func (p *PktProc) NextPacket() (Packet, error) {
 		}
 
 		if p.packetReader == nil {
+			if p.packetReadEOT {
+				return Packet{}, io.EOF
+			}
 			return Packet{}, ocsd.ErrWait
 		}
 
@@ -285,6 +288,7 @@ func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 
 // Close handles end-of-trace control.
 func (p *PktProc) Close() error {
+	p.packetReadEOT = true
 	if err := p.OnEOT(); err != nil {
 		return err
 	}
