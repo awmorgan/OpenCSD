@@ -575,7 +575,11 @@ func processInputFilePull(out io.Writer, tree *dcdtree.DecodeTree, fileName stri
 	}
 	defer file.Close()
 
-	return processInputFileLegacyPushReader(out, tree, file, sink, genPrinter, opts)
+	return processInputFilePullReader(out, tree, file, sink, genPrinter, opts)
+}
+
+func processInputFilePullReader(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
+	return processInputFileLegacyPushReader(out, tree, in, sink, genPrinter, opts)
 }
 
 func frameAlignment(tree *dcdtree.DecodeTree) int {
