@@ -59,7 +59,6 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 		return nil, nil, err
 	}
 
-	// CHANGE 'nil' to 'proc' here to inject the dependency:
 	dec, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, proc)
 	if err != nil {
 		return nil, nil, err

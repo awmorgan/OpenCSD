@@ -26,8 +26,8 @@ func NewPipeline(instID int, cfg *Config, mem common.TargetMemAccess, instr comm
 	dec.MemAccess = mem
 	dec.InstrDecode = instr
 
-	// Wire processor output to decoder input.
-	proc.SetPktOut(dec)
+	// Wire processor output to decoder input via pull source.
+	dec.Source = proc
 
 	return proc, dec, nil
 }

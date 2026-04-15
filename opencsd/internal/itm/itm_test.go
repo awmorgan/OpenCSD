@@ -301,8 +301,8 @@ func TestITMTypedConstructors(t *testing.T) {
 		if dec.Config != cfg {
 			t.Fatal("expected decoder to keep typed config")
 		}
-		if got := proc.PktOut(); got != dec {
-			t.Fatal("expected pipeline constructor to wire processor output to decoder")
+		if dec.Source != proc {
+			t.Fatal("expected pipeline constructor to wire pull Source to processor")
 		}
 	})
 
@@ -317,8 +317,8 @@ func TestITMTypedConstructors(t *testing.T) {
 		if proc == nil || dec == nil {
 			t.Fatal("expected non-nil processor and decoder")
 		}
-		if got := proc.PktOut(); got != dec {
-			t.Fatal("expected pipeline constructor to wire processor output to decoder")
+		if dec.Source != proc {
+			t.Fatal("expected pipeline constructor to wire pull Source to processor")
 		}
 	})
 
