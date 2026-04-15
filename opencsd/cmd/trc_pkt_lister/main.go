@@ -310,7 +310,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 	}
 
 	if !opts.multiSession {
-		return processInputFile(streamOut, tree, builder.BufferFileName(), genAdapter, genPrinter, opts)
+		return processInputFilePush(streamOut, tree, builder.BufferFileName(), genAdapter, genPrinter, opts)
 	}
 
 	total := len(sourceNames)
@@ -322,7 +322,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 			break
 		}
 		binFile := filepath.Join(reader.SnapshotPath, srcTree.BufferInfo.DataFileName)
-		if err := processInputFile(streamOut, tree, binFile, genAdapter, genPrinter, opts); err != nil {
+		if err := processInputFilePush(streamOut, tree, binFile, genAdapter, genPrinter, opts); err != nil {
 			fmt.Fprintf(out, "Trace Packet Lister : ERROR : Multi-session decode for buffer %s failed. Aborting.\n\n", sourceName)
 			return err
 		}
@@ -343,10 +343,6 @@ func framedTailError(traceIndex uint32, pendingLen, align int) error {
 		"trace packet lister: leftover framed tail bytes at EOF: trace_index=%d pending=%d align=%d",
 		traceIndex, pendingLen, align,
 	)
-}
-
-func processInputFile(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
-	return processInputFilePush(out, tree, fileName, sink, genPrinter, opts)
 }
 
 func drainTreeElementsToSink(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter) error {
