@@ -354,34 +354,34 @@ func drainTreeElementsToSink(tree *dcdtree.DecodeTree, sink *filteredGenElemPrin
 		return nil
 	}
 
-	for {
-		elem, err := tree.Next()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
+	var retErr error
+	tree.Elements()(func(elem *ocsd.TraceElement, err error) bool {
 		if err != nil {
 			if errors.Is(err, ocsd.ErrWait) {
 				// Queue is empty, wait for more bytes. This is normal!
-				break
+				return false
 			}
-			return err
+			retErr = err
+			return false
 		}
 		if elem == nil {
-			continue
+			return true
 		}
 		if err := sink.PrintElement(elem); err != nil {
 			if ocsd.IsDataWaitErr(err) {
 				if genPrinter != nil && genPrinter.NeedAckWait() {
 					genPrinter.AckWait()
 				}
-				continue
+				return true
 			}
 			if !ocsd.IsDataContErr(err) {
-				return err
+				retErr = err
+				return false
 			}
 		}
-	}
-	return nil
+		return true
+	})
+	return retErr
 }
 
 func processInputFilePush(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
