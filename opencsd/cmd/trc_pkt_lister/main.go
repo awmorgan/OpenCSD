@@ -505,10 +505,10 @@ func runSharedReaderIteration(out io.Writer, in io.Reader, buf []byte, footer []
 		return pending, traceIndex, dataPathResp, dataPathErr, false, err
 	}
 
+	var done bool
 	if n > 0 {
-		pending = append(pending, buf[:n]...)
-		pending, traceIndex, dataPathResp, dataPathErr = runSharedReaderPending(tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
-		if dataPathErr != nil || ocsd.DataRespIsFatal(dataPathResp) {
+		pending, traceIndex, dataPathResp, dataPathErr, done = feedSharedReaderChunk(tree, sink, genPrinter, buf[:n], pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
+		if done {
 			return pending, traceIndex, dataPathResp, dataPathErr, true, nil
 		}
 	}
@@ -524,6 +524,15 @@ func runSharedReaderIteration(out io.Writer, in io.Reader, buf []byte, footer []
 	}
 
 	return pending, traceIndex, dataPathResp, dataPathErr, false, nil
+}
+
+func feedSharedReaderChunk(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, chunk []byte, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool) ([]byte, uint32, ocsd.DatapathResp, error, bool) {
+	pending = append(pending, chunk...)
+	pending, traceIndex, dataPathResp, dataPathErr = runSharedReaderPending(tree, sink, genPrinter, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed)
+	if dataPathErr != nil || ocsd.DataRespIsFatal(dataPathResp) {
+		return pending, traceIndex, dataPathResp, dataPathErr, true
+	}
+	return pending, traceIndex, dataPathResp, dataPathErr, false
 }
 
 func processInputFilePull(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
