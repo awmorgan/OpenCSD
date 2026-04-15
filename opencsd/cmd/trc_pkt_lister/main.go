@@ -579,6 +579,10 @@ func processInputFilePull(out io.Writer, tree *dcdtree.DecodeTree, fileName stri
 }
 
 func processInputFilePullReader(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
+	return processInputFilePullReaderBody(out, tree, in, sink, genPrinter, opts)
+}
+
+func processInputFilePullReaderBody(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
 	return processInputFileLegacyPushReader(out, tree, in, sink, genPrinter, opts)
 }
 
