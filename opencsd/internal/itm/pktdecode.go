@@ -265,7 +265,9 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 			break
 		}
 		if err != nil {
-			d.Source = nil
+			if !errors.Is(err, ocsd.ErrWait) {
+				d.Source = nil
+			}
 			return 0, 0, ocsd.TraceElement{}, err
 		}
 		if wErr := d.Write(0, &pkt); wErr != nil {

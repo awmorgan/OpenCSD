@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"iter"
 	"testing"
 
 	"opencsd/internal/ocsd"
@@ -37,6 +38,67 @@ func TestITMPktProcNextPacketFromReader(t *testing.T) {
 	}
 	if !seenOverflow {
 		t.Fatalf("expected pull stream to emit %v", PktOverflow)
+	}
+}
+
+type waitThenPacketReader struct {
+	calls int
+}
+
+func (r *waitThenPacketReader) NextPacket() (Packet, error) {
+	switch r.calls {
+	case 0:
+		r.calls++
+		return Packet{}, ocsd.ErrWait
+	case 1:
+		r.calls++
+		return Packet{Type: PktAsync}, nil
+	default:
+		return Packet{Type: PktSWIT, SrcID: 2, Value: 0xAA, ValSz: 1}, io.EOF
+	}
+}
+
+func (r *waitThenPacketReader) Packets() iter.Seq2[Packet, error] {
+	return func(yield func(Packet, error) bool) {
+		for {
+			pkt, err := r.NextPacket()
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					yield(Packet{}, err)
+				}
+				return
+			}
+			if !yield(pkt, nil) {
+				return
+			}
+		}
+	}
+}
+
+func TestITMNextElementPreservesSourceOnWait(t *testing.T) {
+	cfg := &Config{}
+	cfg.SetTraceID(0x11)
+
+	dec, err := NewPktDecode(cfg)
+	if err != nil {
+		t.Fatalf("NewPktDecode failed: %v", err)
+	}
+	dec.Source = &waitThenPacketReader{}
+
+	_, _, _, err = dec.NextElement()
+	if !errors.Is(err, ocsd.ErrWait) {
+		t.Fatalf("expected ErrWait, got %v", err)
+	}
+	if dec.Source == nil {
+		t.Fatal("expected source to be preserved on ErrWait")
+	}
+
+	_, _, elem, err := dec.NextElement()
+	if err != nil {
+		t.Fatalf("expected successful decode after wait, got %v", err)
+	}
+	if elem.String() == "" {
+		t.Fatal("expected decoded trace element after wait")
 	}
 }
 
