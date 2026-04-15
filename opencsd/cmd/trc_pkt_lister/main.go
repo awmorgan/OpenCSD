@@ -580,7 +580,7 @@ func runSharedReaderPending(tree *dcdtree.DecodeTree, sink *filteredGenElemPrint
 			}
 		}
 
-		if sinkErr := drainTreeElementsToSink(tree, sink, genPrinter); sinkErr != nil {
+		if sinkErr := drainSharedPendingOutput(tree, sink, genPrinter); sinkErr != nil {
 			dataPathErr = fmt.Errorf("drain generic elements: %w", sinkErr)
 			return pending, traceIndex, dataPathResp, dataPathErr
 		}
@@ -612,6 +612,13 @@ func runSharedReaderPending(tree *dcdtree.DecodeTree, sink *filteredGenElemPrint
 	}
 
 	return pending, traceIndex, dataPathResp, dataPathErr
+}
+
+func drainSharedPendingOutput(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter) error {
+	if sinkErr := drainTreeElementsToSink(tree, sink, genPrinter); sinkErr != nil {
+		return sinkErr
+	}
+	return nil
 }
 
 func flushSharedPendingWait(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathErr error) ([]byte, uint32, ocsd.DatapathResp, error, error) {
