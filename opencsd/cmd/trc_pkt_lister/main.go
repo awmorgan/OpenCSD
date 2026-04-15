@@ -417,7 +417,7 @@ func reportProcessedInput(out io.Writer, traceIndex uint32, start time.Time, gen
 	}
 }
 
-func runLegacyPushReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options, start time.Time, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool, buf []byte, footer []byte) error {
+func runSharedReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options, start time.Time, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool, buf []byte, footer []byte) error {
 	if err := drainPreInputElements(tree, sink, genPrinter); err != nil {
 		return err
 	}
@@ -552,7 +552,7 @@ func processInputFilePullReaderBody(out io.Writer, tree *dcdtree.DecodeTree, in 
 	isFramed := tree.FrameDeformatter() != nil
 	var footer [8]byte
 
-	return runLegacyPushReaderPipeline(out, tree, in, sink, genPrinter, opts, start, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed, buf, footer[:])
+	return runSharedReaderPipeline(out, tree, in, sink, genPrinter, opts, start, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed, buf, footer[:])
 }
 
 func drainPreInputElements(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter) error {
