@@ -150,7 +150,7 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 			break
 		}
 		if errors.Is(err, ocsd.ErrWait) {
-			return 0, 0, ocsd.TraceElement{}, ocsd.ErrWait
+			break
 		}
 		if err != nil {
 			d.Source = nil
