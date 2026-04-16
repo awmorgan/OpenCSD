@@ -88,28 +88,6 @@ type filteredGenElemPrinter struct {
 	validIDs     [256]bool
 }
 
-type traceDataReaderSetter interface {
-	SetReader(io.Reader)
-}
-
-func findTraceDataReaderSetters(tree *dcdtree.DecodeTree) []traceDataReaderSetter {
-	setters := []traceDataReaderSetter{}
-	if tree == nil || tree.FrameDeformatter() != nil {
-		return setters
-	}
-
-	tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
-		if elem == nil || elem.DataIn == nil {
-			return
-		}
-		if setter, ok := elem.DataIn.(traceDataReaderSetter); ok {
-			setters = append(setters, setter)
-		}
-	})
-
-	return setters
-}
-
 func (g *filteredGenElemPrinter) PrintElement(elem *ocsd.TraceElement) error {
 	if elem == nil {
 		return nil
@@ -572,7 +550,6 @@ func processInputFilePullReader(out io.Writer, tree *dcdtree.DecodeTree, in io.R
 }
 
 func processInputFilePullReaderBody(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
-	setters := findTraceDataReaderSetters(tree)
 	start := time.Now()
 	var traceIndex uint32
 	dataPathResp := ocsd.RespCont
@@ -583,10 +560,6 @@ func processInputFilePullReaderBody(out io.Writer, tree *dcdtree.DecodeTree, in 
 	align := frameAlignment(tree)
 	isFramed := tree.FrameDeformatter() != nil
 	var footer [8]byte
-
-	if len(setters) == 0 {
-		return runSharedReaderPipeline(out, tree, in, sink, genPrinter, opts, start, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed, buf, footer[:])
-	}
 
 	return runSharedReaderPipeline(out, tree, in, sink, genPrinter, opts, start, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed, buf, footer[:])
 }
