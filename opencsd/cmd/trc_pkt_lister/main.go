@@ -806,9 +806,6 @@ func canUseDirectReaderDecodeOnly(tree *dcdtree.DecodeTree, opts options) bool {
 	if !opts.decodeOnly {
 		return false
 	}
-	if opts.multiSession {
-		return false
-	}
 	if tree.FrameDeformatter() != nil {
 		return false
 	}
