@@ -441,6 +441,10 @@ func runSharedReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Read
 	return nil
 }
 
+func runDirectReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options, start time.Time, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool, buf []byte, footer []byte) error {
+	return runSharedReaderPipeline(out, tree, in, sink, genPrinter, opts, start, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed, buf, footer)
+}
+
 func readLegacyDStreamFooter(out io.Writer, in io.Reader, footer []byte, opts options) error {
 	_, ferr := io.ReadFull(in, footer)
 	if ferr == nil && opts.outRawPacked {
@@ -560,6 +564,10 @@ func processInputFilePullReaderBody(out io.Writer, tree *dcdtree.DecodeTree, in 
 	align := frameAlignment(tree)
 	isFramed := tree.FrameDeformatter() != nil
 	var footer [8]byte
+
+	if tree.CanAttachReader() {
+		return runDirectReaderPipeline(out, tree, in, sink, genPrinter, opts, start, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed, buf, footer[:])
+	}
 
 	return runSharedReaderPipeline(out, tree, in, sink, genPrinter, opts, start, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed, buf, footer[:])
 }
