@@ -101,8 +101,8 @@ func TestTypedPipelineConstructors(t *testing.T) {
 	if procPush == nil || decPush == nil {
 		t.Fatalf("NewConfiguredPipelineWithDeps (push) returned nil outputs")
 	}
-	if decPush.Source != nil {
-		t.Fatalf("expected NewConfiguredPipelineWithDeps decoder source to be nil when deps are present (push mode)")
+	if decPush.Source != procPush {
+		t.Fatalf("expected NewConfiguredPipelineWithDeps decoder source to be injected processor even when dependencies are present")
 	}
 	// (Cannot check procPush.SetPktOut side effect directly)
 

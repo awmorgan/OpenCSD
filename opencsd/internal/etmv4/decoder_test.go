@@ -25,6 +25,14 @@ func TestTypedConstructors(t *testing.T) {
 		t.Fatalf("NewConfiguredPipeline failed: proc=%v dec=%v err=%v", proc, dec, err)
 	}
 
+	procWDeps, decWDeps, err := NewConfiguredPipelineWithDeps(3, cfg, nil, nil)
+	if err != nil || procWDeps == nil || decWDeps == nil {
+		t.Fatalf("NewConfiguredPipelineWithDeps failed: proc=%v dec=%v err=%v", procWDeps, decWDeps, err)
+	}
+	if decWDeps.Source != procWDeps {
+		t.Fatalf("expected NewConfiguredPipelineWithDeps decoder source to be injected processor")
+	}
+
 	if proc, err := NewConfiguredProcessor(nil); proc != nil || !isErrorCode(err, ocsd.ErrInvalidParamVal) {
 		t.Fatalf("expected nil-config processor constructor failure, got proc=%v err=%v", proc, err)
 	}

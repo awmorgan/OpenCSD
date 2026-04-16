@@ -2219,7 +2219,7 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 	if err != nil {
 		return nil, nil, err
 	}
-	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, nil)
+	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, mem, instr, proc)
 	if err != nil {
 		return nil, nil, err
 	}

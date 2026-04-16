@@ -271,18 +271,34 @@ func (dt *DecodeTree) Next() (*ocsd.TraceElement, error) {
 		return dt.nextFromElement(dt.decodeElements[ids[0]])
 	}
 
+	sawWait := false
+
 	for _, csID := range ids {
 		elem := dt.decodeElements[csID]
 		if elem == nil || elem.Iterator == nil {
 			continue
 		}
+
 		trcElem, err := elem.Iterator.Next()
 		if errors.Is(err, io.EOF) {
 			continue
 		}
-		return trcElem, err
+		if errors.Is(err, ocsd.ErrWait) {
+			sawWait = true
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if trcElem == nil {
+			continue
+		}
+		return trcElem, nil
 	}
 
+	if sawWait {
+		return nil, ocsd.ErrWait
+	}
 	return nil, io.EOF
 }
 
