@@ -565,7 +565,7 @@ func processInputFilePullReaderBody(out io.Writer, tree *dcdtree.DecodeTree, in 
 	isFramed := tree.FrameDeformatter() != nil
 	var footer [8]byte
 
-	if tree.CanAttachReader() {
+	if opts.decode && tree.CanAttachReader() {
 		return runDirectReaderPipeline(out, tree, in, sink, genPrinter, opts, start, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed, buf, footer[:])
 	}
 
