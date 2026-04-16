@@ -111,6 +111,21 @@ type synchronizedWriter struct {
 	w  io.Writer
 }
 
+type countingReader struct {
+	r io.Reader
+	n uint32
+}
+
+func (r *countingReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	r.n += uint32(n)
+	return n, err
+}
+
+func (r *countingReader) Count() uint32 {
+	return r.n
+}
+
 func (w *synchronizedWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -477,7 +492,8 @@ func runSharedReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Read
 }
 
 func runDirectReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options, start time.Time, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool, buf []byte, footer []byte) error {
-	return runSharedReaderPipeline(out, tree, in, sink, genPrinter, opts, start, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed, buf, footer)
+	countingIn := &countingReader{r: in}
+	return runSharedReaderPipeline(out, tree, countingIn, sink, genPrinter, opts, start, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed, buf, footer)
 }
 
 func readLegacyDStreamFooter(out io.Writer, in io.Reader, footer []byte, opts options) error {
