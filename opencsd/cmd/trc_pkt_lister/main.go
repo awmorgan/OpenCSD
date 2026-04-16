@@ -492,8 +492,30 @@ func runSharedReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Read
 }
 
 func runDirectReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options, start time.Time, pending []byte, traceIndex uint32, dataPathResp ocsd.DatapathResp, dataPathErr error, align int, isFramed bool, buf []byte, footer []byte) error {
+	_ = pending
+	_ = traceIndex
+	_ = dataPathResp
+	_ = dataPathErr
+	_ = align
+	_ = isFramed
+	_ = buf
+	_ = footer
+
+	if err := drainPreInputElements(tree, sink, genPrinter); err != nil {
+		return err
+	}
+
 	countingIn := &countingReader{r: in}
-	return runSharedReaderPipeline(out, tree, countingIn, sink, genPrinter, opts, start, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed, buf, footer)
+	if err := tree.AttachReader(countingIn); err != nil {
+		return fmt.Errorf("trace packet lister: attach direct reader: %w", err)
+	}
+
+	if err := drainTreeElementsToSinkUntilEOF(tree, sink, genPrinter); err != nil {
+		return fmt.Errorf("trace packet lister: direct reader element drain error: %w", err)
+	}
+
+	reportProcessedInput(out, countingIn.Count(), start, genPrinter, opts)
+	return nil
 }
 
 func readLegacyDStreamFooter(out io.Writer, in io.Reader, footer []byte, opts options) error {
@@ -616,7 +638,7 @@ func processInputFilePullReaderBody(out io.Writer, tree *dcdtree.DecodeTree, in 
 	isFramed := tree.FrameDeformatter() != nil
 	var footer [8]byte
 
-	if opts.decode && tree.CanAttachReader() {
+	if canUseDirectReaderDecodeOnly(tree, opts) {
 		return runDirectReaderPipeline(out, tree, in, sink, genPrinter, opts, start, pending, traceIndex, dataPathResp, dataPathErr, align, isFramed, buf, footer[:])
 	}
 
@@ -775,6 +797,38 @@ func applyAdditionalFlags(tree *dcdtree.DecodeTree, flags uint32) error {
 	})
 
 	return applyErr
+}
+
+func canUseDirectReaderDecodeOnly(tree *dcdtree.DecodeTree, opts options) bool {
+	if tree == nil {
+		return false
+	}
+	if !opts.decodeOnly {
+		return false
+	}
+	if opts.multiSession {
+		return false
+	}
+	if tree.FrameDeformatter() != nil {
+		return false
+	}
+	if !tree.CanAttachReader() {
+		return false
+	}
+
+	ok := true
+	tree.ForEachElement(func(_ uint8, elem *dcdtree.DecodeTreeElement) {
+		if !ok || elem == nil {
+			return
+		}
+		switch elem.DataIn.(type) {
+		case *ptm.PktProc, *etmv3.PktProc:
+			// safe initial pull slice
+		default:
+			ok = false
+		}
+	})
+	return ok
 }
 
 func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options) int {
