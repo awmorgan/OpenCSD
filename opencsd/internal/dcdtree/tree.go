@@ -40,6 +40,47 @@ type DecodeTree struct {
 	decoderRoot ocsd.TraceDecoder
 }
 
+type traceDataReaderSetter interface {
+	SetReader(io.Reader)
+}
+
+func (dt *DecodeTree) CanAttachReader() bool {
+	if dt == nil {
+		return false
+	}
+	if dt.frameDeformatter != nil {
+		return false
+	}
+	if dt.treeType != ocsd.TrcSrcSingle {
+		return false
+	}
+
+	elem := dt.decodeElements[0]
+	if elem == nil || elem.DataIn == nil {
+		return false
+	}
+
+	_, ok := elem.DataIn.(traceDataReaderSetter)
+	return ok
+}
+
+func (dt *DecodeTree) AttachReader(r io.Reader) error {
+	if dt == nil {
+		return ocsd.ErrNotInit
+	}
+	if r == nil {
+		return ocsd.ErrInvalidParamVal
+	}
+	if !dt.CanAttachReader() {
+		return ocsd.ErrInvalidParamVal
+	}
+
+	elem := dt.decodeElements[0]
+	setter := elem.DataIn.(traceDataReaderSetter)
+	setter.SetReader(r)
+	return nil
+}
+
 // NewDecodeTree creates a new Trace Decode Tree using the supplied decoder registry.
 // A non-nil registry is required.
 func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) (*DecodeTree, error) {
