@@ -819,8 +819,8 @@ func canUseDirectReaderDecodeOnly(tree *dcdtree.DecodeTree, opts options) bool {
 			return
 		}
 		switch elem.DataIn.(type) {
-		case *ptm.PktProc, *etmv3.PktProc, *stm.PktProc:
-			// safe pull-native slice
+		case *ptm.PktProc, *etmv3.PktProc, *stm.PktProc, *etmv4.Processor:
+			// pull-enabled decode_only slice, including ETMv4/ETE
 		default:
 			ok = false
 		}
