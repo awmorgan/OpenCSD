@@ -380,6 +380,41 @@ func drainTreeElementsToSink(tree *dcdtree.DecodeTree, sink *filteredGenElemPrin
 	return retErr
 }
 
+func drainTreeElementsToSinkUntilEOF(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter) error {
+	if tree == nil || sink == nil {
+		return nil
+	}
+
+	for {
+		elem, err := tree.Next()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			if errors.Is(err, ocsd.ErrWait) {
+				continue
+			}
+			return err
+		}
+		if elem == nil {
+			continue
+		}
+		if err := sink.PrintElement(elem); err != nil {
+			if ocsd.IsDataWaitErr(err) {
+				if genPrinter != nil && genPrinter.NeedAckWait() {
+					genPrinter.AckWait()
+				}
+				continue
+			}
+			if !ocsd.IsDataContErr(err) {
+				return err
+			}
+		}
+	}
+}
+
+var _ = drainTreeElementsToSinkUntilEOF
+
 func finalizeProcessedInput(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
 	if err := tree.Close(); err != nil {
 		return fmt.Errorf("trace packet lister: OpEOT error: %w", err)
