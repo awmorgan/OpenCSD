@@ -514,6 +514,15 @@ func runDirectReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Read
 		return fmt.Errorf("trace packet lister: direct reader element drain error: %w", err)
 	}
 
+	if opts.multiSession {
+		if err := tree.Reset(0); err != nil {
+			return fmt.Errorf("trace packet lister: OpReset error: %w", err)
+		}
+		if err := drainTreeElementsToSink(tree, sink, genPrinter); err != nil {
+			return fmt.Errorf("trace packet lister: post-reset element drain error: %w", err)
+		}
+	}
+
 	reportProcessedInput(out, countingIn.Count(), start, genPrinter, opts)
 	return nil
 }
@@ -820,7 +829,7 @@ func canUseDirectReaderDecodeOnly(tree *dcdtree.DecodeTree, opts options) bool {
 		}
 		switch elem.DataIn.(type) {
 		case *ptm.PktProc, *etmv3.PktProc, *stm.PktProc, *etmv4.Processor:
-			// pull-enabled decode_only slice, including ETMv4/ETE
+			// pull-enabled decode_only slice
 		default:
 			ok = false
 		}

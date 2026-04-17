@@ -51,14 +51,6 @@ const (
 // Packet is a compatibility alias used by the stateless decoder API.
 type Packet = TracePacket
 
-type packetEvent struct {
-	index       ocsd.TrcIndex
-	pkt         Packet
-	data        []byte
-	emitRaw     bool
-	emitDecoded bool
-}
-
 const packetReaderChunkSize = 4096
 
 var errDecodeNeedMoreData = errors.New("decodeNextPacket: need more data")
@@ -94,7 +86,6 @@ type Processor struct {
 	packetReadEOF   bool
 	packetReadEOT   bool
 	pendingPackets  []Packet
-	pendingEvents   []packetEvent
 	collectPackets  bool
 
 	isInit bool // initialized
@@ -136,7 +127,6 @@ func (p *Processor) SetReader(reader io.Reader) {
 	p.packetReadEOF = false
 	p.packetReadEOT = false
 	p.pendingPackets = p.pendingPackets[:0]
-	p.pendingEvents = p.pendingEvents[:0]
 	p.resetProcessorState()
 }
 
@@ -2206,7 +2196,6 @@ func (p *Processor) resetProcessorState() {
 	p.firstTraceInfo = false
 	p.sentNotsyncPacket = false
 	p.pendingPackets = p.pendingPackets[:0]
-	p.pendingEvents = p.pendingEvents[:0]
 	p.collectPackets = false
 }
 
@@ -2233,14 +2222,19 @@ func (p *Processor) clearStateTransient() {
 }
 
 func (p *Processor) outputPacket(pkt *TracePacket, rawData []byte) error {
-	if p.PktRawMonI != nil {
-		p.PktRawMonI.MonitorRawData(p.packetIndex, pkt, rawData)
-	}
 	if p.collectPackets {
+		if p.packetReader != nil && p.PktRawMonI != nil && len(rawData) > 0 {
+			p.PktRawMonI.MonitorRawData(p.packetIndex, pkt, rawData)
+		}
+
 		queuedPkt := *pkt
 		queuedPkt.Index = p.packetIndex
 		p.pendingPackets = append(p.pendingPackets, queuedPkt)
 		return nil
+	}
+
+	if p.PktRawMonI != nil {
+		p.PktRawMonI.MonitorRawData(p.packetIndex, pkt, rawData)
 	}
 	if p.pktOut == nil {
 		queuedPkt := *pkt
@@ -2282,26 +2276,11 @@ func (p *Processor) outputUnsyncedRawPacket() error {
 		p.PktRawMonI.MonitorRawData(p.packetIndex, &pkt, p.stream.data[:monBytes])
 	}
 
-	var rawCopy []byte
-	if p.packetReader != nil && n > 0 && len(p.stream.data) > 0 {
-		monBytes := min(n, len(p.stream.data))
-		rawCopy = append([]byte(nil), p.stream.data[:monBytes]...)
-	}
-
 	var err error
 	if !p.sentNotsyncPacket {
 		if p.collectPackets {
 			pkt.Index = p.packetIndex
 			p.pendingPackets = append(p.pendingPackets, pkt)
-			if p.packetReader != nil && len(rawCopy) > 0 {
-				p.pendingEvents = append(p.pendingEvents, packetEvent{
-					index:       p.packetIndex,
-					pkt:         pkt,
-					data:        rawCopy,
-					emitRaw:     true,
-					emitDecoded: false,
-				})
-			}
 		} else if p.pktOut != nil {
 			err = p.pktOut.Write(p.packetIndex, &pkt)
 		}
@@ -2316,7 +2295,7 @@ func (p *Processor) outputUnsyncedRawPacket() error {
 	} else {
 		p.stream.data = p.stream.data[:0]
 	}
-	return err
+	return nil
 }
 
 func (p *Processor) pendingUnsyncedPacketType(data []byte) PktType {

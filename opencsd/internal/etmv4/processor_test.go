@@ -97,6 +97,27 @@ func TestProcessorNextPacketFromReader(t *testing.T) {
 	}
 }
 
+func TestProcessorNextPacketFromReaderEmitsRawMonitorCallback(t *testing.T) {
+	p := NewProcessor(&Config{})
+	raw := &captureRawMon{}
+	p.SetPktRawMonitor(raw)
+	p.SetReader(bytes.NewReader([]byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+		0x04,
+	}))
+
+	_, err := p.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected first packet error: %v", err)
+	}
+	if len(raw.indexes) == 0 {
+		t.Fatal("expected raw monitor callback from NextPacket reader path")
+	}
+	if raw.lengths[0] == 0 {
+		t.Fatal("expected raw monitor callback with non-zero raw data length")
+	}
+}
+
 func TestProcessorNextPacketReturnsQueuedWritePacketBeforeWaiting(t *testing.T) {
 	p := NewProcessor(&Config{})
 	p.collectPackets = true
