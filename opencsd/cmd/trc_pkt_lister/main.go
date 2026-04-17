@@ -828,9 +828,9 @@ func canUseDirectReaderDecodeOnly(tree *dcdtree.DecodeTree, opts options) bool {
 			return
 		}
 		switch elem.DataIn.(type) {
-		case *stm.PktProc:
-			// allow full decode direct-reader for STM
-		case *ptm.PktProc, *etmv3.PktProc, *etmv4.Processor:
+		case *stm.PktProc, *ptm.PktProc:
+			// allow full decode direct-reader for STM and PTM
+		case *etmv3.PktProc, *etmv4.Processor:
 			if !opts.decodeOnly {
 				ok = false
 			}
