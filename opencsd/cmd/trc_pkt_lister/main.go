@@ -812,7 +812,7 @@ func canUseDirectReaderDecodeOnly(tree *dcdtree.DecodeTree, opts options) bool {
 	if tree == nil {
 		return false
 	}
-	if !opts.decodeOnly {
+	if !opts.decode {
 		return false
 	}
 	if tree.FrameDeformatter() != nil {
@@ -828,8 +828,12 @@ func canUseDirectReaderDecodeOnly(tree *dcdtree.DecodeTree, opts options) bool {
 			return
 		}
 		switch elem.DataIn.(type) {
-		case *ptm.PktProc, *etmv3.PktProc, *stm.PktProc, *etmv4.Processor:
-			// pull-enabled decode_only slice
+		case *stm.PktProc:
+			// allow full decode direct-reader for STM
+		case *ptm.PktProc, *etmv3.PktProc, *etmv4.Processor:
+			if !opts.decodeOnly {
+				ok = false
+			}
 		default:
 			ok = false
 		}
