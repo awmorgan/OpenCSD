@@ -38,6 +38,10 @@ type DecodeTree struct {
 	createdMapper bool
 
 	decoderRoot ocsd.TraceDecoder
+
+	// NEW: Centralized queue for elements pushed by CallbackSink decoders
+	outQueue    []ocsd.TraceElement
+	outQueuePos int
 }
 
 type traceDataReaderSetter interface {
@@ -62,6 +66,23 @@ func (dt *DecodeTree) CanAttachReader() bool {
 
 	_, ok := elem.DataIn.(traceDataReaderSetter)
 	return ok
+}
+
+// popQueuedElement returns the next element pushed via callbacks, or nil if empty.
+func (dt *DecodeTree) popQueuedElement() *ocsd.TraceElement {
+	if dt.outQueuePos < len(dt.outQueue) {
+		// Copy by value to prevent holding slice references
+		e := dt.outQueue[dt.outQueuePos]
+		dt.outQueuePos++
+
+		// Reset slice to reuse memory without reallocating
+		if dt.outQueuePos == len(dt.outQueue) {
+			dt.outQueue = dt.outQueue[:0]
+			dt.outQueuePos = 0
+		}
+		return &e
+	}
+	return nil
 }
 
 func (dt *DecodeTree) AttachReader(r io.Reader) error {
@@ -243,6 +264,18 @@ func (dt *DecodeTree) AddPullDecoder(routeID uint8, name string, protocol ocsd.T
 	elem := NewDecodeTreeElement(name, flagApplier, pktIn, controlIn, iter, true)
 	elem.Protocol = protocol
 
+	// NEW: Attach the centralized callback if the decoder supports it.
+	// This captures elements generated synchronously during dt.Write()
+	if sink, ok := iter.(ocsd.CallbackSink); ok {
+		sink.SetOutCallback(func(idx ocsd.TrcIndex, traceID uint8, trcElem *ocsd.TraceElement) bool {
+			e := *trcElem
+			e.Index = idx
+			e.TraceID = traceID
+			dt.outQueue = append(dt.outQueue, e)
+			return true
+		})
+	}
+
 	dt.decodeElements[routeID] = elem
 	if dt.frameDeformatter != nil && pktIn != nil {
 		dt.frameDeformatter.SetIDStream(routeID, pktIn)
@@ -251,17 +284,32 @@ func (dt *DecodeTree) AddPullDecoder(routeID uint8, name string, protocol ocsd.T
 }
 
 func (dt *DecodeTree) nextFromElement(elem *DecodeTreeElement) (*ocsd.TraceElement, error) {
+	// Drain the central callback queue first
+	if e := dt.popQueuedElement(); e != nil {
+		return e, nil
+	}
+
 	if elem == nil {
 		return nil, io.EOF
 	}
 	if elem.Iterator != nil {
-		return elem.Iterator.Next()
+		trcElem, err := elem.Iterator.Next()
+		// FIX: Catch elements pushed via callback as a side-effect of Next() (like EOT)
+		if e := dt.popQueuedElement(); e != nil {
+			return e, nil
+		}
+		return trcElem, err
 	}
 	return nil, io.EOF
 }
 
 // Next returns the next available generic trace element from registered pull decoders.
 func (dt *DecodeTree) Next() (*ocsd.TraceElement, error) {
+	// Drain the central callback queue first
+	if e := dt.popQueuedElement(); e != nil {
+		return e, nil
+	}
+
 	ids := dt.sortedElementIDs()
 	if len(ids) == 0 {
 		return nil, io.EOF
@@ -280,6 +328,12 @@ func (dt *DecodeTree) Next() (*ocsd.TraceElement, error) {
 		}
 
 		trcElem, err := elem.Iterator.Next()
+
+		// FIX: Catch elements pushed via callback as a side-effect of Next() (like EOT)
+		if e := dt.popQueuedElement(); e != nil {
+			return e, nil
+		}
+
 		if errors.Is(err, io.EOF) {
 			continue
 		}
@@ -290,10 +344,9 @@ func (dt *DecodeTree) Next() (*ocsd.TraceElement, error) {
 		if err != nil {
 			return nil, err
 		}
-		if trcElem == nil {
-			continue
+		if trcElem != nil {
+			return trcElem, nil
 		}
-		return trcElem, nil
 	}
 
 	if sawWait {
