@@ -132,7 +132,15 @@ func (d *PktDecode) processPacket(pktIn *Packet) error {
 	}
 	d.CurrPacketIn = pktIn
 	d.IndexCurrPkt = pktIn.Index
-	return d.ProcessPacket()
+
+	for fn := d.currentStateFn(); fn != nil; {
+		next, err, done := fn()
+		if done {
+			return err
+		}
+		fn = next
+	}
+	return nil
 }
 
 // Close forwards an EOT control operation through the legacy multiplexer.
@@ -149,17 +157,6 @@ func (d *PktDecode) Flush() error {
 func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 	_ = indexSOP
 	return d.OnReset()
-}
-
-func (d *PktDecode) ProcessPacket() error {
-	for fn := d.currentStateFn(); fn != nil; {
-		next, err, done := fn()
-		if done {
-			return err
-		}
-		fn = next
-	}
-	return nil
 }
 
 func (d *PktDecode) currentStateFn() stateFn {
