@@ -375,18 +375,60 @@ func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
 }
 
 // Elements provides a standard Go 1.23 iterator over the trace elements.
-// It wraps the legacy pull-based Next() method.
+// It directly drives the packet decoder and yields elements with zero queue allocation.
 func (d *PktDecode) Elements() iter.Seq2[*ocsd.TraceElement, error] {
 	return func(yield func(*ocsd.TraceElement, error) bool) {
-		for {
-			elem, err := d.Next()
-			if err != nil {
-				if !errors.Is(err, io.EOF) {
-					yield(nil, err)
+		if d.Source == nil {
+			return
+		}
+
+		yieldActive := true
+
+		// Wire the callback directly to the iterator's yield function
+		d.outCallback = func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool {
+			if !yieldActive {
+				return false
+			}
+			e := cloneQueuedElem(elem)
+			e.Index = idx
+			e.TraceID = traceID
+			yieldActive = yield(&e, nil)
+			return yieldActive
+		}
+
+		// Ensure callback is cleaned up when the iterator terminates
+		defer func() {
+			d.outCallback = nil
+		}()
+
+		// Drive the decode process
+		for yieldActive {
+			pkt, err := d.Source.NextPacket()
+			if errors.Is(err, io.EOF) {
+				d.Source = nil
+				if !d.pullEOFDone {
+					d.pullEOFDone = true
+					if closeErr := d.Close(); closeErr != nil {
+						yield(nil, closeErr)
+					}
 				}
 				return
 			}
-			if !yield(elem, nil) {
+			if err != nil {
+				if !errors.Is(err, ocsd.ErrWait) {
+					d.Source = nil
+				}
+				yield(nil, err)
+				return
+			}
+
+			// Write processes the packet and flushes outputs.
+			// The flushes will hit our outCallback and trigger the yield.
+			if wErr := d.Write(0, &pkt); wErr != nil {
+				if errors.Is(wErr, ocsd.ErrWait) {
+					return
+				}
+				yield(nil, wErr)
 				return
 			}
 		}

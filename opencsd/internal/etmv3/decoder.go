@@ -272,20 +272,59 @@ func cloneQueuedElem(elem *ocsd.TraceElement) ocsd.TraceElement {
 }
 
 // Elements provides a standard Go 1.23 iterator over the trace elements.
-// It wraps the legacy pull-based Next() method.
+// It directly drives the packet decoder and yields elements with zero queue allocation.
 func (d *PktDecode) Elements() iter.Seq2[*ocsd.TraceElement, error] {
 	return func(yield func(*ocsd.TraceElement, error) bool) {
-		for {
-			elem, err := d.Next()
+		if d.Source == nil {
+			return
+		}
+
+		yieldActive := true
+
+		// Wire the callback directly to the iterator's yield function
+		d.outCallback = func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool {
+			if !yieldActive {
+				return false
+			}
+			e := cloneQueuedElem(elem)
+			e.Index = idx
+			e.TraceID = traceID
+			yieldActive = yield(&e, nil)
+			return yieldActive
+		}
+
+		defer func() {
+			d.outCallback = nil
+		}()
+
+		// Drive the decode process
+		for yieldActive {
+			pkt, err := d.Source.NextPacket()
 			if err != nil {
-				if !errors.Is(err, io.EOF) {
-					yield(nil, err)
+				if errors.Is(err, io.EOF) {
+					d.Source = nil
+					if closeErr := d.Close(); closeErr != nil {
+						yield(nil, closeErr)
+					}
+					return
 				}
+				yield(nil, err)
 				return
 			}
-			if !yield(elem, nil) {
+
+			d.CurrPacketIn = &pkt
+			d.IndexCurrPkt = pkt.Index
+
+			if err := d.processPacket(); err != nil {
+				if errors.Is(err, ocsd.ErrWait) {
+					return
+				}
+				yield(nil, err)
 				return
 			}
+
+			// This will trigger OutputTraceElementIdx, hit our callback, and yield
+			d.flushOutputElements()
 		}
 	}
 }
