@@ -46,12 +46,6 @@ func (d *PktDecode) traceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *o
 	queued.TraceID = trcChanID
 
 	seq := queuedTraceElemSeq.Add(1)
-	if d.outSink != nil {
-		if !d.outSink(queueIndex, trcChanID, &queued) {
-			return ocsd.ErrWait
-		}
-		return nil
-	}
 	if d.OutSink != nil {
 		if err := d.OutSink(seq, queueIndex, trcChanID, &queued); err != nil {
 			return err
@@ -74,7 +68,6 @@ type PktDecode struct {
 	lastElemIndex   ocsd.TrcIndex
 	sawActivity     bool
 	pullEOFDone     bool
-	outSink         ocsd.ElementSinkFn
 	OutSink         ElementCallback
 
 	// Source is the pull-based packet reader injected at construction time.
@@ -109,24 +102,7 @@ func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMe
 	return decoder, nil
 }
 
-// SetElementSink implements ocsd.TraceElementSink.
-func (d *PktDecode) SetElementSink(fn ocsd.ElementSinkFn) {
-	d.outSink = fn
-	if d.inner == nil {
-		return
-	}
-	if fn == nil {
-		d.inner.SetElementSink(nil)
-		return
-	}
-	d.inner.SetElementSink(func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool {
-		if err := d.traceElemIn(idx, traceID, elem); err != nil {
-			return false
-		}
-		return true
-	})
-	_ = d.drainInner()
-}
+// (removed) SetElementSink is no longer used; Elements() and drainInner use NextElement().
 
 // NewConfiguredPipeline creates and wires a typed ETE processor/decoder pair.
 func NewConfiguredPipeline(instID int, cfg *Config) (*etmv4.Processor, *PktDecode, error) {

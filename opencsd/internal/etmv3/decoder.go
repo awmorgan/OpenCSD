@@ -71,9 +71,6 @@ type PktDecode struct {
 	csID            uint8
 	pendingElements []traceElemEvent
 
-	// outSink is the optional callback for Phase 1 decoupling.
-	outSink ocsd.ElementSinkFn
-
 	// Internal source.
 	Source ocsd.PacketReader[Packet]
 }
@@ -145,15 +142,7 @@ func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem
 	elem.Index = idx
 	elem.TraceID = traceID
 
-	// NEW: If a sink is wired, push the element instantly.
-	if d.outSink != nil {
-		if !d.outSink(idx, traceID, elem) {
-			return ocsd.ErrWait
-		}
-		return nil
-	}
-
-	// FALLBACK: Legacy slice append behavior
+	// Always buffer elements for pull consumers.
 	d.pendingElements = append(d.pendingElements, traceElemEvent{
 		index:   idx,
 		traceID: traceID,
@@ -162,10 +151,7 @@ func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem
 	return nil
 }
 
-// SetElementSink implements ocsd.TraceElementSink.
-func (d *PktDecode) SetElementSink(fn ocsd.ElementSinkFn) {
-	d.outSink = fn
-}
+// (removed) SetElementSink is no longer used; Elements() uses NextElement().
 
 // AccessMemory reads target memory.
 func (d *PktDecode) AccessMemory(address ocsd.VAddr, traceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
@@ -280,56 +266,22 @@ func cloneQueuedElem(elem *ocsd.TraceElement) ocsd.TraceElement {
 // It directly drives the packet decoder and yields elements with zero queue allocation.
 func (d *PktDecode) Elements() iter.Seq2[*ocsd.TraceElement, error] {
 	return func(yield func(*ocsd.TraceElement, error) bool) {
-		if d.Source == nil {
-			return
-		}
-
-		yieldActive := true
-
-		// Wire the callback directly to the iterator's yield function
-		d.outSink = func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool {
-			if !yieldActive {
-				return false
+		for {
+			idx, traceID, elem, err := d.NextElement()
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					yield(nil, err)
+				}
+				return
 			}
-			e := cloneQueuedElem(elem)
+
+			e := cloneQueuedElem(&elem)
 			e.Index = idx
 			e.TraceID = traceID
-			yieldActive = yield(&e, nil)
-			return yieldActive
-		}
 
-		defer func() {
-			d.outSink = nil
-		}()
-
-		// Drive the decode process
-		for yieldActive {
-			pkt, err := d.Source.NextPacket()
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					d.Source = nil
-					if closeErr := d.Close(); closeErr != nil {
-						yield(nil, closeErr)
-					}
-					return
-				}
-				yield(nil, err)
+			if !yield(&e, nil) {
 				return
 			}
-
-			d.CurrPacketIn = &pkt
-			d.IndexCurrPkt = pkt.Index
-
-			if err := d.processPacket(); err != nil {
-				if errors.Is(err, ocsd.ErrWait) {
-					return
-				}
-				yield(nil, err)
-				return
-			}
-
-			// This will trigger OutputTraceElementIdx, hit our callback, and yield
-			d.flushOutputElements()
 		}
 	}
 }

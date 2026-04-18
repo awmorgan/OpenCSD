@@ -26,16 +26,7 @@ func (d *PktDecode) pushOutputElement(index ocsd.TrcIndex, traceID uint8, elem *
 		return nil
 	}
 
-	// NEW: If a sink is wired, push the element instantly.
-	// This supports the future zero-allocation path.
-	if d.outSink != nil {
-		if !d.outSink(index, traceID, elem) {
-			return ocsd.ErrWait // Halt processing if sink is full/closed
-		}
-		return nil
-	}
-
-	// LEGACY: Continue buffering elements for Next() and DecodeTree.
+	// Always buffer elements for the pull-based consumers.
 	e := traceElemEvent{index, traceID, cloneQueuedElem(elem)}
 	d.elemBuf = append(d.elemBuf, e)
 	return nil
@@ -212,9 +203,6 @@ type PktDecode struct {
 	elemBuf    []traceElemEvent
 	elemBufPos int
 
-	// outSink is the optional callback for Phase 1 decoupling.
-	outSink ocsd.ElementSinkFn
-
 	// Source is the pull-based packet reader injected at construction time.
 	// May be nil when the push-based Write path is used instead.
 	Source ocsd.PacketReader[Packet]
@@ -236,9 +224,7 @@ func (d *PktDecode) ApplyFlags(flags uint32) error {
 }
 
 // SetElementSink implements ocsd.TraceElementSink.
-func (d *PktDecode) SetElementSink(fn ocsd.ElementSinkFn) {
-	d.outSink = fn
-}
+// (removed) SetElementSink is no longer used; Elements() uses NextElement().
 
 // OutputTraceElement sends an element using IndexCurrPkt.
 func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error {
@@ -385,57 +371,21 @@ func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
 // It directly drives the packet decoder and yields elements with zero queue allocation.
 func (d *PktDecode) Elements() iter.Seq2[*ocsd.TraceElement, error] {
 	return func(yield func(*ocsd.TraceElement, error) bool) {
-		if d.Source == nil {
-			return
-		}
-
-		yieldActive := true
-
-		// Wire the callback directly to the iterator's yield function
-		d.outSink = func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool {
-			if !yieldActive {
-				return false
+		for {
+			idx, traceID, elem, err := d.NextElement()
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					yield(nil, err)
+				}
+				return
 			}
-			e := cloneQueuedElem(elem)
+
+			// Yield the element
+			e := cloneQueuedElem(&elem)
 			e.Index = idx
 			e.TraceID = traceID
-			yieldActive = yield(&e, nil)
-			return yieldActive
-		}
 
-		// Ensure callback is cleaned up when the iterator terminates
-		defer func() {
-			d.outSink = nil
-		}()
-
-		// Drive the decode process
-		for yieldActive {
-			pkt, err := d.Source.NextPacket()
-			if errors.Is(err, io.EOF) {
-				d.Source = nil
-				if !d.pullEOFDone {
-					d.pullEOFDone = true
-					if closeErr := d.Close(); closeErr != nil {
-						yield(nil, closeErr)
-					}
-				}
-				return
-			}
-			if err != nil {
-				if !errors.Is(err, ocsd.ErrWait) {
-					d.Source = nil
-				}
-				yield(nil, err)
-				return
-			}
-
-			// Write processes the packet and flushes outputs.
-			// The flushes will hit our outSink and trigger the yield.
-			if wErr := d.Write(0, &pkt); wErr != nil {
-				if errors.Is(wErr, ocsd.ErrWait) {
-					return
-				}
-				yield(nil, wErr)
+			if !yield(&e, nil) {
 				return
 			}
 		}
