@@ -258,10 +258,6 @@ func (p *PktProc) nextPktEvent() (packetEvent, error) {
 	return e, nil
 }
 
-func (p *PktProc) putBackPktEvent(e packetEvent) {
-	p.pendingPackets = append([]packetEvent{e}, p.pendingPackets...)
-}
-
 func (p *PktProc) drainPendingDecodedPackets() {
 	for {
 		e, err := p.nextPktEvent()
@@ -318,11 +314,8 @@ func (p *PktProc) NextPacket() (Packet, error) {
 		buf := make([]byte, packetReaderChunkSize)
 		n, err := p.packetReader.Read(buf)
 		if n > 0 {
-			p.collectPackets = true
-			processed, procErr := p.ProcessData(p.packetReadIndex, buf[:n])
-			p.collectPackets = false
+			processed, procErr := p.processData(p.packetReadIndex, buf[:n])
 			p.packetReadIndex += ocsd.TrcIndex(processed)
-			p.drainPendingDecodedPackets()
 			if procErr != nil {
 				return Packet{}, procErr
 			}
@@ -343,36 +336,12 @@ func (p *PktProc) NextPacket() (Packet, error) {
 	}
 }
 
-// Write is the explicit data-path entrypoint used by split interfaces.
+// Write satisfies the ocsd.TraceDecoder interface.
 func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if len(dataBlock) == 0 {
-		return 0, fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
+		return 0, fmt.Errorf("%w: stm processor: zero length data block", ocsd.ErrInvalidParamVal)
 	}
-	p.collectPackets = true
-	processed, err := p.ProcessData(index, dataBlock)
-	p.collectPackets = false
-	if err != nil && !errors.Is(err, ocsd.ErrWait) {
-		return processed, err
-	}
-	for {
-		e, nextErr := p.nextPktEvent()
-		if errors.Is(nextErr, io.EOF) {
-			break
-		}
-		if nextErr != nil {
-			return processed, nextErr
-		}
-		if len(e.data) > 0 {
-			p.outputRawPacketToMonitor(e.index, &e.pkt, e.data)
-		}
-		if outErr := p.outputDecodedPacket(e.index, &e.pkt); outErr != nil {
-			if errors.Is(outErr, ocsd.ErrWait) {
-				p.putBackPktEvent(e)
-			}
-			return processed, outErr
-		}
-	}
-	return processed, nil
+	return p.processData(index, dataBlock)
 }
 
 // Close handles end-of-trace control.
@@ -420,7 +389,7 @@ func (p *PktProc) Packets() iter.Seq2[Packet, error] {
 	}
 }
 
-func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+func (p *PktProc) processData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	var err error
 	p.dataIn = dataBlock
 	p.dataInSize = uint32(len(dataBlock))
