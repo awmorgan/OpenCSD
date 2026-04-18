@@ -203,16 +203,6 @@ func (d *PktDecode) InvalidateMemAccCache(traceID uint8) error {
 	return ocsd.ErrDcdInterfaceUnused
 }
 
-// processPacket is the explicit packet data entrypoint used by split interfaces.
-func (d *PktDecode) processPacket(pktIn *Packet) error {
-	if pktIn == nil {
-		return ocsd.ErrInvalidParamVal
-	}
-	d.CurrPacketIn = pktIn
-	d.IndexCurrPkt = pktIn.Index
-	return d.ProcessPacket()
-}
-
 // Next returns one decoded trace element at a time for pull-based consumers.
 func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
 	idx, traceID, elem, err := d.NextElement()
@@ -365,7 +355,14 @@ func (d *PktDecode) OnFlush() error {
 	return d.contProcess()
 }
 
-func (d *PktDecode) ProcessPacket() error {
+// processPacket encapsulates the core state machine for decoding a single packet.
+func (d *PktDecode) processPacket(pktIn *Packet) error {
+	if pktIn == nil {
+		return ocsd.ErrInvalidParamVal
+	}
+	d.CurrPacketIn = pktIn
+	d.IndexCurrPkt = pktIn.Index
+
 	var err error
 	for {
 		var next decodeState

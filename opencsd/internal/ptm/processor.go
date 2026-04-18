@@ -228,7 +228,7 @@ func (p *PktProc) NextPacket() (Packet, error) {
 		n, err := p.packetReader.Read(buf)
 		if n > 0 {
 			p.collectPackets = true
-			processed, procErr := p.ProcessData(p.packetReadIndex, buf[:n])
+			processed, procErr := p.processData(p.packetReadIndex, buf[:n])
 			p.collectPackets = false
 			p.packetReadIndex += ocsd.TrcIndex(processed)
 			if procErr != nil {
@@ -269,7 +269,7 @@ func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if len(dataBlock) == 0 {
 		return 0, fmt.Errorf("%w: packet processor: zero length data block", ocsd.ErrInvalidParamVal)
 	}
-	processed, err := p.ProcessData(index, dataBlock)
+	processed, err := p.processData(index, dataBlock)
 	if err != nil && !errors.Is(err, ocsd.ErrWait) {
 		return processed, err
 	}
@@ -389,7 +389,7 @@ func (p *PktProc) malformedPacketErr(msg string) error {
 	return fmt.Errorf("%w: %s", ocsd.ErrBadPacketSeq, msg)
 }
 
-func (p *PktProc) ProcessData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, error) {
+func (p *PktProc) processData(index ocsd.TrcIndex, dataBlock []uint8) (uint32, error) {
 	var err error
 
 	p.dataInProcessed = 0
