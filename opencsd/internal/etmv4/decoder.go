@@ -25,6 +25,16 @@ func (d *PktDecode) pushOutputElement(index ocsd.TrcIndex, traceID uint8, elem *
 	if d == nil || elem == nil {
 		return nil
 	}
+
+	// NEW: Route to callback if it is wired up
+	if d.outCallback != nil {
+		if !d.outCallback(index, traceID, elem) {
+			return ocsd.ErrWait
+		}
+		return nil
+	}
+
+	// FALLBACK: Legacy slice append behavior (keeps current tests passing)
 	e := traceElemEvent{index, traceID, cloneQueuedElem(elem)}
 	d.elemBuf = append(d.elemBuf, e)
 	return nil
@@ -200,6 +210,9 @@ type PktDecode struct {
 	// elemBuf/elemBufPos: cursor-based output buffer filled per packet decode.
 	elemBuf    []traceElemEvent
 	elemBufPos int
+
+	// NEW: Callback for zero-allocation iterator
+	outCallback func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool
 
 	// Source is the pull-based packet reader injected at construction time.
 	// May be nil when the push-based Write path is used instead.

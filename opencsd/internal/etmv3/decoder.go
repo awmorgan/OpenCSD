@@ -71,6 +71,9 @@ type PktDecode struct {
 	csID            uint8
 	pendingElements []traceElemEvent
 
+	// NEW: Callback for zero-allocation iterator
+	outCallback func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool
+
 	// Internal source.
 	Source ocsd.PacketReader[Packet]
 }
@@ -141,6 +144,16 @@ func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem
 	}
 	elem.Index = idx
 	elem.TraceID = traceID
+
+	// NEW: Route to callback if it is wired up
+	if d.outCallback != nil {
+		if !d.outCallback(idx, traceID, elem) {
+			return ocsd.ErrWait
+		}
+		return nil
+	}
+
+	// FALLBACK: Legacy slice append behavior
 	d.pendingElements = append(d.pendingElements, traceElemEvent{
 		index:   idx,
 		traceID: traceID,
