@@ -1,7 +1,10 @@
 package demux
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 
 	"opencsd/internal/ocsd"
 )
@@ -50,6 +53,11 @@ type FrameDeformatter struct {
 
 	pendingData  []byte
 	pendingIndex ocsd.TrcIndex
+
+	// Pull-mode source
+	sourceReader io.Reader
+	sourceIndex  ocsd.TrcIndex
+	sourceEOF    bool
 }
 
 func NewFrameDeformatter() *FrameDeformatter {
@@ -366,4 +374,91 @@ func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBloc
 	}
 
 	return d.inBlockProcessed, outErr
+}
+
+// --- Pull Architecture Additions ---
+
+// Stream bridges the push-based demuxer to a pull-based io.Reader.
+// It implements ocsd.TraceDecoder to receive pushed data internally from the demuxer.
+type Stream struct {
+	demux *FrameDeformatter
+	id    uint8
+	buf   bytes.Buffer
+	eof   bool
+}
+
+func (s *Stream) Write(index ocsd.TrcIndex, data []byte) (uint32, error) {
+	n, err := s.buf.Write(data)
+	return uint32(n), err
+}
+
+func (s *Stream) Close() error {
+	s.eof = true
+	return nil
+}
+
+func (s *Stream) Flush() error { return nil }
+
+func (s *Stream) Reset(index ocsd.TrcIndex) error {
+	s.buf.Reset()
+	s.eof = false
+	return nil
+}
+
+func (s *Stream) Read(p []byte) (n int, err error) {
+	for s.buf.Len() == 0 && !s.eof && !s.demux.sourceEOF {
+		err := s.demux.pullFromSource()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break // sourceEOF is set inside pullFromSource
+			}
+			return 0, err
+		}
+	}
+	if s.buf.Len() > 0 {
+		return s.buf.Read(p)
+	}
+	if s.eof || s.demux.sourceEOF {
+		return 0, io.EOF
+	}
+	return 0, ocsd.ErrWait
+}
+
+// SetReader attaches a pull-style raw byte stream to the demuxer.
+func (d *FrameDeformatter) SetReader(r io.Reader) {
+	d.sourceReader = r
+	d.sourceIndex = 0
+	d.sourceEOF = false
+}
+
+// GetStream returns an io.Reader for a specific Trace ID, internally wiring it to the demuxer.
+func (d *FrameDeformatter) GetStream(id uint8) io.Reader {
+	s := &Stream{
+		demux: d,
+		id:    id,
+	}
+	d.SetIDStream(id, s)
+	return s
+}
+
+func (d *FrameDeformatter) pullFromSource() error {
+	if d.sourceReader == nil {
+		return io.EOF
+	}
+	buf := make([]byte, 4096)
+	n, err := d.sourceReader.Read(buf)
+	if n > 0 {
+		_, procErr := d.Write(d.sourceIndex, buf[:n])
+		d.sourceIndex += ocsd.TrcIndex(n)
+		if procErr != nil {
+			return procErr
+		}
+	}
+	// If we hit EOF on the source, flush pending frames and close attached streams.
+	if err != nil && errors.Is(err, io.EOF) && !d.sourceEOF {
+		d.sourceEOF = true
+		_ = d.Flush()
+		_ = d.Close() // this sets eof=true on all registered Streams
+	}
+	return err
 }
