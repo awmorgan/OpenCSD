@@ -189,9 +189,7 @@ func TestITMEndToEndDecode(t *testing.T) {
 			t.Fatalf("NewPipeline failed: %v", err)
 		}
 
-		proc.Write(0, stream)
-		proc.Flush()
-		proc.Close()
+		proc.SetReader(bytes.NewReader(stream))
 
 		elems := make([]ocsd.TraceElement, 0)
 		for elem, nextErr := range dec.Elements() {
@@ -330,12 +328,27 @@ func TestITMErrorCases(t *testing.T) {
 	proc := NewPktProc(nil)
 	proc.SetProtocolConfig(cfg)
 
+	drainProc := func(p *PktProc, data []byte) error {
+		p.SetReader(bytes.NewReader(data))
+		var lastErr error
+		for {
+			_, err := p.NextPacket()
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					lastErr = err
+				}
+				break
+			}
+		}
+		return lastErr
+	}
+
 	// reserved header error
 	sb := &ItmStreamBuilder{}
 	sb.AddAsync()
 	sb.AddBytes(0x14) // reserved
 
-	_, err := proc.Write(0, sb.data)
+	err := drainProc(proc, sb.data)
 	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected non-fatal by default")
@@ -343,7 +356,7 @@ func TestITMErrorCases(t *testing.T) {
 
 	proc.Reset(0)
 	_ = proc.ApplyFlags(ocsd.OpflgPktprocErrBadPkts)
-	_, err = proc.Write(0, sb.data)
+	err = drainProc(proc, sb.data)
 	resp = ocsd.DataRespFromErr(err)
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected fatal response for reserved header (Resp = %v)", resp)
@@ -354,7 +367,7 @@ func TestITMErrorCases(t *testing.T) {
 	sb.AddAsync()
 	sb.AddBytes(0x94, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00)
 	proc.Reset(0)
-	_, err = proc.Write(0, sb.data)
+	err = drainProc(proc, sb.data)
 	resp = ocsd.DataRespFromErr(err)
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected fatal response for GTS1 limit exceeded")
@@ -365,7 +378,7 @@ func TestITMErrorCases(t *testing.T) {
 	sb.AddAsync()
 	sb.AddBytes(0xB4, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00)
 	proc.Reset(0)
-	_, err = proc.Write(0, sb.data)
+	err = drainProc(proc, sb.data)
 	resp = ocsd.DataRespFromErr(err)
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected fatal response for GTS2 limit exceeded")
@@ -376,7 +389,7 @@ func TestITMErrorCases(t *testing.T) {
 	sb.AddAsync()
 	sb.AddBytes(0xC0, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00)
 	proc.Reset(0)
-	_, err = proc.Write(0, sb.data)
+	err = drainProc(proc, sb.data)
 	resp = ocsd.DataRespFromErr(err)
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected fatal response for LTS limit exceeded")
@@ -387,7 +400,7 @@ func TestITMErrorCases(t *testing.T) {
 	sb.AddAsync()
 	sb.AddBytes(0x08, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00)
 	proc.Reset(0)
-	_, err = proc.Write(0, sb.data)
+	err = drainProc(proc, sb.data)
 	resp = ocsd.DataRespFromErr(err)
 	if !ocsd.DataRespIsFatal(resp) {
 		t.Errorf("Expected fatal response for Extension limit exceeded")
@@ -398,15 +411,14 @@ func TestITMErrorCases(t *testing.T) {
 	sb.AddAsync()
 	sb.AddBytes(0x94)
 	proc.Reset(0)
-	proc.Write(0, sb.data)
-	proc.Close()
+	drainProc(proc, sb.data)
 
 	// Async while synced
 	sb = &ItmStreamBuilder{}
 	sb.AddAsync() // triggers sync
 	sb.AddAsync() // processed while synced
 	proc.Reset(0)
-	proc.Write(0, sb.data)
+	drainProc(proc, sb.data)
 
 	// bad-packet hook
 	proc.IsBadPacket()
