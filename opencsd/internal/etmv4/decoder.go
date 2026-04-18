@@ -277,7 +277,7 @@ func (d *PktDecode) Write(indexSOP ocsd.TrcIndex, pktIn *TracePacket) error {
 	}
 	d.CurrPacketIn = pktIn
 	d.IndexCurrPkt = indexSOP
-	err := d.ProcessPacket()
+	err := d.processPacket()
 	d.flushOutputElements()
 	return err
 }
@@ -576,7 +576,7 @@ func (d *PktDecode) OnFlush() error {
 	return nil
 }
 
-func (d *PktDecode) ProcessPacket() error {
+func (d *PktDecode) processPacket() error {
 	d.syncAA64OpcodeCheckMode()
 
 	var err error
