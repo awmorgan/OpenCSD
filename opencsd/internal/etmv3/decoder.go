@@ -162,6 +162,11 @@ func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem
 	return nil
 }
 
+// SetOutCallback wires a direct output sink, bypassing internal buffers.
+func (d *PktDecode) SetOutCallback(cb func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool) {
+	d.outCallback = cb
+}
+
 // AccessMemory reads target memory.
 func (d *PktDecode) AccessMemory(address ocsd.VAddr, traceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
 	if d.MemAccess != nil {

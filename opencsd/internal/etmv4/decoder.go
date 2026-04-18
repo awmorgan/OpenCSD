@@ -229,8 +229,14 @@ func (d *PktDecode) ApplyFlags(flags uint32) error {
 	if (flags & ocsd.OpflgPktdecAA64OpcodeChk) != 0 {
 		d.aa64OpcodeCheck = true
 	}
+
 	d.syncAA64OpcodeCheckMode()
 	return nil
+}
+
+// SetOutCallback wires a direct output sink, bypassing internal buffers.
+func (d *PktDecode) SetOutCallback(cb func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool) {
+	d.outCallback = cb
 }
 
 // OutputTraceElement sends an element using IndexCurrPkt.
