@@ -12,8 +12,8 @@ func TestSequencedDrainFromPendingQueue(t *testing.T) {
 	elem.SetType(ocsd.GenElemEvent)
 	elem.TraceID = 6
 
-	if err := d.TraceElemIn(9, 6, elem); err != nil {
-		t.Fatalf("TraceElemIn failed: %v", err)
+	if err := d.traceElemIn(9, 6, elem); err != nil {
+		t.Fatalf("traceElemIn failed: %v", err)
 	}
 
 	seq, out, err := d.NextSequenced()

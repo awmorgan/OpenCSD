@@ -26,7 +26,7 @@ type SequencedTraceIterator interface {
 	NextSequenced() (uint64, *ocsd.TraceElement, error)
 }
 
-func (d *PktDecode) TraceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
+func (d *PktDecode) traceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
 	if d == nil || elem == nil {
 		return nil
 	}
@@ -150,7 +150,7 @@ func (d *PktDecode) drainInner() error {
 		if err != nil {
 			return err
 		}
-		if err := d.TraceElemIn(idx, trcChanID, &elem); err != nil {
+		if err := d.traceElemIn(idx, trcChanID, &elem); err != nil {
 			return err
 		}
 	}
