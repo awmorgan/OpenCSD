@@ -1,7 +1,6 @@
 package demux
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -383,13 +382,13 @@ func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBloc
 type Stream struct {
 	demux *FrameDeformatter
 	id    uint8
-	buf   bytes.Buffer
+	buf   []byte
 	eof   bool
 }
 
 func (s *Stream) Write(index ocsd.TrcIndex, data []byte) (uint32, error) {
-	n, err := s.buf.Write(data)
-	return uint32(n), err
+	s.buf = append(s.buf, data...)
+	return uint32(len(data)), nil
 }
 
 func (s *Stream) Close() error {
@@ -400,23 +399,25 @@ func (s *Stream) Close() error {
 func (s *Stream) Flush() error { return nil }
 
 func (s *Stream) Reset(index ocsd.TrcIndex) error {
-	s.buf.Reset()
+	s.buf = s.buf[:0]
 	s.eof = false
 	return nil
 }
 
 func (s *Stream) Read(p []byte) (n int, err error) {
-	for s.buf.Len() == 0 && !s.eof && !s.demux.sourceEOF {
+	for len(s.buf) == 0 && !s.eof && !s.demux.sourceEOF {
 		err := s.demux.pullFromSource()
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break // sourceEOF is set inside pullFromSource
+			if errors.Is(err, io.EOF) || errors.Is(err, ocsd.ErrWait) {
+				break // return EOF or wait after source exhaustion or no data available now
 			}
 			return 0, err
 		}
 	}
-	if s.buf.Len() > 0 {
-		return s.buf.Read(p)
+	if len(s.buf) > 0 {
+		n = copy(p, s.buf)
+		s.buf = s.buf[n:]
+		return n, nil
 	}
 	if s.eof || s.demux.sourceEOF {
 		return 0, io.EOF
@@ -445,7 +446,18 @@ func (d *FrameDeformatter) pullFromSource() error {
 	if d.sourceReader == nil {
 		return io.EOF
 	}
-	buf := make([]byte, 4096)
+	if d.alignment == 0 {
+		return fmt.Errorf("%w: Deformatter not configured", ocsd.ErrFail)
+	}
+
+	bytesNeeded := int(d.alignment) - len(d.pendingData)
+	if bytesNeeded <= 0 {
+		// If we already have enough data to process an aligned block,
+		// the caller can retry without pulling more bytes.
+		return nil
+	}
+
+	buf := make([]byte, bytesNeeded)
 	n, err := d.sourceReader.Read(buf)
 	if n > 0 {
 		_, procErr := d.Write(d.sourceIndex, buf[:n])
@@ -454,11 +466,13 @@ func (d *FrameDeformatter) pullFromSource() error {
 			return procErr
 		}
 	}
-	// If we hit EOF on the source, flush pending frames and close attached streams.
 	if err != nil && errors.Is(err, io.EOF) && !d.sourceEOF {
 		d.sourceEOF = true
 		_ = d.Flush()
 		_ = d.Close() // this sets eof=true on all registered Streams
+	}
+	if n == 0 && err == nil {
+		return ocsd.ErrWait
 	}
 	return err
 }

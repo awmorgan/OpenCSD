@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"testing"
 
 	"opencsd/internal/ocsd"
@@ -196,6 +197,24 @@ var _ ocsd.TraceDecoder = (*mockDataSinkWaitOnce)(nil)
 
 type mockRawSink struct {
 	out *bytes.Buffer
+}
+
+type countingReader struct {
+	data     []byte
+	reqSizes []int
+}
+
+func (r *countingReader) Read(p []byte) (int, error) {
+	r.reqSizes = append(r.reqSizes, len(p))
+	if len(r.data) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(p, r.data)
+	r.data = r.data[n:]
+	if len(r.data) == 0 {
+		return n, io.EOF
+	}
+	return n, nil
 }
 
 func (m *mockRawSink) WriteRawFrame(index ocsd.TrcIndex, frameElem ocsd.RawframeElem, data []byte, traceID uint8) error {
@@ -490,6 +509,46 @@ func TestMemAlignAcceptsUnalignedChunks(t *testing.T) {
 
 	if start != len(buf) {
 		t.Fatalf("test did not consume full source buffer: %d/%d", start, len(buf))
+	}
+}
+
+func TestStreamPullsExactAlignedSourceBytes(t *testing.T) {
+	df := NewFrameDeformatter()
+	df.Configure(baseCfg)
+
+	source := &countingReader{data: makeBufMemAlign()}
+	df.SetReader(source)
+	stream := df.GetStream(0x10)
+
+	readBuf := make([]byte, 32)
+	var output []byte
+
+	for {
+		n, err := stream.Read(readBuf)
+		if n > 0 {
+			output = append(output, readBuf[:n]...)
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if errors.Is(err, ocsd.ErrWait) {
+			continue
+		}
+		if err != nil {
+			t.Fatalf("unexpected stream read error: %v", err)
+		}
+	}
+
+	if len(output) == 0 {
+		t.Fatal("expected decoded stream output")
+	}
+	if len(source.reqSizes) == 0 {
+		t.Fatal("expected source reads while pulling stream data")
+	}
+	for _, size := range source.reqSizes {
+		if size > int(df.alignment) || size <= 0 {
+			t.Fatalf("source read %d bytes, expected 1..%d", size, df.alignment)
+		}
 	}
 }
 
