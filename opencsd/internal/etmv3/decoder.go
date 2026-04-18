@@ -71,8 +71,8 @@ type PktDecode struct {
 	csID            uint8
 	pendingElements []traceElemEvent
 
-	// NEW: Callback for zero-allocation iterator
-	outCallback func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool
+	// outSink is the optional callback for Phase 1 decoupling.
+	outSink ocsd.ElementSinkFn
 
 	// Internal source.
 	Source ocsd.PacketReader[Packet]
@@ -145,9 +145,9 @@ func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem
 	elem.Index = idx
 	elem.TraceID = traceID
 
-	// NEW: Route to callback if it is wired up
-	if d.outCallback != nil {
-		if !d.outCallback(idx, traceID, elem) {
+	// NEW: If a sink is wired, push the element instantly.
+	if d.outSink != nil {
+		if !d.outSink(idx, traceID, elem) {
 			return ocsd.ErrWait
 		}
 		return nil
@@ -162,9 +162,9 @@ func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem
 	return nil
 }
 
-// SetOutCallback wires a direct output sink, bypassing internal buffers.
-func (d *PktDecode) SetOutCallback(cb func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool) {
-	d.outCallback = cb
+// SetElementSink implements ocsd.TraceElementSink.
+func (d *PktDecode) SetElementSink(fn ocsd.ElementSinkFn) {
+	d.outSink = fn
 }
 
 // AccessMemory reads target memory.
@@ -287,7 +287,7 @@ func (d *PktDecode) Elements() iter.Seq2[*ocsd.TraceElement, error] {
 		yieldActive := true
 
 		// Wire the callback directly to the iterator's yield function
-		d.outCallback = func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool {
+		d.outSink = func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool {
 			if !yieldActive {
 				return false
 			}
@@ -299,7 +299,7 @@ func (d *PktDecode) Elements() iter.Seq2[*ocsd.TraceElement, error] {
 		}
 
 		defer func() {
-			d.outCallback = nil
+			d.outSink = nil
 		}()
 
 		// Drive the decode process

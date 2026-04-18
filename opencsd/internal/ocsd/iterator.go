@@ -8,7 +8,12 @@ type TraceIterator interface {
 	Elements() iter.Seq2[*TraceElement, error]
 }
 
-// CallbackSink is implemented by decoders that can push elements to a callback sink.
-type CallbackSink interface {
-	SetOutCallback(cb func(idx TrcIndex, traceID uint8, elem *TraceElement) bool)
+// ElementSinkFn is a callback used to push elements out of a decoder instantly.
+// Returning false signals the decoder to stop processing (e.g., iterator break).
+type ElementSinkFn func(idx TrcIndex, traceID uint8, elem *TraceElement) bool
+
+// TraceElementSink is an interface for decoders that support direct,
+// zero-allocation element emission.
+type TraceElementSink interface {
+	SetElementSink(fn ElementSinkFn)
 }

@@ -26,15 +26,16 @@ func (d *PktDecode) pushOutputElement(index ocsd.TrcIndex, traceID uint8, elem *
 		return nil
 	}
 
-	// NEW: Route to callback if it is wired up
-	if d.outCallback != nil {
-		if !d.outCallback(index, traceID, elem) {
-			return ocsd.ErrWait
+	// NEW: If a sink is wired, push the element instantly.
+	// This supports the future zero-allocation path.
+	if d.outSink != nil {
+		if !d.outSink(index, traceID, elem) {
+			return ocsd.ErrWait // Halt processing if sink is full/closed
 		}
 		return nil
 	}
 
-	// FALLBACK: Legacy slice append behavior (keeps current tests passing)
+	// LEGACY: Continue buffering elements for Next() and DecodeTree.
 	e := traceElemEvent{index, traceID, cloneQueuedElem(elem)}
 	d.elemBuf = append(d.elemBuf, e)
 	return nil
@@ -211,8 +212,8 @@ type PktDecode struct {
 	elemBuf    []traceElemEvent
 	elemBufPos int
 
-	// NEW: Callback for zero-allocation iterator
-	outCallback func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool
+	// outSink is the optional callback for Phase 1 decoupling.
+	outSink ocsd.ElementSinkFn
 
 	// Source is the pull-based packet reader injected at construction time.
 	// May be nil when the push-based Write path is used instead.
@@ -234,9 +235,9 @@ func (d *PktDecode) ApplyFlags(flags uint32) error {
 	return nil
 }
 
-// SetOutCallback wires a direct output sink, bypassing internal buffers.
-func (d *PktDecode) SetOutCallback(cb func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool) {
-	d.outCallback = cb
+// SetElementSink implements ocsd.TraceElementSink.
+func (d *PktDecode) SetElementSink(fn ocsd.ElementSinkFn) {
+	d.outSink = fn
 }
 
 // OutputTraceElement sends an element using IndexCurrPkt.
@@ -391,7 +392,7 @@ func (d *PktDecode) Elements() iter.Seq2[*ocsd.TraceElement, error] {
 		yieldActive := true
 
 		// Wire the callback directly to the iterator's yield function
-		d.outCallback = func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool {
+		d.outSink = func(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) bool {
 			if !yieldActive {
 				return false
 			}
@@ -404,7 +405,7 @@ func (d *PktDecode) Elements() iter.Seq2[*ocsd.TraceElement, error] {
 
 		// Ensure callback is cleaned up when the iterator terminates
 		defer func() {
-			d.outCallback = nil
+			d.outSink = nil
 		}()
 
 		// Drive the decode process
