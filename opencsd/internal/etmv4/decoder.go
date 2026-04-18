@@ -430,7 +430,7 @@ func (d *PktDecode) Elements() iter.Seq2[*ocsd.TraceElement, error] {
 			}
 
 			// Write processes the packet and flushes outputs.
-			// The flushes will hit our outCallback and trigger the yield.
+			// The flushes will hit our outSink and trigger the yield.
 			if wErr := d.Write(0, &pkt); wErr != nil {
 				if errors.Is(wErr, ocsd.ErrWait) {
 					return
