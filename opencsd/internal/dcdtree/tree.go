@@ -39,7 +39,7 @@ type DecodeTree struct {
 
 	decoderRoot ocsd.TraceDecoder
 
-	// NEW: Centralized queue for elements pushed by CallbackSink decoders
+	// NEW: Centralized queue for elements pushed by TraceElementSink decoders
 	outQueue    []ocsd.TraceElement
 	outQueuePos int
 }
@@ -263,18 +263,6 @@ func (dt *DecodeTree) AddPullDecoder(routeID uint8, name string, protocol ocsd.T
 	// No decoder manager is needed for direct injection.
 	elem := NewDecodeTreeElement(name, flagApplier, pktIn, controlIn, iter, true)
 	elem.Protocol = protocol
-
-	// NEW: Attach the centralized callback if the decoder supports it.
-	// This captures elements generated synchronously during dt.Write()
-	if sink, ok := iter.(ocsd.TraceElementSink); ok {
-		sink.SetElementSink(func(idx ocsd.TrcIndex, traceID uint8, trcElem *ocsd.TraceElement) bool {
-			e := *trcElem
-			e.Index = idx
-			e.TraceID = traceID
-			dt.outQueue = append(dt.outQueue, e)
-			return true
-		})
-	}
 
 	dt.decodeElements[routeID] = elem
 	if dt.frameDeformatter != nil && pktIn != nil {
