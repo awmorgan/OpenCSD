@@ -24,7 +24,6 @@ func TestDecoderQueueFlushFromLegacyList(t *testing.T) {
 	}
 	out := dec.pendingElements[0].elem
 	out.Index = dec.pendingElements[0].index
-	out.TraceID = dec.pendingElements[0].traceID
 	if out.Index != 11 {
 		t.Fatalf("index=%d, want 11", out.Index)
 	}
