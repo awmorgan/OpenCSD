@@ -194,13 +194,21 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 	if err != nil {
 		return err
 	}
+	return executeDecodePipeline(reader, p, sourceNames, opts)
+}
 
-	if _, err := configureDecodeMode(p.streamOut, p.builder, reader, p.genPrinter, opts); err != nil {
+func executeDecodePipeline(
+	reader *snapshot.Reader,
+	p *decodePipeline,
+	sourceNames []string,
+	opts options,
+) error {
+	if err := configureDecodeMode(p.streamOut, p.builder, reader, p.genPrinter, opts); err != nil {
 		return err
 	}
 
 	if !opts.decode && p.printersAttached == 0 {
-		fmt.Fprintln(out, "Trace Packet Lister : No supported protocols found.")
+		fmt.Fprintln(p.streamOut, "Trace Packet Lister : No supported protocols found.")
 		return nil
 	}
 
@@ -334,25 +342,24 @@ func configureDecodeMode(
 	reader *snapshot.Reader,
 	genPrinter *printers.GenericElementPrinter,
 	opts options,
-) ([]mappedRange, error) {
-	mapped := []mappedRange{}
+) error {
 
 	if !opts.decode {
-		return mapped, nil
+		return nil
 	}
 
 	mapper := builder.MemoryMapper()
 	if mapper == nil {
-		return nil, errors.New("trace packet lister: decode mode requires a memory mapper")
+		return errors.New("trace packet lister: decode mode requires a memory mapper")
 	}
 
 	if opts.memCacheDisable {
 		if err := mapper.EnableCaching(false); err != nil {
-			return nil, fmt.Errorf("trace packet lister: configure memory cache disable=true failed: %w", err)
+			return fmt.Errorf("trace packet lister: configure memory cache disable=true failed: %w", err)
 		}
 	} else {
 		if err := mapper.EnableCaching(true); err != nil {
-			return nil, fmt.Errorf("trace packet lister: configure memory cache disable=false failed: %w", err)
+			return fmt.Errorf("trace packet lister: configure memory cache disable=false failed: %w", err)
 		}
 		if opts.memCachePageSize != 0 || opts.memCachePageNum != 0 {
 			pageSize := opts.memCachePageSize
@@ -364,7 +371,7 @@ func configureDecodeMode(
 				numPages = uint32(memacc.DefaultNumPages)
 			}
 			if err := mapper.SetCacheSizes(uint16(pageSize), int(numPages), false); err != nil {
-				return nil, fmt.Errorf(
+				return fmt.Errorf(
 					"trace packet lister: configure memory cache sizes page_size=%d page_num=%d failed: %w",
 					pageSize, numPages, err,
 				)
@@ -372,10 +379,9 @@ func configureDecodeMode(
 		}
 	}
 
-	var err error
-	mapped, err = mapMemoryRanges(mapper, opts.ssDir, reader)
+	mapped, err := mapMemoryRanges(mapper, opts.ssDir, reader)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("trace packet lister: map memory ranges failed: %w", err)
 	}
 
 	fmt.Fprintln(out, "Trace Packet Lister : Set trace element decode printer")
@@ -388,7 +394,7 @@ func configureDecodeMode(
 	}
 	printMappedRanges(out, mapped)
 
-	return mapped, nil
+	return nil
 }
 
 func runSingleSession(
