@@ -262,7 +262,30 @@ func buildDecodePipeline(
 		return nil, err
 	}
 
-	genPrinter := printers.NewGenericElementPrinter(streamOut)
+	output := configurePacketOutput(streamOut, tree, opts)
+
+	return &decodePipeline{
+		streamOut:        streamOut,
+		builder:          builder,
+		tree:             tree,
+		genPrinter:       output.genPrinter,
+		genAdapter:       output.genAdapter,
+		printersAttached: output.printersAttached,
+	}, nil
+}
+
+type packetOutput struct {
+	genPrinter       *printers.GenericElementPrinter
+	genAdapter       *filteredGenElemPrinter
+	printersAttached int
+}
+
+func configurePacketOutput(
+	out io.Writer,
+	tree *dcdtree.DecodeTree,
+	opts options,
+) packetOutput {
+	genPrinter := printers.NewGenericElementPrinter(out)
 	genAdapter := &filteredGenElemPrinter{
 		printer:      genPrinter,
 		allSourceIDs: opts.allSourceIDs,
@@ -271,17 +294,14 @@ func buildDecodePipeline(
 
 	printersAttached := 0
 	if !opts.decodeOnly {
-		printersAttached = attachPacketPrinters(streamOut, tree, opts)
+		printersAttached = attachPacketPrinters(out, tree, opts)
 	}
 
-	return &decodePipeline{
-		streamOut:        streamOut,
-		builder:          builder,
-		tree:             tree,
+	return packetOutput{
 		genPrinter:       genPrinter,
 		genAdapter:       genAdapter,
 		printersAttached: printersAttached,
-	}, nil
+	}
 }
 
 func configureDecodeMode(
