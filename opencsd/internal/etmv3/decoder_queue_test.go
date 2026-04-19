@@ -8,9 +8,14 @@ import (
 func TestDecoderQueueFlushFromLegacyList(t *testing.T) {
 	dec := mustNewConfiguredPktDecode(t, &Config{})
 
-	elem := dec.nextOutElem(11)
+	elem, err := dec.nextOutElem(11)
+	if err != nil {
+		t.Fatalf("nextOutElem failed: %v", err)
+	}
 	elem.SetType(ocsd.GenElemTimestamp)
-	dec.commitAllPendOutElem()
+	if err := dec.commitAllPendOutElem(); err != nil {
+		t.Fatalf("commitAllPendOutElem failed: %v", err)
+	}
 
 	dec.flushOutputElements()
 

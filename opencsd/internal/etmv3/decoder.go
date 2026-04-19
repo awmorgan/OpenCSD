@@ -334,7 +334,11 @@ func (d *PktDecode) OnFlush() error {
 		return nil
 	}
 
-	d.commitAllPendOutElem()
+	if err := d.commitAllPendOutElem(); err != nil {
+		d.unsyncInfo = ocsd.UnsyncBadPacket
+		d.resetDecoder()
+		return err
+	}
 	err := d.emitPendingNacc()
 	if err != nil {
 		return err
@@ -346,7 +350,9 @@ func (d *PktDecode) OnFlush() error {
 }
 
 func (d *PktDecode) OnEOT() error {
-	d.commitAllPendOutElem()
+	if err := d.commitAllPendOutElem(); err != nil {
+		return err
+	}
 	err := d.emitPendingNacc()
 	if err != nil {
 		return err
@@ -359,7 +365,9 @@ func (d *PktDecode) OnEOT() error {
 	}
 	elem.SetType(ocsd.GenElemEOTrace)
 	elem.Payload.UnsyncEOTInfo = ocsd.UnsyncEOT
-	d.commitAllPendOutElem()
+	if err := d.commitAllPendOutElem(); err != nil {
+		return err
+	}
 
 	d.flushOutputElements()
 	d.currState = decodePkts
@@ -445,11 +453,11 @@ func (d *PktDecode) nextSendOrDecodeState() decoderState {
 }
 
 func (d *PktDecode) getNextOpElem() (*ocsd.TraceElement, error) {
-	return d.nextOutElem(d.IndexCurrPkt), nil
+	return d.nextOutElem(d.IndexCurrPkt)
 }
 
 func (d *PktDecode) getNextOpElemAt(index ocsd.TrcIndex) (*ocsd.TraceElement, error) {
-	return d.nextOutElem(index), nil
+	return d.nextOutElem(index)
 }
 
 func (d *PktDecode) queuePendingNacc(addr uint64, memSpace ocsd.MemSpaceAcc) {
@@ -522,7 +530,11 @@ func (d *PktDecode) decodePacket() (err error, done bool) {
 	}
 
 	if packetIn.Type != PktBranchAddress {
-		d.commitAllPendOutElem()
+		if err := d.commitAllPendOutElem(); err != nil {
+			d.unsyncInfo = ocsd.UnsyncBadPacket
+			d.resetDecoder()
+			return err, true
+		}
 		err = d.emitPendingNacc()
 		if err != nil {
 			return err, true
@@ -739,7 +751,11 @@ func (d *PktDecode) processBranchAddr() error {
 		d.cancelPendOutElem()
 		d.clearPendingNacc()
 	} else {
-		d.commitAllPendOutElem()
+		if err := d.commitAllPendOutElem(); err != nil {
+			d.unsyncInfo = ocsd.UnsyncBadPacket
+			d.resetDecoder()
+			return err
+		}
 		err := d.emitPendingNacc()
 		if err != nil {
 			return err
@@ -1020,9 +1036,9 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 
 // --- ElemList replacements ---
 
-func (d *PktDecode) nextOutElem(index ocsd.TrcIndex) *ocsd.TraceElement {
+func (d *PktDecode) nextOutElem(index ocsd.TrcIndex) (*ocsd.TraceElement, error) {
 	if d.outCount >= len(d.outBuf) {
-		panic("etmv3: outBuf overflow")
+		return nil, fmt.Errorf("etmv3: outBuf overflow")
 	}
 	e := &d.outBuf[d.outCount]
 	e.index = index
@@ -1034,7 +1050,7 @@ func (d *PktDecode) nextOutElem(index ocsd.TrcIndex) *ocsd.TraceElement {
 	e.elem.TraceID = d.csID
 
 	d.outCount++
-	return &e.elem
+	return &e.elem, nil
 }
 
 func (d *PktDecode) pendLastNOutElem(n int) {
@@ -1048,12 +1064,12 @@ func (d *PktDecode) pendLastNOutElem(n int) {
 	}
 }
 
-func (d *PktDecode) commitAllPendOutElem() {
+func (d *PktDecode) commitAllPendOutElem() error {
 	if d.pendCount == 0 {
-		return
+		return nil
 	}
 	if d.outCount+d.pendCount > len(d.outBuf) {
-		panic("etmv3: outBuf overflow on commit")
+		return fmt.Errorf("etmv3: outBuf overflow on commit")
 	}
 
 	if d.outCount > 0 {
@@ -1068,6 +1084,7 @@ func (d *PktDecode) commitAllPendOutElem() {
 
 	d.outCount += d.pendCount
 	d.pendCount = 0
+	return nil
 }
 
 func (d *PktDecode) cancelPendOutElem() {

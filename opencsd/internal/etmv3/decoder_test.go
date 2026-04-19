@@ -808,11 +808,16 @@ func TestOnFlush_SendPktsState(t *testing.T) {
 
 	// Directly manipulate to enter sendPkts state with an element pending
 	dec.currState = sendPkts
-	elem := dec.nextOutElem(5)
+	elem, err := dec.nextOutElem(5)
+	if err != nil {
+		t.Fatalf("nextOutElem failed: %v", err)
+	}
 	if elem != nil {
 		elem.ElemType = ocsd.GenElemEvent
 	}
-	dec.commitAllPendOutElem()
+	if err := dec.commitAllPendOutElem(); err != nil {
+		t.Fatalf("commitAllPendOutElem failed: %v", err)
+	}
 
 	dec.Flush()
 
@@ -847,12 +852,17 @@ func TestOnFlush_SendPkts_WaitISync(t *testing.T) {
 	// Manually put into sendPkts with waitISync=true
 	dec.currState = sendPkts
 	dec.waitISync = true
-	elem := dec.nextOutElem(2)
+	elem, err := dec.nextOutElem(2)
+	if err != nil {
+		t.Fatalf("nextOutElem failed: %v", err)
+	}
 	if elem != nil {
 		elem.ElemType = ocsd.GenElemTimestamp
 		elem.Timestamp = 0xABCD
 	}
-	dec.commitAllPendOutElem()
+	if err := dec.commitAllPendOutElem(); err != nil {
+		t.Fatalf("commitAllPendOutElem failed: %v", err)
+	}
 
 	dec.Flush()
 

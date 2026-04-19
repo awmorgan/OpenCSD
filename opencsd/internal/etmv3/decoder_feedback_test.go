@@ -86,11 +86,14 @@ func TestOnFlushCommitsPendingElements(t *testing.T) {
 	dec := setupDecFast(&Config{})
 	dec.currState = decodePkts
 
-	elem := dec.nextOutElem(7)
+	elem, err := dec.nextOutElem(7)
+	if err != nil {
+		t.Fatalf("nextOutElem failed: %v", err)
+	}
 	elem.SetType(ocsd.GenElemInstrRange)
 	dec.pendLastNOutElem(1)
 
-	err := dec.OnFlush()
+	err = dec.OnFlush()
 	if err != nil {
 		t.Fatalf("expected err nil, got %v", err)
 	}
@@ -154,7 +157,10 @@ func TestProcessBranchAddrContextWithoutException(t *testing.T) {
 func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 	dec := buildDecInDecodePktsPull(t, &Config{})
 
-	elem := dec.nextOutElem(3)
+	elem, err := dec.nextOutElem(3)
+	if err != nil {
+		t.Fatalf("nextOutElem failed: %v", err)
+	}
 	elem.SetType(ocsd.GenElemInstrRange)
 	dec.pendLastNOutElem(1)
 	dec.pendingNacc = true
@@ -166,7 +172,7 @@ func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 	pkt.ResetState()
 	pkt.Type = PktTrigger
 
-	err := writeDecodedPacket(dec, 4, pkt)
+	err = writeDecodedPacket(dec, 4, pkt)
 	if err != nil {
 		t.Fatalf("unexpected fatal response: %v", err)
 	}
@@ -195,7 +201,10 @@ func TestPendingNaccEmittedAfterCommit(t *testing.T) {
 func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 	dec := buildDecInDecodePktsPull(t, &Config{})
 
-	elem := dec.nextOutElem(5)
+	elem, err := dec.nextOutElem(5)
+	if err != nil {
+		t.Fatalf("nextOutElem failed: %v", err)
+	}
 	elem.SetType(ocsd.GenElemInstrRange)
 	dec.pendLastNOutElem(1)
 	dec.pendingNacc = true
@@ -210,7 +219,7 @@ func TestPendingNaccCancelledWithExceptionCancel(t *testing.T) {
 	pkt.ExceptionCancel = true
 	pkt.Exception.Present = true
 
-	err := writeDecodedPacket(dec, 6, pkt)
+	err = writeDecodedPacket(dec, 6, pkt)
 	if err != nil {
 		t.Fatalf("unexpected fatal response: %v", err)
 	}
