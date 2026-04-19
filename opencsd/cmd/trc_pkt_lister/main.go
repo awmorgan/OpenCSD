@@ -420,10 +420,13 @@ func reportProcessedInput(out io.Writer, traceIndex uint32, start time.Time, gen
 	}
 }
 
-func runSharedReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options, start time.Time, pending []byte, traceIndex uint32, dataPathErr error, align int, isFramed bool, buf []byte, footer []byte) error {
+func runSharedReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options, start time.Time, align int, isFramed bool) error {
 	if err := drainPreInputElements(tree, sink, genPrinter); err != nil {
 		return err
 	}
+
+	buf := make([]byte, 1024)
+	var footer [8]byte
 
 	// Instantiate the session state object once.
 	session := &decodeSession{
@@ -432,13 +435,13 @@ func runSharedReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Read
 		genPrinter: genPrinter,
 		align:      align,
 		isFramed:   isFramed,
-		pending:    pending,
-		traceIndex: traceIndex,
-		err:        dataPathErr,
+		pending:    make([]byte, 0, 2048),
+		traceIndex: 0,
+		err:        nil,
 	}
 
 	// Execute the loop
-	if err := session.readLoop(out, in, buf, footer, opts); err != nil {
+	if err := session.readLoop(out, in, buf, footer[:], opts); err != nil {
 		return err
 	}
 
@@ -458,15 +461,7 @@ func runSharedReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Read
 	return nil
 }
 
-func runDirectReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options, start time.Time, pending []byte, traceIndex uint32, dataPathErr error, align int, isFramed bool, buf []byte, footer []byte) error {
-	_ = pending
-	_ = traceIndex
-	_ = dataPathErr
-	_ = align
-	_ = isFramed
-	_ = buf
-	_ = footer
-
+func runDirectReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options, start time.Time) error {
 	if err := drainPreInputElements(tree, sink, genPrinter); err != nil {
 		return err
 	}
@@ -690,20 +685,15 @@ func (s *decodeSession) readLoop(out io.Writer, in io.Reader, buf []byte, footer
 
 func processInputFilePullReaderBody(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
 	start := time.Now()
-	var traceIndex uint32
-	var dataPathErr error
-
-	buf := make([]byte, 1024)
-	pending := make([]byte, 0, 2048)
-	align := frameAlignment(tree)
-	isFramed := tree.FrameDeformatter() != nil
-	var footer [8]byte
 
 	if canUseDirectReaderDecodeOnly(tree, opts) {
-		return runDirectReaderPipeline(out, tree, in, sink, genPrinter, opts, start, pending, traceIndex, dataPathErr, align, isFramed, buf, footer[:])
+		return runDirectReaderPipeline(out, tree, in, sink, genPrinter, opts, start)
 	}
 
-	return runSharedReaderPipeline(out, tree, in, sink, genPrinter, opts, start, pending, traceIndex, dataPathErr, align, isFramed, buf, footer[:])
+	align := frameAlignment(tree)
+	isFramed := tree.FrameDeformatter() != nil
+
+	return runSharedReaderPipeline(out, tree, in, sink, genPrinter, opts, start, align, isFramed)
 }
 
 func drainPreInputElements(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter) error {
