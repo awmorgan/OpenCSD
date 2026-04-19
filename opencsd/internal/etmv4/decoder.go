@@ -370,26 +370,7 @@ func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
 // Elements provides a standard Go 1.23 iterator over the trace elements.
 // It directly drives the packet decoder and yields elements with zero queue allocation.
 func (d *PktDecode) Elements() iter.Seq2[*ocsd.TraceElement, error] {
-	return func(yield func(*ocsd.TraceElement, error) bool) {
-		for {
-			idx, traceID, elem, err := d.NextElement()
-			if err != nil {
-				if !errors.Is(err, io.EOF) {
-					yield(nil, err)
-				}
-				return
-			}
-
-			// Yield the element
-			e := cloneQueuedElem(&elem)
-			e.Index = idx
-			e.TraceID = traceID
-
-			if !yield(&e, nil) {
-				return
-			}
-		}
-	}
+	return ocsd.GenerateElements(d.Next)
 }
 
 // putBackElement unreads an element to the front of the pending queue.

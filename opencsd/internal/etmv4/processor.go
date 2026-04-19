@@ -192,20 +192,7 @@ func (p *Processor) NextPacket() (Packet, error) {
 // Packets provides a standard Go 1.23 iterator over the trace packets.
 // It wraps the legacy pull-based NextPacket() method.
 func (p *Processor) Packets() iter.Seq2[Packet, error] {
-	return func(yield func(Packet, error) bool) {
-		for {
-			pkt, err := p.NextPacket()
-			if err != nil {
-				if !errors.Is(err, io.EOF) {
-					yield(Packet{}, err)
-				}
-				return
-			}
-			if !yield(pkt, nil) {
-				return
-			}
-		}
-	}
+	return ocsd.GeneratePackets(p.NextPacket)
 }
 
 // Close handles end-of-trace control.

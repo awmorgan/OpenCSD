@@ -151,8 +151,6 @@ func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem
 	return nil
 }
 
-// (removed) SetElementSink is no longer used; Elements() uses NextElement().
-
 // AccessMemory reads target memory.
 func (d *PktDecode) AccessMemory(address ocsd.VAddr, traceID uint8, memSpace ocsd.MemSpaceAcc, reqBytes uint32) (uint32, []byte, error) {
 	if d.MemAccess != nil {
@@ -265,25 +263,7 @@ func cloneQueuedElem(elem *ocsd.TraceElement) ocsd.TraceElement {
 // Elements provides a standard Go 1.23 iterator over the trace elements.
 // It directly drives the packet decoder and yields elements with zero queue allocation.
 func (d *PktDecode) Elements() iter.Seq2[*ocsd.TraceElement, error] {
-	return func(yield func(*ocsd.TraceElement, error) bool) {
-		for {
-			idx, traceID, elem, err := d.NextElement()
-			if err != nil {
-				if !errors.Is(err, io.EOF) {
-					yield(nil, err)
-				}
-				return
-			}
-
-			e := cloneQueuedElem(&elem)
-			e.Index = idx
-			e.TraceID = traceID
-
-			if !yield(&e, nil) {
-				return
-			}
-		}
-	}
+	return ocsd.GenerateElements(d.Next)
 }
 
 // putBackElement unreads an element to the front of the pending queue.
