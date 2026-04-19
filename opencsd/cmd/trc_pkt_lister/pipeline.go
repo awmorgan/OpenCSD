@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"opencsd/internal/dcdtree"
-	"opencsd/internal/memacc"
 	"opencsd/internal/printers"
 	"opencsd/internal/snapshot"
 	"path/filepath"
@@ -83,20 +82,6 @@ func buildSnapshotDecodeTree(
 	return builder, tree, nil
 }
 
-func configureBuiltDecodeTree(
-	tree *dcdtree.DecodeTree,
-	out io.Writer,
-	opts options,
-) error {
-	if err := configureFrameDemux(tree, out, opts); err != nil {
-		return err
-	}
-	if err := applyAdditionalFlags(tree, opts.additionalFlags); err != nil {
-		return err
-	}
-	return nil
-}
-
 func configurePacketOutput(
 	out io.Writer,
 	tree *dcdtree.DecodeTree,
@@ -119,67 +104,6 @@ func configurePacketOutput(
 		genAdapter:       genAdapter,
 		printersAttached: printersAttached,
 	}
-}
-
-func configureDecodeMode(
-	out io.Writer,
-	builder *snapshot.DecodeTreeBuilder,
-	reader *snapshot.Reader,
-	genPrinter *printers.GenericElementPrinter,
-	opts options,
-) error {
-
-	if !opts.decode {
-		return nil
-	}
-
-	mapper := builder.MemoryMapper()
-	if mapper == nil {
-		return errors.New("trace packet lister: decode mode requires a memory mapper")
-	}
-
-	if opts.memCacheDisable {
-		if err := mapper.EnableCaching(false); err != nil {
-			return fmt.Errorf("trace packet lister: configure memory cache disable=true failed: %w", err)
-		}
-	} else {
-		if err := mapper.EnableCaching(true); err != nil {
-			return fmt.Errorf("trace packet lister: configure memory cache disable=false failed: %w", err)
-		}
-		if opts.memCachePageSize != 0 || opts.memCachePageNum != 0 {
-			pageSize := opts.memCachePageSize
-			if pageSize == 0 {
-				pageSize = memacc.DefaultPageSize
-			}
-			numPages := opts.memCachePageNum
-			if numPages == 0 {
-				numPages = uint32(memacc.DefaultNumPages)
-			}
-			if err := mapper.SetCacheSizes(uint16(pageSize), int(numPages), false); err != nil {
-				return fmt.Errorf(
-					"trace packet lister: configure memory cache sizes page_size=%d page_num=%d failed: %w",
-					pageSize, numPages, err,
-				)
-			}
-		}
-	}
-
-	mapped, err := mapMemoryRanges(mapper, opts.ssDir, reader)
-	if err != nil {
-		return fmt.Errorf("trace packet lister: map memory ranges failed: %w", err)
-	}
-
-	fmt.Fprintln(out, "Trace Packet Lister : Set trace element decode printer")
-	if opts.testWaits > 0 {
-		genPrinter.SetTestWaits(opts.testWaits)
-	}
-	if opts.profile {
-		genPrinter.SetMute(true)
-		genPrinter.SetCollectStats()
-	}
-	printMappedRanges(out, mapped)
-
-	return nil
 }
 
 func runSingleSession(
