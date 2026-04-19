@@ -242,17 +242,9 @@ func buildDecodePipeline(
 ) (*decodePipeline, error) {
 	streamOut := &synchronizedWriter{w: out}
 
-	builder := snapshot.NewDecodeTreeBuilder(reader)
-	packetProcOnly := !opts.decode
-	tree, err := builder.Build(opts.srcName, packetProcOnly)
+	builder, tree, err := buildSnapshotDecodeTree(reader, opts)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"trace packet lister: failed to create decode tree for source %s: %w",
-			opts.srcName, err,
-		)
-	}
-	if tree == nil {
-		return nil, errors.New("trace packet lister: no supported protocols found")
+		return nil, err
 	}
 
 	if err := configureBuiltDecodeTree(tree, streamOut, opts); err != nil {
@@ -269,6 +261,27 @@ func buildDecodePipeline(
 		genAdapter:       output.genAdapter,
 		printersAttached: output.printersAttached,
 	}, nil
+}
+
+func buildSnapshotDecodeTree(
+	reader *snapshot.Reader,
+	opts options,
+) (*snapshot.DecodeTreeBuilder, *dcdtree.DecodeTree, error) {
+	builder := snapshot.NewDecodeTreeBuilder(reader)
+	packetProcOnly := !opts.decode
+
+	tree, err := builder.Build(opts.srcName, packetProcOnly)
+	if err != nil {
+		return nil, nil, fmt.Errorf(
+			"trace packet lister: failed to create decode tree for source %s: %w",
+			opts.srcName, err,
+		)
+	}
+	if tree == nil {
+		return nil, nil, errors.New("trace packet lister: no supported protocols found")
+	}
+
+	return builder, tree, nil
 }
 
 func configureBuiltDecodeTree(
