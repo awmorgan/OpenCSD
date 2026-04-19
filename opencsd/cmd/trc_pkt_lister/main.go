@@ -277,9 +277,31 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 	}
 
 	if !opts.multiSession {
-		return processInputFilePull(streamOut, tree, builder.BufferFileName(), genAdapter, genPrinter, opts)
+		return runSingleSession(streamOut, tree, builder.BufferFileName(), genAdapter, genPrinter, opts)
 	}
+	return runMultiSession(streamOut, reader, tree, sourceNames, genAdapter, genPrinter, opts)
+}
 
+func runSingleSession(
+	out io.Writer,
+	tree *dcdtree.DecodeTree,
+	fileName string,
+	sink *filteredGenElemPrinter,
+	genPrinter *printers.GenericElementPrinter,
+	opts options,
+) error {
+	return processInputFilePull(out, tree, fileName, sink, genPrinter, opts)
+}
+
+func runMultiSession(
+	out io.Writer,
+	reader *snapshot.Reader,
+	tree *dcdtree.DecodeTree,
+	sourceNames []string,
+	sink *filteredGenElemPrinter,
+	genPrinter *printers.GenericElementPrinter,
+	opts options,
+) error {
 	total := len(sourceNames)
 	for i, sourceName := range sourceNames {
 		fmt.Fprintf(out, "####### Multi Session decode: Buffer %d of %d; Source name = %s.\n\n", i+1, total, sourceName)
@@ -289,7 +311,7 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 			break
 		}
 		binFile := filepath.Join(reader.SnapshotPath, srcTree.BufferInfo.DataFileName)
-		if err := processInputFilePull(streamOut, tree, binFile, genAdapter, genPrinter, opts); err != nil {
+		if err := processInputFilePull(out, tree, binFile, sink, genPrinter, opts); err != nil {
 			fmt.Fprintf(out, "Trace Packet Lister : ERROR : Multi-session decode for buffer %s failed. Aborting.\n\n", sourceName)
 			return err
 		}
