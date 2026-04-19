@@ -210,43 +210,6 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 		return err
 	}
 
-	mapped := []mappedRange{}
-	if opts.decode {
-		mapper := builder.MemoryMapper()
-		if mapper == nil {
-			return errors.New("trace packet lister: decode mode requires a memory mapper")
-		}
-
-		if opts.memCacheDisable {
-			if err := mapper.EnableCaching(false); err != nil {
-				return fmt.Errorf("trace packet lister: configure memory cache disable=true failed: %w", err)
-			}
-		} else {
-			if err := mapper.EnableCaching(true); err != nil {
-				return fmt.Errorf("trace packet lister: configure memory cache disable=false failed: %w", err)
-			}
-			if opts.memCachePageSize != 0 || opts.memCachePageNum != 0 {
-				pageSize := opts.memCachePageSize
-				if pageSize == 0 {
-					pageSize = memacc.DefaultPageSize
-				}
-				numPages := opts.memCachePageNum
-				if numPages == 0 {
-					numPages = uint32(memacc.DefaultNumPages)
-				}
-				if err := mapper.SetCacheSizes(uint16(pageSize), int(numPages), false); err != nil {
-					return fmt.Errorf("trace packet lister: configure memory cache sizes page_size=%d page_num=%d failed: %w", pageSize, numPages, err)
-				}
-			}
-		}
-
-		var err error
-		mapped, err = mapMemoryRanges(mapper, opts.ssDir, reader)
-		if err != nil {
-			return err
-		}
-	}
-
 	genPrinter := printers.NewGenericElementPrinter(streamOut)
 	genAdapter := &filteredGenElemPrinter{
 		printer:      genPrinter,
@@ -254,21 +217,15 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 		validIDs:     makeIDSet(opts.idList),
 	}
 
+	mapped, err := configureDecodeMode(streamOut, builder, reader, genPrinter, opts)
+	if err != nil {
+		return err
+	}
+	_ = mapped
+
 	printersAttached := 0
 	if !opts.decodeOnly {
 		printersAttached = attachPacketPrinters(streamOut, tree, opts)
-	}
-
-	if opts.decode {
-		fmt.Fprintln(out, "Trace Packet Lister : Set trace element decode printer")
-		if opts.testWaits > 0 {
-			genPrinter.SetTestWaits(opts.testWaits)
-		}
-		if opts.profile {
-			genPrinter.SetMute(true)
-			genPrinter.SetCollectStats()
-		}
-		printMappedRanges(streamOut, mapped)
 	}
 
 	if !opts.decode && printersAttached == 0 {
@@ -280,6 +237,69 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 		return runSingleSession(streamOut, tree, builder.BufferFileName(), genAdapter, genPrinter, opts)
 	}
 	return runMultiSession(streamOut, reader, tree, sourceNames, genAdapter, genPrinter, opts)
+}
+
+func configureDecodeMode(
+	out io.Writer,
+	builder *snapshot.DecodeTreeBuilder,
+	reader *snapshot.Reader,
+	genPrinter *printers.GenericElementPrinter,
+	opts options,
+) ([]mappedRange, error) {
+	mapped := []mappedRange{}
+
+	if !opts.decode {
+		return mapped, nil
+	}
+
+	mapper := builder.MemoryMapper()
+	if mapper == nil {
+		return nil, errors.New("trace packet lister: decode mode requires a memory mapper")
+	}
+
+	if opts.memCacheDisable {
+		if err := mapper.EnableCaching(false); err != nil {
+			return nil, fmt.Errorf("trace packet lister: configure memory cache disable=true failed: %w", err)
+		}
+	} else {
+		if err := mapper.EnableCaching(true); err != nil {
+			return nil, fmt.Errorf("trace packet lister: configure memory cache disable=false failed: %w", err)
+		}
+		if opts.memCachePageSize != 0 || opts.memCachePageNum != 0 {
+			pageSize := opts.memCachePageSize
+			if pageSize == 0 {
+				pageSize = memacc.DefaultPageSize
+			}
+			numPages := opts.memCachePageNum
+			if numPages == 0 {
+				numPages = uint32(memacc.DefaultNumPages)
+			}
+			if err := mapper.SetCacheSizes(uint16(pageSize), int(numPages), false); err != nil {
+				return nil, fmt.Errorf(
+					"trace packet lister: configure memory cache sizes page_size=%d page_num=%d failed: %w",
+					pageSize, numPages, err,
+				)
+			}
+		}
+	}
+
+	var err error
+	mapped, err = mapMemoryRanges(mapper, opts.ssDir, reader)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Fprintln(out, "Trace Packet Lister : Set trace element decode printer")
+	if opts.testWaits > 0 {
+		genPrinter.SetTestWaits(opts.testWaits)
+	}
+	if opts.profile {
+		genPrinter.SetMute(true)
+		genPrinter.SetCollectStats()
+	}
+	printMappedRanges(out, mapped)
+
+	return mapped, nil
 }
 
 func runSingleSession(
