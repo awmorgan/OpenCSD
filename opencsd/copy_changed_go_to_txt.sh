@@ -35,10 +35,10 @@ for f in "${files[@]}"; do
   base=$(basename -- "$file")
 
   if [ "$dir" = "." ] || [ "$dir" = "" ]; then
-    dest="${base}.txt"
+    dest="opencsd_${base}.txt"
   else
     rel=${dir//\//_}
-    dest="$dir/${rel}__${base}.txt"
+    dest="$dir/opencsd_${rel}__${base}.txt"
   fi
 
   if [ -e "$dest" ]; then
