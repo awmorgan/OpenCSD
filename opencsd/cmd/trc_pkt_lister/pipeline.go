@@ -82,30 +82,6 @@ func buildSnapshotDecodeTree(
 	return builder, tree, nil
 }
 
-func configurePacketOutput(
-	out io.Writer,
-	tree *dcdtree.DecodeTree,
-	opts options,
-) packetOutput {
-	genPrinter := printers.NewGenericElementPrinter(out)
-	genAdapter := &filteredGenElemPrinter{
-		printer:      genPrinter,
-		allSourceIDs: opts.allSourceIDs,
-		validIDs:     makeIDSet(opts.idList),
-	}
-
-	printersAttached := 0
-	if !opts.decodeOnly {
-		printersAttached = attachPacketPrinters(out, tree, opts)
-	}
-
-	return packetOutput{
-		genPrinter:       genPrinter,
-		genAdapter:       genAdapter,
-		printersAttached: printersAttached,
-	}
-}
-
 func runSingleSession(
 	out io.Writer,
 	tree *dcdtree.DecodeTree,
