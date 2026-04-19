@@ -425,15 +425,28 @@ func runSharedReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Read
 		return err
 	}
 
-	var err error
-	pending, traceIndex, dataPathErr, err = runSharedReaderLoop(out, in, buf, footer, opts, tree, sink, genPrinter, pending, traceIndex, dataPathErr, align, isFramed)
-	if err != nil {
+	// Instantiate the session state object once.
+	session := &decodeSession{
+		tree:       tree,
+		sink:       sink,
+		genPrinter: genPrinter,
+		align:      align,
+		isFramed:   isFramed,
+		pending:    pending,
+		traceIndex: traceIndex,
+		err:        dataPathErr,
+	}
+
+	// Execute the loop
+	if err := session.readLoop(out, in, buf, footer, opts); err != nil {
 		return err
 	}
 
-	pending, traceIndex, dataPathErr = flushSharedPendingTail(tree, sink, genPrinter, pending, traceIndex, dataPathErr, align, isFramed)
+	// Flush leftovers
+	session.flushTail()
 
-	if err := validateLegacyReadState(pending, traceIndex, dataPathErr, align, isFramed); err != nil {
+	// Validate final state
+	if err := validateLegacyReadState(session.pending, session.traceIndex, session.err, session.align, session.isFramed); err != nil {
 		return err
 	}
 
@@ -441,7 +454,7 @@ func runSharedReaderPipeline(out io.Writer, tree *dcdtree.DecodeTree, in io.Read
 		return err
 	}
 
-	reportProcessedInput(out, traceIndex, start, genPrinter, opts)
+	reportProcessedInput(out, session.traceIndex, start, genPrinter, opts)
 	return nil
 }
 
@@ -495,42 +508,6 @@ func readLegacyDStreamFooter(out io.Writer, in io.Reader, footer []byte, opts op
 	return ferr
 }
 
-func runSharedReaderLoop(out io.Writer, in io.Reader, buf []byte, footer []byte, opts options, tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathErr error, align int, isFramed bool) ([]byte, uint32, error, error) {
-	for !ocsd.DataRespIsFatal(ocsd.DataRespFromErr(dataPathErr)) {
-		var done bool
-		var err error
-		pending, traceIndex, dataPathErr, done, err = runSharedReaderIteration(out, in, buf, footer, opts, tree, sink, genPrinter, pending, traceIndex, dataPathErr, align, isFramed)
-		if done {
-			return pending, traceIndex, dataPathErr, nil
-		}
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			return pending, traceIndex, dataPathErr, nil
-		}
-		if err != nil {
-			return pending, traceIndex, dataPathErr, err
-		}
-	}
-	return pending, traceIndex, dataPathErr, nil
-}
-
-func flushSharedPendingTail(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathErr error, align int, isFramed bool) ([]byte, uint32, error) {
-	if !ocsd.DataRespIsFatal(ocsd.DataRespFromErr(dataPathErr)) && len(pending) > 0 && !isFramed {
-		session := &decodeSession{
-			tree:       tree,
-			sink:       sink,
-			genPrinter: genPrinter,
-			align:      align,
-			isFramed:   isFramed,
-			pending:    pending,
-			traceIndex: traceIndex,
-		}
-		dataPathErr = session.processPending()
-		pending = session.pending
-		traceIndex = session.traceIndex
-	}
-	return pending, traceIndex, dataPathErr
-}
-
 func validateLegacyReadState(pending []byte, traceIndex uint32, dataPathErr error, align int, isFramed bool) error {
 	if dataPathErr != nil && ocsd.DataRespIsFatal(ocsd.DataRespFromErr(dataPathErr)) {
 		return fatalDataPathError(ocsd.DataRespFromErr(dataPathErr), traceIndex, len(pending))
@@ -545,49 +522,6 @@ func validateLegacyReadState(pending []byte, traceIndex uint32, dataPathErr erro
 	}
 
 	return nil
-}
-
-func runSharedReaderIteration(out io.Writer, in io.Reader, buf []byte, footer []byte, opts options, tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathErr error, align int, isFramed bool) ([]byte, uint32, error, bool, error) {
-	n, err := readLegacyInputChunk(in, buf, opts)
-	if err == io.ErrUnexpectedEOF || err == io.EOF {
-		n = max(n, 0)
-	} else if err != nil {
-		return pending, traceIndex, dataPathErr, false, err
-	}
-
-	var done bool
-	if n > 0 {
-		session := &decodeSession{
-			tree:       tree,
-			sink:       sink,
-			genPrinter: genPrinter,
-			align:      align,
-			isFramed:   isFramed,
-			pending:    pending,
-			traceIndex: traceIndex,
-		}
-		var feedErr error
-		done, feedErr = session.feedChunk(buf[:n])
-		pending = session.pending
-		traceIndex = session.traceIndex
-		dataPathErr = feedErr
-
-		if done {
-			return pending, traceIndex, dataPathErr, true, nil
-		}
-	}
-
-	if opts.dstreamFormat {
-		if err = readLegacyDStreamFooter(out, in, footer, opts); err != nil {
-			return pending, traceIndex, dataPathErr, false, err
-		}
-	}
-
-	if err == io.EOF || err == io.ErrUnexpectedEOF {
-		return pending, traceIndex, dataPathErr, false, err
-	}
-
-	return pending, traceIndex, dataPathErr, false, nil
 }
 
 func processInputFilePull(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
@@ -701,6 +635,57 @@ func (s *decodeSession) feedChunk(chunk []byte) (bool, error) {
 		return true, err
 	}
 	return false, err
+}
+
+func (s *decodeSession) flushTail() {
+	if !ocsd.DataRespIsFatal(ocsd.DataRespFromErr(s.err)) && len(s.pending) > 0 && !s.isFramed {
+		s.err = s.processPending()
+	}
+}
+
+func (s *decodeSession) readIteration(out io.Writer, in io.Reader, buf []byte, footer []byte, opts options) (bool, error) {
+	n, err := readLegacyInputChunk(in, buf, opts)
+	if err == io.ErrUnexpectedEOF || err == io.EOF {
+		n = max(n, 0)
+	} else if err != nil {
+		return false, err
+	}
+
+	var done bool
+	if n > 0 {
+		done, s.err = s.feedChunk(buf[:n])
+		if done {
+			return true, nil
+		}
+	}
+
+	if opts.dstreamFormat {
+		if err = readLegacyDStreamFooter(out, in, footer, opts); err != nil {
+			return false, err
+		}
+	}
+
+	if err == io.EOF || err == io.ErrUnexpectedEOF {
+		return false, err
+	}
+
+	return false, nil
+}
+
+func (s *decodeSession) readLoop(out io.Writer, in io.Reader, buf []byte, footer []byte, opts options) error {
+	for !ocsd.DataRespIsFatal(ocsd.DataRespFromErr(s.err)) {
+		done, err := s.readIteration(out, in, buf, footer, opts)
+		if done {
+			return nil
+		}
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func processInputFilePullReaderBody(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
