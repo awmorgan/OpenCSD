@@ -17,7 +17,6 @@ import (
 	"opencsd/internal/dcdtree"
 	"opencsd/internal/etmv3"
 	"opencsd/internal/etmv4"
-	"opencsd/internal/itm"
 	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
 	"opencsd/internal/printers"
@@ -798,6 +797,10 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 	idFilter := makeIDSet(opts.idList)
 	showRawBytes := opts.decode || opts.pktMon
 
+	type rawMonitorSetter interface {
+		SetPktRawMonitor(ocsd.PacketMonitor)
+	}
+
 	type elemRef struct {
 		id   uint8
 		elem *dcdtree.DecodeTreeElement
@@ -812,54 +815,20 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 	for _, ref := range elems {
 		csID := ref.id
 		elem := ref.elem
-		if !opts.allSourceIDs {
-			if !idFilter[csID] {
-				continue
-			}
+
+		if !opts.allSourceIDs && !idFilter[csID] {
+			continue
 		}
 
 		protocolName := elem.DecoderTypeName
-		ok := false
-
-		switch proc := elem.DataIn.(type) {
-		case *ptm.PktProc:
-			proc.SetPktRawMonitor(&genericRawPrinter{
-				writer:       out,
-				id:           csID,
-				showRawBytes: showRawBytes,
-			})
-			ok = true
-		case *etmv3.PktProc:
-			proc.SetPktRawMonitor(&genericRawPrinter{
-				writer:       out,
-				id:           csID,
-				showRawBytes: showRawBytes,
-			})
-			ok = true
-		case *etmv4.Processor:
-			proc.SetPktRawMonitor(&genericRawPrinter{
-				writer:       out,
-				id:           csID,
-				showRawBytes: showRawBytes,
-			})
-			ok = true
-		case *itm.PktProc:
-			proc.SetPktRawMonitor(&genericRawPrinter{
-				writer:       out,
-				id:           csID,
-				showRawBytes: showRawBytes,
-			})
-			ok = true
-		case *stm.PktProc:
-			proc.SetPktRawMonitor(&genericRawPrinter{
-				writer:       out,
-				id:           csID,
-				showRawBytes: showRawBytes,
-			})
-			ok = true
+		mon := &genericRawPrinter{
+			writer:       out,
+			id:           csID,
+			showRawBytes: showRawBytes,
 		}
 
-		if ok {
+		if setter, ok := elem.DataIn.(rawMonitorSetter); ok {
+			setter.SetPktRawMonitor(mon)
 			fmt.Fprintf(out, "Trace Packet Lister : Protocol printer %s on Trace ID 0x%x\n", protocolName, csID)
 			attached++
 		} else {
@@ -868,6 +837,7 @@ func attachPacketPrinters(out io.Writer, tree *dcdtree.DecodeTree, opts options)
 	}
 	return attached
 }
+
 func configureFrameDemux(tree *dcdtree.DecodeTree, out io.Writer, opts options) error {
 	deformatter := tree.FrameDeformatter()
 	if deformatter == nil {
