@@ -255,10 +255,7 @@ func buildDecodePipeline(
 		return nil, errors.New("trace packet lister: no supported protocols found")
 	}
 
-	if err := configureFrameDemux(tree, streamOut, opts); err != nil {
-		return nil, err
-	}
-	if err := applyAdditionalFlags(tree, opts.additionalFlags); err != nil {
+	if err := configureBuiltDecodeTree(tree, streamOut, opts); err != nil {
 		return nil, err
 	}
 
@@ -272,6 +269,20 @@ func buildDecodePipeline(
 		genAdapter:       output.genAdapter,
 		printersAttached: output.printersAttached,
 	}, nil
+}
+
+func configureBuiltDecodeTree(
+	tree *dcdtree.DecodeTree,
+	out io.Writer,
+	opts options,
+) error {
+	if err := configureFrameDemux(tree, out, opts); err != nil {
+		return err
+	}
+	if err := applyAdditionalFlags(tree, opts.additionalFlags); err != nil {
+		return err
+	}
+	return nil
 }
 
 type packetOutput struct {
