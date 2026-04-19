@@ -190,24 +190,76 @@ func rotateSourceNames(sourceNames []string, first string) []string {
 }
 
 func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sourceNames []string) error {
+	p, err := buildDecodePipeline(out, reader, opts)
+	if err != nil {
+		return err
+	}
+
+	if _, err := configureDecodeMode(p.streamOut, p.builder, reader, p.genPrinter, opts); err != nil {
+		return err
+	}
+
+	if !opts.decode && p.printersAttached == 0 {
+		fmt.Fprintln(out, "Trace Packet Lister : No supported protocols found.")
+		return nil
+	}
+
+	if !opts.multiSession {
+		return runSingleSession(
+			p.streamOut,
+			p.tree,
+			p.builder.BufferFileName(),
+			p.genAdapter,
+			p.genPrinter,
+			opts,
+		)
+	}
+
+	return runMultiSession(
+		p.streamOut,
+		reader,
+		p.tree,
+		sourceNames,
+		p.genAdapter,
+		p.genPrinter,
+		opts,
+	)
+}
+
+type decodePipeline struct {
+	streamOut        *synchronizedWriter
+	builder          *snapshot.DecodeTreeBuilder
+	tree             *dcdtree.DecodeTree
+	genPrinter       *printers.GenericElementPrinter
+	genAdapter       *filteredGenElemPrinter
+	printersAttached int
+}
+
+func buildDecodePipeline(
+	out io.Writer,
+	reader *snapshot.Reader,
+	opts options,
+) (*decodePipeline, error) {
 	streamOut := &synchronizedWriter{w: out}
 
 	builder := snapshot.NewDecodeTreeBuilder(reader)
 	packetProcOnly := !opts.decode
 	tree, err := builder.Build(opts.srcName, packetProcOnly)
 	if err != nil {
-		return fmt.Errorf("trace packet lister: failed to create decode tree for source %s: %w", opts.srcName, err)
+		return nil, fmt.Errorf(
+			"trace packet lister: failed to create decode tree for source %s: %w",
+			opts.srcName, err,
+		)
 	}
-
 	if tree == nil {
-		return errors.New("trace packet lister: no supported protocols found")
+		return nil, errors.New("trace packet lister: no supported protocols found")
 	}
 
 	if err := configureFrameDemux(tree, streamOut, opts); err != nil {
-		return err
+		return nil, err
 	}
 	if err := applyAdditionalFlags(tree, opts.additionalFlags); err != nil {
-		return err
+		return nil, err
 	}
 
 	genPrinter := printers.NewGenericElementPrinter(streamOut)
@@ -217,26 +269,19 @@ func listTracePackets(out io.Writer, reader *snapshot.Reader, opts options, sour
 		validIDs:     makeIDSet(opts.idList),
 	}
 
-	mapped, err := configureDecodeMode(streamOut, builder, reader, genPrinter, opts)
-	if err != nil {
-		return err
-	}
-	_ = mapped
-
 	printersAttached := 0
 	if !opts.decodeOnly {
 		printersAttached = attachPacketPrinters(streamOut, tree, opts)
 	}
 
-	if !opts.decode && printersAttached == 0 {
-		fmt.Fprintln(out, "Trace Packet Lister : No supported protocols found.")
-		return nil
-	}
-
-	if !opts.multiSession {
-		return runSingleSession(streamOut, tree, builder.BufferFileName(), genAdapter, genPrinter, opts)
-	}
-	return runMultiSession(streamOut, reader, tree, sourceNames, genAdapter, genPrinter, opts)
+	return &decodePipeline{
+		streamOut:        streamOut,
+		builder:          builder,
+		tree:             tree,
+		genPrinter:       genPrinter,
+		genAdapter:       genAdapter,
+		printersAttached: printersAttached,
+	}, nil
 }
 
 func configureDecodeMode(
