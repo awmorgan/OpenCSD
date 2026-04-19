@@ -5,6 +5,7 @@ import (
 	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
 	"opencsd/internal/snapshot"
+	"opencsd/internal/testutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -420,7 +421,7 @@ func strictTraceListerOutput(s string, ignoreMappedRanges bool) string {
 			continue
 		}
 
-		records := splitIdxRecords(trimmed)
+		records := testutil.SplitIdxRecords(trimmed)
 		if len(records) == 0 {
 			continue
 		}
@@ -450,7 +451,7 @@ func normalizeTraceListerOutput(ppl string, ignoreMappedRanges bool) string {
 			continue
 		}
 
-		records := splitIdxRecords(raw)
+		records := testutil.SplitIdxRecords(raw)
 		for _, rec := range records {
 			normalized := normalizeTraceListerIdxRecord(rec)
 			if normalized != "" {
@@ -477,37 +478,6 @@ func normalizeMappedRangeLine(line string) (string, bool) {
 	// (for example, an unexpected "0x" prefix on the second address), while
 	// ignoring unrelated output differences such as memory-space naming.
 	return "MAP_RANGE:" + rangePart, true
-}
-
-func splitIdxRecords(line string) []string {
-	if !strings.Contains(line, "Idx:") {
-		return nil
-	}
-	starts := make([]int, 0, 2)
-	for pos := 0; pos < len(line); {
-		i := strings.Index(line[pos:], "Idx:")
-		if i < 0 {
-			break
-		}
-		starts = append(starts, pos+i)
-		pos += i + len("Idx:")
-	}
-	if len(starts) == 0 {
-		return nil
-	}
-
-	records := make([]string, 0, len(starts))
-	for i, start := range starts {
-		end := len(line)
-		if i+1 < len(starts) {
-			end = starts[i+1]
-		}
-		rec := strings.TrimSpace(line[start:end])
-		if strings.HasPrefix(rec, "Idx:") {
-			records = append(records, rec)
-		}
-	}
-	return records
 }
 
 func normalizeTraceListerIdxRecord(rec string) string {
