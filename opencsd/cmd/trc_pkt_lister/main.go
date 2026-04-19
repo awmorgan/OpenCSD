@@ -515,9 +515,18 @@ func runSharedReaderLoop(out io.Writer, in io.Reader, buf []byte, footer []byte,
 
 func flushSharedPendingTail(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, dataPathErr error, align int, isFramed bool) ([]byte, uint32, error) {
 	if !ocsd.DataRespIsFatal(ocsd.DataRespFromErr(dataPathErr)) && len(pending) > 0 && !isFramed {
-		var err error
-		pending, traceIndex, err = runSharedReaderPending(tree, sink, genPrinter, pending, traceIndex, align, isFramed)
-		dataPathErr = err
+		session := &decodeSession{
+			tree:       tree,
+			sink:       sink,
+			genPrinter: genPrinter,
+			align:      align,
+			isFramed:   isFramed,
+			pending:    pending,
+			traceIndex: traceIndex,
+		}
+		dataPathErr = session.processPending()
+		pending = session.pending
+		traceIndex = session.traceIndex
 	}
 	return pending, traceIndex, dataPathErr
 }
@@ -548,9 +557,21 @@ func runSharedReaderIteration(out io.Writer, in io.Reader, buf []byte, footer []
 
 	var done bool
 	if n > 0 {
+		session := &decodeSession{
+			tree:       tree,
+			sink:       sink,
+			genPrinter: genPrinter,
+			align:      align,
+			isFramed:   isFramed,
+			pending:    pending,
+			traceIndex: traceIndex,
+		}
 		var feedErr error
-		pending, traceIndex, feedErr, done = feedSharedReaderChunk(tree, sink, genPrinter, buf[:n], pending, traceIndex, align, isFramed)
+		done, feedErr = session.feedChunk(buf[:n])
+		pending = session.pending
+		traceIndex = session.traceIndex
 		dataPathErr = feedErr
+
 		if done {
 			return pending, traceIndex, dataPathErr, true, nil
 		}
@@ -567,17 +588,6 @@ func runSharedReaderIteration(out io.Writer, in io.Reader, buf []byte, footer []
 	}
 
 	return pending, traceIndex, dataPathErr, false, nil
-}
-
-func feedSharedReaderChunk(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, chunk []byte, pending []byte, traceIndex uint32, align int, isFramed bool) ([]byte, uint32, error, bool) {
-	pending = append(pending, chunk...)
-	pending, traceIndex, err := runSharedReaderPending(tree, sink, genPrinter, pending, traceIndex, align, isFramed)
-
-	// If the error is fatal, trigger the done boolean to break the upper loop
-	if err != nil && ocsd.DataRespIsFatal(ocsd.DataRespFromErr(err)) {
-		return pending, traceIndex, err, true
-	}
-	return pending, traceIndex, err, false
 }
 
 func processInputFilePull(out io.Writer, tree *dcdtree.DecodeTree, fileName string, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
@@ -637,6 +647,62 @@ func (s *decodeSession) flushWait() error {
 	return nil
 }
 
+func (s *decodeSession) processPending() error {
+	for len(s.pending) > 0 {
+		sendLen := len(s.pending)
+		if s.isFramed {
+			sendLen -= sendLen % s.align
+			if sendLen == 0 {
+				break
+			}
+		}
+
+		used := s.writeChunk(s.pending[:sendLen])
+
+		if s.err != nil {
+			if !ocsd.DataRespIsFatal(ocsd.DataRespFromErr(s.err)) {
+				return s.err
+			}
+		}
+
+		if err := s.drainOutput(); err != nil {
+			return fmt.Errorf("drain generic elements: %w", err)
+		}
+
+		s.consume(used)
+
+		if s.err != nil && ocsd.DataRespIsFatal(ocsd.DataRespFromErr(s.err)) {
+			return s.err
+		}
+
+		if errors.Is(s.err, ocsd.ErrWait) {
+			if err := s.flushWait(); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if used == 0 {
+			break
+		}
+		if !s.isFramed {
+			continue
+		}
+	}
+
+	return s.err
+}
+
+func (s *decodeSession) feedChunk(chunk []byte) (bool, error) {
+	s.pending = append(s.pending, chunk...)
+	err := s.processPending()
+
+	if err != nil && ocsd.DataRespIsFatal(ocsd.DataRespFromErr(err)) {
+		return true, err
+	}
+	return false, err
+}
+
 func processInputFilePullReaderBody(out io.Writer, tree *dcdtree.DecodeTree, in io.Reader, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, opts options) error {
 	start := time.Now()
 	var traceIndex uint32
@@ -660,62 +726,6 @@ func drainPreInputElements(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinte
 		return fmt.Errorf("trace packet lister: pre-data element drain error: %w", err)
 	}
 	return nil
-}
-
-func runSharedReaderPending(tree *dcdtree.DecodeTree, sink *filteredGenElemPrinter, genPrinter *printers.GenericElementPrinter, pending []byte, traceIndex uint32, align int, isFramed bool) ([]byte, uint32, error) {
-	session := &decodeSession{
-		tree:       tree,
-		sink:       sink,
-		genPrinter: genPrinter,
-		align:      align,
-		isFramed:   isFramed,
-		pending:    pending,
-		traceIndex: traceIndex,
-	}
-
-	for len(session.pending) > 0 {
-		sendLen := len(session.pending)
-		if session.isFramed {
-			sendLen -= sendLen % session.align
-			if sendLen == 0 {
-				break
-			}
-		}
-
-		used := session.writeChunk(session.pending[:sendLen])
-
-		if session.err != nil {
-			if !ocsd.DataRespIsFatal(ocsd.DataRespFromErr(session.err)) {
-				return session.pending, session.traceIndex, session.err
-			}
-		}
-
-		if err := session.drainOutput(); err != nil {
-			return session.pending, session.traceIndex, fmt.Errorf("drain generic elements: %w", err)
-		}
-
-		session.consume(used)
-
-		if session.err != nil && ocsd.DataRespIsFatal(ocsd.DataRespFromErr(session.err)) {
-			return session.pending, session.traceIndex, session.err
-		}
-
-		if errors.Is(session.err, ocsd.ErrWait) {
-			if err := session.flushWait(); err != nil {
-				return session.pending, session.traceIndex, err
-			}
-			continue
-		}
-
-		if used == 0 {
-			break
-		}
-		if !session.isFramed {
-			continue
-		}
-	}
-
-	return session.pending, session.traceIndex, session.err
 }
 
 func readLegacyInputChunk(in io.Reader, buf []byte, opts options) (int, error) {
