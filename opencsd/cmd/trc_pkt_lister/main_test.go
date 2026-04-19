@@ -132,14 +132,14 @@ func TestTraceListerGoldens(t *testing.T) {
 			gotPackets, gotElementsByID := splitOutput(gotLines)
 
 			// Check packets against C++ packets
-			if diffIdx, gotLine, wantLine := firstDiff(gotPackets, wantPackets); diffIdx != 0 {
+			if diffIdx, gotLine, wantLine := testutil.FirstDiff(gotPackets, wantPackets); diffIdx != 0 {
 				t.Errorf("Packet mismatch at packet %d\nwant: %s\n got: %s", diffIdx, wantLine, gotLine)
 			}
 
 			// Check elements against C++ elements per ID stream
 			for id, wantElems := range wantElementsByID {
 				gotElems := gotElementsByID[id]
-				if diffIdx, gotLine, wantLine := firstDiff(gotElems, wantElems); diffIdx != 0 {
+				if diffIdx, gotLine, wantLine := testutil.FirstDiff(gotElems, wantElems); diffIdx != 0 {
 					t.Errorf("Element mismatch on ID:%s at element %d\nwant: %s\n got: %s", id, diffIdx, wantLine, gotLine)
 				}
 			}
@@ -577,23 +577,6 @@ func extractGenElemType(line string) string {
 		return ""
 	}
 	return strings.ToUpper(m[1])
-}
-
-func firstDiff(got, want []string) (int, string, string) {
-	maxLen := max(len(got), len(want))
-	for i := range maxLen {
-		var gotLine, wantLine string
-		if i < len(got) {
-			gotLine = got[i]
-		}
-		if i < len(want) {
-			wantLine = want[i]
-		}
-		if gotLine != wantLine {
-			return i + 1, gotLine, wantLine
-		}
-	}
-	return 0, "", ""
 }
 
 func normalizeNewlines(s string) string {

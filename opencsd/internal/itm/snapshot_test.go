@@ -117,7 +117,7 @@ func TestITMSnapshotsAgainstGolden(t *testing.T) {
 			if got != want {
 				gotLines := strings.Split(got, "\n")
 				wantLines := strings.Split(want, "\n")
-				line, gotLine, wantLine := firstDiff(gotLines, wantLines)
+				line, gotLine, wantLine := testutil.FirstDiff(gotLines, wantLines)
 				t.Fatalf("snapshot mismatch at line %d\nwant: %s\n got: %s", line, wantLine, gotLine)
 			}
 		})
@@ -391,23 +391,6 @@ func extractPacketType(s string) string {
 		return ""
 	}
 	return strings.TrimSpace(before)
-}
-
-func firstDiff(got, want []string) (int, string, string) {
-	maxLen := max(len(want), len(got))
-	for i := range maxLen {
-		var gotLine, wantLine string
-		if i < len(got) {
-			gotLine = got[i]
-		}
-		if i < len(want) {
-			wantLine = want[i]
-		}
-		if gotLine != wantLine {
-			return i + 1, gotLine, wantLine
-		}
-	}
-	return 0, "", ""
 }
 
 func findParsedDeviceByName(devs map[string]*snapshot.ParsedDevice, name string) *snapshot.ParsedDevice {

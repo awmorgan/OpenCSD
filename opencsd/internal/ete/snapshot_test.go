@@ -99,7 +99,7 @@ func TestETESnapshotsAgainstGolden(t *testing.T) {
 			if got != want {
 				gotLines := strings.Split(got, "\n")
 				wantLines := strings.Split(want, "\n")
-				line, gotLine, wantLine := firstDiff(gotLines, wantLines)
+				line, gotLine, wantLine := testutil.FirstDiff(gotLines, wantLines)
 				t.Fatalf("snapshot mismatch at line %d\nwant: %s\n got: %s", line, wantLine, gotLine)
 			}
 		})
@@ -489,23 +489,6 @@ func sourceTreeHasETEDevices(sourceTree *snapshot.TraceBufferSourceTree, devs ma
 		}
 	}
 	return false
-}
-
-func firstDiff(gotLines, wantLines []string) (line int, gotLine, wantLine string) {
-	n := max(len(wantLines), len(gotLines))
-	for i := range n {
-		var g, w string
-		if i < len(gotLines) {
-			g = gotLines[i]
-		}
-		if i < len(wantLines) {
-			w = wantLines[i]
-		}
-		if g != w {
-			return i + 1, g, w
-		}
-	}
-	return 0, "", ""
 }
 
 func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericElementPrinter) error {
