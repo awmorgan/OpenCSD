@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -180,7 +179,7 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 
 		cfg := &itm.Config{}
 		if val, ok := dev.RegValue("itmtcr"); ok {
-			cfg.RegTCR = uint32(parseHexOrDec(val))
+			cfg.RegTCR = uint32(testutil.ParseHexOrDec(val))
 		}
 
 		traceID := cfg.TraceID()
@@ -400,16 +399,6 @@ func findParsedDeviceByName(devs map[string]*snapshot.ParsedDevice, name string)
 		}
 	}
 	return nil
-}
-
-func parseHexOrDec(s string) uint64 {
-	s = strings.TrimSpace(s)
-	if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
-		v, _ := strconv.ParseUint(s[2:], 16, 64)
-		return v
-	}
-	v, _ := strconv.ParseUint(s, 10, 64)
-	return v
 }
 
 func extractLineID(line string) (string, bool) {
