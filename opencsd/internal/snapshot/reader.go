@@ -38,12 +38,6 @@ func (r *Reader) Dir() string {
 	return r.SnapshotPath
 }
 
-// SetSnapshotDir sets the directory to read from.
-// Deprecated: prefer SetDir.
-func (r *Reader) SetSnapshotDir(dir string) {
-	r.SetDir(dir)
-}
-
 // SnapshotFound returns true if snapshot.ini was found
 func (r *Reader) SnapshotFound() bool {
 	return r.Found()
@@ -146,12 +140,6 @@ func (r *Reader) Read() error {
 
 	r.readOK = true
 	return nil
-}
-
-// ReadSnapShot reads the snapshot directory and parses all ini files.
-// Deprecated: prefer Read, which returns an error.
-func (r *Reader) ReadSnapShot() bool {
-	return r.Read() == nil
 }
 
 func (r *Reader) loadDevice(devName string, iniFileName string) {

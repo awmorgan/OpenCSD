@@ -199,13 +199,6 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 	return b.tree, nil
 }
 
-// CreateDecodeTree builds the tree for a specific named source buffer (e.g., "ETB_0").
-// Deprecated: prefer Build, which returns an error.
-func (b *DecodeTreeBuilder) CreateDecodeTree(sourceName string, packetProcOnly bool) bool {
-	_, err := b.Build(sourceName, packetProcOnly)
-	return err == nil
-}
-
 // getCoreProfile maps a core device type name (e.g. "Cortex-A57") to its architecture version
 // and core profile, matching the C++ CoreArchProfileMap / getCoreProfile behaviour.
 func getCoreProfile(coreName string) (ocsd.ArchVersion, ocsd.CoreProfile) {
