@@ -46,7 +46,6 @@ func run(args []string) error {
 
 	reader := snapshot.NewReader()
 	reader.SetDir(opts.ssDir)
-	reader.Verbose = opts.ssVerbose
 	if err := reader.Read(); err != nil {
 		return fmt.Errorf("trace packet lister: failed to read snapshot: %w", err)
 	}

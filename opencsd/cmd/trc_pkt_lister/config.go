@@ -13,7 +13,6 @@ const defaultLogFile = "trc_pkt_lister.ppl"
 
 type options struct {
 	ssDir            string
-	ssVerbose        bool
 	srcName          string
 	multiSession     bool
 	decode           bool
@@ -166,7 +165,6 @@ func parseOptions(args []string) (options, error) {
 	fs.Usage = func() {}
 
 	fs.StringVar(&opts.ssDir, "ss_dir", "", "Set the directory path to a trace snapshot")
-	fs.BoolVar(&opts.ssVerbose, "ss_verbose", false, "Verbose output when reading the snapshot")
 	fs.StringVar(&opts.srcName, "src_name", "", "List packets from a given snapshot source name")
 	fs.BoolVar(&opts.multiSession, "multi_session", false, "Decode all source buffers with same config")
 	fs.BoolVar(&opts.decode, "decode", false, "Full decode of packets from snapshot")
