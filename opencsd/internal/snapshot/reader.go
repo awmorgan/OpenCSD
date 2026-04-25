@@ -33,12 +33,6 @@ func (r *Reader) Device(name string) (*ParsedDevice, bool) {
 	return dev, ok
 }
 
-// SourceTree returns a parsed source tree by buffer name.
-func (r *Reader) SourceTree(name string) (*TraceBufferSourceTree, bool) {
-	tree, ok := r.SourceTrees[name]
-	return tree, ok
-}
-
 // Read reads the snapshot directory and parses all ini files.
 func (r *Reader) Read() error {
 	r.SnapshotFound = false
