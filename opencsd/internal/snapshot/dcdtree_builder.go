@@ -120,7 +120,7 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 	}
 
 	formatterFlags := uint32(ocsd.DfrmtrFrameMemAlign)
-	b.bufferFileName = filepath.Join(b.reader.Dir(), tree.BufferInfo.DataFileName)
+	b.bufferFileName = filepath.Join(b.reader.SnapshotPath, tree.BufferInfo.DataFileName)
 
 	dataFormat := strings.ToLower(tree.BufferInfo.DataFormat)
 	srcFormat := ocsd.TrcSrcFrameFormatted
@@ -442,7 +442,7 @@ func (b *DecodeTreeBuilder) addCoreDumpMemory(mapper memacc.Mapper, dev *ParsedD
 			continue
 		}
 
-		path := filepath.Join(b.reader.Dir(), dump.Path)
+		path := filepath.Join(b.reader.SnapshotPath, dump.Path)
 		fileBytes, err := os.ReadFile(path)
 		if err != nil {
 			continue

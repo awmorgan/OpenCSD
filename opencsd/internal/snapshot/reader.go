@@ -27,11 +27,6 @@ func NewReader() *Reader {
 	}
 }
 
-// Dir returns the configured snapshot directory path.
-func (r *Reader) Dir() string {
-	return r.SnapshotPath
-}
-
 // SnapshotFound returns true if snapshot.ini was found
 func (r *Reader) SnapshotFound() bool {
 	return r.Found()
