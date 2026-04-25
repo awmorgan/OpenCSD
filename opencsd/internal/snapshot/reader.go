@@ -27,12 +27,6 @@ func NewReader() *Reader {
 	}
 }
 
-// Device returns the parsed device definition by name.
-func (r *Reader) Device(name string) (*ParsedDevice, bool) {
-	dev, ok := r.ParsedDeviceList[name]
-	return dev, ok
-}
-
 // Read reads the snapshot directory and parses all ini files.
 func (r *Reader) Read() error {
 	r.SnapshotFound = false

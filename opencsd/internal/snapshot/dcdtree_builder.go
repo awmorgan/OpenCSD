@@ -149,13 +149,13 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 
 	numDecodersCreated := 0
 	for srcName, coreName := range tree.SourceCoreAssoc {
-		devSrc, ok := b.reader.Device(srcName)
+		devSrc, ok := b.reader.ParsedDeviceList[srcName]
 		if !ok || devSrc == nil {
 			continue
 		}
 
 		if coreName != "<none>" && coreName != "" {
-			coreDev, ok := b.reader.Device(coreName)
+			coreDev, ok := b.reader.ParsedDeviceList[coreName]
 			if !ok || coreDev == nil {
 				continue
 			}
