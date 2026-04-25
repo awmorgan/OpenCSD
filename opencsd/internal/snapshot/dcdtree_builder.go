@@ -109,7 +109,7 @@ func (b *DecodeTreeBuilder) MemoryMapper() *memacc.GlobalMapper {
 
 // Build builds the tree for a specific named source buffer (e.g., "ETB_0").
 func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdtree.DecodeTree, error) {
-	if !b.reader.ReadOK() {
+	if !b.reader.ReadOK {
 		return nil, fmt.Errorf("supplied snapshot reader has not correctly read the snapshot")
 	}
 

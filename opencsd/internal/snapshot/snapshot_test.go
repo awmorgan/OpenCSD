@@ -271,7 +271,7 @@ ETM_0=cpu_0
 		t.Errorf("expected snapshot found")
 	}
 
-	if !reader.ReadOK() {
+	if !reader.ReadOK {
 		t.Errorf("expected read ok")
 	}
 

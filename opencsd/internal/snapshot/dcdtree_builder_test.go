@@ -66,7 +66,7 @@ func TestCreatePEDecoderRoutesETMv4(t *testing.T) {
 
 func TestBuildPropagatesFormatterConfigFailure(t *testing.T) {
 	reader := NewReader()
-	reader.readOK = true
+	reader.ReadOK = true
 	reader.SnapshotPath = "C:/snapshot"
 	reader.ParsedTrace = &ParsedTrace{
 		TraceBuffers: []TraceBufferInfo{{
@@ -100,7 +100,7 @@ func TestBuildPropagatesFormatterConfigFailure(t *testing.T) {
 
 func TestBuildStillCreatesDecodeTreeOnValidFormatterConfig(t *testing.T) {
 	reader := NewReader()
-	reader.readOK = true
+	reader.ReadOK = true
 	reader.SnapshotPath = "C:/snapshot"
 	reader.ParsedTrace = &ParsedTrace{
 		TraceBuffers: []TraceBufferInfo{{
