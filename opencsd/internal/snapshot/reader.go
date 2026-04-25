@@ -33,11 +33,6 @@ func (r *Reader) Device(name string) (*ParsedDevice, bool) {
 	return dev, ok
 }
 
-// Trace returns parsed trace metadata.
-func (r *Reader) Trace() *ParsedTrace {
-	return r.ParsedTrace
-}
-
 // SourceTree returns a parsed source tree by buffer name.
 func (r *Reader) SourceTree(name string) (*TraceBufferSourceTree, bool) {
 	tree, ok := r.SourceTrees[name]
