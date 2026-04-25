@@ -12,7 +12,6 @@ const TraceINIFilename = "trace.ini"
 // Reader reads a snapshot directory
 type Reader struct {
 	SnapshotPath     string
-	Verbose          bool
 	snapshotFound    bool
 	readOK           bool
 	ParsedDeviceList map[string]*ParsedDevice
@@ -86,7 +85,6 @@ func (r *Reader) Read() error {
 	iniPath := filepath.Join(r.SnapshotPath, SnapshotINIFilename)
 	file, err := os.Open(iniPath)
 	if err != nil {
-		r.logError(fmt.Sprintf("Failed to open %s: %v", iniPath, err))
 		return fmt.Errorf("open snapshot ini %s: %w", iniPath, err)
 	}
 	defer file.Close()
@@ -95,7 +93,6 @@ func (r *Reader) Read() error {
 
 	devList, err := ParseDeviceList(file)
 	if err != nil {
-		r.logError(fmt.Sprintf("Failed to parse device list from %s: %v", iniPath, err))
 		return fmt.Errorf("parse device list %s: %w", iniPath, err)
 	}
 
@@ -118,12 +115,10 @@ func (r *Reader) Read() error {
 		traceIniPath := filepath.Join(r.SnapshotPath, traceMetaName)
 		traceFile, err := os.Open(traceIniPath)
 		if err != nil {
-			r.logError(fmt.Sprintf("Failed to open trace metadata %s: %v", traceIniPath, err))
 		} else {
 			parsedTrace, err := ParseTraceMetaData(traceFile)
 			traceFile.Close()
 			if err != nil {
-				r.logError(fmt.Sprintf("Failed to parse trace metadata %s: %v", traceIniPath, err))
 			} else {
 				r.ParsedTrace = parsedTrace
 
@@ -146,14 +141,12 @@ func (r *Reader) loadDevice(devName string, iniFileName string) {
 	devIniPath := filepath.Join(r.SnapshotPath, iniFileName)
 	devFile, err := os.Open(devIniPath)
 	if err != nil {
-		r.logError(fmt.Sprintf("Failed to open device ini %s: %v", devIniPath, err))
 		return
 	}
 
 	parsedDev, err := ParseSingleDevice(devFile)
 	devFile.Close()
 	if err != nil {
-		r.logError(fmt.Sprintf("Failed to parse device %s: %v", devName, err))
 		return
 	}
 
@@ -173,17 +166,5 @@ func (r *Reader) loadLegacyDevices() {
 			break
 		}
 		r.loadDevice(fmt.Sprintf("device_%d", deviceIdx), legacyIniFileName)
-	}
-}
-
-func (r *Reader) logError(msg string) {
-	if r.Verbose {
-		fmt.Fprintln(os.Stderr, msg)
-	}
-}
-
-func (r *Reader) logInfo(msg string) {
-	if r.Verbose {
-		fmt.Println(msg)
 	}
 }

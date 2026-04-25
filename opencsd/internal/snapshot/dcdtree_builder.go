@@ -110,17 +110,13 @@ func (b *DecodeTreeBuilder) MemoryMapper() *memacc.GlobalMapper {
 // Build builds the tree for a specific named source buffer (e.g., "ETB_0").
 func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdtree.DecodeTree, error) {
 	if !b.reader.ReadOK() {
-		err := fmt.Errorf("supplied snapshot reader has not correctly read the snapshot")
-		b.reader.logError(err.Error())
-		return nil, err
+		return nil, fmt.Errorf("supplied snapshot reader has not correctly read the snapshot")
 	}
 
 	b.packetProcOnly = packetProcOnly
 	tree := NewTraceBufferSourceTree()
 	if !ExtractSourceTree(sourceName, b.reader.Trace(), tree) {
-		err := fmt.Errorf("failed to get parsed source tree for buffer %s", sourceName)
-		b.reader.logError(err.Error())
-		return nil, err
+		return nil, fmt.Errorf("failed to get parsed source tree for buffer %s", sourceName)
 	}
 
 	formatterFlags := uint32(ocsd.DfrmtrFrameMemAlign)
@@ -137,9 +133,7 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 
 	newTree, err := newDecodeTree(srcFormat, formatterFlags)
 	if err != nil {
-		err = fmt.Errorf("failed to create decode tree object: %w", err)
-		b.reader.logError(err.Error())
-		return nil, err
+		return nil, fmt.Errorf("failed to create decode tree object: %w", err)
 	}
 	b.tree = newTree
 
@@ -157,20 +151,17 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 	for srcName, coreName := range tree.SourceCoreAssoc {
 		devSrc, ok := b.reader.Device(srcName)
 		if !ok || devSrc == nil {
-			b.reader.logError(fmt.Sprintf("Failed to find device data for source %s.", srcName))
 			continue
 		}
 
 		if coreName != "<none>" && coreName != "" {
 			coreDev, ok := b.reader.Device(coreName)
 			if !ok || coreDev == nil {
-				b.reader.logError(fmt.Sprintf("Failed to get device data for core %s.", coreName))
 				continue
 			}
 
 			err := b.createPEDecoder(devSrc.DeviceTypeName, devSrc, coreName)
 			if err != nil {
-				b.reader.logError(fmt.Sprintf("Failed to create PEDecoder for source %s: %v", srcName, err))
 				continue
 			}
 
@@ -183,7 +174,6 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 
 		err := b.createSTDecoder(devSrc)
 		if err != nil {
-			b.reader.logError(fmt.Sprintf("Failed to create STDecoder for none core source %s: %v", srcName, err))
 			continue
 		}
 		numDecodersCreated++
@@ -191,9 +181,7 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 
 	if numDecodersCreated == 0 {
 		b.tree = nil
-		err := fmt.Errorf("no supported protocols found")
-		b.reader.logError(err.Error())
-		return nil, err
+		return nil, fmt.Errorf("no supported protocols found")
 	}
 
 	return b.tree, nil
@@ -457,13 +445,11 @@ func (b *DecodeTreeBuilder) addCoreDumpMemory(mapper memacc.Mapper, dev *ParsedD
 		path := filepath.Join(b.reader.Dir(), dump.Path)
 		fileBytes, err := os.ReadFile(path)
 		if err != nil {
-			b.reader.logError(fmt.Sprintf("Failed to read dump file for %s at %s: %v", dev.DeviceName, path, err))
 			continue
 		}
 
 		if dump.Offset > 0 {
 			if dump.Offset >= uint64(len(fileBytes)) {
-				b.reader.logError(fmt.Sprintf("Dump offset out of range for %s at %s", dev.DeviceName, path))
 				continue
 			}
 			fileBytes = fileBytes[dump.Offset:]
@@ -474,14 +460,12 @@ func (b *DecodeTreeBuilder) addCoreDumpMemory(mapper memacc.Mapper, dev *ParsedD
 		}
 
 		if len(fileBytes) == 0 {
-			b.reader.logError(fmt.Sprintf("Empty dump mapping for %s at %s", dev.DeviceName, path))
 			continue
 		}
 
 		acc := memacc.NewBufferAccessor(ocsd.VAddr(dump.Address), fileBytes)
 		acc.SetMemSpace(mapDumpMemSpace(dump.Space))
 		if err := mapper.AddAccessor(acc, ocsd.BadCSSrcID); err != nil {
-			b.reader.logError(fmt.Sprintf("Failed to add memory accessor for %s (%s): %v", dev.DeviceName, path, err))
 		}
 	}
 }

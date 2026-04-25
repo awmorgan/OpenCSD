@@ -262,7 +262,6 @@ ETM_0=cpu_0
 
 	reader := NewReader()
 	reader.SetDir(tempDir)
-	reader.Verbose = true
 
 	if err := reader.Read(); err != nil {
 		t.Fatalf("expected success: %v", err)
@@ -302,7 +301,6 @@ ETM_0=cpu_0
 
 func TestReader_Errors(t *testing.T) {
 	reader := NewReader()
-	reader.Verbose = true
 	// Invalid path
 	reader.SetDir("/non/existent/path/for/sure")
 	if err := reader.Read(); err == nil {
@@ -328,9 +326,6 @@ metadata=missing_trace.ini
 	// Create bad trace.ini? No error returned from parseTraceMetaData typically,
 	// but it would log if file missing. Which is covered above.
 
-	reader.logInfo("test log info")
-	reader.Verbose = false
-	reader.logInfo("should not log")
 }
 
 func TestReader_DefaultTraceININame(t *testing.T) {

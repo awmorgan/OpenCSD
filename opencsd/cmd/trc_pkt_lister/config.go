@@ -224,7 +224,6 @@ func printHelp(out io.Writer) {
 	fmt.Fprintln(out, "Snapshot:")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "-ss_dir <dir>       Set the directory path to a trace snapshot")
-	fmt.Fprintln(out, "-ss_verbose         Verbose output when reading the snapshot")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Decode:")
 	fmt.Fprintln(out)
