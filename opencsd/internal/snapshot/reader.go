@@ -27,11 +27,6 @@ func NewReader() *Reader {
 	}
 }
 
-// SnapshotFound returns true if snapshot.ini was found
-func (r *Reader) SnapshotFound() bool {
-	return r.Found()
-}
-
 // Found returns true if snapshot.ini was found.
 func (r *Reader) Found() bool {
 	return r.snapshotFound
