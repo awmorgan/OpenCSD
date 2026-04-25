@@ -27,11 +27,6 @@ func NewReader() *Reader {
 	}
 }
 
-// SnapshotReadOK returns true if the parse was fully successful
-func (r *Reader) SnapshotReadOK() bool {
-	return r.ReadOK()
-}
-
 // ReadOK returns true if the parse was fully successful.
 func (r *Reader) ReadOK() bool {
 	return r.readOK
