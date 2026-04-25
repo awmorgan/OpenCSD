@@ -12,7 +12,7 @@ const TraceINIFilename = "trace.ini"
 // Reader reads a snapshot directory
 type Reader struct {
 	SnapshotPath     string
-	snapshotFound    bool
+	SnapshotFound    bool
 	readOK           bool
 	ParsedDeviceList map[string]*ParsedDevice
 	ParsedTrace      *ParsedTrace
@@ -25,11 +25,6 @@ func NewReader() *Reader {
 		ParsedDeviceList: make(map[string]*ParsedDevice),
 		SourceTrees:      make(map[string]*TraceBufferSourceTree),
 	}
-}
-
-// Found returns true if snapshot.ini was found.
-func (r *Reader) Found() bool {
-	return r.snapshotFound
 }
 
 // SnapshotReadOK returns true if the parse was fully successful
@@ -61,7 +56,7 @@ func (r *Reader) SourceTree(name string) (*TraceBufferSourceTree, bool) {
 
 // Read reads the snapshot directory and parses all ini files.
 func (r *Reader) Read() error {
-	r.snapshotFound = false
+	r.SnapshotFound = false
 	r.readOK = false
 	r.ParsedDeviceList = make(map[string]*ParsedDevice)
 	r.ParsedTrace = nil
@@ -74,7 +69,7 @@ func (r *Reader) Read() error {
 	}
 	defer file.Close()
 
-	r.snapshotFound = true
+	r.SnapshotFound = true
 
 	devList, err := ParseDeviceList(file)
 	if err != nil {

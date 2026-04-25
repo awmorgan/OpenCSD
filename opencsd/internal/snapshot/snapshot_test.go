@@ -267,7 +267,7 @@ ETM_0=cpu_0
 		t.Fatalf("expected success: %v", err)
 	}
 
-	if !reader.Found() {
+	if !reader.SnapshotFound {
 		t.Errorf("expected snapshot found")
 	}
 
