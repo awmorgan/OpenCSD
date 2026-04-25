@@ -132,7 +132,7 @@ func TestSanitizePPLEmbeddedIdxRecords(t *testing.T) {
 
 func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOptions) ([]byte, error) {
 	reader := snapshot.NewReader()
-	reader.SetDir(snapshotDir)
+	reader.SnapshotPath = snapshotDir
 	if err := reader.Read(); err != nil {
 		return nil, fmt.Errorf("failed to read snapshot: %v", err)
 	}

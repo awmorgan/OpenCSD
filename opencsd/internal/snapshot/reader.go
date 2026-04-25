@@ -27,11 +27,6 @@ func NewReader() *Reader {
 	}
 }
 
-// SetDir sets the directory to read from.
-func (r *Reader) SetDir(dir string) {
-	r.SnapshotPath = dir
-}
-
 // Dir returns the configured snapshot directory path.
 func (r *Reader) Dir() string {
 	return r.SnapshotPath
