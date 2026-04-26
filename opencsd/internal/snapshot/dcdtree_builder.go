@@ -189,6 +189,17 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 	return b.tree, nil
 }
 
+func setReg32(dev *Device, name string, dst *uint32) {
+	if val, ok := dev.RegValue(name); ok {
+		*dst = uint32(parseUint(val))
+	}
+}
+
+func protocolBase(name string) string {
+	base, _, _ := strings.Cut(name, ".")
+	return base
+}
+
 // getCoreProfile maps a core device type name (e.g. "Cortex-A57") to its architecture version
 // and core profile, matching the C++ CoreArchProfileMap / getCoreProfile behaviour.
 func getCoreProfile(coreName string) (ocsd.ArchVersion, ocsd.CoreProfile) {
@@ -199,54 +210,39 @@ func getCoreProfile(coreName string) (ocsd.ArchVersion, ocsd.CoreProfile) {
 }
 
 func (b *DecodeTreeBuilder) createPEDecoder(devTypeName string, devSrc *Device, coreName string) error {
-	// Strip any trailing ".x" version suffix from the device type name (e.g. "ETM4.1" → "ETM4").
-	if pos := strings.IndexByte(devTypeName, '.'); pos >= 0 {
-		devTypeName = devTypeName[:pos]
-	}
-
-	if devTypeName == ETMv3Protocol || strings.HasPrefix(devTypeName, "ETMv3") {
+	switch devTypeName = protocolBase(devTypeName); {
+	case devTypeName == ETMv3Protocol || strings.HasPrefix(devTypeName, "ETMv3"):
 		return b.createETMv3Decoder(coreName, devSrc)
-	} else if devTypeName == ETMv4Protocol || strings.HasPrefix(devTypeName, "ETMv4") {
+	case devTypeName == ETMv4Protocol || strings.HasPrefix(devTypeName, "ETMv4"):
 		return b.createETMv4Decoder(coreName, devSrc)
-	} else if devTypeName == ETEProtocol {
+	case devTypeName == ETEProtocol:
 		return b.createETEDecoder(coreName, devSrc)
-	} else if devTypeName == PTMProtocol || devTypeName == PFTProtocol {
+	case devTypeName == PTMProtocol || devTypeName == PFTProtocol:
 		return b.createPTMDecoder(coreName, devSrc)
+	default:
+		return fmt.Errorf("unknown PE device type %q", devTypeName)
 	}
-	return fmt.Errorf("unknown PE devType: %s", devTypeName)
 }
 
 func (b *DecodeTreeBuilder) createSTDecoder(devSrc *Device) error {
-	devTypeName := devSrc.Type
-	// Strip any trailing ".x" version suffix (e.g. "STM.1" → "STM").
-	if pos := strings.IndexByte(devTypeName, '.'); pos >= 0 {
-		devTypeName = devTypeName[:pos]
-	}
-
+	devTypeName := protocolBase(devSrc.Type)
 	switch devTypeName {
 	case STMProtocol:
 		return b.createSTMDecoder(devSrc)
 	case ITMProtocol:
 		return b.createITMDecoder(devSrc)
+	default:
+		return fmt.Errorf("unknown ST device type %q", devTypeName)
 	}
-	return fmt.Errorf("unknown ST devType: %s", devTypeName)
 }
 
 func (b *DecodeTreeBuilder) createETMv3Decoder(coreName string, devSrc *Device) error {
 	cfg := &etmv3.Config{}
 
-	if val, ok := devSrc.RegValue("etmcr"); ok {
-		cfg.RegCtrl = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("etmtraceidr"); ok {
-		cfg.RegTrcID = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("etmidr"); ok {
-		cfg.RegIDR = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("etmccer"); ok {
-		cfg.RegCCER = uint32(parseUint(val))
-	}
+	setReg32(devSrc, "etmcr", &cfg.RegCtrl)
+	setReg32(devSrc, "etmtraceidr", &cfg.RegTrcID)
+	setReg32(devSrc, "etmidr", &cfg.RegIDR)
+	setReg32(devSrc, "etmccer", &cfg.RegCCER)
 
 	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
@@ -268,18 +264,10 @@ func (b *DecodeTreeBuilder) createETMv3Decoder(coreName string, devSrc *Device) 
 func (b *DecodeTreeBuilder) createPTMDecoder(coreName string, devSrc *Device) error {
 	cfg := ptm.NewConfig()
 
-	if val, ok := devSrc.RegValue("etmcr"); ok {
-		cfg.RegCtrl = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("etmtraceidr"); ok {
-		cfg.RegTrcID = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("etmidr"); ok {
-		cfg.RegIDR = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("etmccer"); ok {
-		cfg.RegCCER = uint32(parseUint(val))
-	}
+	setReg32(devSrc, "etmcr", &cfg.RegCtrl)
+	setReg32(devSrc, "etmtraceidr", &cfg.RegTrcID)
+	setReg32(devSrc, "etmidr", &cfg.RegIDR)
+	setReg32(devSrc, "etmccer", &cfg.RegCCER)
 
 	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
@@ -301,29 +289,13 @@ func (b *DecodeTreeBuilder) createPTMDecoder(coreName string, devSrc *Device) er
 func (b *DecodeTreeBuilder) createETEDecoder(coreName string, devSrc *Device) error {
 	cfg := ete.NewConfig()
 
-	if val, ok := devSrc.RegValue("trcidr0"); ok {
-		cfg.RegIdr0 = uint32(parseUint(val))
-	}
-	// TRCIDR1: use snapshot value if present; ete.NewConfig() already sets the correct ETE default.
-	if val, ok := devSrc.RegValue("trcidr1"); ok {
-		cfg.RegIdr1 = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("trcidr2"); ok {
-		cfg.RegIdr2 = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("trcidr8"); ok {
-		cfg.RegIdr8 = uint32(parseUint(val))
-	}
-	// TRCDEVARCH: use snapshot value if present; ete.NewConfig() already sets the correct default.
-	if val, ok := devSrc.RegValue("trcdevarch"); ok {
-		cfg.RegDevArch = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("trcconfigr"); ok {
-		cfg.RegConfigr = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("trctraceidr"); ok {
-		cfg.RegTraceidr = uint32(parseUint(val))
-	}
+	setReg32(devSrc, "trcidr0", &cfg.RegIdr0)
+	setReg32(devSrc, "trcidr1", &cfg.RegIdr1)
+	setReg32(devSrc, "trcidr2", &cfg.RegIdr2)
+	setReg32(devSrc, "trcidr8", &cfg.RegIdr8)
+	setReg32(devSrc, "trcdevarch", &cfg.RegDevArch)
+	setReg32(devSrc, "trcconfigr", &cfg.RegConfigr)
+	setReg32(devSrc, "trctraceidr", &cfg.RegTraceidr)
 
 	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
@@ -340,44 +312,21 @@ func (b *DecodeTreeBuilder) createETEDecoder(coreName string, devSrc *Device) er
 }
 
 func (b *DecodeTreeBuilder) createETMv4Decoder(coreName string, devSrc *Device) error {
-	cfg := &etmv4.Config{}
+	cfg := &etmv4.Config{
+		RegIdr1: 0x4100F403,
+	}
 
-	if val, ok := devSrc.RegValue("trcidr0"); ok {
-		cfg.RegIdr0 = uint32(parseUint(val))
-	}
-	// TRCIDR1: use snapshot value if present, otherwise fall back to the C++ default 0x4100F403.
-	if val, ok := devSrc.RegValue("trcidr1"); ok {
-		cfg.RegIdr1 = uint32(parseUint(val))
-	} else {
-		cfg.RegIdr1 = 0x4100F403
-	}
-	if val, ok := devSrc.RegValue("trcidr2"); ok {
-		cfg.RegIdr2 = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("trcidr8"); ok {
-		cfg.RegIdr8 = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("trcidr9"); ok {
-		cfg.RegIdr9 = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("trcidr10"); ok {
-		cfg.RegIdr10 = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("trcidr11"); ok {
-		cfg.RegIdr11 = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("trcidr12"); ok {
-		cfg.RegIdr12 = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("trcidr13"); ok {
-		cfg.RegIdr13 = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("trcconfigr"); ok {
-		cfg.RegConfigr = uint32(parseUint(val))
-	}
-	if val, ok := devSrc.RegValue("trctraceidr"); ok {
-		cfg.RegTraceidr = uint32(parseUint(val))
-	}
+	setReg32(devSrc, "trcidr0", &cfg.RegIdr0)
+	setReg32(devSrc, "trcidr1", &cfg.RegIdr1)
+	setReg32(devSrc, "trcidr2", &cfg.RegIdr2)
+	setReg32(devSrc, "trcidr8", &cfg.RegIdr8)
+	setReg32(devSrc, "trcidr9", &cfg.RegIdr9)
+	setReg32(devSrc, "trcidr10", &cfg.RegIdr10)
+	setReg32(devSrc, "trcidr11", &cfg.RegIdr11)
+	setReg32(devSrc, "trcidr12", &cfg.RegIdr12)
+	setReg32(devSrc, "trcidr13", &cfg.RegIdr13)
+	setReg32(devSrc, "trcconfigr", &cfg.RegConfigr)
+	setReg32(devSrc, "trctraceidr", &cfg.RegTraceidr)
 
 	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
@@ -398,9 +347,7 @@ func (b *DecodeTreeBuilder) createETMv4Decoder(coreName string, devSrc *Device) 
 
 func (b *DecodeTreeBuilder) createSTMDecoder(devSrc *Device) error {
 	cfg := stm.NewConfig()
-	if val, ok := devSrc.RegValue("stmtcsr"); ok {
-		cfg.RegTCSR = uint32(parseUint(val))
-	}
+	setReg32(devSrc, "stmtcsr", &cfg.RegTCSR)
 	if b.packetProcOnly {
 		proc, err := stm.NewConfiguredPktProc(int(cfg.TraceID()), cfg)
 		if err != nil {
@@ -418,9 +365,7 @@ func (b *DecodeTreeBuilder) createSTMDecoder(devSrc *Device) error {
 
 func (b *DecodeTreeBuilder) createITMDecoder(devSrc *Device) error {
 	cfg := &itm.Config{}
-	if val, ok := devSrc.RegValue("itmtcr"); ok {
-		cfg.RegTCR = uint32(parseUint(val))
-	}
+	setReg32(devSrc, "itmtcr", &cfg.RegTCR)
 	if b.packetProcOnly {
 		proc, _, err := itm.NewPipeline(int(cfg.TraceID()), cfg, nil, nil)
 		if err != nil {
