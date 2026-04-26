@@ -68,8 +68,8 @@ func NewParsedDevices() *ParsedDevices {
 	}
 }
 
-// TraceBufferInfo stores basic info about the buffer
-type TraceBufferInfo struct {
+// Buffer stores basic info about the buffer
+type Buffer struct {
 	BufferName   string
 	DataFileName string
 	DataFormat   string
@@ -78,7 +78,7 @@ type TraceBufferInfo struct {
 // Trace stores lists of buffers and associations as presented in the ini file.
 type Trace struct {
 	BufferSectionNames []string
-	TraceBuffers       []TraceBufferInfo
+	TraceBuffers       []Buffer
 	SourceBufferAssoc  map[string]string // trace source name -> trace buffer name assoc
 	CPUSourceAssoc     map[string]string // trace source name -> cpu_name assoc
 }
@@ -87,7 +87,7 @@ type Trace struct {
 func NewParsedTrace() *Trace {
 	return &Trace{
 		BufferSectionNames: []string{},
-		TraceBuffers:       []TraceBufferInfo{},
+		TraceBuffers:       []Buffer{},
 		SourceBufferAssoc:  make(map[string]string),
 		CPUSourceAssoc:     make(map[string]string),
 	}
@@ -95,7 +95,7 @@ func NewParsedTrace() *Trace {
 
 // TraceBufferSourceTree stores single buffer information containing just the assoc for the buffer
 type TraceBufferSourceTree struct {
-	BufferInfo      *TraceBufferInfo
+	BufferInfo      *Buffer
 	SourceCoreAssoc map[string]string // list of source names attached to core device names (e.g. ETM_0:cpu_0)
 }
 

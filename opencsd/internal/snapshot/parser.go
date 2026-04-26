@@ -129,7 +129,7 @@ func ParseTraceMetaData(input io.Reader) (*Trace, error) {
 	// parse individual buffer sections
 	for _, bufSecName := range parsed.BufferSectionNames {
 		if bufSec, ok := ini.Sections[bufSecName]; ok {
-			var info TraceBufferInfo
+			var info Buffer
 			info.BufferName = bufSec[BufferNameKey]
 			info.DataFileName = bufSec[BufferFileKey]
 			info.DataFormat = bufSec[BufferFormatKey]
@@ -156,7 +156,7 @@ func ParseTraceMetaData(input io.Reader) (*Trace, error) {
 // ExtractSourceTree builds a source tree for a single buffer
 func ExtractSourceTree(bufferName string, metadata *Trace, bufferData *TraceBufferSourceTree) bool {
 	// Find buffer info
-	var foundInfo *TraceBufferInfo
+	var foundInfo *Buffer
 	for i := range metadata.TraceBuffers {
 		if metadata.TraceBuffers[i].BufferName == bufferName {
 			foundInfo = &metadata.TraceBuffers[i]

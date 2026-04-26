@@ -601,12 +601,12 @@ func decodeETETraceBuffer(tree *dcdtree.DecodeTree, traceData []byte, srcIsFrame
 	return nil
 }
 
-func eteSnapshotBuffers(trace *snapshot.Trace, primaryBuffer string, multiSession bool) []snapshot.TraceBufferInfo {
+func eteSnapshotBuffers(trace *snapshot.Trace, primaryBuffer string, multiSession bool) []snapshot.Buffer {
 	if trace == nil || len(trace.TraceBuffers) == 0 {
 		return nil
 	}
 
-	byName := make(map[string]snapshot.TraceBufferInfo, len(trace.TraceBuffers))
+	byName := make(map[string]snapshot.Buffer, len(trace.TraceBuffers))
 	for _, info := range trace.TraceBuffers {
 		if strings.TrimSpace(info.BufferName) == "" {
 			continue
@@ -616,12 +616,12 @@ func eteSnapshotBuffers(trace *snapshot.Trace, primaryBuffer string, multiSessio
 
 	if !multiSession {
 		if info, ok := byName[primaryBuffer]; ok {
-			return []snapshot.TraceBufferInfo{info}
+			return []snapshot.Buffer{info}
 		}
 		return nil
 	}
 
-	ordered := make([]snapshot.TraceBufferInfo, 0, len(byName))
+	ordered := make([]snapshot.Buffer, 0, len(byName))
 	if info, ok := byName[primaryBuffer]; ok {
 		ordered = append(ordered, info)
 	}

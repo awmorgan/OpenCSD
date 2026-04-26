@@ -205,7 +205,7 @@ metadata=trace.ini
 
 func TestExtractSourceTree_NoCore(t *testing.T) {
 	trace := NewParsedTrace()
-	trace.TraceBuffers = append(trace.TraceBuffers, TraceBufferInfo{BufferName: "buf1"})
+	trace.TraceBuffers = append(trace.TraceBuffers, Buffer{BufferName: "buf1"})
 	trace.SourceBufferAssoc["src1"] = "buf1"
 
 	tree := NewTraceBufferSourceTree()
