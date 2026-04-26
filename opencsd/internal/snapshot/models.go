@@ -9,12 +9,18 @@ type Snapshot struct {
 	Trace       *Trace
 }
 
-// Device stores the entire parsed device ini file
+type ParsedDevices struct {
+	Version           string
+	Description       string
+	DeviceList        map[string]string
+	TraceMetaDataName string
+}
+
 type Device struct {
 	Name        string
 	Class       string
 	Type        string
-	Regs        map[string]string // Key is lowercase for case-insensitive lookup
+	Regs        map[string]string
 	ExtRegs     map[uint32]uint32
 	Memory      []MemoryDump
 	FoundGlobal bool
@@ -54,12 +60,6 @@ func (p *Device) RegValue(key string) (string, bool) {
 }
 
 // ParsedDevices stores the entire device list and snapshot info
-type ParsedDevices struct {
-	DeviceList        map[string]string
-	Version           string
-	Description       string
-	TraceMetaDataName string
-}
 
 // NewParsedDevices creates a new ParsedDevices
 func NewParsedDevices() *ParsedDevices {
