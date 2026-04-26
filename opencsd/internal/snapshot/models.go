@@ -2,13 +2,6 @@ package snapshot
 
 import "strings"
 
-type Snapshot struct {
-	Version     string
-	Description string
-	Devices     map[string]*Device
-	Trace       *Trace
-}
-
 type ParsedDevices struct {
 	Version           string
 	Description       string
