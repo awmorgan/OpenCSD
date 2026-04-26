@@ -15,15 +15,6 @@ type Info struct {
 	Description string
 }
 
-// MemoryDump stores a parsed [dump] section
-type MemoryDump struct {
-	Address uint64
-	Path    string
-	Length  uint64
-	Offset  uint64
-	Space   string
-}
-
 // Device stores the entire parsed device ini file
 type Device struct {
 	Name        string
@@ -34,6 +25,14 @@ type Device struct {
 	Memory      []MemoryDump
 	FoundGlobal bool
 	Core        string
+}
+
+type MemoryDump struct {
+	Address uint64
+	Path    string
+	Length  uint64
+	Offset  uint64
+	Space   string
 }
 
 // NewParsedDevice creates a new Device
