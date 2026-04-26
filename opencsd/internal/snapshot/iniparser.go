@@ -7,17 +7,12 @@ import (
 	"unicode"
 )
 
-// IniFile represents a parsed INI file.
-// It maps section names to a map of key-value pairs.
-// Global properties (before any section) are stored in the "" (empty string) section.
-// SectionOrder records the order in which sections were first encountered in the file.
 type IniFile struct {
 	Sections     map[string]map[string]string
 	SectionVals  map[string]map[string][]string
 	SectionOrder []string
 }
 
-// NewIniFile creates a new empty IniFile
 func NewIniFile() *IniFile {
 	return &IniFile{
 		Sections:     make(map[string]map[string]string),
@@ -26,54 +21,44 @@ func NewIniFile() *IniFile {
 	}
 }
 
-// ParseIni reads an INI file from an io.Reader and returns an IniFile.
+func (ini *IniFile) Section(sectionName string) map[string]string {
+	return ini.Sections[sectionName]
+}
+
 func ParseIni(r io.Reader) *IniFile {
 	ini := NewIniFile()
 	scanner := bufio.NewScanner(r)
-	currentSection := ""
-	ini.Sections[currentSection] = make(map[string]string)
-	ini.SectionVals[currentSection] = make(map[string][]string)
+	section := ""
+
+	ini.Sections[section] = make(map[string]string)
+	ini.SectionVals[section] = make(map[string][]string)
 
 	for scanner.Scan() {
-		line := scanner.Text()
-		line = strings.TrimSpace(line)
+		line := strings.TrimSpace(scanner.Text())
 
-		// Ignore empty lines and comments
-		if line == "" || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
+		if line == "" || line[0] == ';' || line[0] == '#' {
 			continue
 		}
 
-		// Check for section
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			sectionName := strings.TrimSpace(line[1 : len(line)-1])
-			// Some section names might have extra spaces, so we trim them
-			// Section names are kept case-sensitive, although typically lowercase in OpenCSD
-			currentSection = sectionName
-			if _, exists := ini.Sections[currentSection]; !exists {
-				ini.Sections[currentSection] = make(map[string]string)
-				ini.SectionVals[currentSection] = make(map[string][]string)
-				ini.SectionOrder = append(ini.SectionOrder, currentSection)
+			section = strings.TrimSpace(line[1 : len(line)-1])
+			if _, exists := ini.Sections[section]; !exists {
+				ini.Sections[section] = make(map[string]string)
+				ini.SectionVals[section] = make(map[string][]string)
+				ini.SectionOrder = append(ini.SectionOrder, section)
 			}
 			continue
 		}
 
-		// Check for key-value pair
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) == 2 {
-			key := strings.TrimSpace(parts[0])
-			val := strings.TrimSpace(stripInlineComment(parts[1]))
-			ini.SectionVals[currentSection][key] = append(ini.SectionVals[currentSection][key], val)
-			// Preserve legacy single-string API by joining duplicates.
-			ini.Sections[currentSection][key] = strings.Join(ini.SectionVals[currentSection][key], ",")
+		if key, val, found := strings.Cut(line, "="); found {
+			k := strings.TrimSpace(key)
+			v := strings.TrimSpace(stripInlineComment(val))
+
+			ini.SectionVals[section][k] = append(ini.SectionVals[section][k], v)
+			ini.Sections[section][k] = strings.Join(ini.SectionVals[section][k], ",")
 		}
 	}
-
 	return ini
-}
-
-// Section returns the key-value map for a given section, or nil if not found
-func (ini *IniFile) Section(sectionName string) map[string]string {
-	return ini.Sections[sectionName]
 }
 
 func stripInlineComment(value string) string {
@@ -104,6 +89,5 @@ func stripInlineComment(value string) string {
 			}
 		}
 	}
-
 	return value
 }
