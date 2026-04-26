@@ -136,17 +136,17 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 	if err := reader.Read(); err != nil {
 		return nil, fmt.Errorf("failed to read snapshot: %v", err)
 	}
-	if reader.ParsedTrace == nil {
+	if reader.Trace == nil {
 		return nil, fmt.Errorf("missing parsed trace metadata")
 	}
 
-	bufferName := resolveETESourceName(requestedSource, reader.ParsedTrace, reader.ParsedDeviceList)
+	bufferName := resolveETESourceName(requestedSource, reader.Trace, reader.ParsedDeviceList)
 	if bufferName == "" {
 		return nil, fmt.Errorf("no ETE source trees found")
 	}
 
 	sourceTree := snapshot.NewTraceBufferSourceTree()
-	if !snapshot.ExtractSourceTree(bufferName, reader.ParsedTrace, sourceTree) || sourceTree.BufferInfo == nil {
+	if !snapshot.ExtractSourceTree(bufferName, reader.Trace, sourceTree) || sourceTree.BufferInfo == nil {
 		return nil, fmt.Errorf("failed to extract source tree for %s", bufferName)
 	}
 
@@ -285,7 +285,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 		return nil, err
 	}
 
-	buffers := eteSnapshotBuffers(reader.ParsedTrace, bufferName, opts.multiSession)
+	buffers := eteSnapshotBuffers(reader.Trace, bufferName, opts.multiSession)
 	if len(buffers) == 0 {
 		return nil, fmt.Errorf("no trace buffers found for source %s", bufferName)
 	}
@@ -432,7 +432,7 @@ func canonicalPacketToken(tok string) string {
 	}
 }
 
-func resolveETESourceName(requested string, trace *snapshot.ParsedTrace, devs map[string]*snapshot.ParsedDevice) string {
+func resolveETESourceName(requested string, trace *snapshot.Trace, devs map[string]*snapshot.ParsedDevice) string {
 	if strings.TrimSpace(requested) != "" {
 		tree := snapshot.NewTraceBufferSourceTree()
 		if snapshot.ExtractSourceTree(strings.TrimSpace(requested), trace, tree) && tree.BufferInfo != nil && sourceTreeHasETEDevices(tree, devs) {
@@ -601,7 +601,7 @@ func decodeETETraceBuffer(tree *dcdtree.DecodeTree, traceData []byte, srcIsFrame
 	return nil
 }
 
-func eteSnapshotBuffers(trace *snapshot.ParsedTrace, primaryBuffer string, multiSession bool) []snapshot.TraceBufferInfo {
+func eteSnapshotBuffers(trace *snapshot.Trace, primaryBuffer string, multiSession bool) []snapshot.TraceBufferInfo {
 	if trace == nil || len(trace.TraceBuffers) == 0 {
 		return nil
 	}

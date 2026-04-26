@@ -2,6 +2,13 @@ package snapshot
 
 import "strings"
 
+type Snapshot struct {
+	Version     string
+	Description string
+	// Devices     map[string]*Device
+	Trace       *Trace
+}
+
 // Info stores version and description from snapshot.ini
 type Info struct {
 	Version     string
@@ -74,17 +81,17 @@ type TraceBufferInfo struct {
 	DataFormat   string
 }
 
-// ParsedTrace stores lists of buffers and associations as presented in the ini file.
-type ParsedTrace struct {
+// Trace stores lists of buffers and associations as presented in the ini file.
+type Trace struct {
 	BufferSectionNames []string
 	TraceBuffers       []TraceBufferInfo
 	SourceBufferAssoc  map[string]string // trace source name -> trace buffer name assoc
 	CPUSourceAssoc     map[string]string // trace source name -> cpu_name assoc
 }
 
-// NewParsedTrace creates a new ParsedTrace
-func NewParsedTrace() *ParsedTrace {
-	return &ParsedTrace{
+// NewParsedTrace creates a new Trace
+func NewParsedTrace() *Trace {
+	return &Trace{
 		BufferSectionNames: []string{},
 		TraceBuffers:       []TraceBufferInfo{},
 		SourceBufferAssoc:  make(map[string]string),

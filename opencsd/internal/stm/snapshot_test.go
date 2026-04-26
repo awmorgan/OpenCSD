@@ -102,12 +102,12 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 		return nil, fmt.Errorf("failed to read snapshot: %v", err)
 	}
 
-	if reader.ParsedTrace == nil {
+	if reader.Trace == nil {
 		return nil, fmt.Errorf("missing parsed trace metadata")
 	}
 
 	sourceTree := snapshot.NewTraceBufferSourceTree()
-	if !snapshot.ExtractSourceTree(sourceName, reader.ParsedTrace, sourceTree) || sourceTree.BufferInfo == nil {
+	if !snapshot.ExtractSourceTree(sourceName, reader.Trace, sourceTree) || sourceTree.BufferInfo == nil {
 		return nil, fmt.Errorf("failed to extract source tree for %s", sourceName)
 	}
 

@@ -108,7 +108,7 @@ func ParseDeviceList(input io.Reader) (*ParsedDevices, error) {
 }
 
 // ParseTraceMetaData parses the trace metadata ini file (trace.ini)
-func ParseTraceMetaData(input io.Reader) (*ParsedTrace, error) {
+func ParseTraceMetaData(input io.Reader) (*Trace, error) {
 	ini := ParseIni(input)
 	parsed := NewParsedTrace()
 
@@ -154,7 +154,7 @@ func ParseTraceMetaData(input io.Reader) (*ParsedTrace, error) {
 }
 
 // ExtractSourceTree builds a source tree for a single buffer
-func ExtractSourceTree(bufferName string, metadata *ParsedTrace, bufferData *TraceBufferSourceTree) bool {
+func ExtractSourceTree(bufferName string, metadata *Trace, bufferData *TraceBufferSourceTree) bool {
 	// Find buffer info
 	var foundInfo *TraceBufferInfo
 	for i := range metadata.TraceBuffers {

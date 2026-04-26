@@ -245,17 +245,17 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		return nil, fmt.Errorf("failed to read snapshot: %w", err)
 	}
 
-	if reader.ParsedTrace == nil {
+	if reader.Trace == nil {
 		return nil, fmt.Errorf("missing parsed trace metadata")
 	}
 
-	resolvedSourceName := resolveETMv4SourceName(sourceName, reader.ParsedTrace, reader.ParsedDeviceList)
+	resolvedSourceName := resolveETMv4SourceName(sourceName, reader.Trace, reader.ParsedDeviceList)
 	if resolvedSourceName == "" {
 		return nil, fmt.Errorf("failed to resolve ETMv4 source tree for %s", sourceName)
 	}
 
 	sourceTree := snapshot.NewTraceBufferSourceTree()
-	if !snapshot.ExtractSourceTree(resolvedSourceName, reader.ParsedTrace, sourceTree) || sourceTree.BufferInfo == nil {
+	if !snapshot.ExtractSourceTree(resolvedSourceName, reader.Trace, sourceTree) || sourceTree.BufferInfo == nil {
 		return nil, fmt.Errorf("failed to extract source tree for %s", resolvedSourceName)
 	}
 
@@ -677,7 +677,7 @@ func normalizeIdxPrefix(left string) string {
 	return fmt.Sprintf("%s; %s;", idxPart, idPart)
 }
 
-func resolveETMv4SourceName(requested string, trace *snapshot.ParsedTrace, devs map[string]*snapshot.ParsedDevice) string {
+func resolveETMv4SourceName(requested string, trace *snapshot.Trace, devs map[string]*snapshot.ParsedDevice) string {
 	candidates := make([]string, 0, len(trace.TraceBuffers)+1)
 	if strings.TrimSpace(requested) != "" {
 		candidates = append(candidates, strings.TrimSpace(requested))

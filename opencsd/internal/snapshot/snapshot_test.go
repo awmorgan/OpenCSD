@@ -290,7 +290,7 @@ ETM_0=cpu_0
 		}
 	}
 
-	if reader.ParsedTrace == nil {
+	if reader.Trace == nil {
 		t.Fatalf("expected parsed trace")
 	}
 
@@ -370,7 +370,7 @@ ETM_0=cpu_0
 		t.Fatalf("expected success: %v", err)
 	}
 
-	if reader.ParsedTrace == nil {
+	if reader.Trace == nil {
 		t.Fatalf("expected parsed trace from default trace.ini")
 	}
 }

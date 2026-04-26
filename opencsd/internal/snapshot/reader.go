@@ -15,7 +15,7 @@ type Reader struct {
 	SnapshotFound    bool
 	ReadOK           bool
 	ParsedDeviceList map[string]*ParsedDevice
-	ParsedTrace      *ParsedTrace
+	Trace            *Trace
 	SourceTrees      map[string]*TraceBufferSourceTree
 }
 
@@ -32,7 +32,7 @@ func (r *Reader) Read() error {
 	r.SnapshotFound = false
 	r.ReadOK = false
 	r.ParsedDeviceList = make(map[string]*ParsedDevice)
-	r.ParsedTrace = nil
+	r.Trace = nil
 	r.SourceTrees = make(map[string]*TraceBufferSourceTree)
 
 	iniPath := filepath.Join(r.SnapshotPath, SnapshotINIFilename)
@@ -73,7 +73,7 @@ func (r *Reader) Read() error {
 			traceFile.Close()
 			if err != nil {
 			} else {
-				r.ParsedTrace = parsedTrace
+				r.Trace = parsedTrace
 
 				// Extract source trees
 				for _, bufInfo := range parsedTrace.TraceBuffers {

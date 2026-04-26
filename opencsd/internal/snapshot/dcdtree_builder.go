@@ -115,7 +115,7 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 
 	b.packetProcOnly = packetProcOnly
 	tree := NewTraceBufferSourceTree()
-	if !ExtractSourceTree(sourceName, b.reader.ParsedTrace, tree) {
+	if !ExtractSourceTree(sourceName, b.reader.Trace, tree) {
 		return nil, fmt.Errorf("failed to get parsed source tree for buffer %s", sourceName)
 	}
 

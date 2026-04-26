@@ -68,7 +68,7 @@ func TestBuildPropagatesFormatterConfigFailure(t *testing.T) {
 	reader := NewReader()
 	reader.ReadOK = true
 	reader.SnapshotPath = "C:/snapshot"
-	reader.ParsedTrace = &ParsedTrace{
+	reader.Trace = &Trace{
 		TraceBuffers: []TraceBufferInfo{{
 			BufferName:   "BUF0",
 			DataFileName: "trace.bin",
@@ -102,7 +102,7 @@ func TestBuildStillCreatesDecodeTreeOnValidFormatterConfig(t *testing.T) {
 	reader := NewReader()
 	reader.ReadOK = true
 	reader.SnapshotPath = "C:/snapshot"
-	reader.ParsedTrace = &ParsedTrace{
+	reader.Trace = &Trace{
 		TraceBuffers: []TraceBufferInfo{{
 			BufferName:   "BUF0",
 			DataFileName: "trace.bin",

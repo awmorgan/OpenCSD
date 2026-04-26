@@ -193,11 +193,11 @@ func logCmdLine(out io.Writer, args []string) {
 }
 
 func getSourceNames(reader *snapshot.Reader) []string {
-	if reader.ParsedTrace == nil {
+	if reader.Trace == nil {
 		return nil
 	}
-	result := make([]string, 0, len(reader.ParsedTrace.TraceBuffers))
-	for _, b := range reader.ParsedTrace.TraceBuffers {
+	result := make([]string, 0, len(reader.Trace.TraceBuffers))
+	for _, b := range reader.Trace.TraceBuffers {
 		result = append(result, b.BufferName)
 	}
 	return result
