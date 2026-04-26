@@ -10,9 +10,7 @@ import (
 	"opencsd/internal/ocsd"
 )
 
-var (
-	baseCfg uint32 = ocsd.DfrmtrFrameMemAlign | ocsd.DfrmtrPackedRawOut | ocsd.DfrmtrUnpackedRawOut
-)
+var baseCfg uint32 = ocsd.DfrmtrFrameMemAlign | ocsd.DfrmtrPackedRawOut | ocsd.DfrmtrUnpackedRawOut
 
 func idByteID(id uint8) byte {
 	return (id << 1) | 0x01
@@ -236,13 +234,8 @@ func (m *mockRawSink) WriteRawFrame(index ocsd.TrcIndex, frameElem ocsd.Rawframe
 
 	fmt.Fprintf(m.out, "Frame Data; Index %6d; %s", index, elemStr)
 
-	for i, b := range data {
-		if i > 0 {
-			m.out.WriteString(" ")
-		} else {
-			m.out.WriteString(" ")
-		}
-		fmt.Fprintf(m.out, "%02x", b)
+	for _, b := range data {
+		fmt.Fprintf(m.out, " %02x", b)
 	}
 
 	m.out.WriteString("\n")
@@ -263,74 +256,69 @@ func resetDecoder(df *FrameDeformatter, t *testing.T) {
 	}
 }
 
+func newConfiguredFrameDeformatter(t *testing.T, cfg uint32) *FrameDeformatter {
+	t.Helper()
+	df := NewFrameDeformatter()
+	if err := df.Configure(cfg); err != nil {
+		t.Fatalf("Configure(%#x) failed: %v", cfg, err)
+	}
+	return df
+}
+
+func requireWriteConsumes(t *testing.T, df *FrameDeformatter, buf []byte) {
+	t.Helper()
+	processed, _ := df.Write(0, buf)
+	if processed != uint32(len(buf)) {
+		t.Fatalf("Size mismatch: in=%d out=%d", len(buf), processed)
+	}
+}
+
 func TestDemuxInit(t *testing.T) {
 	df := NewFrameDeformatter()
 
-	if err := df.Configure(0); !errors.Is(err, ocsd.ErrInvalidParamVal) {
-		t.Errorf("Expected OCSD_ERR_INVALID_PARAM_VAL for 0 flag config, got %v", err)
+	tests := []struct {
+		name  string
+		flags uint32
+	}{
+		{name: "zero flags", flags: 0},
+		{name: "unknown flag", flags: 0x80 | ocsd.DfrmtrFrameMemAlign},
+		{name: "mem align with sync markers", flags: ocsd.DfrmtrFrameMemAlign | ocsd.DfrmtrHasFsyncs},
 	}
 
-	if err := df.Configure(0x80 | ocsd.DfrmtrFrameMemAlign); !errors.Is(err, ocsd.ErrInvalidParamVal) {
-		t.Errorf("Expected OCSD_ERR_INVALID_PARAM_VAL for unknown flag config, got %v", err)
-	}
-
-	if err := df.Configure(ocsd.DfrmtrFrameMemAlign | ocsd.DfrmtrHasFsyncs); !errors.Is(err, ocsd.ErrInvalidParamVal) {
-		t.Errorf("Expected OCSD_ERR_INVALID_PARAM_VAL for bad combo flag config, got %v", err)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := df.Configure(tc.flags); !errors.Is(err, ocsd.ErrInvalidParamVal) {
+				t.Fatalf("expected ErrInvalidParamVal, got %v", err)
+			}
+		})
 	}
 
 	if err := df.OutputFilterIDs([]uint8{128}, true); !errors.Is(err, ocsd.ErrInvalidID) {
-		t.Errorf("Expected OCSD_ERR_INVALID_ID for ID 128, got %v", err)
+		t.Fatalf("expected ErrInvalidID for ID 128, got %v", err)
 	}
 }
 
 func TestRunMemAlignTest(t *testing.T) {
-	df := NewFrameDeformatter()
-	df.Configure(baseCfg)
-	out := &bytes.Buffer{}
-	sink := &mockRawSink{out: out}
-	df.SetRawTraceFrame(sink)
-
-	// 1
-	resetDecoder(df, t)
-	buf := makeBufMemAlign()
-	processed, _ := df.Write(0, buf)
-	if processed != uint32(len(buf)) {
-		t.Errorf("Size mismatch: in=%d out=%d", len(buf), processed)
+	tests := []struct {
+		name string
+		cfg  uint32
+		buf  []byte
+	}{
+		{name: "standard frame", cfg: baseCfg, buf: makeBufMemAlign()},
+		{name: "eight IDs", cfg: baseCfg, buf: makeBufMemAlign8Id()},
+		{name: "reset at start", cfg: baseCfg | ocsd.DfrmtrResetOn4xFsync, buf: makeBufMemAlignStRst()},
+		{name: "reset in middle", cfg: baseCfg | ocsd.DfrmtrResetOn4xFsync, buf: makeBufMemAlignMidRst()},
+		{name: "reset at end", cfg: baseCfg | ocsd.DfrmtrResetOn4xFsync, buf: makeBufMemAlignEnRst()},
 	}
 
-	// 2
-	resetDecoder(df, t)
-	buf2 := makeBufMemAlign8Id()
-	processed, _ = df.Write(0, buf2)
-	if processed != uint32(len(buf2)) {
-		t.Errorf("Size mismatch: in=%d out=%d", len(buf2), processed)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			df := newConfiguredFrameDeformatter(t, tc.cfg)
+			df.SetRawTraceFrame(&mockRawSink{out: &bytes.Buffer{}})
+			resetDecoder(df, t)
+			requireWriteConsumes(t, df, tc.buf)
+		})
 	}
-
-	// 3
-	df.Configure(baseCfg | ocsd.DfrmtrResetOn4xFsync)
-	resetDecoder(df, t)
-	buf3 := makeBufMemAlignStRst()
-	processed, _ = df.Write(0, buf3)
-	if processed != uint32(len(buf3)) {
-		t.Errorf("Size mismatch: in=%d out=%d", len(buf3), processed)
-	}
-
-	// 4
-	resetDecoder(df, t)
-	buf4 := makeBufMemAlignMidRst()
-	processed, _ = df.Write(0, buf4)
-	if processed != uint32(len(buf4)) {
-		t.Errorf("Size mismatch: in=%d out=%d", len(buf4), processed)
-	}
-
-	// 5
-	resetDecoder(df, t)
-	buf5 := makeBufMemAlignEnRst()
-	processed, _ = df.Write(0, buf5)
-	if processed != uint32(len(buf5)) {
-		t.Errorf("Size mismatch: in=%d out=%d", len(buf5), processed)
-	}
-
 }
 
 func TestDemuxEdgeCases(t *testing.T) {

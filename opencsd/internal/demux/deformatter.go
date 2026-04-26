@@ -8,12 +8,41 @@ import (
 	"opencsd/internal/ocsd"
 )
 
+const (
+	maxTraceID        = 128
+	minOutDataEntries = 16
+)
+
 type outDataEntry struct {
 	id    uint8
 	valid uint32
 	index ocsd.TrcIndex
 	used  uint32
 	data  [16]byte
+}
+
+func (e *outDataEntry) reset(id uint8, index ocsd.TrcIndex) {
+	e.id = id
+	e.valid = 0
+	e.index = index
+	e.used = 0
+}
+
+func (e *outDataEntry) appendByte(b byte) {
+	e.data[e.valid] = b
+	e.valid++
+}
+
+func (e *outDataEntry) bytes() []byte {
+	return e.data[:e.valid]
+}
+
+func (e *outDataEntry) remaining() []byte {
+	return e.data[e.used:e.valid]
+}
+
+func (e *outDataEntry) remainingIndex() ocsd.TrcIndex {
+	return e.index + ocsd.TrcIndex(e.used)
 }
 
 // FrameDeformatter represents TraceFormatterFrameDecoder and its TraceFmtDcdImpl.
@@ -61,8 +90,8 @@ type FrameDeformatter struct {
 
 func NewFrameDeformatter() *FrameDeformatter {
 	d := &FrameDeformatter{
-		rawChanEnable: make([]bool, 128),
-		idStreams:     make([]ocsd.TraceDecoder, 128),
+		rawChanEnable: make([]bool, maxTraceID),
+		idStreams:     make([]ocsd.TraceDecoder, maxTraceID),
 	}
 	d.resetStateParams()
 	d.SetRawChanFilterAll(true)
@@ -71,7 +100,7 @@ func NewFrameDeformatter() *FrameDeformatter {
 
 // Attachments
 func (d *FrameDeformatter) SetIDStream(id uint8, stream ocsd.TraceDecoder) {
-	if id < 128 {
+	if validTraceID(id) {
 		d.idStreams[id] = stream
 	}
 }
@@ -81,36 +110,41 @@ func (d *FrameDeformatter) SetRawTraceFrame(stream ocsd.RawFrameProcessor) {
 }
 
 func (d *FrameDeformatter) Configure(flags uint32) error {
-	var err error
-
-	if (flags & ^uint32(ocsd.DfrmtrValidMask)) != 0 {
-		err = ocsd.ErrInvalidParamVal
+	if err := validateFormatterFlags(flags); err != nil {
+		return err
 	}
 
-	if (flags & ocsd.DfrmtrValidMask) == 0 {
-		err = ocsd.ErrInvalidParamVal
-	}
+	d.cfgFlags = flags
+	d.alignment = alignmentForFlags(flags)
+	return nil
+}
 
-	if (flags&(ocsd.DfrmtrHasFsyncs|ocsd.DfrmtrHasHsyncs) != 0) &&
-		(flags&ocsd.DfrmtrFrameMemAlign != 0) {
-		err = ocsd.ErrInvalidParamVal
+func validateFormatterFlags(flags uint32) error {
+	if flags&^uint32(ocsd.DfrmtrValidMask) != 0 {
+		return ocsd.ErrInvalidParamVal
 	}
-
-	if err == nil {
-		// alignment is the multiple of bytes the buffer size must be.
-		d.cfgFlags = flags
-
-		// using memory aligned buffers, the formatter always outputs 16 byte frames so enforce
-		// this on the input
-		d.alignment = 16
-		// if we have HSYNCS then always align to 2 byte buffers
-		if flags&ocsd.DfrmtrHasHsyncs != 0 {
-			d.alignment = 2
-		} else if flags&ocsd.DfrmtrHasFsyncs != 0 { // otherwise Fsyncs only can have 4 byte aligned buffers.
-			d.alignment = 4
-		}
+	if flags&ocsd.DfrmtrValidMask == 0 {
+		return ocsd.ErrInvalidParamVal
 	}
-	return err
+	if flags&ocsd.DfrmtrFrameMemAlign != 0 && flags&(ocsd.DfrmtrHasFsyncs|ocsd.DfrmtrHasHsyncs) != 0 {
+		return ocsd.ErrInvalidParamVal
+	}
+	return nil
+}
+
+func alignmentForFlags(flags uint32) uint32 {
+	switch {
+	case flags&ocsd.DfrmtrHasHsyncs != 0:
+		return 2
+	case flags&ocsd.DfrmtrHasFsyncs != 0:
+		return 4
+	default:
+		return ocsd.DfrmtrFrameSize
+	}
+}
+
+func validTraceID(id uint8) bool {
+	return id < maxTraceID
 }
 
 func (d *FrameDeformatter) ConfigFlags() uint32 {
@@ -119,7 +153,7 @@ func (d *FrameDeformatter) ConfigFlags() uint32 {
 
 func (d *FrameDeformatter) OutputFilterIDs(idList []uint8, enable bool) error {
 	for _, id := range idList {
-		if id >= 128 {
+		if !validTraceID(id) {
 			return ocsd.ErrInvalidID
 		}
 		// m_IDStreams[id].set_enabled(enable) is handled in attach pt but for here we use a simple routing if absent
@@ -140,10 +174,7 @@ func (d *FrameDeformatter) SetRawChanFilterAll(enable bool) {
 }
 
 func (d *FrameDeformatter) rawChanEnabled(id uint8) bool {
-	if id < 128 {
-		return d.rawChanEnable[id]
-	}
-	return false
+	return validTraceID(id) && d.rawChanEnable[id]
 }
 
 // Decode control
@@ -162,62 +193,43 @@ func (d *FrameDeformatter) callIDStream(stream ocsd.TraceDecoder, index ocsd.Trc
 }
 
 func (d *FrameDeformatter) flushAllIDs() error {
-	var outErr error
-
-	for _, stream := range d.idStreams {
-		if stream != nil { // if attached
-			err := stream.Flush()
-			if err != nil && outErr == nil {
-				outErr = err
-			}
-		}
-	}
-
-	if d.rawTraceFrame != nil {
-		err := d.rawTraceFrame.FlushRawFrames()
-		if err != nil && outErr == nil {
-			outErr = err
-		}
-	}
-	return outErr
+	return d.controlAllIDs(
+		func(stream ocsd.TraceDecoder) error { return stream.Flush() },
+		func(raw ocsd.RawFrameProcessor) error { return raw.FlushRawFrames() },
+	)
 }
 
 func (d *FrameDeformatter) resetAllIDs(index ocsd.TrcIndex) error {
-	var outErr error
-
-	for _, stream := range d.idStreams {
-		if stream != nil { // if attached
-			err := stream.Reset(index)
-			if err != nil && outErr == nil {
-				outErr = err
-			}
-		}
-	}
-
-	if d.rawTraceFrame != nil {
-		err := d.rawTraceFrame.ResetRawFrames()
-		if err != nil && outErr == nil {
-			outErr = err
-		}
-	}
-	return outErr
+	return d.controlAllIDs(
+		func(stream ocsd.TraceDecoder) error { return stream.Reset(index) },
+		func(raw ocsd.RawFrameProcessor) error { return raw.ResetRawFrames() },
+	)
 }
 
 func (d *FrameDeformatter) closeAllIDs() error {
+	return d.controlAllIDs(
+		func(stream ocsd.TraceDecoder) error { return stream.Close() },
+		func(raw ocsd.RawFrameProcessor) error { return raw.CloseRawFrames() },
+	)
+}
+
+func (d *FrameDeformatter) controlAllIDs(
+	streamOp func(ocsd.TraceDecoder) error,
+	rawOp func(ocsd.RawFrameProcessor) error,
+) error {
 	var outErr error
 
 	for _, stream := range d.idStreams {
-		if stream != nil { // if attached
-			err := stream.Close()
-			if err != nil && outErr == nil {
-				outErr = err
-			}
+		if stream == nil {
+			continue
+		}
+		if err := streamOp(stream); err != nil && outErr == nil {
+			outErr = err
 		}
 	}
 
 	if d.rawTraceFrame != nil {
-		err := d.rawTraceFrame.CloseRawFrames()
-		if err != nil && outErr == nil {
+		if err := rawOp(d.rawTraceFrame); err != nil && outErr == nil {
 			outErr = err
 		}
 	}
@@ -248,25 +260,30 @@ func (d *FrameDeformatter) resetStateParams() {
 	d.exFrmBytes = 0
 	d.fsyncStartEOB = false
 	d.trcCurrIdxSof = ocsd.BadTrcIndex
-	if cap(d.exFrmData) < int(ocsd.DfrmtrFrameSize) {
-		d.exFrmData = make([]byte, ocsd.DfrmtrFrameSize)
-	} else {
-		d.exFrmData = d.exFrmData[:ocsd.DfrmtrFrameSize]
-	}
+	d.exFrmData = ensureByteSlice(d.exFrmData, int(ocsd.DfrmtrFrameSize))
 
 	d.pendingData = nil
 	d.pendingIndex = ocsd.BadTrcIndex
-	if cap(d.outData) < 16 {
-		d.outData = make([]outDataEntry, 16)
-	} else {
-		d.outData = d.outData[:16]
+	d.outData = ensureOutDataSlice(d.outData, minOutDataEntries)
+}
+
+func ensureByteSlice(buf []byte, size int) []byte {
+	if cap(buf) < size {
+		return make([]byte, size)
 	}
+	return buf[:size]
+}
+
+func ensureOutDataSlice(buf []outDataEntry, size int) []outDataEntry {
+	if cap(buf) < size {
+		return make([]outDataEntry, size)
+	}
+	return buf[:size]
 }
 
 // Write is the explicit data entrypoint implementing TrcDataProcessorExplicit.
 func (d *FrameDeformatter) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	d.outPackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrPackedRawOut) != 0
-	d.outUnpackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrUnpackedRawOut) != 0
+	d.updateRawOutputState()
 	if len(dataBlock) == 0 {
 		return 0, ocsd.ErrInvalidParamVal
 	}
@@ -275,104 +292,108 @@ func (d *FrameDeformatter) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32,
 
 // Close forwards an EOT operation through the legacy multiplexer.
 func (d *FrameDeformatter) Close() error {
-	d.outPackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrPackedRawOut) != 0
-	d.outUnpackedRaw = d.rawTraceFrame != nil && (d.cfgFlags&ocsd.DfrmtrUnpackedRawOut) != 0
+	d.updateRawOutputState()
 	return d.closeAllIDs()
+}
+
+func (d *FrameDeformatter) updateRawOutputState() {
+	d.outPackedRaw = d.rawTraceFrame != nil && d.cfgFlags&ocsd.DfrmtrPackedRawOut != 0
+	d.outUnpackedRaw = d.rawTraceFrame != nil && d.cfgFlags&ocsd.DfrmtrUnpackedRawOut != 0
 }
 
 func (d *FrameDeformatter) processTraceData(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	if d.alignment == 0 {
 		return 0, fmt.Errorf("%w: Deformatter not configured", ocsd.ErrFail)
 	}
+	if err := d.checkContinuity(index); err != nil {
+		return 0, err
+	}
 
+	d.appendPendingData(index, dataBlock)
+	processSize := alignedPrefixLen(uint32(len(d.pendingData)), d.alignment)
+	if processSize == 0 {
+		d.firstData = true
+		return uint32(len(dataBlock)), nil
+	}
+
+	alignedProcessed, outErr := d.processTraceDataAligned(d.pendingIndex, d.pendingData[:processSize])
+	d.discardProcessedPendingData(alignedProcessed)
+	d.firstData = true
+
+	return uint32(len(dataBlock)), outErr
+}
+
+func (d *FrameDeformatter) checkContinuity(index ocsd.TrcIndex) error {
 	if len(d.pendingData) > 0 {
 		expected := d.pendingIndex + ocsd.TrcIndex(len(d.pendingData))
 		if expected != index {
-			err := fmt.Errorf("%w: Not continuous trace data", ocsd.ErrDfrmtrNotconttrace)
-			return 0, err
+			return fmt.Errorf("%w: Not continuous trace data", ocsd.ErrDfrmtrNotconttrace)
 		}
-	} else if d.firstData {
-		if d.trcCurrIdx != index {
-			err := fmt.Errorf("%w: Not continuous trace data", ocsd.ErrDfrmtrNotconttrace)
-			return 0, err
-		}
+		return nil
 	}
+
+	if d.firstData && d.trcCurrIdx != index {
+		return fmt.Errorf("%w: Not continuous trace data", ocsd.ErrDfrmtrNotconttrace)
+	}
+	return nil
+}
+
+func (d *FrameDeformatter) appendPendingData(index ocsd.TrcIndex, dataBlock []byte) {
 	if len(d.pendingData) == 0 {
 		d.pendingIndex = index
 	}
 	d.pendingData = append(d.pendingData, dataBlock...)
+}
 
-	dataBlockSize := uint32(len(d.pendingData))
-	processSize := dataBlockSize - (dataBlockSize % d.alignment)
+func alignedPrefixLen(size, alignment uint32) uint32 {
+	return size - size%alignment
+}
 
-	if processSize == 0 {
-		if !d.firstData {
-			d.firstData = true
-		}
-		return uint32(len(dataBlock)), nil
+func (d *FrameDeformatter) discardProcessedPendingData(processed uint32) {
+	if processed == 0 {
+		return
 	}
 
-	alignedBlock := d.pendingData[:processSize]
-	alignedIndex := d.pendingIndex
-
-	var alignedProcessed uint32
-	var outErr error
-	alignedProcessed, outErr = d.processTraceDataAligned(alignedIndex, alignedBlock)
-
-	if alignedProcessed > 0 {
-		d.pendingData = d.pendingData[int(alignedProcessed):]
-		d.pendingIndex += ocsd.TrcIndex(alignedProcessed)
-		if len(d.pendingData) == 0 {
-			d.pendingData = nil
-			d.pendingIndex = ocsd.BadTrcIndex
-		}
+	d.pendingData = d.pendingData[int(processed):]
+	d.pendingIndex += ocsd.TrcIndex(processed)
+	if len(d.pendingData) == 0 {
+		d.pendingData = nil
+		d.pendingIndex = ocsd.BadTrcIndex
 	}
-
-	if !d.firstData {
-		d.firstData = true
-	}
-
-	numBytesProcessed := uint32(len(dataBlock))
-	return numBytesProcessed, outErr
 }
 
 func (d *FrameDeformatter) processTraceDataAligned(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	d.trcCurrIdx = index
-
-	// record incoming block
-	d.inBlockBase = dataBlock
-	d.inBlockProcessed = 0
 	dataBlockSize := uint32(len(dataBlock))
-	var outErr error
-
 	if dataBlockSize%d.alignment != 0 {
 		return 0, fmt.Errorf("%w: Input block incorrect size, must be %d byte multiple", ocsd.ErrInvalidParamVal, d.alignment)
 	}
 
-	if d.checkForSync(dataBlockSize) {
-		bProcessing := true
-		for bProcessing {
-			var frameErr error
-			bProcessing, frameErr = d.extractFrame(dataBlockSize)
-			if frameErr != nil && outErr == nil {
-				outErr = frameErr
-			}
-			if outErr != nil {
-				break
-			}
-			if bProcessing {
-				bProcessing = d.unpackFrame()
-			}
-			if bProcessing {
-				bProcessing, outErr = d.outputFrame(outErr)
-				if outErr != nil {
-					break
-				}
+	d.trcCurrIdx = index
+	d.inBlockBase = dataBlock
+	d.inBlockProcessed = 0
+
+	if !d.checkForSync(dataBlockSize) {
+		return d.inBlockProcessed, nil
+	}
+
+	for processing := true; processing; {
+		var err error
+		processing, err = d.extractFrame(dataBlockSize)
+		if err != nil {
+			return d.inBlockProcessed, err
+		}
+		if processing {
+			processing = d.unpackFrame()
+		}
+		if processing {
+			processing, err = d.outputFrame(nil)
+			if err != nil {
+				return d.inBlockProcessed, err
 			}
 		}
 	}
 
-	return d.inBlockProcessed, outErr
+	return d.inBlockProcessed, nil
 }
 
 // --- Pull Architecture Additions ---
@@ -404,18 +425,12 @@ func (s *Stream) Reset(index ocsd.TrcIndex) error {
 	return nil
 }
 
-func (s *Stream) Read(p []byte) (n int, err error) {
-	for len(s.buf) == 0 && !s.eof && !s.demux.sourceEOF {
-		err := s.demux.pullFromSource()
-		if err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, ocsd.ErrWait) {
-				break // return EOF or wait after source exhaustion or no data available now
-			}
-			return 0, err
-		}
+func (s *Stream) Read(p []byte) (int, error) {
+	if err := s.fillUntilReady(); err != nil {
+		return 0, err
 	}
 	if len(s.buf) > 0 {
-		n = copy(p, s.buf)
+		n := copy(p, s.buf)
 		s.buf = s.buf[n:]
 		return n, nil
 	}
@@ -423,6 +438,20 @@ func (s *Stream) Read(p []byte) (n int, err error) {
 		return 0, io.EOF
 	}
 	return 0, ocsd.ErrWait
+}
+
+func (s *Stream) fillUntilReady() error {
+	for len(s.buf) == 0 && !s.eof && !s.demux.sourceEOF {
+		err := s.demux.pullFromSource()
+		if err == nil {
+			continue
+		}
+		if errors.Is(err, io.EOF) || errors.Is(err, ocsd.ErrWait) {
+			break
+		}
+		return err
+	}
+	return nil
 }
 
 // SetReader attaches a pull-style raw byte stream to the demuxer.
@@ -460,19 +489,27 @@ func (d *FrameDeformatter) pullFromSource() error {
 	buf := make([]byte, bytesNeeded)
 	n, err := d.sourceReader.Read(buf)
 	if n > 0 {
-		_, procErr := d.Write(d.sourceIndex, buf[:n])
-		d.sourceIndex += ocsd.TrcIndex(n)
-		if procErr != nil {
+		if procErr := d.writePulledBytes(buf[:n]); procErr != nil {
 			return procErr
 		}
 	}
-	if err != nil && errors.Is(err, io.EOF) && !d.sourceEOF {
-		d.sourceEOF = true
-		_ = d.Flush()
-		_ = d.Close() // this sets eof=true on all registered Streams
+	if errors.Is(err, io.EOF) && !d.sourceEOF {
+		d.finishSource()
 	}
 	if n == 0 && err == nil {
 		return ocsd.ErrWait
 	}
 	return err
+}
+
+func (d *FrameDeformatter) writePulledBytes(data []byte) error {
+	_, err := d.Write(d.sourceIndex, data)
+	d.sourceIndex += ocsd.TrcIndex(len(data))
+	return err
+}
+
+func (d *FrameDeformatter) finishSource() {
+	d.sourceEOF = true
+	_ = d.Flush()
+	_ = d.Close() // this sets eof=true on all registered Streams
 }
