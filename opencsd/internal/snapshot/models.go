@@ -35,7 +35,6 @@ type MemoryDump struct {
 	Space   string
 }
 
-// NewParsedDevice creates a new Device
 func NewParsedDevice() *Device {
 	return &Device{
 		Memory:  []MemoryDump{},
@@ -44,7 +43,6 @@ func NewParsedDevice() *Device {
 	}
 }
 
-// RegValue is a helper to get register value case-insensitively
 func (p *Device) RegValue(key string) (string, bool) {
 	keyLower := strings.ToLower(key)
 	if val, ok := p.Regs[keyLower]; ok {
