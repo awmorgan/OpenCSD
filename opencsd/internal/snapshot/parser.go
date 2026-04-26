@@ -83,7 +83,7 @@ func ParseSingleDevice(input io.Reader) (*Device, error) {
 		}
 	}
 
-	// Extended regs section ([extendregs]) — numeric address → value pairs.
+	// Extended regs section ([extendregs]) - numeric address → value pairs.
 	if extSec, ok := ini.Sections[ExtendedRegsSectionName]; ok {
 		for k, v := range extSec {
 			addr, errA := strconv.ParseUint(strings.TrimSpace(k), 0, 32)
@@ -94,7 +94,7 @@ func ParseSingleDevice(input io.Reader) (*Device, error) {
 		}
 	}
 
-	// Dump sections (prefix "dump") — iterate in file declaration order via SectionOrder.
+	// Dump sections (prefix "dump") - iterate in file declaration order via SectionOrder.
 	for _, secName := range ini.SectionOrder {
 		if !strings.HasPrefix(strings.ToLower(secName), DumpFileSectionPrefix) {
 			continue
