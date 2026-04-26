@@ -54,7 +54,7 @@ func ParseSingleDevice(input io.Reader) (*Device, error) {
 		if !ok {
 			continue
 		}
-		var dump DumpDef
+		var dump MemoryDump
 
 		if addrStr, ok := secMap[DumpAddressKey]; ok {
 			dump.Address = parseUint(addrStr)

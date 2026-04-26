@@ -168,7 +168,7 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 	seenAccessors := make(map[string]struct{})
 	loadErrs := make([]string, 0)
 
-	recordLoadErr := func(filePath string, memParams snapshot.DumpDef, format string, args ...any) {
+	recordLoadErr := func(filePath string, memParams snapshot.MemoryDump, format string, args ...any) {
 		msg := fmt.Sprintf(format, args...)
 		loadErrs = append(loadErrs, fmt.Sprintf(
 			"path=%s address=0x%x offset=%d length=%d space=%q: %s",

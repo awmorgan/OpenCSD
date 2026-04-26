@@ -15,8 +15,8 @@ type Info struct {
 	Description string
 }
 
-// DumpDef stores a parsed [dump] section
-type DumpDef struct {
+// MemoryDump stores a parsed [dump] section
+type MemoryDump struct {
 	Address uint64
 	Path    string
 	Length  uint64
@@ -33,13 +33,13 @@ type Device struct {
 	ExtRegs     map[uint32]uint32
 	FoundGlobal bool
 	Core        string
-	DumpDefs    []DumpDef
+	DumpDefs    []MemoryDump
 }
 
 // NewParsedDevice creates a new Device
 func NewParsedDevice() *Device {
 	return &Device{
-		DumpDefs: []DumpDef{},
+		DumpDefs: []MemoryDump{},
 		Regs:     make(map[string]string),
 		ExtRegs:  make(map[uint32]uint32),
 	}
