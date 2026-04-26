@@ -8,9 +8,53 @@ import (
 	"strings"
 )
 
+// parseOptionalUint looks up key in sec and parses it as a uint64.
+// If the key is absent it returns 0 with no error.
+func parseOptionalUint(sec map[string]string, secName, key string) (uint64, error) {
+	s, ok := sec[key]
+	if !ok {
+		return 0, nil
+	}
+
+	v, err := parseUint(s)
+	if err != nil {
+		return 0, fmt.Errorf("%s.%s: %w", secName, key, err)
+	}
+	return v, nil
+}
+
+// parseMemoryDump builds a MemoryDump from a parsed INI section map.
+func parseMemoryDump(secName string, sec map[string]string) (MemoryDump, error) {
+	addr, err := parseOptionalUint(sec, secName, DumpAddressKey)
+	if err != nil {
+		return MemoryDump{}, err
+	}
+
+	length, err := parseOptionalUint(sec, secName, DumpLengthKey)
+	if err != nil {
+		return MemoryDump{}, err
+	}
+
+	offset, err := parseOptionalUint(sec, secName, DumpOffsetKey)
+	if err != nil {
+		return MemoryDump{}, err
+	}
+
+	return MemoryDump{
+		Address: addr,
+		Length:  length,
+		Offset:  offset,
+		Path:    sec[DumpFileKey],
+		Space:   sec[DumpSpaceKey],
+	}, nil
+}
+
 // ParseSingleDevice parses a device ini file
 func ParseSingleDevice(input io.Reader) (*Device, error) {
-	ini := ParseIni(input)
+	ini, err := ParseIni(input)
+	if err != nil {
+		return nil, err
+	}
 	parsed := &Device{
 		Memory:  []MemoryDump{},
 		Regs:    make(map[string]string),
@@ -55,38 +99,10 @@ func ParseSingleDevice(input io.Reader) (*Device, error) {
 		if !strings.HasPrefix(strings.ToLower(secName), DumpFileSectionPrefix) {
 			continue
 		}
-		secMap, ok := ini.Sections[secName]
-		if !ok {
-			continue
-		}
-		var dump MemoryDump
 
-		if addrStr, ok := secMap[DumpAddressKey]; ok {
-			addr, err := parseUint(addrStr)
-			if err != nil {
-				return nil, fmt.Errorf("%s.%s: %w", secName, DumpAddressKey, err)
-			}
-			dump.Address = addr
-		}
-		if lenStr, ok := secMap[DumpLengthKey]; ok {
-			length, err := parseUint(lenStr)
-			if err != nil {
-				return nil, fmt.Errorf("%s.%s: %w", secName, DumpLengthKey, err)
-			}
-			dump.Length = length
-		}
-		if offStr, ok := secMap[DumpOffsetKey]; ok {
-			offset, err := parseUint(offStr)
-			if err != nil {
-				return nil, fmt.Errorf("%s.%s: %w", secName, DumpOffsetKey, err)
-			}
-			dump.Offset = offset
-		}
-		if file, ok := secMap[DumpFileKey]; ok {
-			dump.Path = file
-		}
-		if space, ok := secMap[DumpSpaceKey]; ok {
-			dump.Space = space
+		dump, err := parseMemoryDump(secName, ini.Sections[secName])
+		if err != nil {
+			return nil, err
 		}
 
 		parsed.Memory = append(parsed.Memory, dump)
@@ -97,7 +113,10 @@ func ParseSingleDevice(input io.Reader) (*Device, error) {
 
 // ParseDeviceList parses the snapshot.ini file
 func ParseDeviceList(input io.Reader) (*ParsedDevices, error) {
-	ini := ParseIni(input)
+	ini, err := ParseIni(input)
+	if err != nil {
+		return nil, err
+	}
 	parsed := &ParsedDevices{
 		DeviceList: make(map[string]string),
 	}
@@ -128,7 +147,10 @@ func ParseDeviceList(input io.Reader) (*ParsedDevices, error) {
 
 // ParseTraceMetaData parses the trace metadata ini file (trace.ini)
 func ParseTraceMetaData(input io.Reader) (*Trace, error) {
-	ini := ParseIni(input)
+	ini, err := ParseIni(input)
+	if err != nil {
+		return nil, err
+	}
 	parsed := &Trace{
 		BufferSectionNames: []string{},
 		TraceBuffers:       []Buffer{},

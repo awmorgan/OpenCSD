@@ -1,7 +1,9 @@
 package snapshot
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
@@ -26,24 +28,27 @@ func (r *Reader) warn(err error) {
 	}
 }
 
-// NewReader creates a new Reader
-func NewReader() *Reader {
-	return &Reader{
-		ParsedDeviceList: make(map[string]*Device),
-		SourceTrees:      make(map[string]*TraceBufferSourceTree),
-	}
-}
-
-// Read loads as much of the snapshot as possible.
-// It returns an error only if snapshot.ini cannot be opened or parsed.
-// Optional or trace-only content failures are recorded in r.Warnings.
-func (r *Reader) Read() error {
+func (r *Reader) reset() {
 	r.SnapshotFound = false
 	r.ReadOK = false
 	r.ParsedDeviceList = make(map[string]*Device)
 	r.Trace = nil
 	r.SourceTrees = make(map[string]*TraceBufferSourceTree)
 	r.Warnings = nil
+}
+
+// NewReader creates a new Reader
+func NewReader() *Reader {
+	r := &Reader{}
+	r.reset()
+	return r
+}
+
+// Read loads as much of the snapshot as possible.
+// It returns an error only if snapshot.ini cannot be opened or parsed.
+// Optional or trace-only content failures are recorded in r.Warnings.
+func (r *Reader) Read() error {
+	r.reset()
 
 	iniPath := filepath.Join(r.SnapshotPath, SnapshotINIFilename)
 	file, err := os.Open(iniPath)
@@ -59,21 +64,15 @@ func (r *Reader) Read() error {
 		return fmt.Errorf("parse device list %s: %w", iniPath, err)
 	}
 
-	// Parse devices
 	for devName, iniFileName := range devList.DeviceList {
-		if err := r.loadDevice(devName, iniFileName); err != nil {
-			r.warn(err)
-		}
+		r.warn(r.loadDevice(devName, iniFileName))
 	}
 
 	if len(devList.DeviceList) == 0 {
 		r.loadLegacyDevices()
 	}
 
-	// Parse trace metadata
-	if err := r.readTraceMetadata(devList.TraceMetaDataName); err != nil {
-		r.warn(err)
-	}
+	r.warn(r.readTraceMetadata(devList.TraceMetaDataName))
 
 	r.ReadOK = true
 	return nil
@@ -101,15 +100,18 @@ func (r *Reader) loadDevice(devName string, iniFileName string) error {
 }
 
 func (r *Reader) loadLegacyDevices() {
-	for deviceIdx := 0; ; deviceIdx++ {
-		legacyIniFileName := fmt.Sprintf("device_%d.ini", deviceIdx)
-		legacyIniPath := filepath.Join(r.SnapshotPath, legacyIniFileName)
-		if _, err := os.Stat(legacyIniPath); err != nil {
-			break
+	for i := 0; ; i++ {
+		name := fmt.Sprintf("device_%d.ini", i)
+		path := filepath.Join(r.SnapshotPath, name)
+
+		if _, err := os.Stat(path); err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				r.warn(fmt.Errorf("stat legacy device %s: %w", path, err))
+			}
+			return
 		}
-		if err := r.loadDevice(fmt.Sprintf("device_%d", deviceIdx), legacyIniFileName); err != nil {
-			r.warn(err)
-		}
+
+		r.warn(r.loadDevice(fmt.Sprintf("device_%d", i), name))
 	}
 }
 

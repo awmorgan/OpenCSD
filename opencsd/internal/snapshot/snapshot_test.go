@@ -32,7 +32,10 @@ ETM_0=etm_0.ini
 metadata=trace.ini
 `
 
-	iniFile := ParseIni(strings.NewReader(iniData))
+	iniFile, err := ParseIni(strings.NewReader(iniData))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if iniFile.Section("snapshot")["version"] != "1.0" {
 		t.Errorf("expected version 1.0, got %s", iniFile.Section("snapshot")["version"])
@@ -326,9 +329,10 @@ metadata=missing_trace.ini
 		t.Errorf("expected success reading snapshot.ini even if sub files fail")
 	}
 
-	// Create bad trace.ini? No error returned from parseTraceMetaData typically,
-	// but it would log if file missing. Which is covered above.
-
+	// missing device and trace files should each produce a warning
+	if got := len(reader.Warnings); got != 2 {
+		t.Fatalf("expected 2 warnings, got %d: %v", got, reader.Warnings)
+	}
 }
 
 func TestReader_DefaultTraceININame(t *testing.T) {

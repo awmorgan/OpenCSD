@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"errors"
 	"fmt"
 	"opencsd/internal/common"
 	"opencsd/internal/dcdtree"
@@ -151,51 +152,64 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 		b.instrDecode = idec.NewDecoder()
 	}
 
-	numDecodersCreated := 0
+	var skipped []error
+	created := 0
+
 	for srcName, coreName := range tree.SourceCoreAssoc {
-		devSrc, ok := b.reader.ParsedDeviceList[srcName]
-		if !ok || devSrc == nil {
+		devSrc := b.reader.ParsedDeviceList[srcName]
+		if devSrc == nil {
+			skipped = append(skipped, fmt.Errorf("source device %q not found", srcName))
 			continue
 		}
 
-		if coreName != "<none>" && coreName != "" {
-			coreDev, ok := b.reader.ParsedDeviceList[coreName]
-			if !ok || coreDev == nil {
+		if coreName != "" && coreName != "<none>" {
+			coreDev := b.reader.ParsedDeviceList[coreName]
+			if coreDev == nil {
+				skipped = append(skipped, fmt.Errorf("core device %q not found", coreName))
 				continue
 			}
 
-			err := b.createPEDecoder(devSrc.Type, devSrc, coreName)
-			if err != nil {
+			if err := b.createPEDecoder(devSrc.Type, devSrc, coreName); err != nil {
+				skipped = append(skipped, fmt.Errorf("create PE decoder for %q: %w", srcName, err))
 				continue
 			}
 
-			numDecodersCreated++
-			if !packetProcOnly && len(coreDev.Memory) > 0 {
+			created++
+			if !packetProcOnly {
 				b.addCoreDumpMemory(b.mapper, coreDev)
 			}
 			continue
 		}
 
-		err := b.createSTDecoder(devSrc)
-		if err != nil {
+		if err := b.createSTDecoder(devSrc); err != nil {
+			skipped = append(skipped, fmt.Errorf("create ST decoder for %q: %w", srcName, err))
 			continue
 		}
-		numDecodersCreated++
+
+		created++
 	}
 
-	if numDecodersCreated == 0 {
+	if created == 0 {
 		b.tree = nil
-		return nil, fmt.Errorf("no supported protocols found")
+		return nil, fmt.Errorf("no supported protocols found: %w", errors.Join(skipped...))
 	}
 
 	return b.tree, nil
 }
 
-func setReg32(dev *Device, name string, dst *uint32) {
-	if val, ok := dev.RegValue(name); ok {
-		parsed, _ := parseUint(val)
-		*dst = uint32(parsed)
+func setReg32(dev *Device, name string, dst *uint32) error {
+	val, ok := dev.RegValue(name)
+	if !ok {
+		return nil
 	}
+
+	parsed, err := parseUint(val)
+	if err != nil {
+		return fmt.Errorf("parse register %s=%q: %w", name, val, err)
+	}
+
+	*dst = uint32(parsed)
+	return nil
 }
 
 func protocolBase(name string) string {
@@ -213,7 +227,9 @@ func getCoreProfile(coreName string) (ocsd.ArchVersion, ocsd.CoreProfile) {
 }
 
 func (b *DecodeTreeBuilder) createPEDecoder(devTypeName string, devSrc *Device, coreName string) error {
-	switch devTypeName = protocolBase(devTypeName); {
+	devTypeName = protocolBase(devTypeName)
+
+	switch {
 	case devTypeName == ETMv3Protocol || strings.HasPrefix(devTypeName, "ETMv3"):
 		return b.createETMv3Decoder(coreName, devSrc)
 	case devTypeName == ETMv4Protocol || strings.HasPrefix(devTypeName, "ETMv4"):
@@ -242,10 +258,18 @@ func (b *DecodeTreeBuilder) createSTDecoder(devSrc *Device) error {
 func (b *DecodeTreeBuilder) createETMv3Decoder(coreName string, devSrc *Device) error {
 	cfg := &etmv3.Config{}
 
-	setReg32(devSrc, "etmcr", &cfg.RegCtrl)
-	setReg32(devSrc, "etmtraceidr", &cfg.RegTrcID)
-	setReg32(devSrc, "etmidr", &cfg.RegIDR)
-	setReg32(devSrc, "etmccer", &cfg.RegCCER)
+	if err := setReg32(devSrc, "etmcr", &cfg.RegCtrl); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "etmtraceidr", &cfg.RegTrcID); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "etmidr", &cfg.RegIDR); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "etmccer", &cfg.RegCCER); err != nil {
+		return err
+	}
 
 	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
@@ -267,10 +291,18 @@ func (b *DecodeTreeBuilder) createETMv3Decoder(coreName string, devSrc *Device) 
 func (b *DecodeTreeBuilder) createPTMDecoder(coreName string, devSrc *Device) error {
 	cfg := ptm.NewConfig()
 
-	setReg32(devSrc, "etmcr", &cfg.RegCtrl)
-	setReg32(devSrc, "etmtraceidr", &cfg.RegTrcID)
-	setReg32(devSrc, "etmidr", &cfg.RegIDR)
-	setReg32(devSrc, "etmccer", &cfg.RegCCER)
+	if err := setReg32(devSrc, "etmcr", &cfg.RegCtrl); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "etmtraceidr", &cfg.RegTrcID); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "etmidr", &cfg.RegIDR); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "etmccer", &cfg.RegCCER); err != nil {
+		return err
+	}
 
 	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
@@ -292,13 +324,27 @@ func (b *DecodeTreeBuilder) createPTMDecoder(coreName string, devSrc *Device) er
 func (b *DecodeTreeBuilder) createETEDecoder(coreName string, devSrc *Device) error {
 	cfg := ete.NewConfig()
 
-	setReg32(devSrc, "trcidr0", &cfg.RegIdr0)
-	setReg32(devSrc, "trcidr1", &cfg.RegIdr1)
-	setReg32(devSrc, "trcidr2", &cfg.RegIdr2)
-	setReg32(devSrc, "trcidr8", &cfg.RegIdr8)
-	setReg32(devSrc, "trcdevarch", &cfg.RegDevArch)
-	setReg32(devSrc, "trcconfigr", &cfg.RegConfigr)
-	setReg32(devSrc, "trctraceidr", &cfg.RegTraceidr)
+	if err := setReg32(devSrc, "trcidr0", &cfg.RegIdr0); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trcidr1", &cfg.RegIdr1); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trcidr2", &cfg.RegIdr2); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trcidr8", &cfg.RegIdr8); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trcdevarch", &cfg.RegDevArch); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trcconfigr", &cfg.RegConfigr); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trctraceidr", &cfg.RegTraceidr); err != nil {
+		return err
+	}
 
 	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
@@ -319,17 +365,39 @@ func (b *DecodeTreeBuilder) createETMv4Decoder(coreName string, devSrc *Device) 
 		RegIdr1: 0x4100F403,
 	}
 
-	setReg32(devSrc, "trcidr0", &cfg.RegIdr0)
-	setReg32(devSrc, "trcidr1", &cfg.RegIdr1)
-	setReg32(devSrc, "trcidr2", &cfg.RegIdr2)
-	setReg32(devSrc, "trcidr8", &cfg.RegIdr8)
-	setReg32(devSrc, "trcidr9", &cfg.RegIdr9)
-	setReg32(devSrc, "trcidr10", &cfg.RegIdr10)
-	setReg32(devSrc, "trcidr11", &cfg.RegIdr11)
-	setReg32(devSrc, "trcidr12", &cfg.RegIdr12)
-	setReg32(devSrc, "trcidr13", &cfg.RegIdr13)
-	setReg32(devSrc, "trcconfigr", &cfg.RegConfigr)
-	setReg32(devSrc, "trctraceidr", &cfg.RegTraceidr)
+	if err := setReg32(devSrc, "trcidr0", &cfg.RegIdr0); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trcidr1", &cfg.RegIdr1); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trcidr2", &cfg.RegIdr2); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trcidr8", &cfg.RegIdr8); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trcidr9", &cfg.RegIdr9); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trcidr10", &cfg.RegIdr10); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trcidr11", &cfg.RegIdr11); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trcidr12", &cfg.RegIdr12); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trcidr13", &cfg.RegIdr13); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trcconfigr", &cfg.RegConfigr); err != nil {
+		return err
+	}
+	if err := setReg32(devSrc, "trctraceidr", &cfg.RegTraceidr); err != nil {
+		return err
+	}
 
 	cfg.ArchVer, cfg.CoreProf = getCoreProfile(coreName)
 
@@ -350,7 +418,9 @@ func (b *DecodeTreeBuilder) createETMv4Decoder(coreName string, devSrc *Device) 
 
 func (b *DecodeTreeBuilder) createSTMDecoder(devSrc *Device) error {
 	cfg := stm.NewConfig()
-	setReg32(devSrc, "stmtcsr", &cfg.RegTCSR)
+	if err := setReg32(devSrc, "stmtcsr", &cfg.RegTCSR); err != nil {
+		return err
+	}
 	if b.packetProcOnly {
 		proc, err := stm.NewConfiguredPktProc(int(cfg.TraceID()), cfg)
 		if err != nil {
@@ -368,7 +438,9 @@ func (b *DecodeTreeBuilder) createSTMDecoder(devSrc *Device) error {
 
 func (b *DecodeTreeBuilder) createITMDecoder(devSrc *Device) error {
 	cfg := &itm.Config{}
-	setReg32(devSrc, "itmtcr", &cfg.RegTCR)
+	if err := setReg32(devSrc, "itmtcr", &cfg.RegTCR); err != nil {
+		return err
+	}
 	if b.packetProcOnly {
 		proc, _, err := itm.NewPipeline(int(cfg.TraceID()), cfg, nil, nil)
 		if err != nil {
@@ -415,7 +487,6 @@ func (b *DecodeTreeBuilder) addCoreDumpMemory(mapper memacc.Mapper, dev *Device)
 
 		acc := memacc.NewBufferAccessor(ocsd.VAddr(dump.Address), fileBytes)
 		acc.SetMemSpace(mapDumpMemSpace(dump.Space))
-		if err := mapper.AddAccessor(acc, ocsd.BadCSSrcID); err != nil {
-		}
+		_ = mapper.AddAccessor(acc, ocsd.BadCSSrcID)
 	}
 }

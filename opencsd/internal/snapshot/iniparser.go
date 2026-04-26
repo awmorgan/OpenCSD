@@ -25,13 +25,24 @@ func (ini *IniFile) Section(sectionName string) map[string]string {
 	return ini.Sections[sectionName]
 }
 
-func ParseIni(r io.Reader) *IniFile {
+func (ini *IniFile) ensureSection(name string) {
+	if _, ok := ini.Sections[name]; ok {
+		return
+	}
+
+	ini.Sections[name] = make(map[string]string)
+	ini.SectionVals[name] = make(map[string][]string)
+	if name != "" {
+		ini.SectionOrder = append(ini.SectionOrder, name)
+	}
+}
+
+func ParseIni(r io.Reader) (*IniFile, error) {
 	ini := NewIniFile()
 	scanner := bufio.NewScanner(r)
 	section := ""
 
-	ini.Sections[section] = make(map[string]string)
-	ini.SectionVals[section] = make(map[string][]string)
+	ini.ensureSection(section)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -42,15 +53,11 @@ func ParseIni(r io.Reader) *IniFile {
 
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
 			section = strings.TrimSpace(line[1 : len(line)-1])
-			if _, exists := ini.Sections[section]; !exists {
-				ini.Sections[section] = make(map[string]string)
-				ini.SectionVals[section] = make(map[string][]string)
-				ini.SectionOrder = append(ini.SectionOrder, section)
-			}
+			ini.ensureSection(section)
 			continue
 		}
 
-		if key, val, found := strings.Cut(line, "="); found {
+		if key, val, ok := strings.Cut(line, "="); ok {
 			k := strings.TrimSpace(key)
 			v := strings.TrimSpace(stripInlineComment(val))
 
@@ -58,7 +65,11 @@ func ParseIni(r io.Reader) *IniFile {
 			ini.Sections[section][k] = strings.Join(ini.SectionVals[section][k], ",")
 		}
 	}
-	return ini
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return ini, nil
 }
 
 func stripInlineComment(value string) string {
