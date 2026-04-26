@@ -92,25 +92,25 @@ func (r *Reader) Read() error {
 	return nil
 }
 
-func (r *Reader) loadDevice(devName string, iniFileName string) {
+func (r *Reader) loadDevice(devName string, iniFileName string) error {
 	devIniPath := filepath.Join(r.SnapshotPath, iniFileName)
 	devFile, err := os.Open(devIniPath)
 	if err != nil {
-		return
+		return fmt.Errorf("failed to open device ini %s: %w", devIniPath, err)
 	}
+	defer devFile.Close()
 
 	parsedDev, err := ParseSingleDevice(devFile)
-	devFile.Close()
 	if err != nil {
-		return
+		return fmt.Errorf("failed to parse device %s: %w", devName, err)
 	}
 
+	targetName := devName
 	if parsedDev.Name != "" {
-		r.ParsedDeviceList[parsedDev.Name] = parsedDev
-		return
+		targetName = parsedDev.Name
 	}
-
-	r.ParsedDeviceList[devName] = parsedDev
+	r.ParsedDeviceList[targetName] = parsedDev
+	return nil
 }
 
 func (r *Reader) loadLegacyDevices() {
