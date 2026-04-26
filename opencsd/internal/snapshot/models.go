@@ -59,31 +59,25 @@ func (p *Device) RegValue(key string) (string, bool) {
 	return "", false
 }
 
-// ParsedDevices stores the entire device list and snapshot info
-
-// NewParsedDevices creates a new ParsedDevices
 func NewParsedDevices() *ParsedDevices {
 	return &ParsedDevices{
 		DeviceList: make(map[string]string),
 	}
 }
 
-// Buffer stores basic info about the buffer
 type Buffer struct {
 	BufferName   string
 	DataFileName string
 	DataFormat   string
 }
 
-// Trace stores lists of buffers and associations as presented in the ini file.
 type Trace struct {
 	BufferSectionNames []string
 	TraceBuffers       []Buffer
-	SourceBufferAssoc  map[string]string // trace source name -> trace buffer name assoc
-	CPUSourceAssoc     map[string]string // trace source name -> cpu_name assoc
+	SourceBufferAssoc  map[string]string
+	CPUSourceAssoc     map[string]string
 }
 
-// NewParsedTrace creates a new Trace
 func NewParsedTrace() *Trace {
 	return &Trace{
 		BufferSectionNames: []string{},
@@ -93,13 +87,11 @@ func NewParsedTrace() *Trace {
 	}
 }
 
-// TraceBufferSourceTree stores single buffer information containing just the assoc for the buffer
 type TraceBufferSourceTree struct {
 	BufferInfo      *Buffer
-	SourceCoreAssoc map[string]string // list of source names attached to core device names (e.g. ETM_0:cpu_0)
+	SourceCoreAssoc map[string]string
 }
 
-// NewTraceBufferSourceTree creates a new TraceBufferSourceTree
 func NewTraceBufferSourceTree() *TraceBufferSourceTree {
 	return &TraceBufferSourceTree{
 		SourceCoreAssoc: make(map[string]string),
