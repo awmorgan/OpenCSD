@@ -29,11 +29,11 @@ type Device struct {
 	Name        string
 	Class       string
 	Type        string
+	Regs        map[string]string // Key is lowercase for case-insensitive lookup
+	ExtRegs     map[uint32]uint32
 	FoundGlobal bool
 	Core        string
 	DumpDefs    []DumpDef
-	Regs        map[string]string // Key is lowercase for case-insensitive lookup
-	ExtRegs     map[uint32]uint32
 }
 
 // NewParsedDevice creates a new Device
