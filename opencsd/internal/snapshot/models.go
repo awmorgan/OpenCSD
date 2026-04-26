@@ -31,17 +31,17 @@ type Device struct {
 	Type        string
 	Regs        map[string]string // Key is lowercase for case-insensitive lookup
 	ExtRegs     map[uint32]uint32
+	Memory      []MemoryDump
 	FoundGlobal bool
 	Core        string
-	DumpDefs    []MemoryDump
 }
 
 // NewParsedDevice creates a new Device
 func NewParsedDevice() *Device {
 	return &Device{
-		DumpDefs: []MemoryDump{},
-		Regs:     make(map[string]string),
-		ExtRegs:  make(map[uint32]uint32),
+		Memory:  []MemoryDump{},
+		Regs:    make(map[string]string),
+		ExtRegs: make(map[uint32]uint32),
 	}
 }
 

@@ -185,7 +185,7 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 		if dev == nil || !strings.EqualFold(dev.Class, "core") {
 			continue
 		}
-		for _, memParams := range dev.DumpDefs {
+		for _, memParams := range dev.Memory {
 			if strings.TrimSpace(memParams.Path) == "" {
 				continue
 			}

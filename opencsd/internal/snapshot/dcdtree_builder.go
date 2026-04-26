@@ -166,7 +166,7 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 			}
 
 			numDecodersCreated++
-			if !packetProcOnly && len(coreDev.DumpDefs) > 0 {
+			if !packetProcOnly && len(coreDev.Memory) > 0 {
 				b.addCoreDumpMemory(b.mapper, coreDev)
 			}
 			continue
@@ -437,7 +437,7 @@ func (b *DecodeTreeBuilder) createITMDecoder(devSrc *Device) error {
 // addCoreDumpMemory adds memory region accessors from a core device's dump definitions.
 // It is called once per PE decoder that is successfully created, only in full-decoder mode.
 func (b *DecodeTreeBuilder) addCoreDumpMemory(mapper memacc.Mapper, dev *Device) {
-	for _, dump := range dev.DumpDefs {
+	for _, dump := range dev.Memory {
 		if strings.TrimSpace(dump.Path) == "" {
 			continue
 		}

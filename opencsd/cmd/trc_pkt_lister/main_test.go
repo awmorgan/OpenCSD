@@ -803,7 +803,7 @@ func TestMapMemoryRangesSameFileDifferentOffsetsBothMapped(t *testing.T) {
 			"cpu_0": {
 				Name:  "cpu_0",
 				Class: "core",
-				DumpDefs: []snapshot.MemoryDump{
+				Memory: []snapshot.MemoryDump{
 					{
 						Path:    "mem.bin",
 						Address: 0x1000,
@@ -851,7 +851,7 @@ func TestMapMemoryRangesBadOffsetReturnsError(t *testing.T) {
 			"cpu_0": {
 				Name:  "cpu_0",
 				Class: "core",
-				DumpDefs: []snapshot.MemoryDump{
+				Memory: []snapshot.MemoryDump{
 					{
 						Path:    "mem.bin",
 						Address: 0x1000,
@@ -892,7 +892,7 @@ func TestMapMemoryRangesUnreadableFileIgnored(t *testing.T) {
 			"cpu_0": {
 				Name:  "cpu_0",
 				Class: "core",
-				DumpDefs: []snapshot.MemoryDump{
+				Memory: []snapshot.MemoryDump{
 					{
 						Path:    "missing.bin",
 						Address: 0x1000,
@@ -927,7 +927,7 @@ func TestMapMemoryRangesDuplicateSemanticMappingIgnored(t *testing.T) {
 			"cpu_0": {
 				Name:  "cpu_0",
 				Class: "core",
-				DumpDefs: []snapshot.MemoryDump{
+				Memory: []snapshot.MemoryDump{
 					{
 						Path:    "mem.bin",
 						Address: 0x1000,

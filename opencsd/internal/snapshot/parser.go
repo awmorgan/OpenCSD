@@ -72,7 +72,7 @@ func ParseSingleDevice(input io.Reader) (*Device, error) {
 			dump.Space = space
 		}
 
-		parsed.DumpDefs = append(parsed.DumpDefs, dump)
+		parsed.Memory = append(parsed.Memory, dump)
 	}
 
 	return parsed, nil

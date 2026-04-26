@@ -90,16 +90,16 @@ length=0x1000
 	if !ok || val != "0x00000001" {
 		t.Errorf("expected TRCCONFIGR=0x00000001")
 	}
-	if len(dev.DumpDefs) != 1 {
+	if len(dev.Memory) != 1 {
 		t.Fatalf("expected 1 dump def")
 	}
-	if dev.DumpDefs[0].Address != 0x80000000 {
+	if dev.Memory[0].Address != 0x80000000 {
 		t.Errorf("expected address 0x80000000")
 	}
-	if dev.DumpDefs[0].Length != 0x1000 {
+	if dev.Memory[0].Length != 0x1000 {
 		t.Errorf("expected length 0x1000")
 	}
-	if dev.DumpDefs[0].Path != "memory.bin" {
+	if dev.Memory[0].Path != "memory.bin" {
 		t.Errorf("expected file memory.bin")
 	}
 }
@@ -278,13 +278,13 @@ ETM_0=cpu_0
 	if r, ok := reader.ParsedDeviceList["cpu_0"]; !ok {
 		t.Errorf("expected cpu_0")
 	} else {
-		if len(r.DumpDefs) != 1 {
+		if len(r.Memory) != 1 {
 			t.Errorf("expected 1 dump")
 		} else {
-			if r.DumpDefs[0].Offset != 1 {
+			if r.Memory[0].Offset != 1 {
 				t.Errorf("expected offset 1")
 			}
-			if r.DumpDefs[0].Space != "memory" {
+			if r.Memory[0].Space != "memory" {
 				t.Errorf("expected space memory")
 			}
 		}

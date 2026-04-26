@@ -250,7 +250,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 		if !strings.EqualFold(dev.Class, "core") {
 			continue
 		}
-		for _, memParams := range dev.DumpDefs {
+		for _, memParams := range dev.Memory {
 			path := filepath.Join(snapshotDir, memParams.Path)
 			b, err := os.ReadFile(path)
 			if err != nil {
