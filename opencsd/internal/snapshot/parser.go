@@ -30,7 +30,7 @@ func ParseSingleDevice(input io.Reader) (*Device, error) {
 	// Symbolic Regs section
 	if regsSec, ok := ini.Sections[SymbolicRegsSectionName]; ok {
 		for k, v := range regsSec {
-			parsed.RegDefs[strings.ToLower(k)] = v
+			parsed.Regs[strings.ToLower(k)] = v
 		}
 	}
 

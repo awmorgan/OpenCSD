@@ -32,7 +32,7 @@ type Device struct {
 	FoundGlobal bool
 	Core        string
 	DumpDefs    []DumpDef
-	RegDefs     map[string]string // Key is lowercase for case-insensitive lookup
+	Regs        map[string]string // Key is lowercase for case-insensitive lookup
 	ExtRegs     map[uint32]uint32
 }
 
@@ -40,7 +40,7 @@ type Device struct {
 func NewParsedDevice() *Device {
 	return &Device{
 		DumpDefs: []DumpDef{},
-		RegDefs:  make(map[string]string),
+		Regs:     make(map[string]string),
 		ExtRegs:  make(map[uint32]uint32),
 	}
 }
@@ -48,11 +48,11 @@ func NewParsedDevice() *Device {
 // RegValue is a helper to get register value case-insensitively
 func (p *Device) RegValue(key string) (string, bool) {
 	keyLower := strings.ToLower(key)
-	if val, ok := p.RegDefs[keyLower]; ok {
+	if val, ok := p.Regs[keyLower]; ok {
 		return val, true
 	}
 	prefix := keyLower + "("
-	for k, v := range p.RegDefs {
+	for k, v := range p.Regs {
 		if strings.HasPrefix(k, prefix) {
 			return v, true
 		}
