@@ -42,12 +42,6 @@ func (p *Device) RegValue(key string) (string, bool) {
 	return "", false
 }
 
-func NewParsedDevices() *ParsedDevices {
-	return &ParsedDevices{
-		DeviceList: make(map[string]string),
-	}
-}
-
 type Buffer struct {
 	BufferName   string
 	DataFileName string

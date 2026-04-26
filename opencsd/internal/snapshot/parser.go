@@ -85,7 +85,9 @@ func ParseSingleDevice(input io.Reader) (*Device, error) {
 // ParseDeviceList parses the snapshot.ini file
 func ParseDeviceList(input io.Reader) (*ParsedDevices, error) {
 	ini := ParseIni(input)
-	parsed := NewParsedDevices()
+	parsed := &ParsedDevices{
+		DeviceList: make(map[string]string),
+	}
 
 	if snapSec, ok := ini.Sections[SnapshotSectionName]; ok {
 		parsed.Version = snapSec[VersionKey]
