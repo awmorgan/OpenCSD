@@ -50,7 +50,7 @@ metadata=trace.ini
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if devs.SnapshotInfo.Version != "1.1" {
+	if devs.Version != "1.1" {
 		t.Errorf("expected version 1.1")
 	}
 	if devs.DeviceList["cpu_0"] != "cpu_0.ini" {
@@ -182,8 +182,8 @@ cpu_0=cpu_0.ini
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if devs.SnapshotInfo.Version != "0.1" {
-		t.Fatalf("expected default version 0.1, got %q", devs.SnapshotInfo.Version)
+	if devs.Version != "0.1" {
+		t.Fatalf("expected default version 0.1, got %q", devs.Version)
 	}
 }
 
@@ -198,8 +198,8 @@ metadata=trace.ini
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if devs.SnapshotInfo.Version != "0.0" {
-		t.Fatalf("expected default version 0.0, got %q", devs.SnapshotInfo.Version)
+	if devs.Version != "0.0" {
+		t.Fatalf("expected default version 0.0, got %q", devs.Version)
 	}
 }
 

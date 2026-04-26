@@ -9,12 +9,6 @@ type Snapshot struct {
 	Trace       *Trace
 }
 
-// Info stores version and description from snapshot.ini
-type Info struct {
-	Version     string
-	Description string
-}
-
 // Device stores the entire parsed device ini file
 type Device struct {
 	Name        string
@@ -62,7 +56,8 @@ func (p *Device) RegValue(key string) (string, bool) {
 // ParsedDevices stores the entire device list and snapshot info
 type ParsedDevices struct {
 	DeviceList        map[string]string
-	SnapshotInfo      Info
+	Version           string
+	Description       string
 	TraceMetaDataName string
 }
 

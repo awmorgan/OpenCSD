@@ -84,19 +84,19 @@ func ParseDeviceList(input io.Reader) (*ParsedDevices, error) {
 	parsed := NewParsedDevices()
 
 	if snapSec, ok := ini.Sections[SnapshotSectionName]; ok {
-		parsed.SnapshotInfo.Version = snapSec[VersionKey]
-		parsed.SnapshotInfo.Description = snapSec[DescriptionKey]
+		parsed.Version = snapSec[VersionKey]
+		parsed.Description = snapSec[DescriptionKey]
 	}
 
 	if devListSec, ok := ini.Sections[DeviceListSectionName]; ok {
 		maps.Copy(parsed.DeviceList, devListSec)
 	}
 
-	if parsed.SnapshotInfo.Version == "" {
+	if parsed.Version == "" {
 		if _, hasDeviceList := ini.Sections[DeviceListSectionName]; hasDeviceList {
-			parsed.SnapshotInfo.Version = "0.1"
+			parsed.Version = "0.1"
 		} else {
-			parsed.SnapshotInfo.Version = "0.0"
+			parsed.Version = "0.0"
 		}
 	}
 
