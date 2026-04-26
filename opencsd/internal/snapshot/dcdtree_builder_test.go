@@ -114,7 +114,7 @@ func TestBuildStillCreatesDecodeTreeOnValidFormatterConfig(t *testing.T) {
 		CPUSourceAssoc: map[string]string{},
 	}
 	reader.ParsedDeviceList["STM_0"] = &Device{
-		DeviceName:     "STM_0",
+		Name:           "STM_0",
 		DeviceTypeName: "STM",
 		RegDefs:        map[string]string{"stmtcsr": "0x0"},
 	}

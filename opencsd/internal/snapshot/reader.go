@@ -103,8 +103,8 @@ func (r *Reader) loadDevice(devName string, iniFileName string) {
 		return
 	}
 
-	if parsedDev.DeviceName != "" {
-		r.ParsedDeviceList[parsedDev.DeviceName] = parsedDev
+	if parsedDev.Name != "" {
+		r.ParsedDeviceList[parsedDev.Name] = parsedDev
 		return
 	}
 

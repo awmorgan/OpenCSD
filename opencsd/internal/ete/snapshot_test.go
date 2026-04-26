@@ -318,7 +318,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 
 func findParsedDeviceByName(devices map[string]*snapshot.Device, name string) *snapshot.Device {
 	for _, dev := range devices {
-		if dev.DeviceName == name {
+		if dev.Name == name {
 			return dev
 		}
 	}

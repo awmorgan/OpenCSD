@@ -22,7 +22,7 @@ func ParseSingleDevice(input io.Reader) (*Device, error) {
 
 	// Device section
 	if deviceSec, ok := ini.Sections[DeviceSectionName]; ok {
-		parsed.DeviceName = deviceSec[DeviceNameKey]
+		parsed.Name = deviceSec[DeviceNameKey]
 		parsed.DeviceClass = deviceSec[DeviceClassKey]
 		parsed.DeviceTypeName = deviceSec[DeviceTypeKey]
 	}

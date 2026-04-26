@@ -394,7 +394,7 @@ func extractPacketType(s string) string {
 
 func findParsedDeviceByName(devs map[string]*snapshot.Device, name string) *snapshot.Device {
 	for _, dev := range devs {
-		if dev != nil && dev.DeviceName == name {
+		if dev != nil && dev.Name == name {
 			return dev
 		}
 	}

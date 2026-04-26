@@ -83,7 +83,7 @@ length=0x1000
 	if !dev.FoundGlobal || dev.Core != "Cortex-A53" {
 		t.Errorf("expected core Cortex-A53")
 	}
-	if dev.DeviceName != "cpu_0" {
+	if dev.Name != "cpu_0" {
 		t.Errorf("expected name cpu_0")
 	}
 	val, ok := dev.RegValue("trcconfigr")
