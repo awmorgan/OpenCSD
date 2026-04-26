@@ -1,8 +1,6 @@
 package idec
 
-import (
-	"opencsd/internal/ocsd"
-)
+import "opencsd/internal/ocsd"
 
 // Decoder implements the ocsd.InstrDecode interface.
 type Decoder struct {
@@ -10,9 +8,7 @@ type Decoder struct {
 }
 
 func NewDecoder() *Decoder {
-	return &Decoder{
-		aa64ErrBadOpcode: false,
-	}
+	return &Decoder{}
 }
 
 func (d *Decoder) SetAA64ErrOnBadOpcode(bSet bool) {
@@ -20,24 +16,20 @@ func (d *Decoder) SetAA64ErrOnBadOpcode(bSet bool) {
 }
 
 func (d *Decoder) DecodeInstruction(instrInfo *ocsd.InstrInfo) error {
-	info := &DecodeInfo{
+	info := DecodeInfo{
 		InstrSubType: ocsd.SInstrNone,
 		ArchVersion:  instrInfo.PeType.Arch,
 	}
 
 	var err error
-
 	switch instrInfo.ISA {
 	case ocsd.ISAArm:
-		err = d.decodeA32(instrInfo, info)
+		err = d.decodeA32(instrInfo, &info)
 	case ocsd.ISAThumb2:
-		err = d.decodeT32(instrInfo, info)
+		err = d.decodeT32(instrInfo, &info)
 	case ocsd.ISAAArch64:
-		err = d.decodeA64(instrInfo, info)
-	case ocsd.ISATee, ocsd.ISAJazelle:
-		fallthrough
+		err = d.decodeA64(instrInfo, &info)
 	default:
-		// unsupported ISA
 		err = ocsd.ErrUnsupportedISA
 	}
 
@@ -45,191 +37,182 @@ func (d *Decoder) DecodeInstruction(instrInfo *ocsd.InstrInfo) error {
 	return err
 }
 
-func (d *Decoder) decodeA32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) error {
-	var branchAddr uint32
-	var barrier ArmBarrierT
-
-	instrInfo.InstrSize = 4           // instruction size A32
-	instrInfo.Type = ocsd.InstrOther  // default type
-	instrInfo.NextISA = instrInfo.ISA // assume same ISA
+func resetInstrInfo(instrInfo *ocsd.InstrInfo) {
+	instrInfo.Type = ocsd.InstrOther
+	instrInfo.NextISA = instrInfo.ISA
 	instrInfo.IsLink = 0
-	instrInfo.ThumbItConditions = 0 // not thumb
+	instrInfo.IsConditional = 0
+}
 
-	if InstARMIsIndirectBranch(instrInfo.Opcode, info) {
-		instrInfo.Type = ocsd.InstrBrIndirect
-		if InstARMIsBranchAndLink(instrInfo.Opcode, info) {
-			instrInfo.IsLink = 1
-		} else {
-			instrInfo.IsLink = 0
+func setBool(dst *uint8, value bool) {
+	if value {
+		*dst = 1
+		return
+	}
+	*dst = 0
+}
+
+func applyBarrier(instrInfo *ocsd.InstrInfo, barrier ArmBarrierT) bool {
+	switch barrier {
+	case ArmBarrierIsb:
+		instrInfo.Type = ocsd.InstrIsb
+		return true
+	case ArmBarrierDsb, ArmBarrierDmb:
+		if instrInfo.DsbDmbWaypoints != 0 {
+			instrInfo.Type = ocsd.InstrDsbDmb
 		}
-	} else if InstARMIsDirectBranch(instrInfo.Opcode) {
-		branchAddr, _ = InstARMBranchDestination(uint32(instrInfo.InstrAddr), instrInfo.Opcode)
+		return true
+	default:
+		return false
+	}
+}
+
+func canonicalThumbOpcode(opcode uint32) uint32 {
+	return (opcode>>16)&0xFFFF | (opcode&0xFFFF)<<16
+}
+
+func setThumbInstrSize(instrInfo *ocsd.InstrInfo) {
+	if IsWideThumb(uint16(instrInfo.Opcode >> 16)) {
+		instrInfo.InstrSize = 4
+		return
+	}
+	instrInfo.InstrSize = 2
+}
+
+func (d *Decoder) decodeA32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) error {
+	resetInstrInfo(instrInfo)
+	instrInfo.InstrSize = 4
+	instrInfo.ThumbItConditions = 0 // not Thumb
+
+	switch {
+	case InstARMIsIndirectBranch(instrInfo.Opcode, info):
+		instrInfo.Type = ocsd.InstrBrIndirect
+		setBool(&instrInfo.IsLink, InstARMIsBranchAndLink(instrInfo.Opcode, info))
+
+	case InstARMIsDirectBranch(instrInfo.Opcode):
+		branchAddr, _ := InstARMBranchDestination(uint32(instrInfo.InstrAddr), instrInfo.Opcode)
 		instrInfo.Type = ocsd.InstrBr
-		if (branchAddr & 0x1) != 0 {
+		if branchAddr&0x1 != 0 {
 			instrInfo.NextISA = ocsd.ISAThumb2
-			branchAddr &= ^uint32(0x1)
+			branchAddr &^= 0x1
 		}
 		instrInfo.BranchAddr = ocsd.VAddr(branchAddr)
-		if InstARMIsBranchAndLink(instrInfo.Opcode, info) {
-			instrInfo.IsLink = 1
-		} else {
-			instrInfo.IsLink = 0
-		}
-	} else if barrier = InstARMBarrier(instrInfo.Opcode); barrier != ArmBarrierNone {
-		switch barrier {
-		case ArmBarrierIsb:
-			instrInfo.Type = ocsd.InstrIsb
-		case ArmBarrierDsb, ArmBarrierDmb:
-			if instrInfo.DsbDmbWaypoints != 0 {
-				instrInfo.Type = ocsd.InstrDsbDmb
-			}
-		}
-	} else if instrInfo.WfiWfeBranch != 0 {
-		if InstARMWfiWfe(instrInfo.Opcode) {
-			instrInfo.Type = ocsd.InstrWfiWfe
-		}
+		setBool(&instrInfo.IsLink, InstARMIsBranchAndLink(instrInfo.Opcode, info))
+
+	case applyBarrier(instrInfo, InstARMBarrier(instrInfo.Opcode)):
+	case instrInfo.WfiWfeBranch != 0 && InstARMWfiWfe(instrInfo.Opcode):
+		instrInfo.Type = ocsd.InstrWfiWfe
 	}
 
-	if InstARMIsConditional(instrInfo.Opcode) {
-		instrInfo.IsConditional = 1
-	} else {
-		instrInfo.IsConditional = 0
-	}
-
+	setBool(&instrInfo.IsConditional, InstARMIsConditional(instrInfo.Opcode))
 	return nil
 }
 
 func (d *Decoder) decodeA64(instrInfo *ocsd.InstrInfo, info *DecodeInfo) error {
-	var branchAddr uint64
-	var barrier ArmBarrierT
-
-	instrInfo.InstrSize = 4           // default address update
-	instrInfo.Type = ocsd.InstrOther  // default type
-	instrInfo.NextISA = instrInfo.ISA // assume same ISA
-	instrInfo.IsLink = 0
+	resetInstrInfo(instrInfo)
+	instrInfo.InstrSize = 4
 	instrInfo.ThumbItConditions = 0
 
-	// check for invalid opcode - top 16 bits cannot be 0x0000.
-	if d.aa64ErrBadOpcode && (instrInfo.Opcode&0xFFFF0000) == 0 {
+	// Top 16 bits cannot be 0x0000 when strict A64 opcode checks are enabled.
+	if d.aa64ErrBadOpcode && instrInfo.Opcode&0xFFFF0000 == 0 {
 		return ocsd.ErrInvalidOpcode
 	}
 
-	if isBranch, isLink := InstA64IsIndirectBranchLink(instrInfo.Opcode, info); isBranch {
-		if isLink {
-			instrInfo.IsLink = 1
-		} else {
-			instrInfo.IsLink = 0
-		}
-		instrInfo.Type = ocsd.InstrBrIndirect
-	} else if isBranch, isLink := InstA64IsDirectBranchLink(instrInfo.Opcode, info); isBranch {
-		if isLink {
-			instrInfo.IsLink = 1
-		} else {
-			instrInfo.IsLink = 0
-		}
-		InstA64BranchDestination(uint64(instrInfo.InstrAddr), instrInfo.Opcode, &branchAddr)
-		instrInfo.Type = ocsd.InstrBr
-		instrInfo.BranchAddr = ocsd.VAddr(branchAddr)
-	} else if barrier = InstA64Barrier(instrInfo.Opcode); barrier != ArmBarrierNone {
-		switch barrier {
-		case ArmBarrierIsb:
-			instrInfo.Type = ocsd.InstrIsb
-		case ArmBarrierDsb, ArmBarrierDmb:
-			if instrInfo.DsbDmbWaypoints != 0 {
-				instrInfo.Type = ocsd.InstrDsbDmb
-			}
-		}
-	} else if instrInfo.WfiWfeBranch != 0 && InstA64WfiWfe(instrInfo.Opcode, info) {
+	switch {
+	case decodeA64IndirectBranch(instrInfo, info):
+	case decodeA64DirectBranch(instrInfo, info):
+	case applyBarrier(instrInfo, InstA64Barrier(instrInfo.Opcode)):
+	case instrInfo.WfiWfeBranch != 0 && InstA64WfiWfe(instrInfo.Opcode, info):
 		instrInfo.Type = ocsd.InstrWfiWfe
-	} else if ocsd.IsArchMinVer(info.ArchVersion, ocsd.ArchAA64) {
-		if InstA64Tstart(instrInfo.Opcode) {
-			instrInfo.Type = ocsd.InstrTstart
-		}
+	case ocsd.IsArchMinVer(info.ArchVersion, ocsd.ArchAA64) && InstA64Tstart(instrInfo.Opcode):
+		instrInfo.Type = ocsd.InstrTstart
 	}
 
-	if InstA64IsConditional(instrInfo.Opcode) {
-		instrInfo.IsConditional = 1
-	} else {
-		instrInfo.IsConditional = 0
-	}
-
+	setBool(&instrInfo.IsConditional, InstA64IsConditional(instrInfo.Opcode))
 	return nil
 }
 
-func (d *Decoder) decodeT32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) error {
-	var branchAddr uint32
-	var barrier ArmBarrierT
-
-	// need to align the 32 bit opcode as 2 16 bit, with LS 16 as in top 16 bit of
-	// 32 bit word - T2 routines assume 16 bit in top 16 bit of 32 bit opcode.
-	opTemp := (instrInfo.Opcode >> 16) & 0xFFFF
-	opTemp |= (instrInfo.Opcode & 0xFFFF) << 16
-	instrInfo.Opcode = opTemp
-
-	if IsWideThumb(uint16(instrInfo.Opcode >> 16)) {
-		instrInfo.InstrSize = 4
-	} else {
-		instrInfo.InstrSize = 2
+func decodeA64IndirectBranch(instrInfo *ocsd.InstrInfo, info *DecodeInfo) bool {
+	isBranch, isLink := InstA64IsIndirectBranchLink(instrInfo.Opcode, info)
+	if !isBranch {
+		return false
 	}
-	instrInfo.Type = ocsd.InstrOther  // default type
-	instrInfo.NextISA = instrInfo.ISA // assume same ISA
-	instrInfo.IsLink = 0
-	instrInfo.IsConditional = 0
+	instrInfo.Type = ocsd.InstrBrIndirect
+	setBool(&instrInfo.IsLink, isLink)
+	return true
+}
 
-	if isBranch, isLink, isCond := InstThumbIsDirectBranchLink(instrInfo.Opcode, info); isBranch {
-		if isLink {
-			instrInfo.IsLink = 1
-		} else {
-			instrInfo.IsLink = 0
-		}
-		if isCond {
-			instrInfo.IsConditional = 1
-		} else {
-			instrInfo.IsConditional = 0
-		}
-		branchAddr, _ = InstThumbBranchDestination(uint32(instrInfo.InstrAddr), instrInfo.Opcode)
-		instrInfo.Type = ocsd.InstrBr
-		instrInfo.BranchAddr = ocsd.VAddr(branchAddr & ^uint32(0x1))
-		if (branchAddr & 0x1) == 0 {
-			instrInfo.NextISA = ocsd.ISAArm
-		}
-	} else if isBranch, isLink := InstThumbIsIndirectBranchLink(instrInfo.Opcode, info); isBranch {
-		if isLink {
-			instrInfo.IsLink = 1
-		} else {
-			instrInfo.IsLink = 0
-		}
-		instrInfo.Type = ocsd.InstrBrIndirect
-	} else if barrier = InstThumbBarrier(instrInfo.Opcode); barrier != ArmBarrierNone {
-		switch barrier {
-		case ArmBarrierIsb:
-			instrInfo.Type = ocsd.InstrIsb
-		case ArmBarrierDsb, ArmBarrierDmb:
-			if instrInfo.DsbDmbWaypoints != 0 {
-				instrInfo.Type = ocsd.InstrDsbDmb
-			}
-		}
-	} else if instrInfo.WfiWfeBranch != 0 {
-		if InstThumbWfiWfe(instrInfo.Opcode) {
-			instrInfo.Type = ocsd.InstrWfiWfe
-		}
+func decodeA64DirectBranch(instrInfo *ocsd.InstrInfo, info *DecodeInfo) bool {
+	isBranch, isLink := InstA64IsDirectBranchLink(instrInfo.Opcode, info)
+	if !isBranch {
+		return false
+	}
+
+	var branchAddr uint64
+	InstA64BranchDestination(uint64(instrInfo.InstrAddr), instrInfo.Opcode, &branchAddr)
+	instrInfo.Type = ocsd.InstrBr
+	instrInfo.BranchAddr = ocsd.VAddr(branchAddr)
+	setBool(&instrInfo.IsLink, isLink)
+	return true
+}
+
+func (d *Decoder) decodeT32(instrInfo *ocsd.InstrInfo, info *DecodeInfo) error {
+	instrInfo.Opcode = canonicalThumbOpcode(instrInfo.Opcode)
+	resetInstrInfo(instrInfo)
+	setThumbInstrSize(instrInfo)
+
+	switch {
+	case decodeT32DirectBranch(instrInfo, info):
+	case decodeT32IndirectBranch(instrInfo, info):
+	case applyBarrier(instrInfo, InstThumbBarrier(instrInfo.Opcode)):
+	case instrInfo.WfiWfeBranch != 0 && InstThumbWfiWfe(instrInfo.Opcode):
+		instrInfo.Type = ocsd.InstrWfiWfe
 	}
 
 	if InstThumbIsConditional(instrInfo.Opcode) {
 		instrInfo.IsConditional = 1
 	}
+	updateThumbITBlock(instrInfo)
+	return nil
+}
 
-	if instrInfo.TrackItBlock != 0 {
-		if instrInfo.ThumbItConditions == 0 {
-			// if the type is not something else we are interested in, check for IT instruction
-			if instrInfo.Type == ocsd.InstrOther {
-				instrInfo.ThumbItConditions = uint8(InstThumbIsIT(instrInfo.Opcode))
-			}
-		} else {
-			instrInfo.IsConditional = 1
-			instrInfo.ThumbItConditions--
-		}
+func decodeT32DirectBranch(instrInfo *ocsd.InstrInfo, info *DecodeInfo) bool {
+	isBranch, isLink, isCond := InstThumbIsDirectBranchLink(instrInfo.Opcode, info)
+	if !isBranch {
+		return false
 	}
 
-	return nil
+	branchAddr, _ := InstThumbBranchDestination(uint32(instrInfo.InstrAddr), instrInfo.Opcode)
+	instrInfo.Type = ocsd.InstrBr
+	instrInfo.BranchAddr = ocsd.VAddr(branchAddr &^ 0x1)
+	setBool(&instrInfo.IsLink, isLink)
+	setBool(&instrInfo.IsConditional, isCond)
+	if branchAddr&0x1 == 0 {
+		instrInfo.NextISA = ocsd.ISAArm
+	}
+	return true
+}
+
+func decodeT32IndirectBranch(instrInfo *ocsd.InstrInfo, info *DecodeInfo) bool {
+	isBranch, isLink := InstThumbIsIndirectBranchLink(instrInfo.Opcode, info)
+	if !isBranch {
+		return false
+	}
+	instrInfo.Type = ocsd.InstrBrIndirect
+	setBool(&instrInfo.IsLink, isLink)
+	return true
+}
+
+func updateThumbITBlock(instrInfo *ocsd.InstrInfo) {
+	if instrInfo.TrackItBlock == 0 {
+		return
+	}
+	if instrInfo.ThumbItConditions > 0 {
+		instrInfo.IsConditional = 1
+		instrInfo.ThumbItConditions--
+		return
+	}
+	if instrInfo.Type == ocsd.InstrOther {
+		instrInfo.ThumbItConditions = uint8(InstThumbIsIT(instrInfo.Opcode))
+	}
 }

@@ -30,11 +30,8 @@ func InstARMIsDirectBranch(inst uint32) bool {
 }
 
 func InstARMWfiWfe(inst uint32) bool {
-	if ((inst & 0xf0000000) != 0xf0000000) && ((inst & 0x0ffffffe) == 0x0320f002) {
-		// WFI & WFE may be traced as branches in etm4.3 ++
-		return true
-	}
-	return false
+	// WFI & WFE may be traced as branches in etm4.3 ++
+	return inst&0xf0000000 != 0xf0000000 && inst&0x0ffffffe == 0x0320f002
 }
 
 func InstARMIsIndirectBranch(inst uint32, info *DecodeInfo) bool {
@@ -134,15 +131,9 @@ func InstThumbIsDirectBranchLink(inst uint32, info *DecodeInfo) (isBranch, isLin
 }
 
 func InstThumbWfiWfe(inst uint32) bool {
-	// WFI, WFE may be branches in etm4.3++
-	if (inst & 0xfffffffe) == 0xf3af8002 {
-		// WFI & WFE (encoding T2)
-		return true
-	} else if (inst & 0xffef0000) == 0xbf200000 {
-		// WFI & WFE (encoding T1)
-		return true
-	}
-	return false
+	// WFI, WFE may be branches in etm4.3++.
+	return inst&0xfffffffe == 0xf3af8002 || // encoding T2
+		inst&0xffef0000 == 0xbf200000 // encoding T1
 }
 
 func InstThumbIsIndirectBranch(inst uint32, info *DecodeInfo) bool {
@@ -222,21 +213,19 @@ func InstA64IsCmpBr(inst uint32) bool {
 	opcode := inst & 0xFF000000
 	desc := inst & 0x0000C000
 
-	// 0x74, desc 0b00, 0b10, 0x11; - CBB, CB reg (SF=0), CBH
-	if (opcode == 0x74000000) && (desc != 0x4000) {
-		return true
+	switch opcode {
+	case 0x74000000:
+		// CBB, CB reg (SF=0), CBH: desc 0b00, 0b10, 0b11.
+		return desc != 0x4000
+	case 0xF4000000:
+		// CB <cc> reg SF=1: desc 0b00.
+		return desc == 0
+	case 0x75000000, 0xF5000000:
+		// CB <cc> imm: SF=x.
+		return desc&0x4000 == 0
+	default:
+		return false
 	}
-
-	// 0xF4, desc 0b00; - CB <cc> reg SF=1
-	if (opcode == 0xF4000000) && (desc == 0x0) {
-		return true
-	}
-
-	// 0x75, 0xF5, SF=x; - CB <cc> imm
-	if ((opcode == 0xF5000000) || (opcode == 0x75000000)) && ((desc & 0x4000) == 0) {
-		return true
-	}
-	return false
 }
 
 func InstA64CmpBrDestination(inst uint32, addr64 uint64) uint64 {
@@ -266,18 +255,12 @@ func InstA64IsDirectBranchLink(inst uint32, info *DecodeInfo) (isBranch, isLink 
 }
 
 func InstA64WfiWfe(inst uint32, info *DecodeInfo) bool {
-	// WFI, WFE may be traced as branches in etm 4.3++
-	if (inst & 0xffffffdf) == 0xd503205f {
+	// WFI, WFE may be traced as branches in etm 4.3++.
+	if inst&0xffffffdf == 0xd503205f {
 		return true
 	}
-	// new feature introduced post v8.3
-	if ocsd.IsArchMinVer(info.ArchVersion, ocsd.ArchAA64) {
-		// WFIT / WFET for later archs
-		if (inst & 0xffffffc0) == 0xd5031000 {
-			return true
-		}
-	}
-	return false
+	// WFIT / WFET for later archs.
+	return ocsd.IsArchMinVer(info.ArchVersion, ocsd.ArchAA64) && inst&0xffffffc0 == 0xd5031000
 }
 
 func InstA64Tstart(inst uint32) bool {
@@ -551,15 +534,8 @@ func InstThumbIsIT(inst uint32) uint32 {
 }
 
 func InstA64IsConditional(inst uint32) bool {
-	if (inst & 0x7c000000) == 0x34000000 {
-		// CB, TB
-		return true
-	} else if (inst & 0xff000000) == 0x54000000 {
-		// B.cond
-		// BC.cond
-		return true
-	}
-	return false
+	return inst&0x7c000000 == 0x34000000 || // CB, TB
+		inst&0xff000000 == 0x54000000 // B.cond, BC.cond
 }
 
 type ArmBarrierT int
@@ -572,58 +548,52 @@ const (
 )
 
 func InstARMBarrier(inst uint32) ArmBarrierT {
-	if (inst & 0xfff00000) == 0xf5700000 {
-		switch inst & 0xf0 {
-		case 0x40:
-			return ArmBarrierDsb
-		case 0x50:
-			return ArmBarrierDmb
-		case 0x60:
-			return ArmBarrierIsb
-		default:
-			return ArmBarrierNone
-		}
-	} else if (inst & 0x0fff0f00) == 0x0e070f00 {
-		switch inst & 0xff {
-		case 0x9a:
-			return ArmBarrierDsb // mcr p15,0,Rt,c7,c10,4
-		case 0xba:
-			return ArmBarrierDmb // mcr p15,0,Rt,c7,c10,5
-		case 0x95:
-			return ArmBarrierIsb // mcr p15,0,Rt,c7,c5,4
-		default:
-			return ArmBarrierNone
-		}
+	switch {
+	case inst&0xfff00000 == 0xf5700000:
+		return decodeSystemBarrier(inst & 0xf0)
+	case inst&0x0fff0f00 == 0x0e070f00:
+		return decodeCP15Barrier(inst & 0xff)
+	default:
+		return ArmBarrierNone
 	}
-	return ArmBarrierNone
 }
 
 func InstThumbBarrier(inst uint32) ArmBarrierT {
-	if (inst & 0xffffff00) == 0xf3bf8f00 {
-		switch inst & 0xf0 {
-		case 0x40:
-			return ArmBarrierDsb
-		case 0x50:
-			return ArmBarrierDmb
-		case 0x60:
-			return ArmBarrierIsb
-		default:
-			return ArmBarrierNone
-		}
-	} else if (inst & 0xffff0f00) == 0xee070f00 {
+	switch {
+	case inst&0xffffff00 == 0xf3bf8f00:
+		return decodeSystemBarrier(inst & 0xf0)
+	case inst&0xffff0f00 == 0xee070f00:
 		// Thumb2 CP15 barriers are unlikely... 1156T2 only?
-		switch inst & 0xff {
-		case 0x9a:
-			return ArmBarrierDsb // mcr p15,0,Rt,c7,c10,4
-		case 0xba:
-			return ArmBarrierDmb // mcr p15,0,Rt,c7,c10,5
-		case 0x95:
-			return ArmBarrierIsb // mcr p15,0,Rt,c7,c5,4
-		default:
-			return ArmBarrierNone
-		}
+		return decodeCP15Barrier(inst & 0xff)
+	default:
+		return ArmBarrierNone
 	}
-	return ArmBarrierNone
+}
+
+func decodeSystemBarrier(value uint32) ArmBarrierT {
+	switch value {
+	case 0x40:
+		return ArmBarrierDsb
+	case 0x50:
+		return ArmBarrierDmb
+	case 0x60:
+		return ArmBarrierIsb
+	default:
+		return ArmBarrierNone
+	}
+}
+
+func decodeCP15Barrier(value uint32) ArmBarrierT {
+	switch value {
+	case 0x9a:
+		return ArmBarrierDsb // mcr p15,0,Rt,c7,c10,4
+	case 0xba:
+		return ArmBarrierDmb // mcr p15,0,Rt,c7,c10,5
+	case 0x95:
+		return ArmBarrierIsb // mcr p15,0,Rt,c7,c5,4
+	default:
+		return ArmBarrierNone
+	}
 }
 
 func InstA64Barrier(inst uint32) ArmBarrierT {

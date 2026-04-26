@@ -5,16 +5,43 @@ import (
 	"testing"
 )
 
+type decodeCase struct {
+	name     string
+	opcode   uint32
+	expected ocsd.InstrType
+	subType  ocsd.InstrSubtype
+	isLink   uint8
+}
+
+func checkDecode(t *testing.T, dec *Decoder, arch ocsd.ArchVersion, isa ocsd.ISA, tc decodeCase) {
+	t.Helper()
+
+	info := &ocsd.InstrInfo{
+		PeType:          ocsd.ArchProfile{Arch: arch},
+		ISA:             isa,
+		InstrAddr:       0x1000,
+		Opcode:          tc.opcode,
+		DsbDmbWaypoints: 1,
+		WfiWfeBranch:    1,
+	}
+	if err := dec.DecodeInstruction(info); err != nil {
+		t.Fatalf("expected decode to succeed, got %v", err)
+	}
+	if info.Type != tc.expected {
+		t.Errorf("expected type %v, got %v", tc.expected, info.Type)
+	}
+	if info.Subtype != tc.subType {
+		t.Errorf("expected subtype %v, got %v", tc.subType, info.Subtype)
+	}
+	if info.IsLink != tc.isLink {
+		t.Errorf("expected link flag %v, got %v", tc.isLink, info.IsLink)
+	}
+}
+
 func TestDecoder_DecodeA32(t *testing.T) {
 	dec := NewDecoder()
 
-	tests := []struct {
-		name     string
-		opcode   uint32
-		expected ocsd.InstrType
-		subType  ocsd.InstrSubtype
-		isLink   uint8
-	}{
+	tests := []decodeCase{
 		{"Direct Branch (B)", 0xEA000000, ocsd.InstrBr, ocsd.SInstrNone, 0},
 		{"Direct Branch Link (BL)", 0xEB000000, ocsd.InstrBr, ocsd.SInstrBrLink, 1},
 		{"Direct Branch Link (BLX imm)", 0xFA000000, ocsd.InstrBr, ocsd.SInstrBrLink, 1},
@@ -53,27 +80,7 @@ func TestDecoder_DecodeA32(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			info := &ocsd.InstrInfo{
-				PeType:          ocsd.ArchProfile{Arch: ocsd.ArchV7},
-				ISA:             ocsd.ISAArm,
-				InstrAddr:       0x1000,
-				Opcode:          tt.opcode,
-				DsbDmbWaypoints: 1,
-				WfiWfeBranch:    1,
-			}
-			err := dec.DecodeInstruction(info)
-			if err != nil {
-				t.Fatalf("Expected OK, got %v", err)
-			}
-			if info.Type != tt.expected {
-				t.Errorf("Expected type %v, got %v", tt.expected, info.Type)
-			}
-			if info.Subtype != tt.subType {
-				t.Errorf("Expected subtype %v, got %v", tt.subType, info.Subtype)
-			}
-			if info.IsLink != tt.isLink {
-				t.Errorf("Expected isLInk %v, got %v", tt.isLink, info.IsLink)
-			}
+			checkDecode(t, dec, ocsd.ArchV7, ocsd.ISAArm, tt)
 		})
 	}
 }
@@ -83,13 +90,7 @@ func TestDecoder_DecodeT32(t *testing.T) {
 
 	// Remember: Thumb32 opcodes must be swapped: e.g. 0xF0008000 in memory -> 0x8000F000
 	// 16-bit opcodes are in lower half: 0x0000xxxx
-	tests := []struct {
-		name     string
-		opcode   uint32
-		expected ocsd.InstrType
-		subType  ocsd.InstrSubtype
-		isLink   uint8
-	}{
+	tests := []decodeCase{
 		{"Direct Branch T1 (B<c>)", 0x0000D000, ocsd.InstrBr, ocsd.SInstrNone, 0},
 		{"Direct Branch T2 (B)", 0x0000E000, ocsd.InstrBr, ocsd.SInstrNone, 0},
 		{"Direct Branch T3 (B)", 0x8000F000, ocsd.InstrBr, ocsd.SInstrNone, 0},
@@ -133,27 +134,7 @@ func TestDecoder_DecodeT32(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			info := &ocsd.InstrInfo{
-				PeType:          ocsd.ArchProfile{Arch: ocsd.ArchV7},
-				ISA:             ocsd.ISAThumb2,
-				InstrAddr:       0x1000,
-				Opcode:          tt.opcode,
-				DsbDmbWaypoints: 1,
-				WfiWfeBranch:    1,
-			}
-			err := dec.DecodeInstruction(info)
-			if err != nil {
-				t.Fatalf("Expected OK, got %v", err)
-			}
-			if info.Type != tt.expected {
-				t.Errorf("Expected type %v, got %v", tt.expected, info.Type)
-			}
-			if info.Subtype != tt.subType {
-				t.Errorf("Expected subtype %v, got %v", tt.subType, info.Subtype)
-			}
-			if info.IsLink != tt.isLink {
-				t.Errorf("Expected islink %v, got %v", tt.isLink, info.IsLink)
-			}
+			checkDecode(t, dec, ocsd.ArchV7, ocsd.ISAThumb2, tt)
 		})
 	}
 }
@@ -162,13 +143,7 @@ func TestDecoder_DecodeA64(t *testing.T) {
 	dec := NewDecoder()
 	dec.SetAA64ErrOnBadOpcode(true)
 
-	tests := []struct {
-		name     string
-		opcode   uint32
-		expected ocsd.InstrType
-		subType  ocsd.InstrSubtype
-		isLink   uint8
-	}{
+	tests := []decodeCase{
 		{"Direct Branch (B)", 0x14000000, ocsd.InstrBr, ocsd.SInstrNone, 0},
 		{"Direct Branch Link (BL)", 0x94000000, ocsd.InstrBr, ocsd.SInstrBrLink, 1},
 		{"Direct Branch BC cond", 0x54000000, ocsd.InstrBr, ocsd.SInstrNone, 0},
@@ -202,27 +177,7 @@ func TestDecoder_DecodeA64(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			info := &ocsd.InstrInfo{
-				PeType:          ocsd.ArchProfile{Arch: ocsd.ArchAA64},
-				ISA:             ocsd.ISAAArch64,
-				InstrAddr:       0x1000,
-				Opcode:          tt.opcode,
-				DsbDmbWaypoints: 1,
-				WfiWfeBranch:    1,
-			}
-			err := dec.DecodeInstruction(info)
-			if err != nil {
-				t.Fatalf("Expected OK, got %v", err)
-			}
-			if info.Type != tt.expected {
-				t.Errorf("Expected type %v, got %v", tt.expected, info.Type)
-			}
-			if info.Subtype != tt.subType {
-				t.Errorf("Expected subtype %v, got %v", tt.subType, info.Subtype)
-			}
-			if info.IsLink != tt.isLink {
-				t.Errorf("Expected isLInk %v, got %v", tt.isLink, info.IsLink)
-			}
+			checkDecode(t, dec, ocsd.ArchAA64, ocsd.ISAAArch64, tt)
 		})
 	}
 
