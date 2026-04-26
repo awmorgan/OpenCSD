@@ -6,12 +6,17 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"slices"
+
 	"opencsd/internal/common"
 	"opencsd/internal/demux"
-
 	"opencsd/internal/memacc"
 	"opencsd/internal/ocsd"
-	"slices"
+)
+
+const (
+	maxTraceRouteID = 0x80
+	writeChunkSize  = 64 * 1024
 )
 
 var (
@@ -47,23 +52,22 @@ type traceDataReaderSetter interface {
 }
 
 func (dt *DecodeTree) CanAttachReader() bool {
-	if dt == nil {
-		return false
-	}
-	if dt.frameDeformatter != nil {
-		return false
-	}
-	if dt.treeType != ocsd.TrcSrcSingle {
-		return false
+	_, ok := dt.readerSetter()
+	return ok
+}
+
+func (dt *DecodeTree) readerSetter() (traceDataReaderSetter, bool) {
+	if dt == nil || dt.frameDeformatter != nil || dt.treeType != ocsd.TrcSrcSingle {
+		return nil, false
 	}
 
 	elem := dt.decodeElements[0]
-	if elem == nil || elem.DataIn == nil {
-		return false
+	if elem == nil {
+		return nil, false
 	}
 
-	_, ok := elem.DataIn.(traceDataReaderSetter)
-	return ok
+	setter, ok := elem.DataIn.(traceDataReaderSetter)
+	return setter, ok
 }
 
 // ...existing code...
@@ -75,12 +79,12 @@ func (dt *DecodeTree) AttachReader(r io.Reader) error {
 	if r == nil {
 		return ocsd.ErrInvalidParamVal
 	}
-	if !dt.CanAttachReader() {
+
+	setter, ok := dt.readerSetter()
+	if !ok {
 		return ocsd.ErrInvalidParamVal
 	}
 
-	elem := dt.decodeElements[0]
-	setter := elem.DataIn.(traceDataReaderSetter)
 	setter.SetReader(r)
 	return nil
 }
@@ -93,13 +97,15 @@ func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) (*DecodeTr
 		decodeElements: make(map[uint8]*DecodeTreeElement),
 	}
 
-	if srcType == ocsd.TrcSrcFrameFormatted {
-		dt.frameDeformatter = demux.NewFrameDeformatter()
-		if err := dt.frameDeformatter.Configure(formatterCfgFlags); err != nil {
-			return nil, fmt.Errorf("%w: configure frame deformatter: %w", ErrCreateDecodeTree, err)
-		}
-		dt.decoderRoot = dt.frameDeformatter
+	if srcType != ocsd.TrcSrcFrameFormatted {
+		return dt, nil
 	}
+
+	dt.frameDeformatter = demux.NewFrameDeformatter()
+	if err := dt.frameDeformatter.Configure(formatterCfgFlags); err != nil {
+		return nil, fmt.Errorf("%w: configure frame deformatter: %w", ErrCreateDecodeTree, err)
+	}
+	dt.decoderRoot = dt.frameDeformatter
 
 	return dt, nil
 }
@@ -108,7 +114,7 @@ func NewDecodeTree(srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) (*DecodeTr
 func (dt *DecodeTree) Destroy() {
 	dt.decodeElements = nil
 	dt.frameDeformatter = nil
-	if dt.createdMapper && dt.defaultMapper != nil {
+	if dt.createdMapper {
 		dt.defaultMapper = nil
 	}
 }
@@ -120,60 +126,71 @@ func (dt *DecodeTree) Write(index ocsd.TrcIndex, data []byte) (uint32, error) {
 
 // WriteContext handles incoming raw byte trace streams into the tree with cancellation support.
 func (dt *DecodeTree) WriteContext(ctx context.Context, index ocsd.TrcIndex, data []byte) (uint32, error) {
-	if ctx != nil {
-		select {
-		case <-ctx.Done():
-			return 0, ctx.Err()
-		default:
-		}
+	if err := contextErr(ctx); err != nil {
+		return 0, err
 	}
 
-	const processChunk = 64 * 1024
-
-	processWithContext := func(proc ocsd.TraceDecoder) (uint32, error) {
-		if proc == nil {
-			return 0, ocsd.ErrNotInit
-		}
-		if ctx == nil || len(data) <= processChunk {
-			return proc.Write(index, data)
-		}
-
-		var total uint32
-		for offset := 0; offset < len(data); {
-			select {
-			case <-ctx.Done():
-				return total, ctx.Err()
-			default:
-			}
-
-			end := min(offset+processChunk, len(data))
-
-			chunkIdx := index + ocsd.TrcIndex(offset)
-			amt, err := proc.Write(chunkIdx, data[offset:end])
-			total += amt
-			if !ocsd.DataRespIsCont(ocsd.DataRespFromErr(err)) {
-				return total, err
-			}
-			if amt == 0 {
-				break
-			}
-			offset += int(amt)
-		}
-		return total, nil
+	proc := dt.writeTarget()
+	if proc == nil {
+		return 0, ocsd.ErrNotInit
 	}
 
+	return writeDecoderContext(ctx, proc, index, data)
+}
+
+func contextErr(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return nil
+	}
+}
+
+func (dt *DecodeTree) writeTarget() ocsd.TraceDecoder {
 	if dt.decoderRoot != nil {
-		return processWithContext(dt.decoderRoot)
+		return dt.decoderRoot
+	}
+	if dt.treeType != ocsd.TrcSrcSingle {
+		return nil
 	}
 
-	// Unformatted single trace source fallback
-	if dt.treeType == ocsd.TrcSrcSingle {
-		elem := dt.decodeElements[0]
-		if elem != nil && elem.DataIn != nil {
-			return processWithContext(elem.DataIn)
-		}
+	elem := dt.decodeElements[0]
+	if elem == nil {
+		return nil
 	}
-	return 0, ocsd.ErrNotInit
+	return elem.DataIn
+}
+
+func writeDecoderContext(ctx context.Context, proc ocsd.TraceDecoder, index ocsd.TrcIndex, data []byte) (uint32, error) {
+	if ctx == nil || len(data) <= writeChunkSize {
+		return proc.Write(index, data)
+	}
+
+	var total uint32
+	for offset := 0; offset < len(data); {
+		if err := contextErr(ctx); err != nil {
+			return total, err
+		}
+
+		end := min(offset+writeChunkSize, len(data))
+		amt, err := proc.Write(index+ocsd.TrcIndex(offset), data[offset:end])
+		total += amt
+
+		if !ocsd.DataRespIsCont(ocsd.DataRespFromErr(err)) {
+			return total, err
+		}
+		if amt == 0 {
+			break
+		}
+		offset += int(amt)
+	}
+
+	return total, nil
 }
 
 // Flush forwards flush control directly to the decoder root.
@@ -199,70 +216,56 @@ func (dt *DecodeTree) Close() error {
 
 // AddPullDecoder registers decoder input routing and pull-based output iteration into the tree.
 func (dt *DecodeTree) AddPullDecoder(routeID uint8, name string, protocol ocsd.TraceProtocol, pktIn ocsd.TraceDecoder, iter ocsd.TraceIterator, flagApplier common.FlagApplier) error {
-	if dt.treeType == ocsd.TrcSrcSingle {
-		routeID = 0
+	routeID = dt.normalizedRouteID(routeID)
+	if err := validatePullDecoder(routeID, pktIn, iter); err != nil {
+		return err
 	}
-	if routeID >= 0x80 {
+
+	controlIn, _ := iter.(ocsd.TraceDecoder)
+	elem, exists := dt.decodeElements[routeID]
+	if !exists {
+		// No decoder manager is needed for direct injection.
+		elem = NewDecodeTreeElement(name, flagApplier, pktIn, controlIn, iter, true)
+		elem.Protocol = protocol
+		dt.decodeElements[routeID] = elem
+	} else if err := elem.attach(name, protocol, pktIn, controlIn, iter, flagApplier); err != nil {
+		return err
+	}
+
+	if pktIn != nil {
+		dt.setIDStream(routeID, pktIn)
+	}
+	return nil
+}
+
+func validatePullDecoder(routeID uint8, pktIn ocsd.TraceDecoder, iter ocsd.TraceIterator) error {
+	if routeID >= maxTraceRouteID {
 		return ocsd.ErrInvalidID
 	}
 	if pktIn == nil && iter == nil {
 		return ocsd.ErrNotInit
 	}
-
-	controlIn, ok := iter.(ocsd.TraceDecoder)
-	if !ok {
-		controlIn = nil
-	}
-
-	if elem, exists := dt.decodeElements[routeID]; exists {
-		if pktIn != nil && elem.DataIn != nil {
-			return ocsd.ErrAttachTooMany
-		}
-		if iter != nil && elem.Iterator != nil {
-			return ocsd.ErrAttachTooMany
-		}
-		if pktIn != nil {
-			elem.DataIn = pktIn
-			if dt.frameDeformatter != nil {
-				dt.frameDeformatter.SetIDStream(routeID, pktIn)
-			}
-		}
-		elem.Iterator = iter
-		if controlIn != nil {
-			elem.ControlIn = controlIn
-		}
-		if elem.FlagApplier == nil {
-			elem.FlagApplier = flagApplier
-		}
-		if elem.Protocol == ocsd.ProtocolUnknown {
-			elem.Protocol = protocol
-		}
-		if elem.DecoderTypeName == "" {
-			elem.DecoderTypeName = name
-		}
-		return nil
-	}
-
-	// No decoder manager is needed for direct injection.
-	elem := NewDecodeTreeElement(name, flagApplier, pktIn, controlIn, iter, true)
-	elem.Protocol = protocol
-
-	dt.decodeElements[routeID] = elem
-	if dt.frameDeformatter != nil && pktIn != nil {
-		dt.frameDeformatter.SetIDStream(routeID, pktIn)
-	}
 	return nil
 }
 
+func (dt *DecodeTree) normalizedRouteID(routeID uint8) uint8 {
+	if dt.treeType == ocsd.TrcSrcSingle {
+		return 0
+	}
+	return routeID
+}
+
+func (dt *DecodeTree) setIDStream(routeID uint8, dec ocsd.TraceDecoder) {
+	if dt.frameDeformatter != nil {
+		dt.frameDeformatter.SetIDStream(routeID, dec)
+	}
+}
+
 func (dt *DecodeTree) nextFromElement(elem *DecodeTreeElement) (*ocsd.TraceElement, error) {
-	if elem == nil {
+	if elem == nil || elem.Iterator == nil {
 		return nil, io.EOF
 	}
-	if elem.Iterator != nil {
-		trcElem, err := elem.Iterator.Next()
-		return trcElem, err
-	}
-	return nil, io.EOF
+	return elem.Iterator.Next()
 }
 
 // Next returns the next available generic trace element from registered pull decoders.
@@ -274,13 +277,10 @@ func (dt *DecodeTree) Next() (*ocsd.TraceElement, error) {
 	if dt.treeType == ocsd.TrcSrcSingle || len(ids) == 1 {
 		return dt.nextFromElement(dt.decodeElements[ids[0]])
 	}
+
 	sawWait := false
 	for _, csID := range ids {
-		elem := dt.decodeElements[csID]
-		if elem == nil || elem.Iterator == nil {
-			continue
-		}
-		trcElem, err := elem.Iterator.Next()
+		trcElem, err := dt.nextFromElement(dt.decodeElements[csID])
 		if errors.Is(err, io.EOF) {
 			continue
 		}
@@ -303,14 +303,8 @@ func (dt *DecodeTree) Next() (*ocsd.TraceElement, error) {
 
 // RemoveDecoder removes a decoder mapped to the given CSID.
 func (dt *DecodeTree) RemoveDecoder(csID uint8) {
-	routeID := csID
-	if dt.treeType == ocsd.TrcSrcSingle {
-		routeID = 0
-	}
-
-	if dt.frameDeformatter != nil {
-		dt.frameDeformatter.SetIDStream(routeID, nil)
-	}
+	routeID := dt.normalizedRouteID(csID)
+	dt.setIDStream(routeID, nil)
 	delete(dt.decodeElements, routeID)
 }
 
@@ -335,8 +329,7 @@ func (dt *DecodeTree) ForEachElement(fn func(csID uint8, elem *DecodeTreeElement
 		return
 	}
 	for _, csID := range dt.sortedElementIDs() {
-		elem := dt.decodeElements[csID]
-		fn(csID, elem)
+		fn(csID, dt.decodeElements[csID])
 	}
 }
 
@@ -356,14 +349,24 @@ func (dt *DecodeTree) sortedElementIDs() []uint8 {
 }
 
 func (dt *DecodeTree) routeControl(dispatch func(dec ocsd.TraceDecoder) error) error {
-	hadTarget := false
-	var outErr error
+	targets := dt.controlTargets()
+	if len(targets) == 0 {
+		return ocsd.ErrNotInit
+	}
 
-	if dt.decoderRoot != nil {
-		hadTarget = true
-		if err := dispatch(dt.decoderRoot); err != nil && outErr == nil {
+	var outErr error
+	for _, target := range targets {
+		if err := dispatch(target); err != nil && outErr == nil {
 			outErr = err
 		}
+	}
+	return outErr
+}
+
+func (dt *DecodeTree) controlTargets() []ocsd.TraceDecoder {
+	targets := make([]ocsd.TraceDecoder, 0, len(dt.decodeElements)+1)
+	if dt.decoderRoot != nil {
+		targets = append(targets, dt.decoderRoot)
 	}
 
 	for _, routeID := range dt.sortedElementIDs() {
@@ -371,24 +374,12 @@ func (dt *DecodeTree) routeControl(dispatch func(dec ocsd.TraceDecoder) error) e
 		if elem == nil {
 			continue
 		}
-
 		if dt.decoderRoot == nil && elem.DataIn != nil {
-			hadTarget = true
-			if err := dispatch(elem.DataIn); err != nil && outErr == nil {
-				outErr = err
-			}
+			targets = append(targets, elem.DataIn)
 		}
-
 		if elem.ControlIn != nil {
-			hadTarget = true
-			if err := dispatch(elem.ControlIn); err != nil && outErr == nil {
-				outErr = err
-			}
+			targets = append(targets, elem.ControlIn)
 		}
 	}
-
-	if !hadTarget {
-		return ocsd.ErrNotInit
-	}
-	return outErr
+	return targets
 }

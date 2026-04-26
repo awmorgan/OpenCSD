@@ -18,15 +18,41 @@ type DecodeTreeElement struct {
 
 // NewDecodeTreeElement creates a new DecodeTreeElement record.
 func NewDecodeTreeElement(name string, flagApplier common.FlagApplier, dataIn ocsd.TraceDecoder, controlIn ocsd.TraceDecoder, iterator ocsd.TraceIterator, created bool) *DecodeTreeElement {
-	protocol := ocsd.ProtocolUnknown
-
 	return &DecodeTreeElement{
 		DecoderTypeName: name,
 		DataIn:          dataIn,
 		ControlIn:       controlIn,
 		Iterator:        iterator,
 		FlagApplier:     flagApplier,
-		Protocol:        protocol,
+		Protocol:        ocsd.ProtocolUnknown,
 		Created:         created,
 	}
+}
+
+func (elem *DecodeTreeElement) attach(name string, protocol ocsd.TraceProtocol, dataIn, controlIn ocsd.TraceDecoder, iterator ocsd.TraceIterator, flagApplier common.FlagApplier) error {
+	if dataIn != nil {
+		if elem.DataIn != nil {
+			return ocsd.ErrAttachTooMany
+		}
+		elem.DataIn = dataIn
+	}
+	if iterator != nil {
+		if elem.Iterator != nil {
+			return ocsd.ErrAttachTooMany
+		}
+		elem.Iterator = iterator
+	}
+	if controlIn != nil {
+		elem.ControlIn = controlIn
+	}
+	if elem.FlagApplier == nil {
+		elem.FlagApplier = flagApplier
+	}
+	if elem.Protocol == ocsd.ProtocolUnknown {
+		elem.Protocol = protocol
+	}
+	if elem.DecoderTypeName == "" {
+		elem.DecoderTypeName = name
+	}
+	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"iter"
+	"slices"
 	"testing"
 
 	"opencsd/internal/ocsd"
@@ -21,27 +22,30 @@ func (f *fakeDataIn) Reset(index ocsd.TrcIndex) error {
 	return nil
 }
 
-type fakeControlDecoder struct {
+type fakeControl struct {
 	closeCalls int
 	flushCalls int
 	resetCalls int
 }
 
-func (f *fakeControlDecoder) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
+func (f *fakeControl) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 	return uint32(len(dataBlock)), nil
 }
-func (f *fakeControlDecoder) Close() error {
+func (f *fakeControl) Close() error {
 	f.closeCalls++
 	return nil
 }
-func (f *fakeControlDecoder) Flush() error {
+func (f *fakeControl) Flush() error {
 	f.flushCalls++
 	return nil
 }
-func (f *fakeControlDecoder) Reset(index ocsd.TrcIndex) error {
+func (f *fakeControl) Reset(index ocsd.TrcIndex) error {
 	f.resetCalls++
 	return nil
 }
+
+type fakeControlDecoder struct{ fakeControl }
+
 func (f *fakeControlDecoder) Next() (*ocsd.TraceElement, error) {
 	return nil, io.EOF
 }
@@ -50,27 +54,7 @@ func (f *fakeControlDecoder) Elements() iter.Seq2[*ocsd.TraceElement, error] {
 	return func(yield func(*ocsd.TraceElement, error) bool) {}
 }
 
-type fakeControlProcessor struct {
-	closeCalls int
-	flushCalls int
-	resetCalls int
-}
-
-func (f *fakeControlProcessor) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
-	return uint32(len(dataBlock)), nil
-}
-func (f *fakeControlProcessor) Close() error {
-	f.closeCalls++
-	return nil
-}
-func (f *fakeControlProcessor) Flush() error {
-	f.flushCalls++
-	return nil
-}
-func (f *fakeControlProcessor) Reset(index ocsd.TrcIndex) error {
-	f.resetCalls++
-	return nil
-}
+type fakeControlProcessor struct{ fakeControl }
 
 type fakeManager struct{ appliedFlags uint32 }
 
@@ -90,15 +74,22 @@ func (f *fakeIterator) Elements() iter.Seq2[*ocsd.TraceElement, error] {
 	return func(yield func(*ocsd.TraceElement, error) bool) {}
 }
 
-func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
-	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)
+func newTestDecodeTree(t *testing.T, srcType ocsd.DcdTreeSrc, formatterCfgFlags uint32) *DecodeTree {
+	t.Helper()
+
+	tree, err := NewDecodeTree(srcType, formatterCfgFlags)
 	if err != nil {
 		t.Fatalf("NewDecodeTree returned error: %v", err)
 	}
 	if tree == nil {
 		t.Fatal("NewDecodeTree returned nil")
 	}
-	defer tree.Destroy()
+	t.Cleanup(tree.Destroy)
+	return tree
+}
+
+func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
+	tree := newTestDecodeTree(t, ocsd.TrcSrcSingle, 0)
 
 	if err := tree.AddPullDecoder(0x23, "TEST_SINGLE", ocsd.ProtocolSTM, &fakeDataIn{}, nil, &fakeManager{}); err != nil {
 		t.Fatalf("AddPullDecoder failed: %v", err)
@@ -115,33 +106,26 @@ func TestDecodeTreeRemoveDecoderSingleRoutesToZero(t *testing.T) {
 
 func TestDecodeTreeElementIterationIsOrdered(t *testing.T) {
 	tree := &DecodeTree{decodeElements: map[uint8]*DecodeTreeElement{}}
-	tree.decodeElements[7] = &DecodeTreeElement{}
-	tree.decodeElements[2] = &DecodeTreeElement{}
-	tree.decodeElements[5] = &DecodeTreeElement{}
+	for _, id := range []uint8{7, 2, 5} {
+		tree.decodeElements[id] = &DecodeTreeElement{}
+	}
 
 	firstID, _ := tree.FirstElement()
 	if firstID != 2 {
 		t.Fatalf("expected first element ID 2, got %d", firstID)
 	}
 
-	ids := make([]uint8, 0, 3)
+	ids := make([]uint8, 0, len(tree.decodeElements))
 	tree.ForEachElement(func(csID uint8, elem *DecodeTreeElement) {
 		ids = append(ids, csID)
 	})
-	want := []uint8{2, 5, 7}
-	for i := range want {
-		if ids[i] != want[i] {
-			t.Fatalf("expected ordered IDs %v, got %v", want, ids)
-		}
+	if want := []uint8{2, 5, 7}; !slices.Equal(ids, want) {
+		t.Fatalf("expected ordered IDs %v, got %v", want, ids)
 	}
 }
 
 func TestDecodeTreeAddPullDecoderDirectInjection(t *testing.T) {
-	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)
-	if err != nil {
-		t.Fatalf("NewDecodeTree returned error: %v", err)
-	}
-	defer tree.Destroy()
+	tree := newTestDecodeTree(t, ocsd.TrcSrcSingle, 0)
 
 	pktIn := &fakeDataIn{}
 	manager := &fakeManager{}
@@ -163,18 +147,14 @@ func TestDecodeTreeAddPullDecoderDirectInjection(t *testing.T) {
 		t.Fatal("expected injected flag applier to be preserved")
 	}
 
-	err = tree.AddPullDecoder(0x00, "duplicate", ocsd.ProtocolSTM, pktIn, nil, manager)
+	err := tree.AddPullDecoder(0x00, "duplicate", ocsd.ProtocolSTM, pktIn, nil, manager)
 	if !errors.Is(err, ocsd.ErrAttachTooMany) {
 		t.Fatalf("expected ErrAttachTooMany for duplicate route, got %v", err)
 	}
 }
 
 func TestDecodeTreeAddPullDecoderCanAttachIteratorAfterProcessor(t *testing.T) {
-	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)
-	if err != nil {
-		t.Fatalf("NewDecodeTree returned error: %v", err)
-	}
-	defer tree.Destroy()
+	tree := newTestDecodeTree(t, ocsd.TrcSrcSingle, 0)
 
 	proc := &fakeDataIn{}
 	if err := tree.AddPullDecoder(0x22, "pull", ocsd.ProtocolETMV4I, proc, nil, nil); err != nil {
@@ -198,12 +178,33 @@ func TestDecodeTreeAddPullDecoderCanAttachIteratorAfterProcessor(t *testing.T) {
 	}
 }
 
-func TestDecodeTreeRoutesControlToProcessorAndDecoder(t *testing.T) {
-	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)
-	if err != nil {
-		t.Fatalf("NewDecodeTree returned error: %v", err)
+func TestDecodeTreeAddPullDecoderCanAttachProcessorAfterIterator(t *testing.T) {
+	tree := newTestDecodeTree(t, ocsd.TrcSrcSingle, 0)
+
+	iter := &fakeIterator{}
+	if err := tree.AddPullDecoder(0x22, "pull", ocsd.ProtocolETMV4I, nil, iter, nil); err != nil {
+		t.Fatalf("initial AddPullDecoder failed: %v", err)
 	}
-	defer tree.Destroy()
+
+	proc := &fakeDataIn{}
+	if err := tree.AddPullDecoder(0x22, "pull", ocsd.ProtocolETMV4I, proc, nil, nil); err != nil {
+		t.Fatalf("processor AddPullDecoder failed: %v", err)
+	}
+
+	elem := tree.decodeElements[0]
+	if elem == nil {
+		t.Fatal("expected route 0 element to exist")
+	}
+	if elem.DataIn != proc {
+		t.Fatal("expected processor to be attached on second call")
+	}
+	if elem.Iterator != iter {
+		t.Fatal("expected initial iterator to remain attached")
+	}
+}
+
+func TestDecodeTreeRoutesControlToProcessorAndDecoder(t *testing.T) {
+	tree := newTestDecodeTree(t, ocsd.TrcSrcSingle, 0)
 
 	proc := &fakeControlProcessor{}
 	dec := &fakeControlDecoder{}
@@ -234,27 +235,16 @@ func TestDecodeTreeRoutesControlToProcessorAndDecoder(t *testing.T) {
 }
 
 func TestDecodeTreeAddPullDecoderRejectsOutOfRangeRouteID(t *testing.T) {
-	tree, err := NewDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign)
-	if err != nil {
-		t.Fatalf("NewDecodeTree returned error: %v", err)
-	}
-	defer tree.Destroy()
+	tree := newTestDecodeTree(t, ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign)
 
-	err = tree.AddPullDecoder(0x80, "direct", ocsd.ProtocolSTM, &fakeDataIn{}, nil, &fakeManager{})
+	err := tree.AddPullDecoder(0x80, "direct", ocsd.ProtocolSTM, &fakeDataIn{}, nil, &fakeManager{})
 	if !errors.Is(err, ocsd.ErrInvalidID) {
 		t.Fatalf("expected ErrInvalidID for route ID 0x80, got %v", err)
 	}
 }
 
 func TestDecodeTreeTraceDataInContextCancelled(t *testing.T) {
-	tree, err := NewDecodeTree(ocsd.TrcSrcSingle, 0)
-	if err != nil {
-		t.Fatalf("NewDecodeTree returned error: %v", err)
-	}
-	if tree == nil {
-		t.Fatal("NewDefaultDecodeTree returned nil")
-	}
-	defer tree.Destroy()
+	tree := newTestDecodeTree(t, ocsd.TrcSrcSingle, 0)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -282,14 +272,7 @@ func TestNewDecodeTreeFailsOnInvalidFrameFormatterConfig(t *testing.T) {
 }
 
 func TestNewDecodeTreeBuildsFrameTreeOnValidFormatterConfig(t *testing.T) {
-	tree, err := NewDecodeTree(ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign)
-	if err != nil {
-		t.Fatalf("expected constructor success, got %v", err)
-	}
-	if tree == nil {
-		t.Fatal("expected non-nil tree")
-	}
-	defer tree.Destroy()
+	tree := newTestDecodeTree(t, ocsd.TrcSrcFrameFormatted, ocsd.DfrmtrFrameMemAlign)
 
 	if tree.frameDeformatter == nil {
 		t.Fatal("expected frame deformatter to be initialized")
