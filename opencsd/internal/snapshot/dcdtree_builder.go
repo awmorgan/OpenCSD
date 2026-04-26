@@ -113,6 +113,10 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 		return nil, fmt.Errorf("supplied snapshot reader has not correctly read the snapshot")
 	}
 
+	if b.reader.Trace == nil {
+		return nil, fmt.Errorf("trace metadata not loaded")
+	}
+
 	b.packetProcOnly = packetProcOnly
 	tree, ok := SourceTree(sourceName, b.reader.Trace)
 	if !ok {
@@ -189,7 +193,8 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 
 func setReg32(dev *Device, name string, dst *uint32) {
 	if val, ok := dev.RegValue(name); ok {
-		*dst = uint32(parseUint(val))
+		parsed, _ := parseUint(val)
+		*dst = uint32(parsed)
 	}
 }
 

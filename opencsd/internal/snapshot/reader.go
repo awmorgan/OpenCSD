@@ -17,6 +17,13 @@ type Reader struct {
 	ParsedDeviceList map[string]*Device
 	Trace            *Trace
 	SourceTrees      map[string]*TraceBufferSourceTree
+	Warnings         []error
+}
+
+func (r *Reader) warn(err error) {
+	if err != nil {
+		r.Warnings = append(r.Warnings, err)
+	}
 }
 
 // NewReader creates a new Reader
@@ -27,13 +34,16 @@ func NewReader() *Reader {
 	}
 }
 
-// Read reads the snapshot directory and parses all ini files.
+// Read loads as much of the snapshot as possible.
+// It returns an error only if snapshot.ini cannot be opened or parsed.
+// Optional or trace-only content failures are recorded in r.Warnings.
 func (r *Reader) Read() error {
 	r.SnapshotFound = false
 	r.ReadOK = false
 	r.ParsedDeviceList = make(map[string]*Device)
 	r.Trace = nil
 	r.SourceTrees = make(map[string]*TraceBufferSourceTree)
+	r.Warnings = nil
 
 	iniPath := filepath.Join(r.SnapshotPath, SnapshotINIFilename)
 	file, err := os.Open(iniPath)
@@ -51,7 +61,9 @@ func (r *Reader) Read() error {
 
 	// Parse devices
 	for devName, iniFileName := range devList.DeviceList {
-		r.loadDevice(devName, iniFileName)
+		if err := r.loadDevice(devName, iniFileName); err != nil {
+			r.warn(err)
+		}
 	}
 
 	if len(devList.DeviceList) == 0 {
@@ -59,30 +71,8 @@ func (r *Reader) Read() error {
 	}
 
 	// Parse trace metadata
-	traceMetaName := devList.TraceMetaDataName
-	if traceMetaName == "" {
-		traceMetaName = TraceINIFilename
-	}
-
-	if traceMetaName != "" {
-		traceIniPath := filepath.Join(r.SnapshotPath, traceMetaName)
-		traceFile, err := os.Open(traceIniPath)
-		if err != nil {
-		} else {
-			parsedTrace, err := ParseTraceMetaData(traceFile)
-			traceFile.Close()
-			if err != nil {
-			} else {
-				r.Trace = parsedTrace
-
-				// Extract source trees
-				for _, bufInfo := range parsedTrace.TraceBuffers {
-					if tree, ok := SourceTree(bufInfo.BufferName, parsedTrace); ok {
-						r.SourceTrees[bufInfo.BufferName] = tree
-					}
-				}
-			}
-		}
+	if err := r.readTraceMetadata(devList.TraceMetaDataName); err != nil {
+		r.warn(err)
 	}
 
 	r.ReadOK = true
@@ -117,6 +107,36 @@ func (r *Reader) loadLegacyDevices() {
 		if _, err := os.Stat(legacyIniPath); err != nil {
 			break
 		}
-		r.loadDevice(fmt.Sprintf("device_%d", deviceIdx), legacyIniFileName)
+		if err := r.loadDevice(fmt.Sprintf("device_%d", deviceIdx), legacyIniFileName); err != nil {
+			r.warn(err)
+		}
 	}
+}
+
+func (r *Reader) readTraceMetadata(name string) error {
+	if name == "" {
+		name = TraceINIFilename
+	}
+
+	path := filepath.Join(r.SnapshotPath, name)
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open trace metadata %s: %w", path, err)
+	}
+	defer file.Close()
+
+	trace, err := ParseTraceMetaData(file)
+	if err != nil {
+		return fmt.Errorf("parse trace metadata %s: %w", path, err)
+	}
+
+	r.Trace = trace
+	for _, buf := range trace.TraceBuffers {
+		tree, ok := SourceTree(buf.BufferName, trace)
+		if ok {
+			r.SourceTrees[buf.BufferName] = tree
+		}
+	}
+
+	return nil
 }

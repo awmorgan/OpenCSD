@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"fmt"
 	"io"
 	"maps"
 	"strconv"
@@ -61,13 +62,25 @@ func ParseSingleDevice(input io.Reader) (*Device, error) {
 		var dump MemoryDump
 
 		if addrStr, ok := secMap[DumpAddressKey]; ok {
-			dump.Address = parseUint(addrStr)
+			addr, err := parseUint(addrStr)
+			if err != nil {
+				return nil, fmt.Errorf("%s.%s: %w", secName, DumpAddressKey, err)
+			}
+			dump.Address = addr
 		}
 		if lenStr, ok := secMap[DumpLengthKey]; ok {
-			dump.Length = parseUint(lenStr)
+			length, err := parseUint(lenStr)
+			if err != nil {
+				return nil, fmt.Errorf("%s.%s: %w", secName, DumpLengthKey, err)
+			}
+			dump.Length = length
 		}
 		if offStr, ok := secMap[DumpOffsetKey]; ok {
-			dump.Offset = parseUint(offStr)
+			offset, err := parseUint(offStr)
+			if err != nil {
+				return nil, fmt.Errorf("%s.%s: %w", secName, DumpOffsetKey, err)
+			}
+			dump.Offset = offset
 		}
 		if file, ok := secMap[DumpFileKey]; ok {
 			dump.Path = file
@@ -212,7 +225,6 @@ func (t *Trace) coreForSource(sourceName string) string {
 	return "<none>"
 }
 
-func parseUint(s string) uint64 {
-	v, _ := strconv.ParseUint(strings.TrimSpace(s), 0, 64)
-	return v
+func parseUint(s string) (uint64, error) {
+	return strconv.ParseUint(strings.TrimSpace(s), 0, 64)
 }

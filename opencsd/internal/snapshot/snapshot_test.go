@@ -168,13 +168,13 @@ ETM_0=cpu_0
 }
 
 func TestParseUint(t *testing.T) {
-	if v := parseUint("0x10"); v != 16 {
+	if v, _ := parseUint("0x10"); v != 16 {
 		t.Errorf("expected 16, got %d", v)
 	}
-	if v := parseUint("16"); v != 16 {
+	if v, _ := parseUint("16"); v != 16 {
 		t.Errorf("expected 16, got %d", v)
 	}
-	if v := parseUint("010"); v != 8 {
+	if v, _ := parseUint("010"); v != 8 {
 		t.Errorf("expected octal 010 to parse as 8, got %d", v)
 	}
 }
