@@ -182,7 +182,7 @@ func mapMemoryRanges(mapper memacc.Mapper, ssDir string, reader *snapshot.Reader
 	}
 
 	for _, dev := range reader.ParsedDeviceList {
-		if dev == nil || !strings.EqualFold(dev.DeviceClass, "core") {
+		if dev == nil || !strings.EqualFold(dev.Class, "core") {
 			continue
 		}
 		for _, memParams := range dev.DumpDefs {

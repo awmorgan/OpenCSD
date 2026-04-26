@@ -193,7 +193,7 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	}
 
 	for _, dev := range reader.ParsedDeviceList {
-		if !strings.EqualFold(dev.DeviceClass, "core") {
+		if !strings.EqualFold(dev.Class, "core") {
 			continue
 		}
 		for _, memParams := range dev.DumpDefs {

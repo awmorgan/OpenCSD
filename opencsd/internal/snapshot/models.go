@@ -32,7 +32,7 @@ type Device struct {
 	RegDefs        map[string]string // Key is lowercase for case-insensitive lookup
 	ExtendRegDefs  map[uint32]uint32
 	Name           string
-	DeviceClass    string
+	Class          string
 	DeviceTypeName string
 }
 

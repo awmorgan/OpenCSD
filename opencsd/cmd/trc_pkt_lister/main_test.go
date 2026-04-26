@@ -801,8 +801,8 @@ func TestMapMemoryRangesSameFileDifferentOffsetsBothMapped(t *testing.T) {
 	reader := &snapshot.Reader{
 		ParsedDeviceList: map[string]*snapshot.Device{
 			"cpu_0": {
-				Name:        "cpu_0",
-				DeviceClass: "core",
+				Name:  "cpu_0",
+				Class: "core",
 				DumpDefs: []snapshot.DumpDef{
 					{
 						Path:    "mem.bin",
@@ -849,8 +849,8 @@ func TestMapMemoryRangesBadOffsetReturnsError(t *testing.T) {
 	reader := &snapshot.Reader{
 		ParsedDeviceList: map[string]*snapshot.Device{
 			"cpu_0": {
-				Name:        "cpu_0",
-				DeviceClass: "core",
+				Name:  "cpu_0",
+				Class: "core",
 				DumpDefs: []snapshot.DumpDef{
 					{
 						Path:    "mem.bin",
@@ -890,8 +890,8 @@ func TestMapMemoryRangesUnreadableFileIgnored(t *testing.T) {
 	reader := &snapshot.Reader{
 		ParsedDeviceList: map[string]*snapshot.Device{
 			"cpu_0": {
-				Name:        "cpu_0",
-				DeviceClass: "core",
+				Name:  "cpu_0",
+				Class: "core",
 				DumpDefs: []snapshot.DumpDef{
 					{
 						Path:    "missing.bin",
@@ -925,8 +925,8 @@ func TestMapMemoryRangesDuplicateSemanticMappingIgnored(t *testing.T) {
 	reader := &snapshot.Reader{
 		ParsedDeviceList: map[string]*snapshot.Device{
 			"cpu_0": {
-				Name:        "cpu_0",
-				DeviceClass: "core",
+				Name:  "cpu_0",
+				Class: "core",
 				DumpDefs: []snapshot.DumpDef{
 					{
 						Path:    "mem.bin",

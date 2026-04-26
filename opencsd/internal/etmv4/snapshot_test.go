@@ -406,7 +406,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 	callbackReads := 0
 
 	for _, dev := range reader.ParsedDeviceList {
-		if !strings.EqualFold(dev.DeviceClass, "core") {
+		if !strings.EqualFold(dev.Class, "core") {
 			continue
 		}
 		for _, memParams := range dev.DumpDefs {
