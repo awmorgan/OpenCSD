@@ -164,50 +164,52 @@ func ParseTraceMetaData(input io.Reader) (*Trace, error) {
 	return parsed, nil
 }
 
-// ExtractSourceTree builds a source tree for a single buffer
-func ExtractSourceTree(bufferName string, metadata *Trace, bufferData *TraceBufferSourceTree) bool {
-	// Find buffer info
-	var foundInfo *Buffer
+// SourceTree builds a source tree for a single buffer.
+func SourceTree(bufferName string, metadata *Trace) (*TraceBufferSourceTree, bool) {
+	if metadata == nil {
+		return nil, false
+	}
+
+	var bufferInfo *Buffer
 	for i := range metadata.TraceBuffers {
 		if metadata.TraceBuffers[i].BufferName == bufferName {
-			foundInfo = &metadata.TraceBuffers[i]
+			bufferInfo = &metadata.TraceBuffers[i]
 			break
 		}
 	}
-
-	if foundInfo == nil {
-		return false
+	if bufferInfo == nil {
+		return nil, false
 	}
 
-	bufferData.BufferInfo = foundInfo
+	tree := &TraceBufferSourceTree{
+		BufferInfo:      bufferInfo,
+		SourceCoreAssoc: make(map[string]string),
+	}
 
-	// Find sources associated with this buffer
 	for sourceName, bName := range metadata.SourceBufferAssoc {
-		if bName == bufferName {
-			// associate core device with source device
-			coreName := "<none>"
-			if cName, ok := metadata.CPUSourceAssoc[sourceName]; ok {
-				coreName = cName
-			} else {
-				// Search values instead of keys; values may be comma-separated when a core
-				// has multiple sessions (duplicate keys accumulated by the INI parser).
-				for k, v := range metadata.CPUSourceAssoc {
-					for sv := range strings.SplitSeq(v, ",") {
-						if strings.TrimSpace(sv) == sourceName {
-							coreName = k
-							break
-						}
-					}
-					if coreName != "<none>" {
-						break
-					}
-				}
+		if bName != bufferName {
+			continue
+		}
+		tree.SourceCoreAssoc[sourceName] = metadata.coreForSource(sourceName)
+	}
+
+	return tree, true
+}
+
+func (t *Trace) coreForSource(sourceName string) string {
+	if coreName, ok := t.CPUSourceAssoc[sourceName]; ok {
+		return coreName
+	}
+
+	for coreName, sources := range t.CPUSourceAssoc {
+		for source := range strings.SplitSeq(sources, ",") {
+			if strings.TrimSpace(source) == sourceName {
+				return coreName
 			}
-			bufferData.SourceCoreAssoc[sourceName] = coreName
 		}
 	}
 
-	return true
+	return "<none>"
 }
 
 func parseUint(s string) uint64 {

@@ -77,10 +77,7 @@ func (r *Reader) Read() error {
 
 				// Extract source trees
 				for _, bufInfo := range parsedTrace.TraceBuffers {
-					tree := &TraceBufferSourceTree{
-						SourceCoreAssoc: make(map[string]string),
-					}
-					if ExtractSourceTree(bufInfo.BufferName, parsedTrace, tree) {
+					if tree, ok := SourceTree(bufInfo.BufferName, parsedTrace); ok {
 						r.SourceTrees[bufInfo.BufferName] = tree
 					}
 				}

@@ -145,10 +145,8 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 		return nil, fmt.Errorf("no ETE source trees found")
 	}
 
-	sourceTree := &snapshot.TraceBufferSourceTree{
-		SourceCoreAssoc: make(map[string]string),
-	}
-	if !snapshot.ExtractSourceTree(bufferName, reader.Trace, sourceTree) || sourceTree.BufferInfo == nil {
+	sourceTree, ok := snapshot.SourceTree(bufferName, reader.Trace)
+	if !ok || sourceTree.BufferInfo == nil {
 		return nil, fmt.Errorf("failed to extract source tree for %s", bufferName)
 	}
 
@@ -436,10 +434,8 @@ func canonicalPacketToken(tok string) string {
 
 func resolveETESourceName(requested string, trace *snapshot.Trace, devs map[string]*snapshot.Device) string {
 	if strings.TrimSpace(requested) != "" {
-		tree := &snapshot.TraceBufferSourceTree{
-			SourceCoreAssoc: make(map[string]string),
-		}
-		if snapshot.ExtractSourceTree(strings.TrimSpace(requested), trace, tree) && tree.BufferInfo != nil && sourceTreeHasETEDevices(tree, devs) {
+		tree, ok := snapshot.SourceTree(strings.TrimSpace(requested), trace)
+		if ok && tree.BufferInfo != nil && sourceTreeHasETEDevices(tree, devs) {
 			return strings.TrimSpace(requested)
 		}
 	}
@@ -448,10 +444,8 @@ func resolveETESourceName(requested string, trace *snapshot.Trace, devs map[stri
 		if strings.TrimSpace(info.BufferName) == "" {
 			continue
 		}
-		tree := &snapshot.TraceBufferSourceTree{
-			SourceCoreAssoc: make(map[string]string),
-		}
-		if !snapshot.ExtractSourceTree(info.BufferName, trace, tree) || tree.BufferInfo == nil {
+		tree, ok := snapshot.SourceTree(info.BufferName, trace)
+		if !ok || tree.BufferInfo == nil {
 			continue
 		}
 		if sourceTreeHasETEDevices(tree, devs) {
