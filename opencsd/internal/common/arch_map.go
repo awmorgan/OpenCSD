@@ -2,6 +2,7 @@ package common
 
 import (
 	"maps"
+	"strconv"
 	"strings"
 
 	"opencsd/internal/ocsd"
@@ -45,6 +46,8 @@ var defaultCoreMap = map[string]ocsd.ArchProfile{
 	"Cortex-M0":  {Arch: ocsd.ArchV7, Profile: ocsd.ProfileCortexM},
 }
 
+var unknownArchProfile = ocsd.ArchProfile{Arch: ocsd.ArchUnknown, Profile: ocsd.ProfileUnknown}
+
 // CoreArchProfileMap maps core names to architecture profiles.
 type CoreArchProfileMap struct {
 	coreMap map[string]ocsd.ArchProfile
@@ -64,90 +67,105 @@ func (m *CoreArchProfileMap) ArchProfile(coreName string) (ocsd.ArchProfile, boo
 		return val, true
 	}
 
-	if val, ok := getPatternMatchCoreName(coreName); ok {
-		return val, true
-	}
-
-	return ocsd.ArchProfile{Arch: ocsd.ArchUnknown, Profile: ocsd.ProfileUnknown}, false
+	return getPatternMatchCoreName(coreName)
 }
 
 func getPatternMatchCoreName(coreName string) (ocsd.ArchProfile, bool) {
-	ap := ocsd.ArchProfile{Arch: ocsd.ArchUnknown, Profile: ocsd.ProfileUnknown}
-
 	if rest, ok := strings.CutPrefix(coreName, "ARMv"); ok {
-		if len(rest) == 0 || rest[0] < '0' || rest[0] > '9' {
-			return ap, false
-		}
+		return parseARMvCoreName(rest)
+	}
+	if rest, ok := strings.CutPrefix(coreName, "ARM-"); ok {
+		return parseARMDashCoreName(rest)
+	}
+	return unknownArchProfile, false
+}
 
-		majver := int(rest[0] - '0')
-		minver := 0
-		profileOffset := 1
+func parseARMvCoreName(rest string) (ocsd.ArchProfile, bool) {
+	version, profile, ok := strings.Cut(rest, "-")
+	if !ok || profile == "" {
+		return unknownArchProfile, false
+	}
 
-		if strings.HasPrefix(rest[1:], ".") {
-			if len(rest) < 3 || rest[2] < '0' || rest[2] > '9' {
-				return ap, false
-			}
-			minver = int(rest[2] - '0')
-			profileOffset = 3
-		} else if strings.IndexByte(rest, '.') >= 0 {
-			return ap, false
-		}
+	major, minor, ok := parseARMVersion(version)
+	if !ok {
+		return unknownArchProfile, false
+	}
 
-		if majver == 7 {
-			ap.Arch = ocsd.ArchV7
-		} else if majver >= 8 {
-			ap.Arch = ocsd.ArchAA64
-			if majver == 8 {
-				if minver < 3 {
-					ap.Arch = ocsd.ArchV8
-				} else if minver == 3 {
-					ap.Arch = ocsd.ArchV8r3
-				}
-			}
-		} else {
-			return ap, false
-		}
+	ap := ocsd.ArchProfile{}
+	if !setProfileFromByte(&ap, profile[0]) {
+		return unknownArchProfile, false
+	}
+	if !setArchFromARMVersion(&ap, major, minor) {
+		return unknownArchProfile, false
+	}
+	return ap, true
+}
 
-		if len(rest) <= profileOffset || rest[profileOffset] != '-' {
-			ap.Arch = ocsd.ArchUnknown
-			return ap, false
-		}
-		profileIdx := profileOffset + 1
-		if profileIdx >= len(rest) {
-			ap.Arch = ocsd.ArchUnknown
-			return ap, false
-		}
+func parseARMDashCoreName(rest string) (ocsd.ArchProfile, bool) {
+	archName, profile, hasProfile := strings.Cut(rest, "-")
+	if !strings.EqualFold(archName, "aa64") {
+		return unknownArchProfile, false
+	}
 
-		switch rest[profileIdx] {
-		case 'A':
-			ap.Profile = ocsd.ProfileCortexA
-		case 'R':
-			ap.Profile = ocsd.ProfileCortexR
-		case 'M':
-			ap.Profile = ocsd.ProfileCortexM
-		default:
-			ap.Arch = ocsd.ArchUnknown
-			return ap, false
-		}
-
+	ap := ocsd.ArchProfile{Arch: ocsd.ArchAA64, Profile: ocsd.ProfileCortexA}
+	if !hasProfile || profile == "" {
 		return ap, true
 	}
 
-	if rest, ok := strings.CutPrefix(coreName, "ARM-"); ok {
-		if strings.HasPrefix(rest, "aa64") || strings.HasPrefix(rest, "AA64") {
-			ap.Arch = ocsd.ArchAA64
-			ap.Profile = ocsd.ProfileCortexA
-			if len(rest) > 5 && rest[4] == '-' {
-				switch rest[5] {
-				case 'R':
-					ap.Profile = ocsd.ProfileCortexR
-				case 'M':
-					ap.Profile = ocsd.ProfileCortexM
-				}
-			}
-			return ap, true
-		}
+	switch profile[0] {
+	case 'R':
+		ap.Profile = ocsd.ProfileCortexR
+	case 'M':
+		ap.Profile = ocsd.ProfileCortexM
+	}
+	return ap, true
+}
+
+func parseARMVersion(version string) (major, minor int, ok bool) {
+	majorPart, minorPart, hasMinor := strings.Cut(version, ".")
+
+	major, err := strconv.Atoi(majorPart)
+	if err != nil || major < 0 {
+		return 0, 0, false
 	}
 
-	return ap, false
+	if !hasMinor {
+		return major, 0, true
+	}
+
+	minor, err = strconv.Atoi(minorPart)
+	if err != nil || minor < 0 {
+		return 0, 0, false
+	}
+	return major, minor, true
+}
+
+func setArchFromARMVersion(ap *ocsd.ArchProfile, major, minor int) bool {
+	switch {
+	case major == 7:
+		ap.Arch = ocsd.ArchV7
+	case major == 8 && minor < 3:
+		ap.Arch = ocsd.ArchV8
+	case major == 8 && minor == 3:
+		ap.Arch = ocsd.ArchV8r3
+	case major >= 8:
+		ap.Arch = ocsd.ArchAA64
+	default:
+		return false
+	}
+	return true
+}
+
+func setProfileFromByte(ap *ocsd.ArchProfile, profile byte) bool {
+	switch profile {
+	case 'A':
+		ap.Profile = ocsd.ProfileCortexA
+	case 'R':
+		ap.Profile = ocsd.ProfileCortexR
+	case 'M':
+		ap.Profile = ocsd.ProfileCortexM
+	default:
+		return false
+	}
+	return true
 }
