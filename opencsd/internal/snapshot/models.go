@@ -28,14 +28,6 @@ type MemoryDump struct {
 	Space   string
 }
 
-func NewParsedDevice() *Device {
-	return &Device{
-		Memory:  []MemoryDump{},
-		Regs:    make(map[string]string),
-		ExtRegs: make(map[uint32]uint32),
-	}
-}
-
 func (p *Device) RegValue(key string) (string, bool) {
 	keyLower := strings.ToLower(key)
 	if val, ok := p.Regs[keyLower]; ok {

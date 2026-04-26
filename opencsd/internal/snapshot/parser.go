@@ -10,7 +10,11 @@ import (
 // ParseSingleDevice parses a device ini file
 func ParseSingleDevice(input io.Reader) (*Device, error) {
 	ini := ParseIni(input)
-	parsed := NewParsedDevice()
+	parsed := &Device{
+		Memory:  []MemoryDump{},
+		Regs:    make(map[string]string),
+		ExtRegs: make(map[uint32]uint32),
+	}
 
 	// Global section (deprecated/unused in trace decode, but keep for completeness)
 	if globalSec, ok := ini.Sections[GlobalSectionName]; ok {

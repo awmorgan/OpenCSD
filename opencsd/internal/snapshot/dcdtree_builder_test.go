@@ -55,7 +55,11 @@ func TestCreatePEDecoderRoutesETMv4(t *testing.T) {
 		t.Fatal("NewDecodeTree returned nil")
 	}
 
-	devSrc := NewParsedDevice()
+	devSrc := &Device{
+		Memory:  []MemoryDump{},
+		Regs:    make(map[string]string),
+		ExtRegs: make(map[uint32]uint32),
+	}
 	devSrc.Type = "ETMv4"
 	devSrc.Regs["trctraceidr"] = "0x10"
 
