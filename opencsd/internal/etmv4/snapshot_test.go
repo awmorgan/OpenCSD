@@ -254,7 +254,9 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		return nil, fmt.Errorf("failed to resolve ETMv4 source tree for %s", sourceName)
 	}
 
-	sourceTree := snapshot.NewTraceBufferSourceTree()
+	sourceTree := &snapshot.TraceBufferSourceTree{
+		SourceCoreAssoc: make(map[string]string),
+	}
 	if !snapshot.ExtractSourceTree(resolvedSourceName, reader.Trace, sourceTree) || sourceTree.BufferInfo == nil {
 		return nil, fmt.Errorf("failed to extract source tree for %s", resolvedSourceName)
 	}
@@ -697,7 +699,9 @@ func resolveETMv4SourceName(requested string, trace *snapshot.Trace, devs map[st
 		}
 		seen[key] = struct{}{}
 
-		tree := snapshot.NewTraceBufferSourceTree()
+		tree := &snapshot.TraceBufferSourceTree{
+			SourceCoreAssoc: make(map[string]string),
+		}
 		if !snapshot.ExtractSourceTree(candidate, trace, tree) || tree.BufferInfo == nil {
 			continue
 		}

@@ -106,7 +106,9 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 		return nil, fmt.Errorf("missing parsed trace metadata")
 	}
 
-	sourceTree := snapshot.NewTraceBufferSourceTree()
+	sourceTree := &snapshot.TraceBufferSourceTree{
+		SourceCoreAssoc: make(map[string]string),
+	}
 	if !snapshot.ExtractSourceTree(sourceName, reader.Trace, sourceTree) || sourceTree.BufferInfo == nil {
 		return nil, fmt.Errorf("failed to extract source tree for %s", sourceName)
 	}

@@ -140,7 +140,9 @@ ETM_0=cpu_0
 		t.Errorf("expected ETM_0 -> cpu_0")
 	}
 
-	tree := NewTraceBufferSourceTree()
+	tree := &TraceBufferSourceTree{
+		SourceCoreAssoc: make(map[string]string),
+	}
 	ok := ExtractSourceTree("ETB_0", trace, tree)
 	if !ok {
 		t.Fatalf("expected to extract tree")
@@ -208,7 +210,9 @@ func TestExtractSourceTree_NoCore(t *testing.T) {
 	trace.TraceBuffers = append(trace.TraceBuffers, Buffer{BufferName: "buf1"})
 	trace.SourceBufferAssoc["src1"] = "buf1"
 
-	tree := NewTraceBufferSourceTree()
+	tree := &TraceBufferSourceTree{
+		SourceCoreAssoc: make(map[string]string),
+	}
 	ok := ExtractSourceTree("buf1", trace, tree)
 	if !ok {
 		t.Fatalf("expected to extract tree")

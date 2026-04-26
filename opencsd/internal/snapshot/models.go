@@ -82,9 +82,3 @@ type TraceBufferSourceTree struct {
 	BufferInfo      *Buffer
 	SourceCoreAssoc map[string]string
 }
-
-func NewTraceBufferSourceTree() *TraceBufferSourceTree {
-	return &TraceBufferSourceTree{
-		SourceCoreAssoc: make(map[string]string),
-	}
-}
