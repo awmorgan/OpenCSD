@@ -7,6 +7,15 @@ import (
 	"testing"
 )
 
+func writeFile(t *testing.T, dir, name, body string) {
+	t.Helper()
+
+	err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
+	if err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+}
+
 func TestINIParser(t *testing.T) {
 	iniData := `
 ; This is a comment
@@ -225,30 +234,24 @@ func TestReader(t *testing.T) {
 	// Create a temporary directory structure mimicking a snapshot
 	tempDir := t.TempDir()
 
-	err := os.WriteFile(filepath.Join(tempDir, "snapshot.ini"), []byte(`
+	writeFile(t, tempDir, "snapshot.ini", `
 [snapshot]
 [device_list]
 cpu_0=cpu_0.ini
 [trace]
 metadata=trace.ini
-`), 0644)
-	if err != nil {
-		t.Fatalf("failed to create snapshot.ini: %v", err)
-	}
+`)
 
-	err = os.WriteFile(filepath.Join(tempDir, "cpu_0.ini"), []byte(`
+	writeFile(t, tempDir, "cpu_0.ini", `
 [device]
 name=cpu_0
 [dump1]
 address=0x0
 offset=0x1
 space=memory
-`), 0644)
-	if err != nil {
-		t.Fatalf("failed to create cpu_0.ini: %v", err)
-	}
+`)
 
-	err = os.WriteFile(filepath.Join(tempDir, "trace.ini"), []byte(`
+	writeFile(t, tempDir, "trace.ini", `
 [trace_buffers]
 buffers=buffer1
 [buffer1]
@@ -258,10 +261,7 @@ file=trace.bin
 ETM_0=ETB
 [core_trace_sources]
 ETM_0=cpu_0
-`), 0644)
-	if err != nil {
-		t.Fatalf("failed to create trace.ini: %v", err)
-	}
+`)
 
 	reader := NewReader()
 	reader.SnapshotPath = tempDir
@@ -314,12 +314,12 @@ func TestReader_Errors(t *testing.T) {
 	reader.SnapshotPath = tempDir
 
 	// missing device file
-	os.WriteFile(filepath.Join(tempDir, "snapshot.ini"), []byte(`
+	writeFile(t, tempDir, "snapshot.ini", `
 [device_list]
 cpu_0=missing.ini
 [trace]
 metadata=missing_trace.ini
-`), 0644)
+`)
 
 	// should still return true as it read snapshot.ini but individual files failed
 	if err := reader.Read(); err != nil {
@@ -334,25 +334,19 @@ metadata=missing_trace.ini
 func TestReader_DefaultTraceININame(t *testing.T) {
 	tempDir := t.TempDir()
 
-	err := os.WriteFile(filepath.Join(tempDir, "snapshot.ini"), []byte(`
+	writeFile(t, tempDir, "snapshot.ini", `
 [snapshot]
 version=1.0
 [device_list]
 cpu_0=cpu_0.ini
-`), 0644)
-	if err != nil {
-		t.Fatalf("failed to create snapshot.ini: %v", err)
-	}
+`)
 
-	err = os.WriteFile(filepath.Join(tempDir, "cpu_0.ini"), []byte(`
+	writeFile(t, tempDir, "cpu_0.ini", `
 [device]
 name=cpu_0
-`), 0644)
-	if err != nil {
-		t.Fatalf("failed to create cpu_0.ini: %v", err)
-	}
+`)
 
-	err = os.WriteFile(filepath.Join(tempDir, "trace.ini"), []byte(`
+	writeFile(t, tempDir, "trace.ini", `
 [trace_buffers]
 buffers=buffer1
 [buffer1]
@@ -362,10 +356,7 @@ file=trace.bin
 ETM_0=ETB
 [core_trace_sources]
 ETM_0=cpu_0
-`), 0644)
-	if err != nil {
-		t.Fatalf("failed to create trace.ini: %v", err)
-	}
+`)
 
 	reader := NewReader()
 	reader.SnapshotPath = tempDir
@@ -381,30 +372,21 @@ ETM_0=cpu_0
 func TestReader_LegacyDeviceFiles(t *testing.T) {
 	tempDir := t.TempDir()
 
-	err := os.WriteFile(filepath.Join(tempDir, "snapshot.ini"), []byte(`
+	writeFile(t, tempDir, "snapshot.ini", `
 [snapshot]
 version=0.0
 description=legacy snapshot
-`), 0644)
-	if err != nil {
-		t.Fatalf("failed to create snapshot.ini: %v", err)
-	}
+`)
 
-	err = os.WriteFile(filepath.Join(tempDir, "device_0.ini"), []byte(`
+	writeFile(t, tempDir, "device_0.ini", `
 [device]
 name=cpu_legacy_0
-`), 0644)
-	if err != nil {
-		t.Fatalf("failed to create device_0.ini: %v", err)
-	}
+`)
 
-	err = os.WriteFile(filepath.Join(tempDir, "device_1.ini"), []byte(`
+	writeFile(t, tempDir, "device_1.ini", `
 [device]
 name=cpu_legacy_1
-`), 0644)
-	if err != nil {
-		t.Fatalf("failed to create device_1.ini: %v", err)
-	}
+`)
 
 	reader := NewReader()
 	reader.SnapshotPath = tempDir
