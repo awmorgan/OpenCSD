@@ -8,7 +8,7 @@ import (
 )
 
 // ParseSingleDevice parses a device ini file
-func ParseSingleDevice(input io.Reader) (*ParsedDevice, error) {
+func ParseSingleDevice(input io.Reader) (*Device, error) {
 	ini := ParseIni(input)
 	parsed := NewParsedDevice()
 

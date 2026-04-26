@@ -196,7 +196,7 @@ func getCoreProfile(coreName string) (ocsd.ArchVersion, ocsd.CoreProfile) {
 	return ocsd.ArchUnknown, ocsd.ProfileUnknown
 }
 
-func (b *DecodeTreeBuilder) createPEDecoder(devTypeName string, devSrc *ParsedDevice, coreName string) error {
+func (b *DecodeTreeBuilder) createPEDecoder(devTypeName string, devSrc *Device, coreName string) error {
 	// Strip any trailing ".x" version suffix from the device type name (e.g. "ETM4.1" → "ETM4").
 	if pos := strings.IndexByte(devTypeName, '.'); pos >= 0 {
 		devTypeName = devTypeName[:pos]
@@ -214,7 +214,7 @@ func (b *DecodeTreeBuilder) createPEDecoder(devTypeName string, devSrc *ParsedDe
 	return fmt.Errorf("unknown PE devType: %s", devTypeName)
 }
 
-func (b *DecodeTreeBuilder) createSTDecoder(devSrc *ParsedDevice) error {
+func (b *DecodeTreeBuilder) createSTDecoder(devSrc *Device) error {
 	devTypeName := devSrc.DeviceTypeName
 	// Strip any trailing ".x" version suffix (e.g. "STM.1" → "STM").
 	if pos := strings.IndexByte(devTypeName, '.'); pos >= 0 {
@@ -230,7 +230,7 @@ func (b *DecodeTreeBuilder) createSTDecoder(devSrc *ParsedDevice) error {
 	return fmt.Errorf("unknown ST devType: %s", devTypeName)
 }
 
-func (b *DecodeTreeBuilder) createETMv3Decoder(coreName string, devSrc *ParsedDevice) error {
+func (b *DecodeTreeBuilder) createETMv3Decoder(coreName string, devSrc *Device) error {
 	cfg := &etmv3.Config{}
 
 	if val, ok := devSrc.RegValue("etmcr"); ok {
@@ -263,7 +263,7 @@ func (b *DecodeTreeBuilder) createETMv3Decoder(coreName string, devSrc *ParsedDe
 	return b.tree.AddPullDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV3, ocsd.ProtocolETMV3, proc, dec, dec)
 }
 
-func (b *DecodeTreeBuilder) createPTMDecoder(coreName string, devSrc *ParsedDevice) error {
+func (b *DecodeTreeBuilder) createPTMDecoder(coreName string, devSrc *Device) error {
 	cfg := ptm.NewConfig()
 
 	if val, ok := devSrc.RegValue("etmcr"); ok {
@@ -296,7 +296,7 @@ func (b *DecodeTreeBuilder) createPTMDecoder(coreName string, devSrc *ParsedDevi
 	return b.tree.AddPullDecoder(cfg.TraceID(), ocsd.BuiltinDcdPTM, ocsd.ProtocolPTM, proc, dec, dec)
 }
 
-func (b *DecodeTreeBuilder) createETEDecoder(coreName string, devSrc *ParsedDevice) error {
+func (b *DecodeTreeBuilder) createETEDecoder(coreName string, devSrc *Device) error {
 	cfg := ete.NewConfig()
 
 	if val, ok := devSrc.RegValue("trcidr0"); ok {
@@ -337,7 +337,7 @@ func (b *DecodeTreeBuilder) createETEDecoder(coreName string, devSrc *ParsedDevi
 	return b.tree.AddPullDecoder(cfg.TraceID(), ocsd.BuiltinDcdETE, ocsd.ProtocolETE, proc, dec, dec)
 }
 
-func (b *DecodeTreeBuilder) createETMv4Decoder(coreName string, devSrc *ParsedDevice) error {
+func (b *DecodeTreeBuilder) createETMv4Decoder(coreName string, devSrc *Device) error {
 	cfg := &etmv4.Config{}
 
 	if val, ok := devSrc.RegValue("trcidr0"); ok {
@@ -394,7 +394,7 @@ func (b *DecodeTreeBuilder) createETMv4Decoder(coreName string, devSrc *ParsedDe
 	return b.tree.AddPullDecoder(cfg.TraceID(), ocsd.BuiltinDcdETMV4I, ocsd.ProtocolETMV4I, proc, dec, dec)
 }
 
-func (b *DecodeTreeBuilder) createSTMDecoder(devSrc *ParsedDevice) error {
+func (b *DecodeTreeBuilder) createSTMDecoder(devSrc *Device) error {
 	cfg := stm.NewConfig()
 	if val, ok := devSrc.RegValue("stmtcsr"); ok {
 		cfg.RegTCSR = uint32(parseUint(val))
@@ -414,7 +414,7 @@ func (b *DecodeTreeBuilder) createSTMDecoder(devSrc *ParsedDevice) error {
 	return b.tree.AddPullDecoder(cfg.TraceID(), ocsd.BuiltinDcdSTM, ocsd.ProtocolSTM, proc, dec, dec)
 }
 
-func (b *DecodeTreeBuilder) createITMDecoder(devSrc *ParsedDevice) error {
+func (b *DecodeTreeBuilder) createITMDecoder(devSrc *Device) error {
 	cfg := &itm.Config{}
 	if val, ok := devSrc.RegValue("itmtcr"); ok {
 		cfg.RegTCR = uint32(parseUint(val))
@@ -436,7 +436,7 @@ func (b *DecodeTreeBuilder) createITMDecoder(devSrc *ParsedDevice) error {
 
 // addCoreDumpMemory adds memory region accessors from a core device's dump definitions.
 // It is called once per PE decoder that is successfully created, only in full-decoder mode.
-func (b *DecodeTreeBuilder) addCoreDumpMemory(mapper memacc.Mapper, dev *ParsedDevice) {
+func (b *DecodeTreeBuilder) addCoreDumpMemory(mapper memacc.Mapper, dev *Device) {
 	for _, dump := range dev.DumpDefs {
 		if strings.TrimSpace(dump.Path) == "" {
 			continue

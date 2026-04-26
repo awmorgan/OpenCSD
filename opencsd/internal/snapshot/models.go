@@ -5,7 +5,7 @@ import "strings"
 type Snapshot struct {
 	Version     string
 	Description string
-	// Devices     map[string]*Device
+	Devices     map[string]*Device
 	Trace       *Trace
 }
 
@@ -24,8 +24,8 @@ type DumpDef struct {
 	Space   string
 }
 
-// ParsedDevice stores the entire parsed device ini file
-type ParsedDevice struct {
+// Device stores the entire parsed device ini file
+type Device struct {
 	FoundGlobal    bool
 	Core           string
 	DumpDefs       []DumpDef
@@ -36,9 +36,9 @@ type ParsedDevice struct {
 	DeviceTypeName string
 }
 
-// NewParsedDevice creates a new ParsedDevice
-func NewParsedDevice() *ParsedDevice {
-	return &ParsedDevice{
+// NewParsedDevice creates a new Device
+func NewParsedDevice() *Device {
+	return &Device{
 		DumpDefs:      []DumpDef{},
 		RegDefs:       make(map[string]string),
 		ExtendRegDefs: make(map[uint32]uint32),
@@ -46,7 +46,7 @@ func NewParsedDevice() *ParsedDevice {
 }
 
 // RegValue is a helper to get register value case-insensitively
-func (p *ParsedDevice) RegValue(key string) (string, bool) {
+func (p *Device) RegValue(key string) (string, bool) {
 	keyLower := strings.ToLower(key)
 	if val, ok := p.RegDefs[keyLower]; ok {
 		return val, true

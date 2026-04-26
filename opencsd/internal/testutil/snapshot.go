@@ -163,7 +163,7 @@ func FirstDiff(got, want []string) (int, string, string) {
 	return 0, "", ""
 }
 
-func FindParsedDeviceByName(devs map[string]*snapshot.ParsedDevice, name string) *snapshot.ParsedDevice {
+func FindParsedDeviceByName(devs map[string]*snapshot.Device, name string) *snapshot.Device {
 	for _, dev := range devs {
 		if dev != nil && dev.DeviceName == name {
 			return dev

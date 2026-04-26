@@ -677,7 +677,7 @@ func normalizeIdxPrefix(left string) string {
 	return fmt.Sprintf("%s; %s;", idxPart, idPart)
 }
 
-func resolveETMv4SourceName(requested string, trace *snapshot.Trace, devs map[string]*snapshot.ParsedDevice) string {
+func resolveETMv4SourceName(requested string, trace *snapshot.Trace, devs map[string]*snapshot.Device) string {
 	candidates := make([]string, 0, len(trace.TraceBuffers)+1)
 	if strings.TrimSpace(requested) != "" {
 		candidates = append(candidates, strings.TrimSpace(requested))
@@ -708,7 +708,7 @@ func resolveETMv4SourceName(requested string, trace *snapshot.Trace, devs map[st
 	return ""
 }
 
-func sourceTreeHasETMv4Devices(sourceTree *snapshot.TraceBufferSourceTree, devs map[string]*snapshot.ParsedDevice) bool {
+func sourceTreeHasETMv4Devices(sourceTree *snapshot.TraceBufferSourceTree, devs map[string]*snapshot.Device) bool {
 	for srcDevName := range sourceTree.SourceCoreAssoc {
 		dev := testutil.FindParsedDeviceByName(devs, srcDevName)
 		if dev == nil {

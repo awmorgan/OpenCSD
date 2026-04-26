@@ -316,7 +316,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 	return out.Bytes(), nil
 }
 
-func findParsedDeviceByName(devices map[string]*snapshot.ParsedDevice, name string) *snapshot.ParsedDevice {
+func findParsedDeviceByName(devices map[string]*snapshot.Device, name string) *snapshot.Device {
 	for _, dev := range devices {
 		if dev.DeviceName == name {
 			return dev
@@ -432,7 +432,7 @@ func canonicalPacketToken(tok string) string {
 	}
 }
 
-func resolveETESourceName(requested string, trace *snapshot.Trace, devs map[string]*snapshot.ParsedDevice) string {
+func resolveETESourceName(requested string, trace *snapshot.Trace, devs map[string]*snapshot.Device) string {
 	if strings.TrimSpace(requested) != "" {
 		tree := snapshot.NewTraceBufferSourceTree()
 		if snapshot.ExtractSourceTree(strings.TrimSpace(requested), trace, tree) && tree.BufferInfo != nil && sourceTreeHasETEDevices(tree, devs) {
@@ -467,7 +467,7 @@ func extractSourceNameFromGolden(ppl string) string {
 	return ""
 }
 
-func sourceTreeHasETEDevices(sourceTree *snapshot.TraceBufferSourceTree, devs map[string]*snapshot.ParsedDevice) bool {
+func sourceTreeHasETEDevices(sourceTree *snapshot.TraceBufferSourceTree, devs map[string]*snapshot.Device) bool {
 	for srcDevName := range sourceTree.SourceCoreAssoc {
 		dev := findParsedDeviceByName(devs, srcDevName)
 		if dev == nil {

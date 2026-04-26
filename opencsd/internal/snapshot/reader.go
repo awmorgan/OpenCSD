@@ -14,7 +14,7 @@ type Reader struct {
 	SnapshotPath     string
 	SnapshotFound    bool
 	ReadOK           bool
-	ParsedDeviceList map[string]*ParsedDevice
+	ParsedDeviceList map[string]*Device
 	Trace            *Trace
 	SourceTrees      map[string]*TraceBufferSourceTree
 }
@@ -22,7 +22,7 @@ type Reader struct {
 // NewReader creates a new Reader
 func NewReader() *Reader {
 	return &Reader{
-		ParsedDeviceList: make(map[string]*ParsedDevice),
+		ParsedDeviceList: make(map[string]*Device),
 		SourceTrees:      make(map[string]*TraceBufferSourceTree),
 	}
 }
@@ -31,7 +31,7 @@ func NewReader() *Reader {
 func (r *Reader) Read() error {
 	r.SnapshotFound = false
 	r.ReadOK = false
-	r.ParsedDeviceList = make(map[string]*ParsedDevice)
+	r.ParsedDeviceList = make(map[string]*Device)
 	r.Trace = nil
 	r.SourceTrees = make(map[string]*TraceBufferSourceTree)
 
