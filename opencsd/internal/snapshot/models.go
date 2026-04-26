@@ -69,15 +69,6 @@ type Trace struct {
 	CPUSourceAssoc     map[string]string
 }
 
-func NewParsedTrace() *Trace {
-	return &Trace{
-		BufferSectionNames: []string{},
-		TraceBuffers:       []Buffer{},
-		SourceBufferAssoc:  make(map[string]string),
-		CPUSourceAssoc:     make(map[string]string),
-	}
-}
-
 type TraceBufferSourceTree struct {
 	BufferInfo      *Buffer
 	SourceCoreAssoc map[string]string

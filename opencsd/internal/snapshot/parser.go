@@ -110,7 +110,12 @@ func ParseDeviceList(input io.Reader) (*ParsedDevices, error) {
 // ParseTraceMetaData parses the trace metadata ini file (trace.ini)
 func ParseTraceMetaData(input io.Reader) (*Trace, error) {
 	ini := ParseIni(input)
-	parsed := NewParsedTrace()
+	parsed := &Trace{
+		BufferSectionNames: []string{},
+		TraceBuffers:       []Buffer{},
+		SourceBufferAssoc:  make(map[string]string),
+		CPUSourceAssoc:     make(map[string]string),
+	}
 
 	// trace_buffers section
 	if tbSec, ok := ini.Sections[TraceBuffersSectionName]; ok {
