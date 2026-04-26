@@ -40,7 +40,7 @@ func ParseSingleDevice(input io.Reader) (*Device, error) {
 			addr, errA := strconv.ParseUint(strings.TrimSpace(k), 0, 32)
 			val, errV := strconv.ParseUint(strings.TrimSpace(v), 0, 32)
 			if errA == nil && errV == nil {
-				parsed.ExtendRegDefs[uint32(addr)] = uint32(val)
+				parsed.ExtRegs[uint32(addr)] = uint32(val)
 			}
 		}
 	}
