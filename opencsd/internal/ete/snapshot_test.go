@@ -194,7 +194,7 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 		if dev == nil {
 			continue
 		}
-		if !strings.EqualFold(dev.DeviceTypeName, "ETE") {
+		if !strings.EqualFold(dev.Type, "ETE") {
 			continue
 		}
 
@@ -473,7 +473,7 @@ func sourceTreeHasETEDevices(sourceTree *snapshot.TraceBufferSourceTree, devs ma
 		if dev == nil {
 			continue
 		}
-		if strings.EqualFold(dev.DeviceTypeName, "ETE") {
+		if strings.EqualFold(dev.Type, "ETE") {
 			return true
 		}
 	}

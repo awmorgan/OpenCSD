@@ -26,14 +26,14 @@ type DumpDef struct {
 
 // Device stores the entire parsed device ini file
 type Device struct {
-	FoundGlobal    bool
-	Core           string
-	DumpDefs       []DumpDef
-	RegDefs        map[string]string // Key is lowercase for case-insensitive lookup
-	ExtendRegDefs  map[uint32]uint32
-	Name           string
-	Class          string
-	DeviceTypeName string
+	FoundGlobal   bool
+	Core          string
+	DumpDefs      []DumpDef
+	RegDefs       map[string]string // Key is lowercase for case-insensitive lookup
+	ExtendRegDefs map[uint32]uint32
+	Name          string
+	Class         string
+	Type          string
 }
 
 // NewParsedDevice creates a new Device

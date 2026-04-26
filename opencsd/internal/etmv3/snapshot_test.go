@@ -246,7 +246,7 @@ func runETMv3SnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		if dev == nil {
 			continue
 		}
-		devType := strings.ToUpper(dev.DeviceTypeName)
+		devType := strings.ToUpper(dev.Type)
 		// Only create ETMv3 decoders - skip PTM, ETMv4, ITM, STM
 		if !strings.HasPrefix(devType, "ETM") {
 			continue

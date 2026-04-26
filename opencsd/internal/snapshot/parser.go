@@ -24,7 +24,7 @@ func ParseSingleDevice(input io.Reader) (*Device, error) {
 	if deviceSec, ok := ini.Sections[DeviceSectionName]; ok {
 		parsed.Name = deviceSec[DeviceNameKey]
 		parsed.Class = deviceSec[DeviceClassKey]
-		parsed.DeviceTypeName = deviceSec[DeviceTypeKey]
+		parsed.Type = deviceSec[DeviceTypeKey]
 	}
 
 	// Symbolic Regs section

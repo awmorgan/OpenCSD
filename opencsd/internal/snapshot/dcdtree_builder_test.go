@@ -56,10 +56,10 @@ func TestCreatePEDecoderRoutesETMv4(t *testing.T) {
 	}
 
 	devSrc := NewParsedDevice()
-	devSrc.DeviceTypeName = "ETMv4"
+	devSrc.Type = "ETMv4"
 	devSrc.RegDefs["trctraceidr"] = "0x10"
 
-	if err := b.createPEDecoder(devSrc.DeviceTypeName, devSrc, "Cortex-A53"); err != nil {
+	if err := b.createPEDecoder(devSrc.Type, devSrc, "Cortex-A53"); err != nil {
 		t.Fatalf("createPEDecoder ETMv4 route failed: %v", err)
 	}
 }
@@ -114,9 +114,9 @@ func TestBuildStillCreatesDecodeTreeOnValidFormatterConfig(t *testing.T) {
 		CPUSourceAssoc: map[string]string{},
 	}
 	reader.ParsedDeviceList["STM_0"] = &Device{
-		Name:           "STM_0",
-		DeviceTypeName: "STM",
-		RegDefs:        map[string]string{"stmtcsr": "0x0"},
+		Name:    "STM_0",
+		Type:    "STM",
+		RegDefs: map[string]string{"stmtcsr": "0x0"},
 	}
 
 	b := NewDecodeTreeBuilder(reader)

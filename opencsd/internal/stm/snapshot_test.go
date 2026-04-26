@@ -145,7 +145,7 @@ func runSTMSnapshotDecodeMode(snapshotDir, sourceName string, forceSingle bool) 
 		if dev == nil {
 			continue
 		}
-		if !strings.HasPrefix(strings.ToUpper(dev.DeviceTypeName), "STM") {
+		if !strings.HasPrefix(strings.ToUpper(dev.Type), "STM") {
 			continue
 		}
 

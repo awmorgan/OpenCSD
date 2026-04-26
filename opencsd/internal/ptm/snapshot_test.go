@@ -157,7 +157,7 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		if dev == nil {
 			continue
 		}
-		devType := strings.ToUpper(dev.DeviceTypeName)
+		devType := strings.ToUpper(dev.Type)
 		if !strings.HasPrefix(devType, "PTM") && !strings.HasPrefix(devType, "PFT") {
 			continue
 		}

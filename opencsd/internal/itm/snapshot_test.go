@@ -173,7 +173,7 @@ func runITMSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		if dev == nil {
 			continue
 		}
-		if !strings.HasPrefix(strings.ToUpper(dev.DeviceTypeName), "ITM") {
+		if !strings.HasPrefix(strings.ToUpper(dev.Type), "ITM") {
 			continue
 		}
 

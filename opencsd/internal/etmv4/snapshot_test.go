@@ -299,7 +299,7 @@ func runSnapshotDecode(snapshotDir, sourceName string, packetOnly bool, opts etm
 		if dev == nil {
 			continue
 		}
-		devType := strings.ToUpper(dev.DeviceTypeName)
+		devType := strings.ToUpper(dev.Type)
 		if !strings.HasPrefix(devType, "ETM4") {
 			continue
 		}
@@ -714,7 +714,7 @@ func sourceTreeHasETMv4Devices(sourceTree *snapshot.TraceBufferSourceTree, devs 
 		if dev == nil {
 			continue
 		}
-		devType := strings.ToUpper(dev.DeviceTypeName)
+		devType := strings.ToUpper(dev.Type)
 		if strings.HasPrefix(devType, "ETM4") {
 			return true
 		}

@@ -160,7 +160,7 @@ func (b *DecodeTreeBuilder) Build(sourceName string, packetProcOnly bool) (*dcdt
 				continue
 			}
 
-			err := b.createPEDecoder(devSrc.DeviceTypeName, devSrc, coreName)
+			err := b.createPEDecoder(devSrc.Type, devSrc, coreName)
 			if err != nil {
 				continue
 			}
@@ -215,7 +215,7 @@ func (b *DecodeTreeBuilder) createPEDecoder(devTypeName string, devSrc *Device, 
 }
 
 func (b *DecodeTreeBuilder) createSTDecoder(devSrc *Device) error {
-	devTypeName := devSrc.DeviceTypeName
+	devTypeName := devSrc.Type
 	// Strip any trailing ".x" version suffix (e.g. "STM.1" → "STM").
 	if pos := strings.IndexByte(devTypeName, '.'); pos >= 0 {
 		devTypeName = devTypeName[:pos]
