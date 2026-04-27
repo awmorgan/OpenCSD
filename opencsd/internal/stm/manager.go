@@ -6,14 +6,20 @@ import (
 	"opencsd/internal/ocsd"
 )
 
+func validateConfig(cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("%w: STM config cannot be nil", ocsd.ErrInvalidParamVal)
+	}
+	return nil
+}
+
 // NewConfiguredPktProc creates an STM packet processor with a typed config.
 func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("%w: STM config cannot be nil", ocsd.ErrInvalidParamVal)
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
 	}
 	_ = instID
-	proc := NewPktProc(cfg)
-	return proc, nil
+	return NewPktProc(cfg), nil
 }
 
 // NewConfiguredPktDecode creates an STM packet decoder with a typed config.
@@ -37,19 +43,7 @@ func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMe
 
 // NewConfiguredPipeline creates and wires a typed STM processor/decoder pair.
 func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, error) {
-	proc, err := NewConfiguredPktProc(instID, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	dec, err := NewConfiguredPktDecode(instID, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// ADD THIS LINE to connect the pull pipeline:
-	dec.Source = proc
-
-	return proc, dec, nil
+	return NewConfiguredPipelineWithDeps(instID, cfg, nil, nil)
 }
 
 // NewConfiguredPipelineWithDeps creates and wires an STM processor/decoder pair with dependencies.

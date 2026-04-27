@@ -282,58 +282,83 @@ func (p *PktProc) SetReader(reader io.Reader) {
 // NextPacket returns the next decoded packet from the attached reader.
 func (p *PktProc) NextPacket() (Packet, error) {
 	for {
-		if len(p.packetReaderBuf) > 0 {
-			pkt := p.packetReaderBuf[0]
-			p.packetReaderBuf = p.packetReaderBuf[1:]
+		if pkt, ok := p.popBufferedPacket(); ok {
 			return pkt, nil
 		}
-
 		if p.packetReader == nil {
-			// Act as a push-to-pull bridge when not configured with a reader.
-			if p.packetReadEOT {
-				return Packet{}, io.EOF
-			}
-			return Packet{}, ocsd.ErrWait
+			return p.nextPushBridgePacket()
 		}
-
 		if p.packetReadEOF {
-			if p.packetReadEOT {
-				return Packet{}, io.EOF
-			}
-			p.collectPackets = true
-			err := p.OnEOT()
-			p.collectPackets = false
-			p.packetReadEOT = true
-			p.drainPendingDecodedPackets()
-			if err != nil {
+			if err := p.finishReaderEOT(); err != nil {
 				return Packet{}, err
 			}
 			continue
 		}
-
-		buf := make([]byte, packetReaderChunkSize)
-		n, err := p.packetReader.Read(buf)
-		if n > 0 {
-			processed, procErr := p.processData(p.packetReadIndex, buf[:n])
-			p.packetReadIndex += ocsd.TrcIndex(processed)
-			if procErr != nil {
-				return Packet{}, procErr
-			}
-			if processed != uint32(n) {
-				return Packet{}, fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, n)
-			}
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				p.packetReadEOF = true
-				continue
-			}
+		if err := p.readPacketChunk(); err != nil {
 			return Packet{}, err
 		}
-		if n == 0 {
-			return Packet{}, io.ErrNoProgress
+	}
+}
+
+func (p *PktProc) popBufferedPacket() (Packet, bool) {
+	if len(p.packetReaderBuf) == 0 {
+		return Packet{}, false
+	}
+	pkt := p.packetReaderBuf[0]
+	p.packetReaderBuf = p.packetReaderBuf[1:]
+	return pkt, true
+}
+
+func (p *PktProc) nextPushBridgePacket() (Packet, error) {
+	if p.packetReadEOT {
+		return Packet{}, io.EOF
+	}
+	return Packet{}, ocsd.ErrWait
+}
+
+func (p *PktProc) finishReaderEOT() error {
+	if p.packetReadEOT {
+		return io.EOF
+	}
+	p.collectPackets = true
+	err := p.OnEOT()
+	p.collectPackets = false
+	p.packetReadEOT = true
+	p.drainPendingDecodedPackets()
+	return err
+}
+
+func (p *PktProc) readPacketChunk() error {
+	buf := make([]byte, packetReaderChunkSize)
+	n, err := p.packetReader.Read(buf)
+	if n > 0 {
+		if procErr := p.processPacketReaderBytes(buf[:n]); procErr != nil {
+			return procErr
 		}
 	}
+	if errors.Is(err, io.EOF) {
+		p.packetReadEOF = true
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return io.ErrNoProgress
+	}
+	return nil
+}
+
+func (p *PktProc) processPacketReaderBytes(buf []byte) error {
+	processed, err := p.processData(p.packetReadIndex, buf)
+	p.packetReadIndex += ocsd.TrcIndex(processed)
+	if err != nil {
+		return err
+	}
+	if processed != uint32(len(buf)) {
+		return fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, len(buf))
+	}
+	return nil
 }
 
 // Write satisfies the ocsd.TraceDecoder interface.
@@ -427,68 +452,8 @@ func (p *PktProc) stateWaitSync(index ocsd.TrcIndex) (error, bool) {
 
 func (p *PktProc) stateHdr(index ocsd.TrcIndex) (error, bool) {
 	p.packetIndex = index + ocsd.TrcIndex(p.dataInUsed)
-	if p.streamSync {
-		nibbleOffset := int(p.dataInUsed) * 2
-		if p.nibble2ndValid {
-			nibbleOffset--
-		}
-		pkt, nibblesConsumed, decErr := decodeNextPacket(p.dataIn, nibbleOffset)
-		if !errors.Is(decErr, errDecodeNotImplemented) {
-			if decErr != nil {
-				return p.handleProcError(decErr)
-			}
-			for range nibblesConsumed {
-				p.readNibble()
-			}
-			switch pkt.Type {
-			case PktM8:
-				p.currPacket.SetPacketType(PktM8, false)
-				p.currPacket.SetMaster(pkt.Master)
-			case PktC8:
-				p.currPacket.SetPacketType(PktC8, false)
-				p.currPacket.SetChannel(pkt.Channel, true)
-			case PktD4:
-				p.currPacket.SetPacketType(PktD4, pkt.IsMarkerPkt())
-				p.currPacket.SetD4Payload(pkt.Payload.D8)
-			case PktMErr:
-				p.currPacket.SetPacketType(PktMErr, false)
-				p.currPacket.SetChannel(0, false)
-				p.currPacket.Payload.D8 = pkt.Payload.D8
-			case PktGErr:
-				p.currPacket.SetPacketType(PktGErr, false)
-				p.currPacket.SetMaster(0)
-				p.currPacket.Payload.D8 = pkt.Payload.D8
-			case PktC16:
-				p.currPacket.SetPacketType(PktC16, false)
-				p.currPacket.SetChannel(pkt.Channel, false)
-			case PktD8:
-				p.currPacket.SetPacketType(PktD8, pkt.IsMarkerPkt())
-				p.currPacket.Payload.D8 = pkt.Payload.D8
-			case PktD16:
-				p.currPacket.SetPacketType(PktD16, pkt.IsMarkerPkt())
-				p.currPacket.Payload.D16 = pkt.Payload.D16
-			case PktD32:
-				p.currPacket.SetPacketType(PktD32, pkt.IsMarkerPkt())
-				p.currPacket.Payload.D32 = pkt.Payload.D32
-			case PktD64:
-				p.currPacket.SetPacketType(PktD64, pkt.IsMarkerPkt())
-				p.currPacket.Payload.D64 = pkt.Payload.D64
-			case PktVersion:
-				p.currPacket.SetPacketType(PktVersion, false)
-				p.currPacket.Payload.D8 = pkt.Payload.D8
-				p.currPacket.OnVersionPkt(pkt.TSType)
-			case PktTrig:
-				p.currPacket.SetPacketType(PktTrig, false)
-				p.currPacket.Payload.D8 = pkt.Payload.D8
-			case PktFreq:
-				p.currPacket.SetPacketType(PktFreq, false)
-				p.currPacket.Payload.D32 = pkt.Payload.D32
-			default:
-				p.currPacket.SetPacketType(pkt.Type, false)
-			}
-			p.procState = procSendPkt
-			return p.stateSendPkt(index)
-		}
+	if handled, err := p.tryStatelessDecode(index); handled {
+		return err, true
 	}
 	if p.readNibble() {
 		p.procState = procDataState
@@ -496,6 +461,71 @@ func (p *PktProc) stateHdr(index ocsd.TrcIndex) (error, bool) {
 		return p.stateData(index)
 	}
 	return nil, false
+}
+
+func (p *PktProc) tryStatelessDecode(index ocsd.TrcIndex) (handled bool, err error) {
+	if !p.streamSync {
+		return false, nil
+	}
+
+	nibbleOffset := int(p.dataInUsed) * 2
+	if p.nibble2ndValid {
+		nibbleOffset--
+	}
+	pkt, nibblesConsumed, decErr := decodeNextPacket(p.dataIn, nibbleOffset)
+	if errors.Is(decErr, errDecodeNotImplemented) {
+		return false, nil
+	}
+	if decErr != nil {
+		return true, p.handleProcErrorAsErr(decErr)
+	}
+
+	for range nibblesConsumed {
+		p.readNibble()
+	}
+	p.applyStatelessPacket(pkt)
+	p.procState = procSendPkt
+	err, _ = p.stateSendPkt(index)
+	return true, err
+}
+
+func (p *PktProc) handleProcErrorAsErr(err error) error {
+	outErr, _ := p.handleProcError(err)
+	return outErr
+}
+
+func (p *PktProc) applyStatelessPacket(pkt Packet) {
+	p.currPacket.SetPacketType(pkt.Type, pkt.IsMarkerPkt())
+
+	switch pkt.Type {
+	case PktM8:
+		p.currPacket.SetMaster(pkt.Master)
+	case PktC8:
+		p.currPacket.SetChannel(pkt.Channel, true)
+	case PktC16:
+		p.currPacket.SetChannel(pkt.Channel, false)
+	case PktD4:
+		p.currPacket.SetD4Payload(pkt.Payload.D8)
+	case PktMErr:
+		p.currPacket.SetChannel(0, false)
+		p.currPacket.Payload.D8 = pkt.Payload.D8
+	case PktGErr:
+		p.currPacket.SetMaster(0)
+		p.currPacket.Payload.D8 = pkt.Payload.D8
+	case PktD8:
+		p.currPacket.Payload.D8 = pkt.Payload.D8
+	case PktD16:
+		p.currPacket.Payload.D16 = pkt.Payload.D16
+	case PktD32, PktFreq:
+		p.currPacket.Payload.D32 = pkt.Payload.D32
+	case PktD64:
+		p.currPacket.Payload.D64 = pkt.Payload.D64
+	case PktVersion:
+		p.currPacket.Payload.D8 = pkt.Payload.D8
+		p.currPacket.OnVersionPkt(pkt.TSType)
+	case PktTrig:
+		p.currPacket.Payload.D8 = pkt.Payload.D8
+	}
 }
 
 func (p *PktProc) stateData(index ocsd.TrcIndex) (error, bool) {
@@ -624,89 +654,97 @@ func (p *PktProc) resetNextPacket() {
 }
 
 func (p *PktProc) runDecodeAction() error {
-	switch p.currDecode {
-	case decodePktReserved:
-		return p.PktReserved()
-	case decodePktNull:
-		return p.PktNull()
-	case decodePktNullTS:
-		return p.PktNullTS()
-	case decodePktM8:
-		return p.PktM8()
-	case decodePktMERR:
-		return p.PktMERR()
-	case decodePktC8:
-		return p.PktC8()
-	case decodePktD4:
-		return p.PktD4()
-	case decodePktD8:
-		return p.PktD8()
-	case decodePktD16:
-		return p.PktD16()
-	case decodePktD32:
-		return p.PktD32()
-	case decodePktD64:
-		return p.PktD64()
-	case decodePktD4MTS:
-		return p.PktD4MTS()
-	case decodePktD8MTS:
-		return p.PktD8MTS()
-	case decodePktD16MTS:
-		return p.PktD16MTS()
-	case decodePktD32MTS:
-		return p.PktD32MTS()
-	case decodePktD64MTS:
-		return p.PktD64MTS()
-	case decodePktFlagTS:
-		return p.PktFlagTS()
-	case decodePktFExt:
-		return p.PktFExt()
-	case decodePktReservedFn:
-		return p.PktReservedFn()
-	case decodePktF0Ext:
-		return p.PktF0Ext()
-	case decodePktGERR:
-		return p.PktGERR()
-	case decodePktC16:
-		return p.PktC16()
-	case decodePktD4TS:
-		return p.PktD4TS()
-	case decodePktD8TS:
-		return p.PktD8TS()
-	case decodePktD16TS:
-		return p.PktD16TS()
-	case decodePktD32TS:
-		return p.PktD32TS()
-	case decodePktD64TS:
-		return p.PktD64TS()
-	case decodePktD4M:
-		return p.PktD4M()
-	case decodePktD8M:
-		return p.PktD8M()
-	case decodePktD16M:
-		return p.PktD16M()
-	case decodePktD32M:
-		return p.PktD32M()
-	case decodePktD64M:
-		return p.PktD64M()
-	case decodePktFlag:
-		return p.PktFlag()
-	case decodePktReservedF0n:
-		return p.PktReservedF0n()
-	case decodePktVersion:
-		return p.PktVersion()
-	case decodePktTrigger:
-		return p.PktTrigger()
-	case decodePktTriggerTS:
-		return p.PktTriggerTS()
-	case decodePktFreq:
-		return p.PktFreq()
-	case decodePktASync:
-		return p.PktASync()
-	case decodeExtractTS:
-		return p.ExtractTS()
-	default:
+	handler := decodeActionHandler(p.currDecode)
+	if handler == nil {
 		return p.setBadSequenceError("STM decode action not set")
+	}
+	return handler(p)
+}
+
+func decodeActionHandler(action decodeAction) func(*PktProc) error {
+	switch action {
+	case decodePktReserved:
+		return (*PktProc).PktReserved
+	case decodePktNull:
+		return (*PktProc).PktNull
+	case decodePktNullTS:
+		return (*PktProc).PktNullTS
+	case decodePktM8:
+		return (*PktProc).PktM8
+	case decodePktMERR:
+		return (*PktProc).PktMERR
+	case decodePktC8:
+		return (*PktProc).PktC8
+	case decodePktD4:
+		return (*PktProc).PktD4
+	case decodePktD8:
+		return (*PktProc).PktD8
+	case decodePktD16:
+		return (*PktProc).PktD16
+	case decodePktD32:
+		return (*PktProc).PktD32
+	case decodePktD64:
+		return (*PktProc).PktD64
+	case decodePktD4MTS:
+		return (*PktProc).PktD4MTS
+	case decodePktD8MTS:
+		return (*PktProc).PktD8MTS
+	case decodePktD16MTS:
+		return (*PktProc).PktD16MTS
+	case decodePktD32MTS:
+		return (*PktProc).PktD32MTS
+	case decodePktD64MTS:
+		return (*PktProc).PktD64MTS
+	case decodePktFlagTS:
+		return (*PktProc).PktFlagTS
+	case decodePktFExt:
+		return (*PktProc).PktFExt
+	case decodePktReservedFn:
+		return (*PktProc).PktReservedFn
+	case decodePktF0Ext:
+		return (*PktProc).PktF0Ext
+	case decodePktGERR:
+		return (*PktProc).PktGERR
+	case decodePktC16:
+		return (*PktProc).PktC16
+	case decodePktD4TS:
+		return (*PktProc).PktD4TS
+	case decodePktD8TS:
+		return (*PktProc).PktD8TS
+	case decodePktD16TS:
+		return (*PktProc).PktD16TS
+	case decodePktD32TS:
+		return (*PktProc).PktD32TS
+	case decodePktD64TS:
+		return (*PktProc).PktD64TS
+	case decodePktD4M:
+		return (*PktProc).PktD4M
+	case decodePktD8M:
+		return (*PktProc).PktD8M
+	case decodePktD16M:
+		return (*PktProc).PktD16M
+	case decodePktD32M:
+		return (*PktProc).PktD32M
+	case decodePktD64M:
+		return (*PktProc).PktD64M
+	case decodePktFlag:
+		return (*PktProc).PktFlag
+	case decodePktReservedF0n:
+		return (*PktProc).PktReservedF0n
+	case decodePktVersion:
+		return (*PktProc).PktVersion
+	case decodePktTrigger:
+		return (*PktProc).PktTrigger
+	case decodePktTriggerTS:
+		return (*PktProc).PktTriggerTS
+	case decodePktFreq:
+		return (*PktProc).PktFreq
+	case decodePktASync:
+		return (*PktProc).PktASync
+	case decodeExtractTS:
+		return (*PktProc).ExtractTS
+	default:
+		return nil
 	}
 }
 

@@ -79,23 +79,29 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 
 // OutputTraceElement queues an element for pull-based consumption using IndexCurrPkt.
 func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error {
-	e := traceElemEvent{d.IndexCurrPkt, traceID, cloneQueuedElem(elem)}
-	d.pendingElements = append(d.pendingElements, e)
-	return nil
+	return d.enqueueTraceElement(d.IndexCurrPkt, traceID, elem)
 }
 
 // OutputTraceElementIdx queues an element at an explicit index.
 func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
-	e := traceElemEvent{idx, traceID, cloneQueuedElem(elem)}
-	d.pendingElements = append(d.pendingElements, e)
+	return d.enqueueTraceElement(idx, traceID, elem)
+}
+
+func (d *PktDecode) enqueueTraceElement(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
+	d.pendingElements = append(d.pendingElements, traceElemEvent{
+		index:   idx,
+		traceID: traceID,
+		elem:    cloneQueuedElem(elem),
+	})
 	return nil
 }
 
 func cloneQueuedElem(elem *ocsd.TraceElement) ocsd.TraceElement {
-	clone := *elem
-	if elem.PtrExtendedData != nil {
-		clone.PtrExtendedData = append([]byte(nil), elem.PtrExtendedData...)
+	if elem == nil {
+		return ocsd.TraceElement{}
 	}
+	clone := *elem
+	clone.PtrExtendedData = append([]byte(nil), elem.PtrExtendedData...)
 	return clone
 }
 
@@ -266,22 +272,30 @@ func (d *PktDecode) resetPayloadBuffer() {
 // next packet from Source, decodes it, and returns the first resulting element.
 func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
 	for len(d.pendingElements) == 0 && d.Source != nil {
-		pkt, err := d.Source.NextPacket()
-		if errors.Is(err, io.EOF) {
-			d.Source = nil
-			_ = d.Close()
-			break
-		}
-		if err != nil {
-			if !errors.Is(err, ocsd.ErrWait) {
-				d.Source = nil
-			}
+		if err := d.pullNextPacket(); err != nil {
 			return 0, 0, ocsd.TraceElement{}, err
 		}
-		if wErr := d.processPacket(&pkt); wErr != nil {
-			return 0, 0, ocsd.TraceElement{}, wErr
-		}
 	}
+	return d.popPendingElement()
+}
+
+func (d *PktDecode) pullNextPacket() error {
+	pkt, err := d.Source.NextPacket()
+	if errors.Is(err, io.EOF) {
+		d.Source = nil
+		_ = d.Close()
+		return nil
+	}
+	if err != nil {
+		if !errors.Is(err, ocsd.ErrWait) {
+			d.Source = nil
+		}
+		return err
+	}
+	return d.processPacket(&pkt)
+}
+
+func (d *PktDecode) popPendingElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
 	if len(d.pendingElements) == 0 {
 		return 0, 0, ocsd.TraceElement{}, io.EOF
 	}
@@ -386,28 +400,40 @@ func (d *PktDecode) clearSWTPerPcktInfo() {
 
 func (d *PktDecode) updatePayload() bool {
 	d.swtPacketInfo.PayloadNumPackets = 1
-
-	switch d.CurrPacketIn.Type {
-	case PktD4:
-		d.swtPacketInfo.PayloadPktBitsize = 4
-		d.payloadBuffer[0] = d.CurrPacketIn.Payload.D8
-	case PktD8, PktTrig, PktGErr, PktMErr:
-		d.swtPacketInfo.PayloadPktBitsize = 8
-		d.payloadBuffer[0] = d.CurrPacketIn.Payload.D8
-	case PktD16:
-		d.swtPacketInfo.PayloadPktBitsize = 16
-		binary.LittleEndian.PutUint16(d.payloadBuffer, d.CurrPacketIn.Payload.D16)
-	case PktD32, PktFreq:
-		d.swtPacketInfo.PayloadPktBitsize = 32
-		binary.LittleEndian.PutUint32(d.payloadBuffer, d.CurrPacketIn.Payload.D32)
-	case PktD64:
-		d.swtPacketInfo.PayloadPktBitsize = 64
-		binary.LittleEndian.PutUint64(d.payloadBuffer, d.CurrPacketIn.Payload.D64)
-	}
+	d.swtPacketInfo.PayloadPktBitsize = d.payloadBitSize(d.CurrPacketIn.Type)
+	d.writePayloadBytes(d.CurrPacketIn)
 
 	d.outputElem.SetExtendedDataPtr(d.payloadBuffer)
-	if d.CurrPacketIn.IsMarkerPkt() {
-		d.swtPacketInfo.MarkerPacket = true
-	}
+	d.swtPacketInfo.MarkerPacket = d.swtPacketInfo.MarkerPacket || d.CurrPacketIn.IsMarkerPkt()
 	return true
+}
+
+func (d *PktDecode) payloadBitSize(typ PktType) uint8 {
+	switch typ {
+	case PktD4:
+		return 4
+	case PktD8, PktTrig, PktGErr, PktMErr:
+		return 8
+	case PktD16:
+		return 16
+	case PktD32, PktFreq:
+		return 32
+	case PktD64:
+		return 64
+	default:
+		return 0
+	}
+}
+
+func (d *PktDecode) writePayloadBytes(pkt *Packet) {
+	switch pkt.Type {
+	case PktD4, PktD8, PktTrig, PktGErr, PktMErr:
+		d.payloadBuffer[0] = pkt.Payload.D8
+	case PktD16:
+		binary.LittleEndian.PutUint16(d.payloadBuffer, pkt.Payload.D16)
+	case PktD32, PktFreq:
+		binary.LittleEndian.PutUint32(d.payloadBuffer, pkt.Payload.D32)
+	case PktD64:
+		binary.LittleEndian.PutUint64(d.payloadBuffer, pkt.Payload.D64)
+	}
 }

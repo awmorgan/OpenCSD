@@ -75,6 +75,28 @@ func (b *StmStreamBuilder) Flush() {
 	}
 }
 
+func (b *StmStreamBuilder) AddAsync() {
+	for range 21 {
+		b.AddNibble(0xF)
+	}
+	b.AddNibble(0x0)
+}
+
+func drainProc(p *PktProc, data []byte) error {
+	p.SetReader(bytes.NewReader(data))
+	var lastErr error
+	for {
+		_, err := p.NextPacket()
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, io.EOF) {
+			lastErr = err
+		}
+		return lastErr
+	}
+}
+
 func TestSTMEndToEndDecode(t *testing.T) {
 	config := NewConfig()
 	config.SetTraceID(0x10)
@@ -191,21 +213,6 @@ func TestSTMErrorCases(t *testing.T) {
 	proc := NewPktProc(nil)
 	proc.SetProtocolConfig(config)
 
-	drainProc := func(p *PktProc, data []byte) error {
-		p.SetReader(bytes.NewReader(data))
-		var lastErr error
-		for {
-			_, err := p.NextPacket()
-			if err != nil {
-				if !errors.Is(err, io.EOF) {
-					lastErr = err
-				}
-				break
-			}
-		}
-		return lastErr
-	}
-
 	// Error case 1: ASYNC with invalid padding
 	sb := &StmStreamBuilder{}
 	for range 21 {
@@ -291,31 +298,53 @@ func TestSTMErrorCases(t *testing.T) {
 }
 
 func TestSTMPacketString(t *testing.T) {
-	pkt := &Packet{}
-	pkt.ResetStartState()
-	if pkt.String() != "NOTSYNC:STM not synchronised" {
-		t.Errorf("Unexpected string for initial state: %s", pkt.String())
+	tests := []struct {
+		name  string
+		setup func(*Packet)
+		want  string
+	}{
+		{
+			name: "initial state",
+			setup: func(pkt *Packet) {
+				pkt.ResetStartState()
+			},
+			want: "NOTSYNC:STM not synchronised",
+		},
+		{
+			name: "D8 payload",
+			setup: func(pkt *Packet) {
+				pkt.SetPacketType(PktD8, false)
+				pkt.Payload.D8 = 0xAB
+			},
+			want: "D8:8 bit data; Data=0xab",
+		},
+		{
+			name: "bad sequence includes original type",
+			setup: func(pkt *Packet) {
+				pkt.SetPacketType(PktD32, false)
+				pkt.OrigType = pkt.Type
+				pkt.Type = PktBadSequence
+			},
+			want: "BAD_SEQUENCE:Invalid sequence in packet[D32]",
+		},
+		{
+			name: "frequency payload",
+			setup: func(pkt *Packet) {
+				pkt.SetPacketType(PktFreq, false)
+				pkt.Payload.D32 = 1000
+			},
+			want: "FREQ:Frequency packet; Freq=1000Hz",
+		},
 	}
 
-	pkt.SetPacketType(PktD8, false)
-	pkt.Payload.D8 = 0xAB
-	str := pkt.String()
-	if str != "D8:8 bit data; Data=0xab" {
-		t.Errorf("Unexpected formatting for D8: %s", str)
-	}
-
-	pkt.SetPacketType(PktD32, false)
-	pkt.OrigType = pkt.Type
-	pkt.Type = PktBadSequence
-	if pkt.String() != "BAD_SEQUENCE:Invalid sequence in packet[D32]" {
-		t.Errorf("Unexpected formatting: %s", pkt.String())
-	}
-	pkt.Type = PktD8
-
-	pkt.SetPacketType(PktFreq, false)
-	pkt.Payload.D32 = 1000
-	if pkt.String() != "FREQ:Frequency packet; Freq=1000Hz" {
-		t.Errorf("Unexpected formatting: %s", pkt.String())
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			pkt := &Packet{}
+			tc.setup(pkt)
+			if got := pkt.String(); got != tc.want {
+				t.Fatalf("Packet.String() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -325,20 +354,30 @@ func TestSTMConfig(t *testing.T) {
 	if cfg.TraceID() != 0x77 {
 		t.Errorf("TraceID mismatch")
 	}
-	cfg.SetHWTraceFeat(HWEventEnabled)
-	if !cfg.HWTraceEn() {
-		t.Errorf("HWTraceEn mismatch")
+
+	tests := []struct {
+		name    string
+		feat    HWEventFeat
+		feat1R  uint32
+		tcsr    uint32
+		wantHWE bool
+	}{
+		{name: "explicit enabled", feat: HWEventEnabled, wantHWE: true},
+		{name: "register disabled", feat: HWEventUseRegisters, wantHWE: false},
+		{name: "register enabled", feat: HWEventUseRegisters, feat1R: 0x80000, tcsr: 0x8, wantHWE: true},
 	}
-	cfg.SetHWTraceFeat(HWEventUseRegisters)
-	if cfg.HWTraceEn() {
-		t.Errorf("HWTraceEn should be false")
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg.RegFeat1R = tc.feat1R
+			cfg.RegTCSR = tc.tcsr
+			cfg.SetHWTraceFeat(tc.feat)
+			if cfg.HWTraceEn() != tc.wantHWE {
+				t.Fatalf("HWTraceEn() = %v, want %v", cfg.HWTraceEn(), tc.wantHWE)
+			}
+		})
 	}
-	cfg.RegFeat1R = 0x80000
-	cfg.RegTCSR = 0x8
-	cfg.SetHWTraceFeat(HWEventUseRegisters)
-	if !cfg.HWTraceEn() {
-		t.Errorf("HWTraceEn should be true")
-	}
+
 	_ = cfg.MaxMasterIdx()
 	_ = cfg.MaxChannelIdx()
 	_ = cfg.HWTraceMasterIdx()
