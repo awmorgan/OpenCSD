@@ -2,119 +2,154 @@ package testutil
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
 	"opencsd/internal/snapshot"
 )
 
+type snapshotLine struct {
+	line  string
+	id    string
+	idx   int
+	order int
+}
+
 // SanitizePPL filters and normalizes PPL output lines for diff comparison.
 func SanitizePPL(s string, traceIDs []string) string {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	s = strings.ReplaceAll(s, "\r", "\n")
-	lines := strings.Split(s, "\n")
+	lines := strings.Split(normalizeNewlines(s), "\n")
+	parsed := parseSnapshotLines(lines[firstRecordLine(lines):])
+	sortSnapshotLines(parsed)
 
-	idSet := make(map[string]struct{}, len(traceIDs))
-	for _, id := range traceIDs {
-		idSet[strings.ToLower(strings.TrimSpace(id))] = struct{}{}
+	return joinSnapshotLines(parsed, traceIDSet(traceIDs))
+}
+
+func normalizeNewlines(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return strings.ReplaceAll(s, "\r", "\n")
+}
+
+func traceIDSet(traceIDs []string) map[string]struct{} {
+	if len(traceIDs) == 0 {
+		return nil
 	}
 
-	start := 0
+	ids := make(map[string]struct{}, len(traceIDs))
+	for _, id := range traceIDs {
+		id = strings.ToLower(strings.TrimSpace(id))
+		if id != "" {
+			ids[id] = struct{}{}
+		}
+	}
+	return ids
+}
+
+func firstRecordLine(lines []string) int {
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "Idx:") || strings.HasPrefix(trimmed, "Frame:") {
-			start = i
-			break
+			return i
 		}
 	}
+	return 0
+}
 
-	type parsedLine struct {
-		line  string
-		id    string
-		idx   int
-		order int
-	}
-
-	parsed := make([]parsedLine, 0, len(lines)-start)
-	ord := 0
-	for _, line := range lines[start:] {
+func parseSnapshotLines(lines []string) []snapshotLine {
+	parsed := make([]snapshotLine, 0, len(lines))
+	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		for _, idxLine := range SplitIdxRecords(line) {
-			normalized := NormalizeSnapshotLine(idxLine)
-			if normalized == "" {
-				continue
+		for _, record := range SplitIdxRecords(line) {
+			if parsedLine, ok := parseSnapshotLine(record, len(parsed)); ok {
+				parsed = append(parsed, parsedLine)
 			}
-			idVal, ok := ExtractLineID(idxLine)
-			if !ok {
-				continue
-			}
-			idxVal, ok := ExtractLineIdx(idxLine)
-			if !ok {
-				continue
-			}
-			parsed = append(parsed, parsedLine{line: normalized, id: idVal, idx: idxVal, order: ord})
-			ord++
 		}
 	}
+	return parsed
+}
 
-	sort.SliceStable(parsed, func(i, j int) bool {
-		if parsed[i].idx != parsed[j].idx {
-			return parsed[i].idx < parsed[j].idx
+func parseSnapshotLine(line string, order int) (snapshotLine, bool) {
+	normalized := NormalizeSnapshotLine(line)
+	if normalized == "" {
+		return snapshotLine{}, false
+	}
+
+	id, ok := ExtractLineID(line)
+	if !ok {
+		return snapshotLine{}, false
+	}
+
+	idx, ok := ExtractLineIdx(line)
+	if !ok {
+		return snapshotLine{}, false
+	}
+
+	return snapshotLine{line: normalized, id: id, idx: idx, order: order}, true
+}
+
+func sortSnapshotLines(lines []snapshotLine) {
+	slices.SortStableFunc(lines, func(a, b snapshotLine) int {
+		switch {
+		case a.idx < b.idx:
+			return -1
+		case a.idx > b.idx:
+			return 1
+		case a.id < b.id:
+			return -1
+		case a.id > b.id:
+			return 1
+		case a.order < b.order:
+			return -1
+		case a.order > b.order:
+			return 1
+		default:
+			return 0
 		}
-		if parsed[i].id != parsed[j].id {
-			return parsed[i].id < parsed[j].id
-		}
-		return parsed[i].order < parsed[j].order
 	})
+}
 
-	if len(idSet) == 0 {
-		out := make([]string, 0, len(parsed))
-		for _, entry := range parsed {
-			out = append(out, entry.line)
-		}
-		return strings.Join(out, "\n")
-	}
-
-	out := make([]string, 0, len(parsed))
-	for _, entry := range parsed {
-		if _, ok := idSet[entry.id]; ok {
-			out = append(out, entry.line)
+func joinSnapshotLines(lines []snapshotLine, ids map[string]struct{}) string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if len(ids) == 0 || hasTraceID(ids, line.id) {
+			out = append(out, line.line)
 		}
 	}
-
 	return strings.Join(out, "\n")
 }
 
+func hasTraceID(ids map[string]struct{}, id string) bool {
+	_, ok := ids[id]
+	return ok
+}
+
 func SplitIdxRecords(line string) []string {
-	if !strings.Contains(line, "Idx:") {
-		return nil
-	}
-	starts := make([]int, 0, 2)
-	for pos := 0; pos < len(line); {
-		i := strings.Index(line[pos:], "Idx:")
-		if i < 0 {
-			break
+	var records []string
+	for {
+		start := strings.Index(line, "Idx:")
+		if start < 0 {
+			return records
 		}
-		starts = append(starts, pos+i)
-		pos += i + len("Idx:")
-	}
-	if len(starts) == 0 {
-		return nil
-	}
-	records := make([]string, 0, len(starts))
-	for i, st := range starts {
-		end := len(line)
-		if i+1 < len(starts) {
-			end = starts[i+1]
+		line = line[start:]
+
+		next := strings.Index(line[len("Idx:"):], "Idx:")
+		if next < 0 {
+			return appendRecord(records, line)
 		}
-		rec := strings.TrimSpace(line[st:end])
-		if strings.HasPrefix(rec, "Idx:") {
-			records = append(records, rec)
-		}
+
+		end := len("Idx:") + next
+		records = appendRecord(records, line[:end])
+		line = line[end:]
+	}
+}
+
+func appendRecord(records []string, record string) []string {
+	record = strings.TrimSpace(record)
+	if strings.HasPrefix(record, "Idx:") {
+		return append(records, record)
 	}
 	return records
 }
@@ -128,7 +163,8 @@ func NormalizeSnapshotLine(line string) string {
 	if !ok {
 		return ""
 	}
-	packetType := ExtractPacketType(strings.TrimSpace(right))
+
+	packetType := ExtractPacketType(right)
 	if packetType == "" {
 		return ""
 	}
@@ -136,10 +172,7 @@ func NormalizeSnapshotLine(line string) string {
 }
 
 func ExtractPacketType(s string) string {
-	if s == "" {
-		return ""
-	}
-	before, _, ok := strings.Cut(s, ":")
+	before, _, ok := strings.Cut(strings.TrimSpace(s), ":")
 	if !ok {
 		return ""
 	}
@@ -149,18 +182,19 @@ func ExtractPacketType(s string) string {
 func FirstDiff(got, want []string) (int, string, string) {
 	maxLen := max(len(want), len(got))
 	for i := range maxLen {
-		var gotLine, wantLine string
-		if i < len(got) {
-			gotLine = got[i]
-		}
-		if i < len(want) {
-			wantLine = want[i]
-		}
+		gotLine, wantLine := lineAt(got, i), lineAt(want, i)
 		if gotLine != wantLine {
 			return i + 1, gotLine, wantLine
 		}
 	}
 	return 0, "", ""
+}
+
+func lineAt(lines []string, i int) string {
+	if i >= len(lines) {
+		return ""
+	}
+	return lines[i]
 }
 
 func FindParsedDeviceByName(devs map[string]*snapshot.Device, name string) *snapshot.Device {
@@ -177,6 +211,7 @@ func parseHexOrDecErr(s string) (uint64, error) {
 	if s == "" {
 		return 0, nil
 	}
+
 	v, err := strconv.ParseUint(s, 0, 64)
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse integer string %q: %w", s, err)
@@ -193,30 +228,35 @@ func ParseHexOrDec(s string) uint64 {
 }
 
 func ExtractLineID(line string) (string, bool) {
-	_, after, ok := strings.Cut(line, "ID:")
+	id, ok := extractDelimitedField(line, "ID:")
 	if !ok {
 		return "", false
 	}
-	rest := after
-	before, _, ok := strings.Cut(rest, ";")
-	if !ok {
-		return "", false
-	}
-	return strings.ToLower(strings.TrimSpace(before)), true
+	return strings.ToLower(id), true
 }
 
 func ExtractLineIdx(line string) (int, bool) {
-	_, after, ok := strings.Cut(line, "Idx:")
+	field, ok := extractDelimitedField(line, "Idx:")
 	if !ok {
 		return 0, false
 	}
-	before, _, ok := strings.Cut(after, ";")
-	if !ok {
-		return 0, false
-	}
-	idx, err := strconv.Atoi(strings.TrimSpace(before))
+
+	idx, err := strconv.Atoi(field)
 	if err != nil {
 		return 0, false
 	}
 	return idx, true
+}
+
+func extractDelimitedField(line, prefix string) (string, bool) {
+	_, after, ok := strings.Cut(line, prefix)
+	if !ok {
+		return "", false
+	}
+
+	before, _, ok := strings.Cut(after, ";")
+	if !ok {
+		return "", false
+	}
+	return strings.TrimSpace(before), true
 }
