@@ -1,9 +1,6 @@
 package printers
 
-import (
-	"fmt"
-	"io"
-)
+import "io"
 
 // ItemPrinter translates the C++ ItemPrinter class.
 type ItemPrinter struct {
@@ -15,16 +12,15 @@ type ItemPrinter struct {
 
 // NewItemPrinter constructs an ItemPrinter using the given io.Writer.
 func NewItemPrinter(writer io.Writer) *ItemPrinter {
-	return &ItemPrinter{
-		writer: writer,
-	}
+	return &ItemPrinter{writer: writer}
 }
 
 // ItemPrintLine writes the given message to the writer.
 func (p *ItemPrinter) ItemPrintLine(msg string) {
-	if p.writer != nil {
-		fmt.Fprint(p.writer, msg)
+	if p.writer == nil {
+		return
 	}
+	_, _ = io.WriteString(p.writer, msg)
 }
 
 // SetTestWaits configures the printer to simulate returning wait signals for a specified number of elements.

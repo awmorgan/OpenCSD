@@ -8,6 +8,8 @@ import (
 	"opencsd/internal/ocsd"
 )
 
+const rawFrameBytesPerLine = 16
+
 // RawFramePrinter translates the C++ RawFramePrinter class.
 // It acts as a sink for raw trace dataframes, printing their content.
 type RawFramePrinter struct {
@@ -16,9 +18,7 @@ type RawFramePrinter struct {
 
 // NewRawFramePrinter creates a new printer for RawFrame elements.
 func NewRawFramePrinter(writer io.Writer) *RawFramePrinter {
-	return &RawFramePrinter{
-		ItemPrinter: *NewItemPrinter(writer),
-	}
+	return &RawFramePrinter{ItemPrinter: *NewItemPrinter(writer)}
 }
 
 // WriteRawFrame responds to raw frame data callbacks.
@@ -28,44 +28,44 @@ func (p *RawFramePrinter) WriteRawFrame(index ocsd.TrcIndex, frameElem ocsd.Rawf
 	}
 
 	var sb strings.Builder
+	fmt.Fprintf(&sb, "Frame Data; Index%7d; %s", index, rawFrameElemLabel(frameElem, traceID))
+	writeRawFrameBytes(&sb, data)
+	sb.WriteByte('\n')
 
-	fmt.Fprintf(&sb, "Frame Data; Index%7d; ", index)
+	p.ItemPrintLine(sb.String())
+	return nil
+}
 
+func rawFrameElemLabel(frameElem ocsd.RawframeElem, traceID uint8) string {
 	switch frameElem {
 	case ocsd.FrmPacked:
-		fmt.Fprintf(&sb, "%15s", "RAW_PACKED; ")
+		return fmt.Sprintf("%15s", "RAW_PACKED; ")
 	case ocsd.FrmHsync:
-		fmt.Fprintf(&sb, "%15s", "HSYNC; ")
+		return fmt.Sprintf("%15s", "HSYNC; ")
 	case ocsd.FrmFsync:
-		fmt.Fprintf(&sb, "%15s", "FSYNC; ")
+		return fmt.Sprintf("%15s", "FSYNC; ")
 	case ocsd.FrmIDData:
-		fmt.Fprintf(&sb, "%10s", "ID_DATA[")
-		if traceID == ocsd.BadCSSrcID {
-			sb.WriteString("????")
-		} else {
-			fmt.Fprintf(&sb, "0x%02x", traceID)
-		}
-		sb.WriteString("]; ")
+		return rawFrameIDLabel(traceID)
 	default:
-		fmt.Fprintf(&sb, "%15s", "UNKNOWN; ")
+		return fmt.Sprintf("%15s", "UNKNOWN; ")
 	}
+}
 
-	// Process byte data if available
-	if len(data) > 0 {
-		lineBytes := 0
-		for i := range data {
-			if lineBytes == 16 {
-				sb.WriteString("\n")
-				lineBytes = 0
-			}
-			fmt.Fprintf(&sb, "%02x ", data[i])
-			lineBytes++
+func rawFrameIDLabel(traceID uint8) string {
+	id := "????"
+	if traceID != ocsd.BadCSSrcID {
+		id = fmt.Sprintf("0x%02x", traceID)
+	}
+	return fmt.Sprintf("%10s%s]; ", "ID_DATA[", id)
+}
+
+func writeRawFrameBytes(sb *strings.Builder, data []byte) {
+	for i, b := range data {
+		if i > 0 && i%rawFrameBytesPerLine == 0 {
+			sb.WriteByte('\n')
 		}
+		fmt.Fprintf(sb, "%02x ", b)
 	}
-	sb.WriteString("\n")
-	p.ItemPrintLine(sb.String())
-
-	return nil
 }
 
 func (p *RawFramePrinter) FlushRawFrames() error {

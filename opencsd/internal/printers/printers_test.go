@@ -2,6 +2,7 @@ package printers
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -32,19 +33,15 @@ func TestItemPrinter(t *testing.T) {
 	}
 
 	p.ItemPrintLine("Hello Test\n")
-	if buf.String() != "Hello Test\n" {
-		t.Errorf("buf string mismatch: %q", buf.String())
-	}
+	assertBuffer(t, &buf, "Hello Test\n")
 }
 
 func TestRawFramePrinter(t *testing.T) {
 	var buf bytes.Buffer
 	rp := NewRawFramePrinter(&buf)
 
-	// Test muted
 	rp.SetMute(true)
-	err := rp.WriteRawFrame(0, ocsd.FrmPacked, nil, 0)
-	if err != nil {
+	if err := rp.WriteRawFrame(0, ocsd.FrmPacked, nil, 0); err != nil {
 		t.Errorf("Expected nil error, got %v", err)
 	}
 	if buf.Len() != 0 {
@@ -52,18 +49,19 @@ func TestRawFramePrinter(t *testing.T) {
 	}
 	rp.SetMute(false)
 
-	// Test control methods
-	err = rp.FlushRawFrames()
-	if err != nil {
-		t.Errorf("Expected nil error for flush, got %v", err)
-	}
-	err = rp.ResetRawFrames()
-	if err != nil {
-		t.Errorf("Expected nil error for reset, got %v", err)
-	}
-	err = rp.CloseRawFrames()
-	if err != nil {
-		t.Errorf("Expected nil error for close, got %v", err)
+	for _, tc := range []struct {
+		name string
+		fn   func() error
+	}{
+		{name: "flush", fn: rp.FlushRawFrames},
+		{name: "reset", fn: rp.ResetRawFrames},
+		{name: "close", fn: rp.CloseRawFrames},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.fn(); err != nil {
+				t.Fatalf("expected nil error, got %v", err)
+			}
+		})
 	}
 
 	tests := []struct {
@@ -125,9 +123,7 @@ func TestRawFramePrinter(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			buf.Reset()
 			rp.WriteRawFrame(tc.index, tc.elem, tc.data, tc.traceID)
-			if buf.String() != tc.exptStr {
-				t.Errorf("\nexpected:\n%q\nactual:\n%q", tc.exptStr, buf.String())
-			}
+			assertBuffer(t, &buf, tc.exptStr)
 		})
 	}
 }
@@ -135,14 +131,12 @@ func TestRawFramePrinter(t *testing.T) {
 func TestGenericElementPrinter(t *testing.T) {
 	var buf bytes.Buffer
 	gp := NewGenericElementPrinter(&buf)
-
-	// Test muted
-	gp.SetMute(true)
 	elem := ocsd.NewTraceElementWithType(ocsd.GenElemTraceOn)
+
+	gp.SetMute(true)
 	elem.Index = 123
 	elem.TraceID = 0x10
-	err := gp.PrintElement(elem)
-	if err != nil {
+	if err := gp.PrintElement(elem); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if buf.Len() != 0 {
@@ -150,7 +144,6 @@ func TestGenericElementPrinter(t *testing.T) {
 	}
 	gp.SetMute(false)
 
-	// test mute id print
 	gp.MuteIDPrint(true)
 	elem.Index = 100
 	elem.TraceID = 0x11
@@ -161,22 +154,16 @@ func TestGenericElementPrinter(t *testing.T) {
 	gp.MuteIDPrint(false)
 	buf.Reset()
 
-	// standard elem test
 	elem.Index = 200
 	elem.TraceID = 0x22
 	gp.PrintElement(elem)
-	expt := "Idx:200; ID:22; OCSD_GEN_TRC_ELEM_TRACE_ON( [begin or filter])\n"
-	if buf.String() != expt {
-		t.Errorf("expected %q, got %q", expt, buf.String())
-	}
+	assertBuffer(t, &buf, "Idx:200; ID:22; OCSD_GEN_TRC_ELEM_TRACE_ON( [begin or filter])\n")
 	buf.Reset()
 
-	// Test wait functionality
 	gp.SetTestWaits(1)
 	elem.Index = 300
 	elem.TraceID = 0x33
-	err = gp.PrintElement(elem)
-	if !ocsd.IsDataWaitErr(err) {
+	if err := gp.PrintElement(elem); !errors.Is(err, ocsd.ErrWait) {
 		t.Fatalf("expected wait sentinel error, got %v", err)
 	}
 	if !gp.NeedAckWait() {
@@ -184,7 +171,6 @@ func TestGenericElementPrinter(t *testing.T) {
 	}
 
 	buf.Reset()
-	// Next element without ack wait
 	elem.Index = 301
 	elem.TraceID = 0x33
 	gp.PrintElement(elem)
@@ -196,12 +182,11 @@ func TestGenericElementPrinter(t *testing.T) {
 	}
 	buf.Reset()
 
-	// with ack wait
 	gp.SetTestWaits(1)
 	elem.Index = 400
 	elem.TraceID = 0x44
-	gp.PrintElement(elem) // sets needAckWait = true
-	gp.AckWait()          // manual clear
+	gp.PrintElement(elem)
+	gp.AckWait()
 	buf.Reset()
 	elem.Index = 401
 	elem.TraceID = 0x44
@@ -210,16 +195,13 @@ func TestGenericElementPrinter(t *testing.T) {
 		t.Errorf("did not expect warning, got %s", buf.String())
 	}
 
-	// Test collect stats
 	gp.SetCollectStats()
-	ctxElemA := ocsd.NewTraceElementWithType(ocsd.GenElemPeContext)
-	ctxElemA.Index = 500
-	ctxElemA.TraceID = 0x55
-	gp.PrintElement(ctxElemA)
-	ctxElemB := ocsd.NewTraceElementWithType(ocsd.GenElemPeContext)
-	ctxElemB.Index = 501
-	ctxElemB.TraceID = 0x55
-	gp.PrintElement(ctxElemB)
+	for _, elem := range []*ocsd.TraceElement{
+		newTraceElement(ocsd.GenElemPeContext, 500, 0x55),
+		newTraceElement(ocsd.GenElemPeContext, 501, 0x55),
+	} {
+		gp.PrintElement(elem)
+	}
 
 	buf.Reset()
 	gp.PrintStats()
@@ -230,8 +212,21 @@ func TestGenericElementPrinter(t *testing.T) {
 		t.Errorf("expected pe context count 2, got %s", buf.String())
 	}
 
-	// Out of bounds elemName check
 	if nm := elemName(ocsd.GenElemType(999)); nm != "OCSD_GEN_TRC_ELEM_UNKNOWN" {
 		t.Errorf("expected unknown, got %s", nm)
+	}
+}
+
+func newTraceElement(typ ocsd.GenElemType, index ocsd.TrcIndex, traceID uint8) *ocsd.TraceElement {
+	elem := ocsd.NewTraceElementWithType(typ)
+	elem.Index = index
+	elem.TraceID = traceID
+	return elem
+}
+
+func assertBuffer(t *testing.T, buf *bytes.Buffer, want string) {
+	t.Helper()
+	if got := buf.String(); got != want {
+		t.Errorf("\nexpected:\n%q\nactual:\n%q", want, got)
 	}
 }

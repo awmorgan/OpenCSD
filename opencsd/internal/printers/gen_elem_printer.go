@@ -8,6 +8,8 @@ import (
 	"opencsd/internal/ocsd"
 )
 
+const unackedWaitWarning = "WARNING: Generic Element Printer; New element without previous _WAIT acknowledged\n"
+
 // WaitAcker provides an interface for test/output behavior that interacts with the datapath.
 type WaitAcker interface {
 	NeedAckWait() bool
@@ -35,38 +37,48 @@ func (p *GenericElementPrinter) PrintElement(elem *ocsd.TraceElement) error {
 	if elem == nil {
 		return nil
 	}
-	if p.collectStats {
-		p.packetCounts[elem.ElemType]++
-	}
 
+	p.countElement(elem)
 	if p.IsMuted() {
 		return nil
 	}
 
+	p.printElementLine(elem)
+	p.warnOnUnackedWait()
+	return p.maybeWait()
+}
+
+func (p *GenericElementPrinter) countElement(elem *ocsd.TraceElement) {
+	if p.collectStats {
+		p.packetCounts[elem.ElemType]++
+	}
+}
+
+func (p *GenericElementPrinter) printElementLine(elem *ocsd.TraceElement) {
 	var sb strings.Builder
 	if !p.IDPrintMuted() {
 		fmt.Fprintf(&sb, "Idx:%d; ID:%x; ", elem.Index, elem.TraceID)
 	}
-
-	// append trace element standard formatting
 	sb.WriteString(elem.String())
-	sb.WriteString("\n")
-
+	sb.WriteByte('\n')
 	p.ItemPrintLine(sb.String())
+}
 
-	// Functonality to test wait / flush mechanism
-	if p.needWaitAck {
-		p.ItemPrintLine("WARNING: Generic Element Printer; New element without previous _WAIT acknowledged\n")
-		p.needWaitAck = false
+func (p *GenericElementPrinter) warnOnUnackedWait() {
+	if !p.needWaitAck {
+		return
 	}
+	p.ItemPrintLine(unackedWaitWarning)
+	p.needWaitAck = false
+}
 
-	if p.TestWaits() > 0 {
-		p.DecTestWaits()
-		p.needWaitAck = true
-		return ocsd.ErrWait
+func (p *GenericElementPrinter) maybeWait() error {
+	if p.TestWaits() <= 0 {
+		return nil
 	}
-
-	return nil
+	p.DecTestWaits()
+	p.needWaitAck = true
+	return ocsd.ErrWait
 }
 
 // AckWait acknowledges a wait signal.
@@ -83,15 +95,15 @@ func (p *GenericElementPrinter) PrintStats() {
 	var sb strings.Builder
 
 	sb.WriteString("Generic Packets processed:-\n")
-	for i := ocsd.GenElemUnknown; i <= ocsd.GenElemCustom; i++ {
-		fmt.Fprintf(&sb, "%s : %d\n", elemName(i), p.packetCounts[i])
+	for typ := ocsd.GenElemUnknown; typ <= ocsd.GenElemCustom; typ++ {
+		fmt.Fprintf(&sb, "%s : %d\n", elemName(typ), p.packetCounts[typ])
 	}
 	sb.WriteString("\n\n")
 
 	p.ItemPrintLine(sb.String())
 }
 
-var elemNames = map[ocsd.GenElemType]string{
+var elemNames = [...]string{
 	ocsd.GenElemUnknown:         "OCSD_GEN_TRC_ELEM_UNKNOWN",
 	ocsd.GenElemNoSync:          "OCSD_GEN_TRC_ELEM_NO_SYNC",
 	ocsd.GenElemTraceOn:         "OCSD_GEN_TRC_ELEM_TRACE_ON",
@@ -115,8 +127,9 @@ var elemNames = map[ocsd.GenElemType]string{
 }
 
 func elemName(t ocsd.GenElemType) string {
-	if name, ok := elemNames[t]; ok {
-		return name
+	idx := int(t)
+	if idx >= 0 && idx < len(elemNames) && elemNames[idx] != "" {
+		return elemNames[idx]
 	}
-	return "OCSD_GEN_TRC_ELEM_UNKNOWN"
+	return elemNames[ocsd.GenElemUnknown]
 }
