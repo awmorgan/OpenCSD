@@ -1,6 +1,7 @@
 package ocsd
 
 import (
+	"encoding/binary"
 	"fmt"
 	"strings"
 )
@@ -164,6 +165,7 @@ func (e *TraceElement) clearPerPktData() {
 	e.LastInstrCond = false
 	e.ExceptionRetAddrBrTgt = false
 	e.ExceptionMTailChain = false
+	e.PtrExtendedData = nil
 
 	e.Payload = struct {
 		ExceptionNum  uint32
@@ -177,7 +179,6 @@ func (e *TraceElement) clearPerPktData() {
 		SWIte         TraceSWIte
 		SWTItm        SWTItmInfo
 	}{}
-	e.PtrExtendedData = nil
 }
 
 // Construct with default state
@@ -188,8 +189,7 @@ func NewTraceElement() *TraceElement {
 }
 
 func NewTraceElementWithType(typ GenElemType) *TraceElement {
-	te := &TraceElement{}
-	te.Init()
+	te := NewTraceElement()
 	te.ElemType = typ
 	return te
 }
@@ -393,249 +393,225 @@ var markerTypeNames = map[TraceSyncMarker]string{
 }
 
 func traceElemMemSpaceString(memSpace MemSpaceAcc) string {
-	switch memSpace {
-	case MemSpaceNone:
-		return "None"
-	case MemSpaceEL1S:
-		return "EL1S"
-	case MemSpaceEL1N:
-		return "EL1N"
-	case MemSpaceEL2:
-		return "EL2N"
-	case MemSpaceEL3:
-		return "EL3"
-	case MemSpaceEL2S:
-		return "EL2S"
-	case MemSpaceEL1R:
-		return "EL1R"
-	case MemSpaceEL2R:
-		return "EL2R"
-	case MemSpaceRoot:
-		return "Root"
-	case MemSpaceS:
-		return "Any S"
-	case MemSpaceN:
-		return "Any NS"
-	case MemSpaceR:
-		return "Any R"
-	case MemSpaceAny:
-		return "Any"
-	default:
-		var parts []string
-		msBits := uint8(memSpace)
-		if msBits&uint8(MemSpaceEL1S) != 0 {
-			parts = append(parts, "EL1S")
-		}
-		if msBits&uint8(MemSpaceEL1N) != 0 {
-			parts = append(parts, "EL1N")
-		}
-		if msBits&uint8(MemSpaceEL2) != 0 {
-			parts = append(parts, "EL2N")
-		}
-		if msBits&uint8(MemSpaceEL3) != 0 {
-			parts = append(parts, "EL3")
-		}
-		if msBits&uint8(MemSpaceEL2S) != 0 {
-			parts = append(parts, "EL2S")
-		}
-		if msBits&uint8(MemSpaceEL1R) != 0 {
-			parts = append(parts, "EL1R")
-		}
-		if msBits&uint8(MemSpaceEL2R) != 0 {
-			parts = append(parts, "EL2R")
-		}
-		if msBits&uint8(MemSpaceRoot) != 0 {
-			parts = append(parts, "Root")
-		}
-		return strings.Join(parts, ",")
-	}
+	return memSpace.String()
 }
 
 // String implements OcsdTraceElement::toString
 func (e *TraceElement) String() string {
-	var sb strings.Builder
-
 	desc, ok := elemDescs[e.ElemType]
 	if !ok {
 		return "OCSD_GEN_TRC_ELEM??: index out of range."
 	}
-	sb.WriteString(desc)
-	sb.WriteString("(")
 
+	var sb strings.Builder
+	sb.WriteString(desc)
+	sb.WriteByte('(')
+	e.writeElementPayload(&sb)
+	if e.HasCC {
+		fmt.Fprintf(&sb, " [CC=%d]; ", e.CycleCount)
+	}
+	sb.WriteByte(')')
+	return sb.String()
+}
+
+func (e *TraceElement) writeElementPayload(sb *strings.Builder) {
 	switch e.ElemType {
 	case GenElemInstrRange:
-		fmt.Fprintf(&sb, "exec range=0x%x:[0x%x] ", e.StartAddr, e.EndAddr)
-		fmt.Fprintf(&sb, "num_i(%d) ", e.Payload.NumInstrRange)
-		fmt.Fprintf(&sb, "last_sz(%d) ", e.LastInstrSize)
-		fmt.Fprintf(&sb, "(ISA=%s) ", isaNames[e.ISA])
-		if e.LastInstrExecuted {
-			sb.WriteString("E ")
-		} else {
-			sb.WriteString("N ")
-		}
-		if s, ok := instrTypeNames[e.LastInstrType]; ok {
-			sb.WriteString(s)
-		}
-		if e.LastInstrSubtype != SInstrNone {
-			if s, ok := instrSubtypeNames[e.LastInstrSubtype]; ok {
-				sb.WriteString(s)
-			}
-		}
-		if e.LastInstrCond {
-			sb.WriteString(" <cond>")
-		}
-
+		e.writeInstrRange(sb)
 	case GenElemAddrNacc:
-		strEx := traceElemMemSpaceString(MemSpaceAcc(e.Payload.ExceptionNum))
-		fmt.Fprintf(&sb, " 0x%x; Memspace [0x%x:%s] ", e.StartAddr, e.Payload.ExceptionNum, strEx)
-
+		space := MemSpaceAcc(e.Payload.ExceptionNum)
+		fmt.Fprintf(sb, " 0x%x; Memspace [0x%x:%s] ", e.StartAddr, e.Payload.ExceptionNum, traceElemMemSpaceString(space))
 	case GenElemIRangeNopath:
-		fmt.Fprintf(&sb, "first 0x%x:[next 0x%x] ", e.StartAddr, e.EndAddr)
-		fmt.Fprintf(&sb, "num_i(%d) ", e.Payload.NumInstrRange)
-
+		fmt.Fprintf(sb, "first 0x%x:[next 0x%x] num_i(%d) ", e.StartAddr, e.EndAddr, e.Payload.NumInstrRange)
 	case GenElemException:
-		if e.ExceptionRetAddr {
-			fmt.Fprintf(&sb, "pref ret addr:0x%x", e.EndAddr)
-			if e.ExceptionRetAddrBrTgt {
-				sb.WriteString(" [addr also prev br tgt]")
-			}
-			sb.WriteString("; ")
-		}
-		fmt.Fprintf(&sb, "excep num (0x%02x) ", e.Payload.ExceptionNum)
-
+		e.writeException(sb)
 	case GenElemPeContext:
-		fmt.Fprintf(&sb, "(ISA=%s) ", isaNames[e.ISA])
-		if e.Context.ExceptionLevel > ELUnknown && e.Context.ELValid {
-			fmt.Fprintf(&sb, "EL%d", e.Context.ExceptionLevel)
-		}
-		switch e.Context.SecurityLevel {
-		case SecSecure:
-			sb.WriteString("S; ")
-		case SecNonsecure:
-			sb.WriteString("N; ")
-		case SecRoot:
-			sb.WriteString("Root; ")
-		case SecRealm:
-			sb.WriteString("Realm; ")
-		}
-		if e.Context.Bits64 {
-			sb.WriteString("64-bit; ")
-		} else {
-			sb.WriteString("32-bit; ")
-		}
-		if e.Context.VMIDValid {
-			fmt.Fprintf(&sb, "VMID=0x%x; ", e.Context.VMID)
-		}
-		if e.Context.CtxtIDValid {
-			fmt.Fprintf(&sb, "CTXTID=0x%x; ", e.Context.ContextID)
-		}
-
+		e.writePEContext(sb)
 	case GenElemTraceOn:
 		if s, ok := traceOnNames[e.Payload.TraceOnReason]; ok {
-			fmt.Fprintf(&sb, " [%s]", s)
+			fmt.Fprintf(sb, " [%s]", s)
 		}
-
 	case GenElemTimestamp:
-		fmt.Fprintf(&sb, " [ TS=0x%012x]; ", e.Timestamp)
-
+		fmt.Fprintf(sb, " [ TS=0x%012x]; ", e.Timestamp)
 	case GenElemSWTrace:
-		e.printSWInfoPkt(&sb)
-
+		e.printSWInfoPkt(sb)
 	case GenElemITMTrace:
-		e.printSWInfoPktItm(&sb)
-
+		e.printSWInfoPktItm(sb)
 	case GenElemEvent:
-		switch e.Payload.TraceEvent.EvType {
-		case EventTrigger:
-			sb.WriteString(" Trigger; ")
-		case EventNumbered:
-			fmt.Fprintf(&sb, " Numbered:%d; ", e.Payload.TraceEvent.EvNumber)
-		}
-
+		e.writeEvent(sb)
 	case GenElemEOTrace, GenElemNoSync:
-		if e.Payload.UnsyncEOTInfo <= UnsyncEOT {
-			fmt.Fprintf(&sb, " [%s]", unsyncNames[e.Payload.UnsyncEOTInfo])
+		if s, ok := unsyncNames[e.Payload.UnsyncEOTInfo]; ok {
+			fmt.Fprintf(sb, " [%s]", s)
 		}
-
 	case GenElemSyncMarker:
-		typ := e.Payload.SyncMarker.Type
-		if s, ok := markerTypeNames[typ]; ok {
-			fmt.Fprintf(&sb, " [%s(0x%08x)]", s, e.Payload.SyncMarker.Value)
+		marker := e.Payload.SyncMarker
+		if s, ok := markerTypeNames[marker.Type]; ok {
+			fmt.Fprintf(sb, " [%s(0x%08x)]", s, marker.Value)
 		}
-
 	case GenElemMemTrans:
 		if s, ok := transTypeNames[e.Payload.MemTrans]; ok {
 			sb.WriteString(s)
 		}
-
 	case GenElemInstrumentation:
-		fmt.Fprintf(&sb, "EL%d; 0x%016x", e.Payload.SWIte.EL, e.Payload.SWIte.Value)
+		fmt.Fprintf(sb, "EL%d; 0x%016x", e.Payload.SWIte.EL, e.Payload.SWIte.Value)
 	}
+}
 
-	if e.HasCC {
-		fmt.Fprintf(&sb, " [CC=%d]; ", e.CycleCount)
+func (e *TraceElement) writeInstrRange(sb *strings.Builder) {
+	fmt.Fprintf(sb, "exec range=0x%x:[0x%x] ", e.StartAddr, e.EndAddr)
+	fmt.Fprintf(sb, "num_i(%d) last_sz(%d) ", e.Payload.NumInstrRange, e.LastInstrSize)
+	fmt.Fprintf(sb, "(ISA=%s) ", isaName(e.ISA))
+	if e.LastInstrExecuted {
+		sb.WriteString("E ")
+	} else {
+		sb.WriteString("N ")
 	}
+	if s, ok := instrTypeNames[e.LastInstrType]; ok {
+		sb.WriteString(s)
+	}
+	if e.LastInstrSubtype != SInstrNone {
+		if s, ok := instrSubtypeNames[e.LastInstrSubtype]; ok {
+			sb.WriteString(s)
+		}
+	}
+	if e.LastInstrCond {
+		sb.WriteString(" <cond>")
+	}
+}
 
-	sb.WriteString(")")
-	return sb.String()
+func (e *TraceElement) writeException(sb *strings.Builder) {
+	if e.ExceptionRetAddr {
+		fmt.Fprintf(sb, "pref ret addr:0x%x", e.EndAddr)
+		if e.ExceptionRetAddrBrTgt {
+			sb.WriteString(" [addr also prev br tgt]")
+		}
+		sb.WriteString("; ")
+	}
+	fmt.Fprintf(sb, "excep num (0x%02x) ", e.Payload.ExceptionNum)
+}
+
+func (e *TraceElement) writePEContext(sb *strings.Builder) {
+	fmt.Fprintf(sb, "(ISA=%s) ", isaName(e.ISA))
+	if e.Context.ExceptionLevel > ELUnknown && e.Context.ELValid {
+		fmt.Fprintf(sb, "EL%d", e.Context.ExceptionLevel)
+	}
+	sb.WriteString(securityLevelName(e.Context.SecurityLevel))
+	if e.Context.Bits64 {
+		sb.WriteString("64-bit; ")
+	} else {
+		sb.WriteString("32-bit; ")
+	}
+	if e.Context.VMIDValid {
+		fmt.Fprintf(sb, "VMID=0x%x; ", e.Context.VMID)
+	}
+	if e.Context.CtxtIDValid {
+		fmt.Fprintf(sb, "CTXTID=0x%x; ", e.Context.ContextID)
+	}
+}
+
+func (e *TraceElement) writeEvent(sb *strings.Builder) {
+	switch e.Payload.TraceEvent.EvType {
+	case EventTrigger:
+		sb.WriteString(" Trigger; ")
+	case EventNumbered:
+		fmt.Fprintf(sb, " Numbered:%d; ", e.Payload.TraceEvent.EvNumber)
+	}
+}
+
+func isaName(isa ISA) string {
+	if s, ok := isaNames[isa]; ok {
+		return s
+	}
+	return isaNames[ISAUnknown]
+}
+
+func securityLevelName(level SecLevel) string {
+	switch level {
+	case SecSecure:
+		return "S; "
+	case SecNonsecure:
+		return "N; "
+	case SecRoot:
+		return "Root; "
+	case SecRealm:
+		return "Realm; "
+	default:
+		return ""
+	}
 }
 
 func (e *TraceElement) printSWInfoPkt(sb *strings.Builder) {
 	info := e.Payload.SWTraceInfo
-	if !info.GlobalErr {
-		if info.IDValid {
-			fmt.Fprintf(sb, " (Ma:0x%02x; Ch:0x%02x) ", info.MasterID, info.ChannelID)
-		} else {
-			sb.WriteString("(Ma:0x??; Ch:0x??) ")
-		}
-
-		if info.PayloadPktBitsize > 0 && len(e.PtrExtendedData) > 0 {
-			sb.WriteString("0x")
-			switch info.PayloadPktBitsize {
-			case 4:
-				fmt.Fprintf(sb, "%x", e.PtrExtendedData[0]&0xF)
-			case 8:
-				fmt.Fprintf(sb, "%02x", e.PtrExtendedData[0])
-			case 16:
-				if len(e.PtrExtendedData) >= 2 {
-					val := uint16(e.PtrExtendedData[0]) | (uint16(e.PtrExtendedData[1]) << 8)
-					fmt.Fprintf(sb, "%04x", val)
-				}
-			case 32:
-				if len(e.PtrExtendedData) >= 4 {
-					val := uint32(e.PtrExtendedData[0]) | (uint32(e.PtrExtendedData[1]) << 8) | (uint32(e.PtrExtendedData[2]) << 16) | (uint32(e.PtrExtendedData[3]) << 24)
-					fmt.Fprintf(sb, "%08x", val)
-				}
-			case 64:
-				if len(e.PtrExtendedData) >= 8 {
-					val := uint64(e.PtrExtendedData[0]) | (uint64(e.PtrExtendedData[1]) << 8) | (uint64(e.PtrExtendedData[2]) << 16) | (uint64(e.PtrExtendedData[3]) << 24) |
-						(uint64(e.PtrExtendedData[4]) << 32) | (uint64(e.PtrExtendedData[5]) << 40) | (uint64(e.PtrExtendedData[6]) << 48) | (uint64(e.PtrExtendedData[7]) << 56)
-					fmt.Fprintf(sb, "%016x", val)
-				}
-			default:
-				sb.WriteString("{Data Error : unsupported bit width.}")
-			}
-			sb.WriteString("; ")
-		}
-
-		if info.MarkerPacket {
-			sb.WriteString("+Mrk ")
-		}
-		if info.TriggerEvent {
-			sb.WriteString("Trig ")
-		}
-		if info.HasTimestamp {
-			fmt.Fprintf(sb, " [ TS=0x%012x]; ", e.Timestamp)
-		}
-		if info.Frequency {
-			sb.WriteString("Freq")
-		}
-		if info.MasterErr {
-			sb.WriteString("{Master Error.}")
-		}
-	} else {
+	if info.GlobalErr {
 		sb.WriteString("{Global Error.}")
+		return
 	}
+
+	writeSWTID(sb, info)
+	e.writeSWTPayload(sb, info.PayloadPktBitsize)
+	writeSWTFlags(sb, info, e.Timestamp)
+}
+
+func writeSWTID(sb *strings.Builder, info SWTInfo) {
+	if info.IDValid {
+		fmt.Fprintf(sb, " (Ma:0x%02x; Ch:0x%02x) ", info.MasterID, info.ChannelID)
+		return
+	}
+	sb.WriteString("(Ma:0x??; Ch:0x??) ")
+}
+
+func (e *TraceElement) writeSWTPayload(sb *strings.Builder, bitSize uint8) {
+	if bitSize == 0 || len(e.PtrExtendedData) == 0 {
+		return
+	}
+
+	sb.WriteString("0x")
+	switch bitSize {
+	case 4:
+		fmt.Fprintf(sb, "%x", e.PtrExtendedData[0]&0xF)
+	case 8:
+		fmt.Fprintf(sb, "%02x", e.PtrExtendedData[0])
+	case 16:
+		if len(e.PtrExtendedData) >= 2 {
+			fmt.Fprintf(sb, "%04x", binary.LittleEndian.Uint16(e.PtrExtendedData))
+		}
+	case 32:
+		if len(e.PtrExtendedData) >= 4 {
+			fmt.Fprintf(sb, "%08x", binary.LittleEndian.Uint32(e.PtrExtendedData))
+		}
+	case 64:
+		if len(e.PtrExtendedData) >= 8 {
+			fmt.Fprintf(sb, "%016x", binary.LittleEndian.Uint64(e.PtrExtendedData))
+		}
+	default:
+		sb.WriteString("{Data Error : unsupported bit width.}")
+	}
+	sb.WriteString("; ")
+}
+
+func writeSWTFlags(sb *strings.Builder, info SWTInfo, timestamp uint64) {
+	if info.MarkerPacket {
+		sb.WriteString("+Mrk ")
+	}
+	if info.TriggerEvent {
+		sb.WriteString("Trig ")
+	}
+	if info.HasTimestamp {
+		fmt.Fprintf(sb, " [ TS=0x%012x]; ", timestamp)
+	}
+	if info.Frequency {
+		sb.WriteString("Freq")
+	}
+	if info.MasterErr {
+		sb.WriteString("{Master Error.}")
+	}
+}
+
+var itmLocalTimestampNames = map[SWTItmType]string{
+	TSSync:       "TS Sync",
+	TSDelay:      "TS Delay",
+	TSPKTDelay:   "Packet Delay",
+	TSPKTTSDelay: "TS and Packet Delay",
 }
 
 func (e *TraceElement) printSWInfoPktItm(sb *strings.Builder) {
@@ -645,29 +621,17 @@ func (e *TraceElement) printSWInfoPktItm(sb *strings.Builder) {
 		sb.WriteString("ITM_OVERFLOW; ")
 	}
 
-	var tsLocalDesc string
-
 	switch itm.PktType {
 	case SWITPayload:
-		width := int(itm.PayloadSize) * 2
-		fmt.Fprintf(sb, "ITM_SWIT (ch: 0x%x; Data: 0x%0*x) ", itm.PayloadSrcID, width, itm.Value)
+		fmt.Fprintf(sb, "ITM_SWIT (ch: 0x%x; Data: 0x%0*x) ", itm.PayloadSrcID, int(itm.PayloadSize)*2, itm.Value)
 	case DWTPayload:
-		width := int(itm.PayloadSize) * 2
-		fmt.Fprintf(sb, "ITM_DWT (desc: 0x%x; Data: 0x%0*x) ", itm.PayloadSrcID, width, itm.Value)
+		fmt.Fprintf(sb, "ITM_DWT (desc: 0x%x; Data: 0x%0*x) ", itm.PayloadSrcID, int(itm.PayloadSize)*2, itm.Value)
 	case TSGlobal:
 		fmt.Fprintf(sb, "ITM_TS_GLOBAL ( TS: 0x%016x) ", e.Timestamp)
-	case TSSync:
-		tsLocalDesc = "TS Sync"
-	case TSDelay:
-		tsLocalDesc = "TS Delay"
-	case TSPKTDelay:
-		tsLocalDesc = "Packet Delay"
-	case TSPKTTSDelay:
-		tsLocalDesc = "TS and Packet Delay"
 	}
 
-	if tsLocalDesc != "" {
-		fmt.Fprintf(sb, "ITM_TS_LOCAL ( TS delta: 0x%08x, { %s}; ", itm.Value, tsLocalDesc)
+	if desc := itmLocalTimestampNames[itm.PktType]; desc != "" {
+		fmt.Fprintf(sb, "ITM_TS_LOCAL ( TS delta: 0x%08x, { %s}; ", itm.Value, desc)
 		fmt.Fprintf(sb, "TS cumulative: 0x%016x) ", e.Timestamp)
 	}
 }

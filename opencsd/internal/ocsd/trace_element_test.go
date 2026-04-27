@@ -5,17 +5,20 @@ import (
 	"testing"
 )
 
+func assertTraceElementStringContains(t *testing.T, e *TraceElement, want string) {
+	t.Helper()
+	if got := e.String(); !strings.Contains(got, want) {
+		t.Fatalf("expected %q in %q", want, got)
+	}
+}
+
 func TestTraceElementString_AddressWidthFormatting(t *testing.T) {
 	e := NewTraceElementWithType(GenElemInstrRange)
 	e.SetAddrRange(0x1234, 0x123456789ABCDEF0, 1)
 	e.SetISA(ISAArm)
 	e.SetLastInstrInfo(true, InstrOther, SInstrNone, 4)
 
-	s := e.String()
-	want := "exec range=0x1234:[0x123456789abcdef0]"
-	if !strings.Contains(s, want) {
-		t.Fatalf("expected %q in %q", want, s)
-	}
+	assertTraceElementStringContains(t, e, "exec range=0x1234:[0x123456789abcdef0]")
 }
 
 func TestTraceElementString_ExceptionRetAddressFormatting(t *testing.T) {
@@ -24,11 +27,7 @@ func TestTraceElementString_ExceptionRetAddressFormatting(t *testing.T) {
 	e.EndAddr = 0xDEADBEEF
 	e.SetExceptionNum(0x11)
 
-	s := e.String()
-	want := "pref ret addr:0xdeadbeef"
-	if !strings.Contains(s, want) {
-		t.Fatalf("expected %q in %q", want, s)
-	}
+	assertTraceElementStringContains(t, e, "pref ret addr:0xdeadbeef")
 }
 
 func TestTraceElementString_AddrNaccMemSpaceFormatting(t *testing.T) {
@@ -48,10 +47,7 @@ func TestTraceElementString_AddrNaccMemSpaceFormatting(t *testing.T) {
 			e.StartAddr = 0x1000
 			e.SetExceptionNum(uint32(tt.space))
 
-			s := e.String()
-			if !strings.Contains(s, tt.want) {
-				t.Fatalf("expected %q in %q", tt.want, s)
-			}
+			assertTraceElementStringContains(t, e, tt.want)
 		})
 	}
 }

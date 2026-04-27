@@ -1,6 +1,9 @@
 package ocsd
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 // Trace Indexing and Channel IDs
 
@@ -139,19 +142,18 @@ func IsDataContErr(err error) bool { return err == nil }
 
 // DataRespFromErr maps transitional datapath sentinel errors to DatapathResp.
 func DataRespFromErr(err error) DatapathResp {
-	if IsDataContErr(err) {
+	switch {
+	case err == nil:
 		return RespCont
-	}
-	if IsDataWaitErr(err) {
+	case errors.Is(err, ErrWait):
 		return RespWait
-	}
-	if errors.Is(err, ErrNotInit) {
+	case errors.Is(err, ErrNotInit):
 		return RespFatalNotInit
-	}
-	if errors.Is(err, ErrInvalidParamVal) || errors.Is(err, ErrInvalidParamType) {
+	case errors.Is(err, ErrInvalidParamVal), errors.Is(err, ErrInvalidParamType):
 		return RespFatalInvalidParam
+	default:
+		return RespFatalInvalidData
 	}
-	return RespFatalInvalidData
 }
 
 // DataErrFromResp maps legacy DatapathResp values to transitional error flow control.
@@ -159,12 +161,13 @@ func DataErrFromResp(resp DatapathResp, err error) error {
 	if err != nil {
 		return err
 	}
-	if DataRespIsCont(resp) {
+	switch {
+	case DataRespIsCont(resp):
 		return nil
-	}
-	if DataRespIsWait(resp) {
+	case DataRespIsWait(resp):
 		return ErrWait
 	}
+
 	switch resp {
 	case RespFatalNotInit:
 		return ErrNotInit
@@ -258,10 +261,14 @@ const (
 )
 
 func BitMask(bits int) uint64 {
-	if bits == MaxVABitsize {
+	switch {
+	case bits <= 0:
+		return 0
+	case bits >= MaxVABitsize:
 		return VAMask
+	default:
+		return (uint64(1) << bits) - 1
 	}
-	return (uint64(1) << bits) - 1
 }
 
 // Instruction Decode Information
@@ -368,6 +375,50 @@ const (
 	MemSpaceR    MemSpaceAcc = 0x60
 	MemSpaceAny  MemSpaceAcc = 0xFF
 )
+
+var memSpaceNames = map[MemSpaceAcc]string{
+	MemSpaceNone: "None",
+	MemSpaceEL1S: "EL1S",
+	MemSpaceEL1N: "EL1N",
+	MemSpaceEL2:  "EL2N",
+	MemSpaceEL3:  "EL3",
+	MemSpaceEL2S: "EL2S",
+	MemSpaceEL1R: "EL1R",
+	MemSpaceEL2R: "EL2R",
+	MemSpaceRoot: "Root",
+	MemSpaceS:    "Any S",
+	MemSpaceN:    "Any NS",
+	MemSpaceR:    "Any R",
+	MemSpaceAny:  "Any",
+}
+
+var memSpacePartNames = []struct {
+	space MemSpaceAcc
+	name  string
+}{
+	{MemSpaceEL1S, "EL1S"},
+	{MemSpaceEL1N, "EL1N"},
+	{MemSpaceEL2, "EL2N"},
+	{MemSpaceEL3, "EL3"},
+	{MemSpaceEL2S, "EL2S"},
+	{MemSpaceEL1R, "EL1R"},
+	{MemSpaceEL2R, "EL2R"},
+	{MemSpaceRoot, "Root"},
+}
+
+func (m MemSpaceAcc) String() string {
+	if name, ok := memSpaceNames[m]; ok {
+		return name
+	}
+
+	parts := make([]string, 0, len(memSpacePartNames))
+	for _, part := range memSpacePartNames {
+		if m&part.space != 0 {
+			parts = append(parts, part.name)
+		}
+	}
+	return strings.Join(parts, ",")
+}
 
 type FileMemRegion struct {
 	FileOffset   uint64 // size_t
