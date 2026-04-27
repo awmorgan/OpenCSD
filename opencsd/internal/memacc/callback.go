@@ -1,8 +1,6 @@
 package memacc
 
-import (
-	"opencsd/internal/ocsd"
-)
+import "opencsd/internal/ocsd"
 
 // CallbackAccessor represents a callback trace memory accessor.
 type CallbackAccessor struct {
@@ -14,24 +12,20 @@ type CallbackAccessor struct {
 // NewCallbackAccessor creates a new callback accessor.
 func NewCallbackAccessor(startAddr ocsd.VAddr, endAddr ocsd.VAddr, memSpace ocsd.MemSpaceAcc) *CallbackAccessor {
 	return &CallbackAccessor{
-		BaseAccessor: BaseAccessor{
-			StartAddress: startAddr,
-			EndAddress:   endAddr,
-			AccType:      TypeCBIf,
-			MemSpaceAcc:  memSpace,
-		},
+		BaseAccessor: newBaseAccessor(startAddr, endAddr, TypeCBIf, memSpace),
 	}
 }
 
 // ReadBytes implements the Accessor interface.
 func (c *CallbackAccessor) ReadBytes(address ocsd.VAddr, memSpace ocsd.MemSpaceAcc, trcID uint8, reqBytes uint32, buffer []byte) uint32 {
-	if c.traceIDCallback != nil {
+	switch {
+	case c.traceIDCallback != nil:
 		return c.traceIDCallback(address, memSpace, trcID, reqBytes, buffer)
-	} else if c.callback != nil {
+	case c.callback != nil:
 		return c.callback(address, memSpace, trcID, reqBytes, buffer)
+	default:
+		return 0
 	}
-
-	return 0
 }
 
 // SetCallback sets a callback function that does not take a trace ID.

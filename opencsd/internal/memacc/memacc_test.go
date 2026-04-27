@@ -910,3 +910,17 @@ func TestSentinelError_CallbackBothModes(t *testing.T) {
 		t.Fatalf("unexpected simple callback data")
 	}
 }
+
+func TestOverlapRangeDetectsContainingRange(t *testing.T) {
+	mapper := NewGlobalMapper()
+
+	inner := NewBufferAccessor(0x1000, make([]byte, 0x100))
+	if err := mapper.AddAccessor(inner, 0); err != nil {
+		t.Fatalf("failed to add inner accessor: %v", err)
+	}
+
+	containing := NewBufferAccessor(0x0000, make([]byte, 0x3000))
+	if err := mapper.AddAccessor(containing, 0); !errors.Is(err, ocsd.ErrMemAccOverlap) {
+		t.Fatalf("expected containing range to overlap existing accessor, got %v", err)
+	}
+}
