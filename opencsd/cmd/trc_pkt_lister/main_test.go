@@ -92,6 +92,10 @@ func TestTraceListerGoldens(t *testing.T) {
 				args = append(args, "-decode")
 			}
 
+			if strings.HasSuffix(tc.name, "juno_r1_1_badopcode.ppl") {
+				t.Setenv("OPENCSD_ERR_ON_AA64_BAD_OPCODE", "1")
+			}
+
 			outPath := args[3]
 			err := run(args)
 			if tc.expectedRunError == "" {
@@ -208,10 +212,7 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 		{decoder: "etmv4", goldenName: "juno-uname-001", snapshotName: "juno-uname-001"},
 		{decoder: "etmv4", goldenName: "juno-uname-002", snapshotName: "juno-uname-002"},
 		{decoder: "etmv4", goldenName: "juno_r1_1", snapshotName: "juno_r1_1"},
-		{
-			decoder: "etmv4", goldenName: "juno_r1_1_badopcode", snapshotName: "juno_r1_1",
-			normalizeReason: "legacy ETMv4 bad-opcode recovery behavior differs (bad-packet no-sync vs decoded range)",
-		},
+		{decoder: "etmv4", goldenName: "juno_r1_1_badopcode", snapshotName: "juno_r1_1"},
 		{decoder: "etmv4", goldenName: "juno_r1_1_badopcode_flag", snapshotName: "juno_r1_1"},
 		{
 			decoder: "etmv4", goldenName: "juno_r1_1_rangelimit", snapshotName: "juno_r1_1",
