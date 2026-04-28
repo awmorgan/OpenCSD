@@ -59,6 +59,32 @@ func (m *mapperAdapter) InvalidateMemAccCache(csTraceID uint8) {
 	m.mapper.InvalidateMemAccCache(csTraceID)
 }
 
+type traceSourceFormat struct {
+	srcType        ocsd.DcdTreeSrc
+	formatterFlags uint32
+	frameAlignment int
+	frameFormatted bool
+}
+
+func sourceFormat(bufferFormat string) traceSourceFormat {
+	format := strings.ToLower(bufferFormat)
+	out := traceSourceFormat{
+		srcType:        ocsd.TrcSrcFrameFormatted,
+		formatterFlags: uint32(ocsd.DfrmtrFrameMemAlign),
+		frameAlignment: 16,
+		frameFormatted: true,
+	}
+	switch format {
+	case "source_data":
+		out.srcType = ocsd.TrcSrcSingle
+		out.frameFormatted = false
+	case "dstream_coresight":
+		out.formatterFlags = ocsd.DfrmtrHasFsyncs
+		out.frameAlignment = 4
+	}
+	return out
+}
+
 func TestPTMSnapshotsAgainstGolden(t *testing.T) {
 	t.Parallel()
 
@@ -119,27 +145,9 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to extract source tree for %s", sourceName)
 	}
 
-	dataFormat := strings.ToLower(sourceTree.BufferInfo.DataFormat)
-	srcIsFrame := true
-	frameAlignment := 16
-	switch dataFormat {
-	case "source_data":
-		srcIsFrame = false
-	case "dstream_coresight":
-		frameAlignment = 4
-	}
+	format := sourceFormat(sourceTree.BufferInfo.DataFormat)
 
-	formatterFlags := uint32(ocsd.DfrmtrFrameMemAlign)
-	if dataFormat == "dstream_coresight" {
-		formatterFlags = ocsd.DfrmtrHasFsyncs
-	}
-
-	srcType := ocsd.TrcSrcFrameFormatted
-	if !srcIsFrame {
-		srcType = ocsd.TrcSrcSingle
-	}
-
-	tree, err := dcdtree.NewDecodeTree(srcType, formatterFlags)
+	tree, err := dcdtree.NewDecodeTree(format.srcType, format.formatterFlags)
 	if err != nil {
 		return nil, fmt.Errorf("create decode tree: %w", err)
 	}
@@ -162,20 +170,7 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 			continue
 		}
 
-		cfg := ptm.NewConfig()
-		if val, ok := dev.RegValue("etmcr"); ok {
-			cfg.RegCtrl = uint32(testutil.ParseHexOrDec(val))
-		}
-		if val, ok := dev.RegValue("etmtraceidr"); ok {
-			cfg.RegTrcID = uint32(testutil.ParseHexOrDec(val))
-		}
-		if val, ok := dev.RegValue("etmidr"); ok {
-			cfg.RegIDR = uint32(testutil.ParseHexOrDec(val))
-		}
-		if val, ok := dev.RegValue("etmccer"); ok {
-			cfg.RegCCER = uint32(testutil.ParseHexOrDec(val))
-		}
-
+		cfg := ptmConfigFromDevice(dev)
 		traceID := cfg.TraceID()
 		proc, dec, err := ptm.NewConfiguredPipelineWithDeps(int(traceID), cfg, memIf, instr)
 		if err != nil {
@@ -192,31 +187,7 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		return nil, fmt.Errorf("no PTM decoders found for source %s", sourceName)
 	}
 
-	for _, dev := range reader.ParsedDeviceList {
-		if !strings.EqualFold(dev.Class, "core") {
-			continue
-		}
-		for _, memParams := range dev.Memory {
-			path := filepath.Join(snapshotDir, memParams.Path)
-			b, err := os.ReadFile(path)
-			if err != nil {
-				continue
-			}
-
-			if memParams.Offset > 0 {
-				if memParams.Offset >= uint64(len(b)) {
-					continue
-				}
-				b = b[memParams.Offset:]
-			}
-			if memParams.Length > 0 && memParams.Length < uint64(len(b)) {
-				b = b[:memParams.Length]
-			}
-
-			acc := memacc.NewBufferAccessor(ocsd.VAddr(memParams.Address), b)
-			mapper.AddAccessor(acc, 0)
-		}
-	}
+	loadSnapshotMemory(snapshotDir, reader.ParsedDeviceList, mapper)
 
 	var out bytes.Buffer
 	printer := printers.NewGenericElementPrinter(&out)
@@ -237,43 +208,8 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 		return nil, fmt.Errorf("read trace buffer %s: %w", binFile, err)
 	}
 
-	var traceIndex uint32
-	if srcIsFrame {
-		pending := traceData
-		for len(pending) >= frameAlignment {
-			sendLen := frameAlignment
-			consumed, err := tree.Write(ocsd.TrcIndex(traceIndex), pending[:sendLen])
-			resp := ocsd.DataRespFromErr(err)
-			if ocsd.DataRespIsFatal(resp) {
-				return nil, fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
-			}
-			if consumed == 0 {
-				return nil, fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
-			}
-			traceIndex += consumed
-			pending = pending[consumed:]
-			if err := drainAndPrintElements(tree, printer); err != nil {
-				return nil, err
-			}
-		}
-	} else {
-		remaining := traceData
-		for len(remaining) > 0 {
-			sendLen := min(len(remaining), 256)
-			consumed, err := tree.Write(ocsd.TrcIndex(traceIndex), remaining[:sendLen])
-			resp := ocsd.DataRespFromErr(err)
-			if ocsd.DataRespIsFatal(resp) {
-				return nil, fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
-			}
-			if consumed == 0 {
-				return nil, fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
-			}
-			traceIndex += consumed
-			remaining = remaining[consumed:]
-			if err := drainAndPrintElements(tree, printer); err != nil {
-				return nil, err
-			}
-		}
+	if err := writeTraceData(tree, printer, traceData, format); err != nil {
+		return nil, err
 	}
 
 	err = tree.Close()
@@ -286,6 +222,80 @@ func runSnapshotDecode(snapshotDir, sourceName string) ([]byte, error) {
 	}
 
 	return out.Bytes(), nil
+}
+
+func ptmConfigFromDevice(dev *snapshot.Device) *ptm.Config {
+	cfg := ptm.NewConfig()
+	setReg := func(name string, dst *uint32) {
+		if val, ok := dev.RegValue(name); ok {
+			*dst = uint32(testutil.ParseHexOrDec(val))
+		}
+	}
+	setReg("etmcr", &cfg.RegCtrl)
+	setReg("etmtraceidr", &cfg.RegTrcID)
+	setReg("etmidr", &cfg.RegIDR)
+	setReg("etmccer", &cfg.RegCCER)
+	return cfg
+}
+
+func loadSnapshotMemory(snapshotDir string, devices map[string]*snapshot.Device, mapper memacc.Mapper) {
+	for _, dev := range devices {
+		if !strings.EqualFold(dev.Class, "core") {
+			continue
+		}
+		for _, memParams := range dev.Memory {
+			b, err := os.ReadFile(filepath.Join(snapshotDir, memParams.Path))
+			if err != nil {
+				continue
+			}
+			if memParams.Offset > 0 {
+				if memParams.Offset >= uint64(len(b)) {
+					continue
+				}
+				b = b[memParams.Offset:]
+			}
+			if memParams.Length > 0 && memParams.Length < uint64(len(b)) {
+				b = b[:memParams.Length]
+			}
+			_ = mapper.AddAccessor(memacc.NewBufferAccessor(ocsd.VAddr(memParams.Address), b), 0)
+		}
+	}
+}
+
+func writeTraceData(tree *dcdtree.DecodeTree, printer *printers.GenericElementPrinter, data []byte, format traceSourceFormat) error {
+	chunkSize := 256
+	if format.frameFormatted {
+		chunkSize = format.frameAlignment
+	}
+
+	var traceIndex uint32
+	remaining := data
+	for len(remaining) > 0 {
+		if format.frameFormatted && len(remaining) < chunkSize {
+			break
+		}
+		sendLen := min(len(remaining), chunkSize)
+		consumed, err := tree.Write(ocsd.TrcIndex(traceIndex), remaining[:sendLen])
+		if err := checkDecodeProgress(traceIndex, consumed, err); err != nil {
+			return err
+		}
+		traceIndex += consumed
+		remaining = remaining[consumed:]
+		if err := drainAndPrintElements(tree, printer); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkDecodeProgress(traceIndex uint32, consumed uint32, err error) error {
+	if ocsd.DataRespIsFatal(ocsd.DataRespFromErr(err)) {
+		return fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
+	}
+	if consumed == 0 {
+		return fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
+	}
+	return nil
 }
 
 func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericElementPrinter) error {

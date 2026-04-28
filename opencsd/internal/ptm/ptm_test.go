@@ -18,25 +18,23 @@ func TestPTMPktProcNextPacketFromReader(t *testing.T) {
 		0x0C, // TRIGGER
 	}))
 
-	pkt, err := proc.NextPacket()
-	if err != nil {
-		t.Fatalf("unexpected first packet error: %v", err)
-	}
-	if pkt.Type != PktASync {
-		t.Fatalf("expected first packet type %v, got %v", PktASync, pkt.Type)
-	}
+	assertNextPacketType(t, proc, PktASync)
+	assertNextPacketType(t, proc, PktTrigger)
 
-	pkt, err = proc.NextPacket()
-	if err != nil {
-		t.Fatalf("unexpected second packet error: %v", err)
-	}
-	if pkt.Type != PktTrigger {
-		t.Fatalf("expected second packet type %v, got %v", PktTrigger, pkt.Type)
-	}
-
-	_, err = proc.NextPacket()
+	_, err := proc.NextPacket()
 	if !errors.Is(err, io.EOF) {
 		t.Fatalf("expected io.EOF after draining packet reader, got %v", err)
+	}
+}
+
+func assertNextPacketType(t *testing.T, proc *PktProc, want PktType) {
+	t.Helper()
+	pkt, err := proc.NextPacket()
+	if err != nil {
+		t.Fatalf("unexpected packet error: %v", err)
+	}
+	if pkt.Type != want {
+		t.Fatalf("expected packet type %v, got %v", want, pkt.Type)
 	}
 }
 
@@ -140,16 +138,34 @@ func TestPtmConfig(t *testing.T) {
 	}
 
 	config.RegCtrl = ctrlBranchBcast | ctrlCycleAcc | ctrlTSEna | ctrlRetStackEna | ctrlVMIDEna | (2 << 14)
-	if !config.EnaBranchBCast() || !config.EnaCycleAcc() || !config.EnaTS() || !config.EnaRetStack() || !config.EnaVMID() {
-		t.Errorf("Expected all control enablers to be true")
+	for name, enabled := range map[string]bool{
+		"EnaBranchBCast": config.EnaBranchBCast(),
+		"EnaCycleAcc":    config.EnaCycleAcc(),
+		"EnaTS":          config.EnaTS(),
+		"EnaRetStack":    config.EnaRetStack(),
+		"EnaVMID":        config.EnaVMID(),
+	} {
+		if !enabled {
+			t.Errorf("expected %s to be enabled", name)
+		}
 	}
 	if config.CtxtIDBytes() != 2 {
 		t.Errorf("Expected CtxtIDBytes to be 2, was %d", config.CtxtIDBytes())
 	}
 
 	config.RegCCER = ccerTSImpl | ccerRestackImpl | ccerDmsbWpt | ccerTSDmsb | ccerVirtExt | ccerTSEncNat | ccerTS64Bit
-	if !config.HasTS() || !config.HasRetStack() || !config.DmsbWayPt() || !config.DmsbGenTS() || !config.HasVirtExt() || !config.TSBinEnc() || !config.TSPkt64() {
-		t.Errorf("Expected all CCER enablers to be true")
+	for name, enabled := range map[string]bool{
+		"HasTS":       config.HasTS(),
+		"HasRetStack": config.HasRetStack(),
+		"DmsbWayPt":   config.DmsbWayPt(),
+		"DmsbGenTS":   config.DmsbGenTS(),
+		"HasVirtExt":  config.HasVirtExt(),
+		"TSBinEnc":    config.TSBinEnc(),
+		"TSPkt64":     config.TSPkt64(),
+	} {
+		if !enabled {
+			t.Errorf("expected %s to be enabled", name)
+		}
 	}
 
 	config.RegTrcID = 0xAA

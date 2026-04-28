@@ -2,18 +2,25 @@ package ptm
 
 import (
 	"fmt"
+
 	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
 
+func validateConfig(cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("%w: PTM config cannot be nil", ocsd.ErrInvalidParamVal)
+	}
+	return nil
+}
+
 // NewConfiguredPktProc creates a PTM packet processor with a typed config.
 func NewConfiguredPktProc(instID int, cfg *Config) (*PktProc, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("%w: PTM config cannot be nil", ocsd.ErrInvalidParamVal)
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
 	}
 	_ = instID
-	proc := NewPktProc(cfg)
-	return proc, nil
+	return NewPktProc(cfg), nil
 }
 
 // NewConfiguredPktDecode creates a PTM packet decoder with a typed config.
@@ -29,28 +36,22 @@ func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMe
 	if err != nil {
 		return nil, err
 	}
-	dec.MemAccess = mem
-	dec.InstrDecode = instr
+	dec.SetInterfaces(mem, instr)
 	dec.Source = source
 	return dec, nil
 }
 
 // NewConfiguredPipeline creates and wires a typed PTM processor/decoder pair.
 func NewConfiguredPipeline(instID int, cfg *Config) (*PktProc, *PktDecode, error) {
-	proc, err := NewConfiguredPktProc(instID, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	dec, err := NewConfiguredPktDecode(instID, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	dec.Source = proc
-	return proc, dec, nil
+	return newConfiguredPipeline(instID, cfg, nil, nil)
 }
 
 // NewConfiguredPipelineWithDeps creates and wires a PTM processor/decoder pair with dependencies.
 func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktProc, *PktDecode, error) {
+	return newConfiguredPipeline(instID, cfg, mem, instr)
+}
+
+func newConfiguredPipeline(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktProc, *PktDecode, error) {
 	proc, err := NewConfiguredPktProc(instID, cfg)
 	if err != nil {
 		return nil, nil, err

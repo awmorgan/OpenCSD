@@ -111,9 +111,14 @@ type PktDecode struct {
 
 func (d *PktDecode) ApplyFlags(flags uint32) error { return nil }
 
+func (d *PktDecode) SetInterfaces(mem common.TargetMemAccess, instr common.InstrDecode) {
+	d.MemAccess = mem
+	d.InstrDecode = instr
+}
+
 func NewPktDecode(cfg *Config) (*PktDecode, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("%w: PTM config cannot be nil", ocsd.ErrInvalidParamVal)
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
 	}
 
 	instIDNum := int(cfg.TraceID())
@@ -129,8 +134,11 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 
 // OutputTraceElement sends an element using IndexCurrPkt (or queues if in collect mode).
 func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error {
-	e := traceElemEvent{d.IndexCurrPkt, traceID, cloneQueuedElem(elem)}
-	d.pendingElements = append(d.pendingElements, e)
+	return d.queueTraceElement(d.IndexCurrPkt, traceID, elem)
+}
+
+func (d *PktDecode) queueTraceElement(index ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
+	d.pendingElements = append(d.pendingElements, traceElemEvent{index: index, traceID: traceID, elem: cloneQueuedElem(elem)})
 	return nil
 }
 
@@ -139,22 +147,30 @@ func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) e
 // next packet from Source, decodes it, and returns the first resulting element.
 func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
 	for len(d.pendingElements) == 0 && d.Source != nil {
-		pkt, err := d.Source.NextPacket()
-		if errors.Is(err, io.EOF) {
-			d.Source = nil
-			_ = d.Close()
-			break
-		}
-		if err != nil {
-			if !errors.Is(err, ocsd.ErrWait) {
-				d.Source = nil
-			}
+		if err := d.pullAndProcessPacket(); err != nil {
 			return 0, 0, ocsd.TraceElement{}, err
 		}
-		if wErr := d.processPacket(&pkt); wErr != nil {
-			return 0, 0, ocsd.TraceElement{}, wErr
-		}
 	}
+	return d.popPendingElement()
+}
+
+func (d *PktDecode) pullAndProcessPacket() error {
+	pkt, err := d.Source.NextPacket()
+	if errors.Is(err, io.EOF) {
+		d.Source = nil
+		_ = d.Close()
+		return nil
+	}
+	if err != nil {
+		if !errors.Is(err, ocsd.ErrWait) {
+			d.Source = nil
+		}
+		return err
+	}
+	return d.processPacket(&pkt)
+}
+
+func (d *PktDecode) popPendingElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
 	if len(d.pendingElements) == 0 {
 		return 0, 0, ocsd.TraceElement{}, io.EOF
 	}
@@ -164,18 +180,17 @@ func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, erro
 }
 
 func cloneQueuedElem(elem *ocsd.TraceElement) ocsd.TraceElement {
-	clone := *elem
-	if elem.PtrExtendedData != nil {
-		clone.PtrExtendedData = append([]byte(nil), elem.PtrExtendedData...)
+	if elem == nil {
+		return ocsd.TraceElement{}
 	}
+	clone := *elem
+	clone.PtrExtendedData = append([]byte(nil), elem.PtrExtendedData...)
 	return clone
 }
 
 // OutputTraceElementIdx sends an element at an explicit index (or queues if in collect mode).
 func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
-	e := traceElemEvent{idx, traceID, cloneQueuedElem(elem)}
-	d.pendingElements = append(d.pendingElements, e)
-	return nil
+	return d.queueTraceElement(idx, traceID, elem)
 }
 
 // AccessMemory reads target memory.
@@ -218,20 +233,7 @@ func (d *PktDecode) Next() (*ocsd.TraceElement, error) {
 // Elements provides a standard Go 1.23 iterator over the trace elements.
 // It wraps the legacy pull-based Next() method.
 func (d *PktDecode) Elements() iter.Seq2[*ocsd.TraceElement, error] {
-	return func(yield func(*ocsd.TraceElement, error) bool) {
-		for {
-			elem, err := d.Next()
-			if err != nil {
-				if !errors.Is(err, io.EOF) {
-					yield(nil, err)
-				}
-				return
-			}
-			if !yield(elem, nil) {
-				return
-			}
-		}
-	}
+	return ocsd.GenerateElements(d.Next)
 }
 
 // Close forwards an EOT control operation through the legacy multiplexer.

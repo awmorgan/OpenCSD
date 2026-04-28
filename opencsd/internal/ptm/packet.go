@@ -198,25 +198,32 @@ func (p *Packet) SetAtomFromPHdr(pHdr uint8) {
 }
 
 func (p *Packet) IsBadPacket() bool {
-	return p.Type == PktIncompleteEOT || p.Type == PktBadSequence || p.Type == PktReserved
+	switch p.Type {
+	case PktIncompleteEOT, PktBadSequence, PktReserved:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *Packet) String() string {
-	displayType := p.Type
-	name, desc := packetTypeName(displayType)
+	info := packetInfo(p.Type)
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "%s : %s; ", name, desc)
+	fmt.Fprintf(&sb, "%s : %s; ", info.name, info.desc)
+	p.writeDetails(&sb)
+	return sb.String()
+}
 
-	switch displayType {
+func (p *Packet) writeDetails(sb *strings.Builder) {
+	switch p.Type {
 	case PktBadSequence:
-		errName, _ := packetTypeName(p.Type)
-		fmt.Fprintf(&sb, "[%s]; ", errName)
+		fmt.Fprintf(sb, "[%s]; ", PktTypeName(p.Type))
 	case PktAtom:
 		sb.WriteString(p.getAtomStr())
 	case PktContextID:
-		fmt.Fprintf(&sb, "CtxtID=0x%08x; ", p.Context.CtxtID)
+		fmt.Fprintf(sb, "CtxtID=0x%08x; ", p.Context.CtxtID)
 	case PktVMID:
-		fmt.Fprintf(&sb, "VMID=0x%02x; ", p.Context.VMID)
+		fmt.Fprintf(sb, "VMID=0x%02x; ", p.Context.VMID)
 	case PktWPointUpdate, PktBranchAddress:
 		sb.WriteString(p.getBranchAddressStr())
 	case PktISync:
@@ -224,7 +231,6 @@ func (p *Packet) String() string {
 	case PktTimestamp:
 		sb.WriteString(p.getTSStr())
 	}
-	return sb.String()
 }
 
 func (p *Packet) ToStringFmt(fmtFlags uint32) string {
@@ -305,25 +311,26 @@ func (p *Packet) getISAStr() string {
 	}
 }
 
-func (p *Packet) getExcepStr() string {
-	excepNames := []string{
-		"No Exception", "Debug Halt", "SMC", "Hyp",
-		"Async Data Abort", "Jazelle", "Reserved", "Reserved",
-		"PE Reset", "Undefined Instr", "SVC", "Prefetch Abort",
-		"Data Fault", "Generic", "IRQ", "FIQ",
-	}
+var ptmExceptionNames = [...]string{
+	"No Exception", "Debug Halt", "SMC", "Hyp",
+	"Async Data Abort", "Jazelle", "Reserved", "Reserved",
+	"PE Reset", "Undefined Instr", "SVC", "Prefetch Abort",
+	"Data Fault", "Generic", "IRQ", "FIQ",
+}
 
+var iSyncReasonNames = [...]string{"Periodic", "Trace Enable", "Restart Overflow", "Debug Exit"}
+
+func (p *Packet) getExcepStr() string {
 	name := "Unknown"
-	if p.Exception.Number < 16 {
-		name = excepNames[p.Exception.Number]
+	if int(p.Exception.Number) < len(ptmExceptionNames) {
+		name = ptmExceptionNames[p.Exception.Number]
 	}
 	return fmt.Sprintf("Excep=%s [%02x]; ", name, p.Exception.Number)
 }
 
 func (p *Packet) getISyncStr() string {
-	reasons := []string{"Periodic", "Trace Enable", "Restart Overflow", "Debug Exit"}
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "(%s); ", reasons[int(p.ISyncReason)])
+	fmt.Fprintf(&sb, "(%s); ", iSyncReasonName(p.ISyncReason))
 	fmt.Fprintf(&sb, "Addr=0x%08x; ", uint32(p.AddrVal))
 
 	if p.Context.CurrNS {
@@ -365,41 +372,47 @@ func (p *Packet) getCycleCountStr() string {
 	return fmt.Sprintf("Cycles=%d; ", p.CycleCount)
 }
 
-func packetTypeName(t PktType) (string, string) {
-	switch t {
-	case PktNotSync:
-		return "NOTSYNC", "PTM Not Synchronised"
-	case PktIncompleteEOT:
-		return "INCOMPLETE_EOT", "Incomplete packet flushed at end of trace"
-	case PktBadSequence:
-		return "BAD_SEQUENCE", "Invalid sequence in packet"
-	case PktReserved:
-		return "RESERVED", "Reserved Packet Header"
-	case PktBranchAddress:
-		return "BRANCH_ADDRESS", "Branch address packet"
-	case PktASync:
-		return "ASYNC", "Alignment Synchronisation Packet"
-	case PktISync:
-		return "ISYNC", "Instruction Synchronisation packet"
-	case PktTrigger:
-		return "TRIGGER", "Trigger Event packet"
-	case PktWPointUpdate:
-		return "WP_UPDATE", "Waypoint update packet"
-	case PktIgnore:
-		return "IGNORE", "Ignore packet"
-	case PktContextID:
-		return "CTXTID", "Context ID packet"
-	case PktVMID:
-		return "VMID", "VM ID packet"
-	case PktAtom:
-		return "ATOM", "Atom packet"
-	case PktTimestamp:
-		return "TIMESTAMP", "Timestamp packet"
-	case PktExceptionRet:
-		return "ERET", "Exception return packet"
-	default:
-		return "UNKNOWN", "Unknown packet type"
+type pktTypeInfo struct {
+	name string
+	desc string
+}
+
+var packetTypeInfos = map[PktType]pktTypeInfo{
+	PktNotSync:       {"NOTSYNC", "PTM Not Synchronised"},
+	PktIncompleteEOT: {"INCOMPLETE_EOT", "Incomplete packet flushed at end of trace"},
+	PktBadSequence:   {"BAD_SEQUENCE", "Invalid sequence in packet"},
+	PktReserved:      {"RESERVED", "Reserved Packet Header"},
+	PktBranchAddress: {"BRANCH_ADDRESS", "Branch address packet"},
+	PktASync:         {"ASYNC", "Alignment Synchronisation Packet"},
+	PktISync:         {"ISYNC", "Instruction Synchronisation packet"},
+	PktTrigger:       {"TRIGGER", "Trigger Event packet"},
+	PktWPointUpdate:  {"WP_UPDATE", "Waypoint update packet"},
+	PktIgnore:        {"IGNORE", "Ignore packet"},
+	PktContextID:     {"CTXTID", "Context ID packet"},
+	PktVMID:          {"VMID", "VM ID packet"},
+	PktAtom:          {"ATOM", "Atom packet"},
+	PktTimestamp:     {"TIMESTAMP", "Timestamp packet"},
+	PktExceptionRet:  {"ERET", "Exception return packet"},
+}
+
+func packetInfo(t PktType) pktTypeInfo {
+	if info, ok := packetTypeInfos[t]; ok {
+		return info
 	}
+	return pktTypeInfo{"UNKNOWN", "Unknown packet type"}
+}
+
+// PktTypeName returns the canonical packet-type name used in raw/golden output.
+func PktTypeName(t PktType) string {
+	return packetInfo(t).name
+}
+
+func iSyncReasonName(reason ocsd.ISyncReason) string {
+	idx := int(reason)
+	if idx >= 0 && idx < len(iSyncReasonNames) {
+		return iSyncReasonNames[idx]
+	}
+	return "Unknown"
 }
 
 func maskBits64(bits int) uint64 {
