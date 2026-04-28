@@ -179,108 +179,19 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 	}
 
 	mapper := memacc.NewGlobalMapper()
-	memIf := &mapperAdapter{mapper: mapper}
-	instr := idec.NewDecoder()
-
-	eteDecoders := 0
-	seenTraceIDs := map[uint8]struct{}{}
-	srcDevNames := make([]string, 0, len(sourceTree.SourceCoreAssoc))
-	for srcDevName := range sourceTree.SourceCoreAssoc {
-		srcDevNames = append(srcDevNames, srcDevName)
-	}
-	sort.Strings(srcDevNames)
-	for _, srcDevName := range srcDevNames {
-		dev := findParsedDeviceByName(reader.ParsedDeviceList, srcDevName)
-		if dev == nil {
-			continue
-		}
-		if !strings.EqualFold(dev.Type, "ETE") {
-			continue
-		}
-
-		cfg := ete.NewConfig()
-		if val, ok := dev.RegValue("trcidr0"); ok {
-			cfg.RegIdr0 = uint32(testutil.ParseHexOrDec(val))
-		}
-		if val, ok := dev.RegValue("trcidr1"); ok {
-			cfg.RegIdr1 = uint32(testutil.ParseHexOrDec(val))
-		}
-		if val, ok := dev.RegValue("trcidr2"); ok {
-			cfg.RegIdr2 = uint32(testutil.ParseHexOrDec(val))
-		}
-		if val, ok := dev.RegValue("trcidr8"); ok {
-			cfg.RegIdr8 = uint32(testutil.ParseHexOrDec(val))
-		}
-		if val, ok := dev.RegValue("trcdevarch"); ok {
-			cfg.RegDevArch = uint32(testutil.ParseHexOrDec(val))
-		}
-		if val, ok := dev.RegValue("trcconfigr"); ok {
-			cfg.RegConfigr = uint32(testutil.ParseHexOrDec(val))
-		}
-		if val, ok := dev.RegValue("trctraceidr"); ok {
-			cfg.RegTraceidr = uint32(testutil.ParseHexOrDec(val))
-		}
-		traceID := cfg.TraceID()
-		if _, exists := seenTraceIDs[traceID]; exists {
-			continue
-		}
-
-		proc, dec, err := ete.NewConfiguredPipelineWithDeps(int(traceID), cfg, memIf, instr)
-		if err != nil {
-			return nil, fmt.Errorf("create ETE pipeline for %s failed: %v", srcDevName, err)
-		}
-
-		if err := tree.AddPullDecoder(traceID, ocsd.BuiltinDcdETE, ocsd.ProtocolETE, proc, dec, dec); err != nil {
-			if errors.Is(err, ocsd.ErrAttachTooMany) {
-				continue
-			}
-			return nil, fmt.Errorf("attach ETE decoder for %s failed: %v", srcDevName, err)
-		}
-		eteDecoders++
-		seenTraceIDs[traceID] = struct{}{}
-	}
-
-	if eteDecoders == 0 {
-		return nil, fmt.Errorf("no ETE decoders found for source %s", bufferName)
+	if err := addETEDecoders(tree, sourceTree, reader.ParsedDeviceList, mapper, bufferName); err != nil {
+		return nil, err
 	}
 
 	applyOpModeFlags(tree, eteOpFlags(opts))
 
-	for _, dev := range reader.ParsedDeviceList {
-		if !strings.EqualFold(dev.Class, "core") {
-			continue
-		}
-		for _, memParams := range dev.Memory {
-			path := filepath.Join(snapshotDir, memParams.Path)
-			b, err := os.ReadFile(path)
-			if err != nil {
-				continue
-			}
-
-			if memParams.Offset > 0 {
-				if memParams.Offset >= uint64(len(b)) {
-					continue
-				}
-				b = b[memParams.Offset:]
-			}
-			if memParams.Length > 0 && memParams.Length < uint64(len(b)) {
-				b = b[:memParams.Length]
-			}
-
-			acc := memacc.NewBufferAccessor(ocsd.VAddr(memParams.Address), b)
-			mapper.AddAccessor(acc, 0)
-		}
+	if err := loadCoreMemoryImages(snapshotDir, reader.ParsedDeviceList, mapper); err != nil {
+		return nil, err
 	}
 
 	var out bytes.Buffer
 	printer := printers.NewGenericElementPrinter(&out)
-	tree.ForEachElement(func(csID uint8, elem *dcdtree.DecodeTreeElement) {
-		proc, ok := elem.DataIn.(*etmv4.Processor)
-		if !ok || proc == nil {
-			return
-		}
-		proc.SetPktRawMonitor(&eteRawPacketPrinter{writer: &out, traceID: csID})
-	})
+	setETEPacketRawMonitors(tree, &out)
 	if err := drainAndPrintElements(tree, printer); err != nil {
 		return nil, err
 	}
@@ -290,30 +201,172 @@ func runETESnapshotDecode(snapshotDir, requestedSource string, opts eteDecodeOpt
 		return nil, fmt.Errorf("no trace buffers found for source %s", bufferName)
 	}
 
-	for i, bufInfo := range buffers {
-		srcTree, ok := reader.SourceTrees[bufInfo.BufferName]
-		if !ok || srcTree == nil || srcTree.BufferInfo == nil {
-			continue
-		}
-		binFile := filepath.Join(snapshotDir, srcTree.BufferInfo.DataFileName)
-		traceData, err := os.ReadFile(binFile)
-		if err != nil {
-			return nil, fmt.Errorf("read trace buffer %s: %w", binFile, err)
-		}
-		if err := decodeETETraceBuffer(tree, traceData, srcIsFrame, frameAlignment, printer); err != nil {
-			return nil, err
-		}
-		if opts.multiSession && i+1 < len(buffers) {
-			if err2 := tree.Reset(0); err2 != nil {
-				return nil, fmt.Errorf("OpReset after buffer %s: %w", bufInfo.BufferName, err2)
-			}
-			if err := drainAndPrintElements(tree, printer); err != nil {
-				return nil, err
-			}
-		}
+	if err := decodeETESnapshotBuffers(tree, reader, snapshotDir, buffers, srcIsFrame, frameAlignment, opts.multiSession, printer); err != nil {
+		return nil, err
 	}
 
 	return out.Bytes(), nil
+}
+
+func addETEDecoders(tree *dcdtree.DecodeTree, sourceTree *snapshot.TraceBufferSourceTree, devices map[string]*snapshot.Device, mapper memacc.Mapper, bufferName string) error {
+	memIf := &mapperAdapter{mapper: mapper}
+	instr := idec.NewDecoder()
+	seenTraceIDs := map[uint8]struct{}{}
+	eteDecoders := 0
+
+	for _, srcDevName := range sortedETESourceDeviceNames(sourceTree) {
+		dev := findParsedDeviceByName(devices, srcDevName)
+		if dev == nil || !strings.EqualFold(dev.Type, "ETE") {
+			continue
+		}
+
+		cfg := eteConfigFromDevice(dev)
+		traceID := cfg.TraceID()
+		if _, exists := seenTraceIDs[traceID]; exists {
+			continue
+		}
+
+		proc, dec, err := ete.NewConfiguredPipelineWithDeps(int(traceID), cfg, memIf, instr)
+		if err != nil {
+			return fmt.Errorf("create ETE pipeline for %s failed: %v", srcDevName, err)
+		}
+
+		if err := tree.AddPullDecoder(traceID, ocsd.BuiltinDcdETE, ocsd.ProtocolETE, proc, dec, dec); err != nil {
+			if errors.Is(err, ocsd.ErrAttachTooMany) {
+				continue
+			}
+			return fmt.Errorf("attach ETE decoder for %s failed: %v", srcDevName, err)
+		}
+		eteDecoders++
+		seenTraceIDs[traceID] = struct{}{}
+	}
+
+	if eteDecoders == 0 {
+		return fmt.Errorf("no ETE decoders found for source %s", bufferName)
+	}
+	return nil
+}
+
+func sortedETESourceDeviceNames(sourceTree *snapshot.TraceBufferSourceTree) []string {
+	names := make([]string, 0, len(sourceTree.SourceCoreAssoc))
+	for name := range sourceTree.SourceCoreAssoc {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func eteConfigFromDevice(dev *snapshot.Device) *ete.Config {
+	cfg := ete.NewConfig()
+	eteRegSetters := map[string]func(uint32){
+		"trcidr0":     func(v uint32) { cfg.RegIdr0 = v },
+		"trcidr1":     func(v uint32) { cfg.RegIdr1 = v },
+		"trcidr2":     func(v uint32) { cfg.RegIdr2 = v },
+		"trcidr8":     func(v uint32) { cfg.RegIdr8 = v },
+		"trcdevarch":  func(v uint32) { cfg.RegDevArch = v },
+		"trcconfigr":  func(v uint32) { cfg.RegConfigr = v },
+		"trctraceidr": func(v uint32) { cfg.RegTraceidr = v },
+	}
+	for reg, set := range eteRegSetters {
+		if val, ok := dev.RegValue(reg); ok {
+			set(uint32(testutil.ParseHexOrDec(val)))
+		}
+	}
+	return cfg
+}
+
+func loadCoreMemoryImages(snapshotDir string, devices map[string]*snapshot.Device, mapper memacc.Mapper) error {
+	for _, dev := range devices {
+		if !strings.EqualFold(dev.Class, "core") {
+			continue
+		}
+		for _, memParams := range dev.Memory {
+			path := filepath.Join(snapshotDir, memParams.Path)
+			b, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			b, ok := sliceMemoryImage(b, memParams.Offset, memParams.Length)
+			if !ok {
+				continue
+			}
+
+			acc := memacc.NewBufferAccessor(ocsd.VAddr(memParams.Address), b)
+			_ = mapper.AddAccessor(acc, 0)
+		}
+	}
+	return nil
+}
+
+func sliceMemoryImage(b []byte, offset, length uint64) ([]byte, bool) {
+	if offset > 0 {
+		if offset >= uint64(len(b)) {
+			return nil, false
+		}
+		b = b[offset:]
+	}
+	if length > 0 && length < uint64(len(b)) {
+		b = b[:length]
+	}
+	return b, true
+}
+
+func decodeETESnapshotBuffers(
+	tree *dcdtree.DecodeTree,
+	reader *snapshot.Reader,
+	snapshotDir string,
+	buffers []snapshot.Buffer,
+	srcIsFrame bool,
+	frameAlignment int,
+	multiSession bool,
+	printer *printers.GenericElementPrinter,
+) error {
+	for i, bufInfo := range buffers {
+		srcTree := reader.SourceTrees[bufInfo.BufferName]
+		if srcTree == nil || srcTree.BufferInfo == nil {
+			continue
+		}
+
+		traceData, err := readTraceBuffer(snapshotDir, srcTree.BufferInfo.DataFileName)
+		if err != nil {
+			return err
+		}
+		if err := decodeETETraceBuffer(tree, traceData, srcIsFrame, frameAlignment, printer); err != nil {
+			return err
+		}
+		if multiSession && i+1 < len(buffers) {
+			if err := resetBetweenBuffers(tree, printer, bufInfo.BufferName); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func readTraceBuffer(snapshotDir, dataFileName string) ([]byte, error) {
+	binFile := filepath.Join(snapshotDir, dataFileName)
+	traceData, err := os.ReadFile(binFile)
+	if err != nil {
+		return nil, fmt.Errorf("read trace buffer %s: %w", binFile, err)
+	}
+	return traceData, nil
+}
+
+func resetBetweenBuffers(tree *dcdtree.DecodeTree, printer *printers.GenericElementPrinter, bufferName string) error {
+	if err := tree.Reset(0); err != nil {
+		return fmt.Errorf("OpReset after buffer %s: %w", bufferName, err)
+	}
+	return drainAndPrintElements(tree, printer)
+}
+
+func setETEPacketRawMonitors(tree *dcdtree.DecodeTree, writer io.Writer) {
+	tree.ForEachElement(func(csID uint8, elem *dcdtree.DecodeTreeElement) {
+		proc, ok := elem.DataIn.(*etmv4.Processor)
+		if !ok || proc == nil {
+			return
+		}
+		proc.SetPktRawMonitor(&eteRawPacketPrinter{writer: writer, traceID: csID})
+	})
 }
 
 func findParsedDeviceByName(devices map[string]*snapshot.Device, name string) *snapshot.Device {
@@ -326,35 +379,43 @@ func findParsedDeviceByName(devices map[string]*snapshot.Device, name string) *s
 }
 
 func sanitizePPL(s string, keepGenElems bool) string {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	s = strings.ReplaceAll(s, "\r", "\n")
-	lines := strings.Split(s, "\n")
-
-	start := 0
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "Idx:") || strings.HasPrefix(trimmed, "Frame:") {
-			start = i
-			break
-		}
-	}
+	lines := strings.Split(normalizeNewlines(s), "\n")
+	start := firstSnapshotLine(lines)
 
 	out := make([]string, 0, len(lines)-start)
 	for _, line := range lines[start:] {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+		out = appendNormalizedSnapshotRecords(out, line, keepGenElems)
+	}
+	return strings.Join(out, "\n")
+}
 
-		for _, idxLine := range testutil.SplitIdxRecords(line) {
-			normalized := normalizeSnapshotLine(idxLine, keepGenElems)
-			if normalized == "" {
-				continue
-			}
+func normalizeNewlines(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return strings.ReplaceAll(s, "\r", "\n")
+}
+
+func firstSnapshotLine(lines []string) int {
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "Idx:") || strings.HasPrefix(trimmed, "Frame:") {
+			return i
+		}
+	}
+	return 0
+}
+
+func appendNormalizedSnapshotRecords(out []string, line string, keepGenElems bool) []string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return out
+	}
+
+	for _, idxLine := range testutil.SplitIdxRecords(line) {
+		if normalized := normalizeSnapshotLine(idxLine, keepGenElems); normalized != "" {
 			out = append(out, normalized)
 		}
 	}
-	return strings.Join(out, "\n")
+	return out
 }
 
 var iPacketTokenRE = regexp.MustCompile(`\bI_[A-Z0-9_]+\b`)
@@ -394,42 +455,46 @@ func normalizeSnapshotLine(line string, keepGenElems bool) string {
 	return idPrefix + "\t" + m
 }
 
+var packetTokenAliases = map[string]string{
+	"I_ETE_ITE":                  "I_ITE",
+	"I_ETE_TRANS_ST":             "I_TRANS_ST",
+	"I_ETE_TRANS_COMMIT":         "I_TRANS_COMMIT",
+	"I_ETE_TRANS_FAIL":           "I_TRANS_FAIL",
+	"I_ETE_PE_RESET":             "I_PE_RESET",
+	"ETE_PKT_I_SRC_ADDR_MATCH":   "I_ADDR_OR_ATOM",
+	"ETE_PKT_I_SRC_ADDR_S_IS0":   "I_ADDR_OR_ATOM",
+	"ETE_PKT_I_SRC_ADDR_S_IS1":   "I_ADDR_OR_ATOM",
+	"ETE_PKT_I_SRC_ADDR_L_32IS0": "I_ADDR_OR_ATOM",
+	"ETE_PKT_I_SRC_ADDR_L_32IS1": "I_ADDR_OR_ATOM",
+	"ETE_PKT_I_SRC_ADDR_L_64IS0": "I_ADDR_OR_ATOM",
+	"ETE_PKT_I_SRC_ADDR_L_64IS1": "I_ADDR_OR_ATOM",
+}
+
+var atomPacketTokens = map[string]struct{}{
+	"I_ATOM":    {},
+	"I_ATOM_F1": {},
+	"I_ATOM_F2": {},
+	"I_ATOM_F3": {},
+	"I_ATOM_F4": {},
+	"I_ATOM_F5": {},
+	"I_ATOM_F6": {},
+}
+
 func canonicalPacketToken(tok string) string {
-	if strings.HasPrefix(tok, "I_ADDR_") || strings.HasPrefix(tok, "I_SRC_ADDR_") || strings.HasPrefix(tok, "I_SCR_ADDR_") {
+	switch {
+	case strings.HasPrefix(tok, "I_ADDR_"),
+		strings.HasPrefix(tok, "I_SRC_ADDR_"),
+		strings.HasPrefix(tok, "I_SCR_ADDR_"):
 		return "I_ADDR_OR_ATOM"
 	}
-	switch tok {
-	case "I_ATOM_F1", "I_ATOM_F2", "I_ATOM_F3", "I_ATOM_F4", "I_ATOM_F5", "I_ATOM_F6":
+
+	if _, ok := atomPacketTokens[tok]; ok {
 		return "I_ADDR_OR_ATOM"
-	case "I_ATOM":
-		return "I_ADDR_OR_ATOM"
-	case "I_ETE_ITE":
-		return "I_ITE"
-	case "I_ETE_TRANS_ST":
-		return "I_TRANS_ST"
-	case "I_ETE_TRANS_COMMIT":
-		return "I_TRANS_COMMIT"
-	case "I_ETE_TRANS_FAIL":
-		return "I_TRANS_FAIL"
-	case "I_ETE_PE_RESET":
-		return "I_PE_RESET"
-	case "ETE_PKT_I_SRC_ADDR_MATCH":
-		return "I_ADDR_OR_ATOM"
-	case "ETE_PKT_I_SRC_ADDR_S_IS0":
-		return "I_ADDR_OR_ATOM"
-	case "ETE_PKT_I_SRC_ADDR_S_IS1":
-		return "I_ADDR_OR_ATOM"
-	case "ETE_PKT_I_SRC_ADDR_L_32IS0":
-		return "I_ADDR_OR_ATOM"
-	case "ETE_PKT_I_SRC_ADDR_L_32IS1":
-		return "I_ADDR_OR_ATOM"
-	case "ETE_PKT_I_SRC_ADDR_L_64IS0":
-		return "I_ADDR_OR_ATOM"
-	case "ETE_PKT_I_SRC_ADDR_L_64IS1":
-		return "I_ADDR_OR_ATOM"
-	default:
-		return tok
 	}
+	if alias, ok := packetTokenAliases[tok]; ok {
+		return alias
+	}
+	return tok
 }
 
 func resolveETESourceName(requested string, trace *snapshot.Trace, devs map[string]*snapshot.Device) string {
@@ -554,49 +619,68 @@ func drainAndPrintElements(tree *dcdtree.DecodeTree, printer *printers.GenericEl
 func decodeETETraceBuffer(tree *dcdtree.DecodeTree, traceData []byte, srcIsFrame bool, alignment int, printer *printers.GenericElementPrinter) error {
 	var traceIndex uint32
 	if srcIsFrame {
-		pending := traceData
-		for len(pending) >= alignment {
-			sendLen := alignment
-			consumed, err := tree.Write(ocsd.TrcIndex(traceIndex), pending[:sendLen])
-			resp := ocsd.DataRespFromErr(err)
-			if ocsd.DataRespIsFatal(resp) {
-				return fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
+		if err := writeTraceChunks(tree, traceData, printer, &traceIndex, func(remaining int) (int, bool) {
+			if remaining < alignment {
+				return 0, false
 			}
-			if consumed == 0 {
-				return fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
-			}
-			traceIndex += consumed
-			pending = pending[consumed:]
-			if err := drainAndPrintElements(tree, printer); err != nil {
-				return err
-			}
+			return alignment, true
+		}); err != nil {
+			return err
 		}
 	} else {
-		remaining := traceData
-		for len(remaining) > 0 {
-			sendLen := min(len(remaining), 256)
-			consumed, err := tree.Write(ocsd.TrcIndex(traceIndex), remaining[:sendLen])
-			resp := ocsd.DataRespFromErr(err)
-			if ocsd.DataRespIsFatal(resp) {
-				return fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
-			}
-			if consumed == 0 {
-				return fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
-			}
-			traceIndex += consumed
-			remaining = remaining[consumed:]
-			if err := drainAndPrintElements(tree, printer); err != nil {
-				return err
-			}
+		if err := writeTraceChunks(tree, traceData, printer, &traceIndex, func(remaining int) (int, bool) {
+			return min(remaining, 256), remaining > 0
+		}); err != nil {
+			return err
 		}
 	}
-	err := tree.Close()
+
+	if err := closeTraceTree(tree); err != nil {
+		return err
+	}
+	return drainAndPrintElements(tree, printer)
+}
+
+func writeTraceChunks(
+	tree *dcdtree.DecodeTree,
+	data []byte,
+	printer *printers.GenericElementPrinter,
+	traceIndex *uint32,
+	nextChunk func(remaining int) (int, bool),
+) error {
+	remaining := data
+	for {
+		sendLen, ok := nextChunk(len(remaining))
+		if !ok {
+			return nil
+		}
+		consumed, err := tree.Write(ocsd.TrcIndex(*traceIndex), remaining[:sendLen])
+		if err := checkTraceWriteProgress(*traceIndex, consumed, err); err != nil {
+			return err
+		}
+		*traceIndex += consumed
+		remaining = remaining[consumed:]
+		if err := drainAndPrintElements(tree, printer); err != nil {
+			return err
+		}
+	}
+}
+
+func checkTraceWriteProgress(traceIndex uint32, consumed uint32, err error) error {
 	resp := ocsd.DataRespFromErr(err)
 	if ocsd.DataRespIsFatal(resp) {
-		return fmt.Errorf("fatal datapath response on EOT")
+		return fmt.Errorf("fatal datapath response at trace index %d", traceIndex)
 	}
-	if err := drainAndPrintElements(tree, printer); err != nil {
-		return err
+	if consumed == 0 {
+		return fmt.Errorf("no progress while decoding at trace index %d", traceIndex)
+	}
+	return nil
+}
+
+func closeTraceTree(tree *dcdtree.DecodeTree) error {
+	resp := ocsd.DataRespFromErr(tree.Close())
+	if ocsd.DataRespIsFatal(resp) {
+		return fmt.Errorf("fatal datapath response on EOT")
 	}
 	return nil
 }
