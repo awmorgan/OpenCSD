@@ -2,17 +2,25 @@ package itm
 
 import (
 	"fmt"
+
 	"opencsd/internal/common"
 	"opencsd/internal/ocsd"
 )
+
+func validateConfig(cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("%w: ITM config cannot be nil", ocsd.ErrInvalidParamVal)
+	}
+	return nil
+}
 
 // NewPipeline creates and wires an ITM processor/decoder pair with optional dependencies.
 // The config is required (instID is retained for backwards compatibility but not used).
 // Dependencies (out, mem, instr) may be nil; when nil, the decoder operations that require
 // them will fail at runtime (by design for packet-only or partial-decode modes).
 func NewPipeline(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*PktProc, *PktDecode, error) {
-	if cfg == nil {
-		return nil, nil, fmt.Errorf("%w: ITM config cannot be nil", ocsd.ErrInvalidParamVal)
+	if err := validateConfig(cfg); err != nil {
+		return nil, nil, err
 	}
 	_ = instID
 
@@ -21,12 +29,7 @@ func NewPipeline(instID int, cfg *Config, mem common.TargetMemAccess, instr comm
 	if err != nil {
 		return nil, nil, err
 	}
-
-	// Inject dependencies (may be nil).
-	dec.MemAccess = mem
-	dec.InstrDecode = instr
-
-	// Wire processor output to decoder input via pull source.
+	dec.SetInterfaces(mem, instr)
 	dec.Source = proc
 
 	return proc, dec, nil

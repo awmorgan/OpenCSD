@@ -59,6 +59,11 @@ type PktDecode struct {
 
 func (d *PktDecode) ApplyFlags(flags uint32) error { return nil }
 
+func (d *PktDecode) SetInterfaces(mem common.TargetMemAccess, instr common.InstrDecode) {
+	d.MemAccess = mem
+	d.InstrDecode = instr
+}
+
 // NewPktDecode creates a new ITM packet decoder.
 func NewPktDecode(cfg *Config) (*PktDecode, error) {
 	if cfg == nil {
@@ -78,15 +83,16 @@ func NewPktDecode(cfg *Config) (*PktDecode, error) {
 
 // OutputTraceElement sends an element using IndexCurrPkt (or queues if in collect mode).
 func (d *PktDecode) OutputTraceElement(traceID uint8, elem *ocsd.TraceElement) error {
-	e := traceElemEvent{d.IndexCurrPkt, traceID, cloneQueuedElem(elem)}
-	d.pendingElements = append(d.pendingElements, e)
-	return nil
+	return d.queueTraceElement(d.IndexCurrPkt, traceID, elem)
 }
 
 // OutputTraceElementIdx sends an element at an explicit index.
 func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
-	e := traceElemEvent{idx, traceID, cloneQueuedElem(elem)}
-	d.pendingElements = append(d.pendingElements, e)
+	return d.queueTraceElement(idx, traceID, elem)
+}
+
+func (d *PktDecode) queueTraceElement(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) error {
+	d.pendingElements = append(d.pendingElements, traceElemEvent{idx, traceID, cloneQueuedElem(elem)})
 	return nil
 }
 
@@ -255,22 +261,29 @@ func (d *PktDecode) resetDecoder() {
 // next packet from Source, decodes it, and returns the first resulting element.
 func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
 	for len(d.pendingElements) == 0 && d.Source != nil {
-		pkt, err := d.Source.NextPacket()
-		if errors.Is(err, io.EOF) {
-			d.Source = nil
-			_ = d.Close()
-			break
-		}
-		if err != nil {
-			if !errors.Is(err, ocsd.ErrWait) {
-				d.Source = nil
-			}
+		if err := d.pullAndProcessPacket(); err != nil {
 			return 0, 0, ocsd.TraceElement{}, err
 		}
-		if wErr := d.processPacket(&pkt); wErr != nil {
-			return 0, 0, ocsd.TraceElement{}, wErr
-		}
 	}
+	return d.popPendingElement()
+}
+
+func (d *PktDecode) pullAndProcessPacket() error {
+	pkt, err := d.Source.NextPacket()
+	if errors.Is(err, io.EOF) {
+		d.Source = nil
+		return d.Close()
+	}
+	if err != nil {
+		if !errors.Is(err, ocsd.ErrWait) {
+			d.Source = nil
+		}
+		return err
+	}
+	return d.processPacket(&pkt)
+}
+
+func (d *PktDecode) popPendingElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
 	if len(d.pendingElements) == 0 {
 		return 0, 0, ocsd.TraceElement{}, io.EOF
 	}
@@ -305,24 +318,25 @@ func cloneQueuedElem(elem *ocsd.TraceElement) ocsd.TraceElement {
 	return clone
 }
 
-func (d *PktDecode) decodePacket() error {
-	globalTSLowMask := []uint64{
+var (
+	globalTSLowMasks = [...]uint64{
 		0x00000007F, // [ 6:0]
 		0x000003FFF, // [13:0]
 		0x0001FFFFF, // [20:0]
 		0x003FFFFFF, // [25:0]
 	}
-	globalTSHiMask := ^globalTSLowMask[3]
-
-	sendPacket := false
-	srcID := d.CurrPacketIn.SrcID
-
-	localTSTCTypes := []ocsd.SWTItmType{
+	globalTSHiMask = ^globalTSLowMasks[3]
+	localTSTCTypes = [...]ocsd.SWTItmType{
 		ocsd.TSSync,
 		ocsd.TSDelay,
 		ocsd.TSPKTDelay,
 		ocsd.TSPKTTSDelay,
 	}
+)
+
+func (d *PktDecode) decodePacket() error {
+	sendPacket := false
+	srcID := d.CurrPacketIn.SrcID
 
 	d.itmInfo = ocsd.SWTItmInfo{}
 
@@ -374,7 +388,7 @@ func (d *PktDecode) decodePacket() error {
 			d.gtsFreqChange = (srcID & 0x1) != 0
 		}
 
-		d.globalTS &= ^globalTSLowMask[d.CurrPacketIn.ValSz-1]
+		d.globalTS &= ^globalTSLowMasks[d.CurrPacketIn.ValSz-1]
 		d.globalTS |= uint64(d.CurrPacketIn.Value)
 
 		if !d.needGTS2 {
@@ -408,14 +422,18 @@ func (d *PktDecode) decodePacket() error {
 	}
 
 	if sendPacket {
-		if d.prevOverflow {
-			d.itmInfo.Overflow = 1
-			d.prevOverflow = false
-		}
-		d.outputElem.SetType(ocsd.GenElemITMTrace)
-		d.outputElem.SetSWTITMInfo(d.itmInfo)
-		return d.OutputTraceElement(d.csID, &d.outputElem)
+		return d.outputITMTraceElement()
 	}
 
 	return nil
+}
+
+func (d *PktDecode) outputITMTraceElement() error {
+	if d.prevOverflow {
+		d.itmInfo.Overflow = 1
+		d.prevOverflow = false
+	}
+	d.outputElem.SetType(ocsd.GenElemITMTrace)
+	d.outputElem.SetSWTITMInfo(d.itmInfo)
+	return d.OutputTraceElement(d.csID, &d.outputElem)
 }

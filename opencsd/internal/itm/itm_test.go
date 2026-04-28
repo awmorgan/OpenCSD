@@ -274,6 +274,35 @@ func TestITMEndToEndDecode(t *testing.T) {
 	})
 }
 
+func TestITMConfigTraceIDAndPrescale(t *testing.T) {
+	tests := []struct {
+		name string
+		reg  uint32
+		want uint32
+	}{
+		{name: "SWO disabled defaults to 1", reg: 0x000, want: 1},
+		{name: "prescale 1", reg: 0x010, want: 1},
+		{name: "prescale 4", reg: 0x110, want: 4},
+		{name: "prescale 16", reg: 0x210, want: 16},
+		{name: "prescale 64", reg: 0x310, want: 64},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{RegTCR: tt.reg}
+			if got := cfg.TSPrescaleValue(); got != tt.want {
+				t.Fatalf("TSPrescaleValue() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+
+	cfg := &Config{}
+	cfg.SetTraceID(0x55)
+	if got := cfg.TraceID(); got != 0x55 {
+		t.Fatalf("TraceID() = 0x%X, want 0x55", got)
+	}
+}
+
 func TestITMTypedConstructors(t *testing.T) {
 	t.Run("PipelineCreation", func(t *testing.T) {
 		cfg := &Config{}

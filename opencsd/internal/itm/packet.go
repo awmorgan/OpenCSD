@@ -93,70 +93,77 @@ func (p *Packet) ExtValue() uint64 {
 
 // IsBadPacket returns true if the packet type indicates a bad sequence or reserved protocol.
 func (p *Packet) IsBadPacket() bool {
-	return p.Type == PktIncompleteEOT || p.Type == PktBadSequence || p.Type == PktReserved
+	switch p.Type {
+	case PktIncompleteEOT, PktBadSequence, PktReserved:
+		return true
+	default:
+		return false
+	}
+}
+
+type pktTypeInfo struct {
+	name string
+	desc string
+}
+
+var pktTypeInfos = map[PktType]pktTypeInfo{
+	PktNotSync:       {"ITM_NOTSYNC", "ITM data stream not synchronised"},
+	PktIncompleteEOT: {"ITM_INCOMPLETE_EOT", "Incomplete packet flushed at end of trace"},
+	PktAsync:         {"ITM_ASYNC", "Alignment synchronisation packet"},
+	PktOverflow:      {"ITM_OVERFLOW", "ITM overflow packet"},
+	PktSWIT:          {"ITM_SWIT", "Software Stimulus write packet"},
+	PktDWT:           {"ITM_DWT", "DWT hardware stimulus write"},
+	PktTSLocal:       {"ITM_TS_LOCAL", "Local Timestamp"},
+	PktTSGlobal1:     {"ITM_GTS_1", "Global Timestamp [25:0]"},
+	PktTSGlobal2:     {"ITM_GTS_2", "Global Timestamp [{63|42}:26]"},
+	PktExtension:     {"ITM_EXTENSION", "Extension packet"},
+	PktBadSequence:   {"ITM_BAD_SEQUENCE", "Invalid sequence in packet"},
+	PktReserved:      {"ITM_RESERVED", "Reserved Packet Header"},
+}
+
+// PktTypeName returns the canonical printable name for an ITM packet type.
+func PktTypeName(t PktType) string {
+	return pktInfo(t).name
 }
 
 // String provides a string representation of the packet, matching C++ trc_pkt_elem_itm formatting.
 func (p *Packet) String() string {
 	var sb strings.Builder
-	name, desc := (&Packet{Type: p.Type}).typeNameAndDesc()
-	sb.WriteString(name)
+	info := pktInfo(p.Type)
+	sb.WriteString(info.name)
 	sb.WriteString(": ")
-
-	switch p.Type {
-	case PktSWIT:
-		fmt.Fprintf(&sb, "{src id: 0x%02x}  ", p.SrcID)
-		p.writeHexVal(&sb)
-	case PktDWT:
-		fmt.Fprintf(&sb, "{desc: 0x%02x} ", p.SrcID)
-		p.writeDwtPacketBody(&sb)
-	case PktTSLocal:
-		p.writeTsLocalPacketBody(&sb)
-	case PktTSGlobal1:
-		p.writeTsGlobal1PacketBody(&sb)
-	case PktTSGlobal2:
-		p.writeTsGlobal2PacketBody(&sb)
-	case PktExtension:
-		p.writeExtensionPacketBody(&sb)
-	case PktIncompleteEOT, PktBadSequence:
-		errName, _ := p.typeNameAndDesc()
-		fmt.Fprintf(&sb, "[Init type: %s] ", errName)
-	}
-
+	p.writePacketBody(&sb)
 	sb.WriteString("; '")
-	sb.WriteString(desc)
+	sb.WriteString(info.desc)
 	sb.WriteString("'")
 	return sb.String()
 }
 
-func (p *Packet) typeNameAndDesc() (string, string) {
+func pktInfo(t PktType) pktTypeInfo {
+	if info, ok := pktTypeInfos[t]; ok {
+		return info
+	}
+	return pktTypeInfo{"ITM_UNKNOWN", "ERROR: unknown packet type"}
+}
+
+func (p *Packet) writePacketBody(sb *strings.Builder) {
 	switch p.Type {
-	case PktNotSync:
-		return "ITM_NOTSYNC", "ITM data stream not synchronised"
-	case PktIncompleteEOT:
-		return "ITM_INCOMPLETE_EOT", "Incomplete packet flushed at end of trace"
-	case PktAsync:
-		return "ITM_ASYNC", "Alignment synchronisation packet"
-	case PktOverflow:
-		return "ITM_OVERFLOW", "ITM overflow packet"
 	case PktSWIT:
-		return "ITM_SWIT", "Software Stimulus write packet"
+		fmt.Fprintf(sb, "{src id: 0x%02x}  ", p.SrcID)
+		p.writeHexVal(sb)
 	case PktDWT:
-		return "ITM_DWT", "DWT hardware stimulus write"
+		fmt.Fprintf(sb, "{desc: 0x%02x} ", p.SrcID)
+		p.writeDwtPacketBody(sb)
 	case PktTSLocal:
-		return "ITM_TS_LOCAL", "Local Timestamp"
+		p.writeTsLocalPacketBody(sb)
 	case PktTSGlobal1:
-		return "ITM_GTS_1", "Global Timestamp [25:0]"
+		p.writeTsGlobal1PacketBody(sb)
 	case PktTSGlobal2:
-		return "ITM_GTS_2", "Global Timestamp [{63|42}:26]"
+		p.writeTsGlobal2PacketBody(sb)
 	case PktExtension:
-		return "ITM_EXTENSION", "Extension packet"
-	case PktBadSequence:
-		return "ITM_BAD_SEQUENCE", "Invalid sequence in packet"
-	case PktReserved:
-		return "ITM_RESERVED", "Reserved Packet Header"
-	default:
-		return "ITM_UNKNOWN", "ERROR: unknown packet type"
+		p.writeExtensionPacketBody(sb)
+	case PktIncompleteEOT, PktBadSequence:
+		fmt.Fprintf(sb, "[Init type: %s] ", PktTypeName(p.Type))
 	}
 }
 

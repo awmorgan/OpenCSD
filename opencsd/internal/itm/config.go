@@ -1,5 +1,22 @@
 package itm
 
+const (
+	traceIDMask        uint32 = 0x007F0000
+	traceIDShift              = 16
+	tcrSWOEnable       uint32 = 0x10
+	tcrTSPrescaleShift        = 8
+)
+
+var tsPrescaleValues = [...]uint32{1, 4, 16, 64}
+
+type HWEventFeat int
+
+const (
+	HWEventUnknownDisabled HWEventFeat = iota
+	HWEventEnabled
+	HWEventUseRegisters
+)
+
 // Config represents ITM hardware configuration data.
 // Represents the programmed and hardware configured state of an ITM device.
 type Config struct {
@@ -8,24 +25,20 @@ type Config struct {
 
 // SetTraceID sets the CoreSight trace ID.
 func (c *Config) SetTraceID(traceID uint8) {
-	IDmask := uint32(0x007F0000)
-	c.RegTCR &= ^IDmask
-	c.RegTCR |= (uint32(traceID) << 16) & IDmask
+	c.RegTCR &^= traceIDMask
+	c.RegTCR |= (uint32(traceID) << traceIDShift) & traceIDMask
 }
 
 // TraceID gets the CoreSight trace ID.
 func (c *Config) TraceID() uint8 {
-	return uint8((c.RegTCR >> 16) & 0x7F)
+	return uint8((c.RegTCR & traceIDMask) >> traceIDShift)
 }
 
 // TSPrescaleValue gets the prescaler for the local ts clock.
 func (c *Config) TSPrescaleValue() uint32 {
-	prescaleVals := []uint32{1, 4, 16, 64}
-	preScaleIdx := 0
-
-	// prescaler is used with TPIU clock - SWOENA = 1b1 - bit[4]
-	if (c.RegTCR & 0x10) != 0 {
-		preScaleIdx = int((c.RegTCR >> 8) & 0x3)
+	if c.RegTCR&tcrSWOEnable == 0 {
+		return tsPrescaleValues[0]
 	}
-	return prescaleVals[preScaleIdx]
+	idx := (c.RegTCR >> tcrTSPrescaleShift) & 0x3
+	return tsPrescaleValues[idx]
 }

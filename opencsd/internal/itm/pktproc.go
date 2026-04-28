@@ -133,15 +133,14 @@ func (p *PktProc) StatsInit() { p.statsInit = true }
 
 // ResetStats zeroes all decode statistics fields.
 func (p *PktProc) ResetStats() {
-	p.Stats.Version = ocsd.VerNum
-	p.Stats.Revision = ocsd.StatsRevision
-	p.Stats.ChannelTotal = 0
-	p.Stats.ChannelUnsynced = 0
-	p.Stats.BadHeaderErrs = 0
-	p.Stats.BadSequenceErrs = 0
-	p.Stats.Demux.FrameBytes = 0
-	p.Stats.Demux.NoIDBytes = 0
-	p.Stats.Demux.ValidIDBytes = 0
+	p.Stats = defaultDecodeStats()
+}
+
+func defaultDecodeStats() ocsd.DecodeStats {
+	return ocsd.DecodeStats{
+		Version:  ocsd.VerNum,
+		Revision: ocsd.StatsRevision,
+	}
 }
 
 // StatsAddTotalCount adds to the total channel bytes counter.
@@ -231,64 +230,100 @@ const packetReaderChunkSize = 4096
 // SetReader attaches a pull-style raw byte stream for PacketReader consumers.
 func (p *PktProc) SetReader(reader io.Reader) {
 	p.packetReader = reader
+	p.resetReaderState()
+	p.resetProcessorState()
+}
+
+func (p *PktProc) resetReaderState() {
 	p.packetReadIndex = 0
 	p.packetReadEOF = false
 	p.packetReadEOT = false
 	p.packetReaderBuf = p.packetReaderBuf[:0]
-	p.resetProcessorState()
 }
 
 // NextPacket returns the next decoded Packet from the attached reader.
 // It implements ocsd.PacketReader[Packet] for use as a decoder source.
 func (p *PktProc) NextPacket() (Packet, error) {
 	for {
-		if len(p.packetReaderBuf) > 0 {
-			pkt := p.packetReaderBuf[0]
-			p.packetReaderBuf = p.packetReaderBuf[1:]
+		if pkt, ok := p.popBufferedPacket(); ok {
 			return pkt, nil
 		}
 
 		if p.packetReader == nil {
-			if p.packetReadEOT {
-				return Packet{}, io.EOF
-			}
-			return Packet{}, ocsd.ErrWait
+			return p.nextPacketWithoutReader()
 		}
 
 		if p.packetReadEOF {
-			if p.packetReadEOT {
-				return Packet{}, io.EOF
-			}
-			if err := p.OnEOT(); err != nil {
+			if err := p.finishReaderEOT(); err != nil {
 				return Packet{}, err
 			}
-			p.packetReadEOT = true
 			continue
 		}
 
-		buf := make([]byte, packetReaderChunkSize)
-		n, err := p.packetReader.Read(buf)
-		if n > 0 {
-			processed, procErr := p.processData(p.packetReadIndex, buf[:n])
-			p.packetReadIndex += ocsd.TrcIndex(processed)
-			if procErr != nil {
-				return Packet{}, procErr
-			}
-			if processed != uint32(n) {
-				return Packet{}, fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, n)
-			}
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				p.packetReadEOF = true
-				continue
-			}
+		if err := p.readPacketChunk(); err != nil {
 			return Packet{}, err
 		}
-		if n == 0 {
-			return Packet{}, io.ErrNoProgress
+	}
+}
+
+func (p *PktProc) popBufferedPacket() (Packet, bool) {
+	if len(p.packetReaderBuf) == 0 {
+		return Packet{}, false
+	}
+	pkt := p.packetReaderBuf[0]
+	p.packetReaderBuf = p.packetReaderBuf[1:]
+	return pkt, true
+}
+
+func (p *PktProc) nextPacketWithoutReader() (Packet, error) {
+	if p.packetReadEOT {
+		return Packet{}, io.EOF
+	}
+	return Packet{}, ocsd.ErrWait
+}
+
+func (p *PktProc) finishReaderEOT() error {
+	if p.packetReadEOT {
+		return io.EOF
+	}
+	if err := p.OnEOT(); err != nil {
+		return err
+	}
+	p.packetReadEOT = true
+	return nil
+}
+
+func (p *PktProc) readPacketChunk() error {
+	buf := make([]byte, packetReaderChunkSize)
+	n, err := p.packetReader.Read(buf)
+	if n > 0 {
+		if procErr := p.processReaderBytes(buf[:n]); procErr != nil {
+			return procErr
 		}
 	}
+	if errors.Is(err, io.EOF) {
+		p.packetReadEOF = true
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return io.ErrNoProgress
+	}
+	return nil
+}
+
+func (p *PktProc) processReaderBytes(data []byte) error {
+	processed, err := p.processData(p.packetReadIndex, data)
+	p.packetReadIndex += ocsd.TrcIndex(processed)
+	if err != nil {
+		return err
+	}
+	if processed != uint32(len(data)) {
+		return fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, len(data))
+	}
+	return nil
 }
 
 func (p *PktProc) resetProcessorState() {
@@ -374,30 +409,7 @@ func (p *PktProc) stateHdr(index ocsd.TrcIndex) (error, bool) {
 	p.packetIndex = index + ocsd.TrcIndex(p.dataInUsed)
 
 	if p.streamSync {
-		pkt, consumed, err := decodeNextPacket(p.dataIn, int(p.dataInUsed))
-		switch {
-		case err == nil:
-			for range consumed {
-				if _, ok := p.readByte(); !ok {
-					return io.ErrUnexpectedEOF, true
-				}
-			}
-			if pkt.Type == PktTSGlobal1 && consumed == 5 && len(p.packetData) >= 5 {
-				// Keep compatibility with legacy decode path, which masks src bits in the
-				// final continuation byte before raw packet monitoring/output.
-				p.packetData[4] &= 0x1F
-			}
-			p.currPacket = pkt
-			p.procState = procSendPkt
-			return p.stateSendPkt(index)
-		case errors.Is(err, errDecodeNotImplemented),
-			errors.Is(err, ocsd.ErrBadPacketSeq),
-			errors.Is(err, ocsd.ErrInvalidPcktHdr):
-			// Fall back to the legacy state machine while migration is in progress.
-			// The legacy path owns byte consumption for error cases; handling them here
-			// would retry the same header indefinitely when the stateless decoder fails
-			// before consuming input.
-		default:
+		if handled, err := p.tryStatelessDecode(index); handled {
 			return err, true
 		}
 	}
@@ -414,6 +426,44 @@ func (p *PktProc) stateHdr(index ocsd.TrcIndex) (error, bool) {
 		return p.stateSendPkt(index)
 	}
 	return p.stateData(index)
+}
+
+func (p *PktProc) tryStatelessDecode(index ocsd.TrcIndex) (bool, error) {
+	pkt, consumed, err := decodeNextPacket(p.dataIn, int(p.dataInUsed))
+	switch {
+	case err == nil:
+		if err := p.consumeStatelessPacket(pkt, consumed); err != nil {
+			return true, err
+		}
+		return true, p.stateSendPktErr(index)
+	case errors.Is(err, errDecodeNotImplemented),
+		errors.Is(err, ocsd.ErrBadPacketSeq),
+		errors.Is(err, ocsd.ErrInvalidPcktHdr):
+		return false, nil
+	default:
+		return true, err
+	}
+}
+
+func (p *PktProc) consumeStatelessPacket(pkt Packet, consumed int) error {
+	for range consumed {
+		if _, ok := p.readByte(); !ok {
+			return io.ErrUnexpectedEOF
+		}
+	}
+	if pkt.Type == PktTSGlobal1 && consumed == 5 && len(p.packetData) >= 5 {
+		// Keep compatibility with legacy decode path, which masks src bits in the
+		// final continuation byte before raw packet monitoring/output.
+		p.packetData[4] &= 0x1F
+	}
+	p.currPacket = pkt
+	p.procState = procSendPkt
+	return nil
+}
+
+func (p *PktProc) stateSendPktErr(index ocsd.TrcIndex) error {
+	err, _ := p.stateSendPkt(index)
+	return err
 }
 
 func (p *PktProc) stateData(index ocsd.TrcIndex) (error, bool) {
@@ -530,46 +580,61 @@ func (p *PktProc) ProcessHdr() error {
 		return nil
 	}
 	p.headerByte = b
+	return p.classifyHeader(b)
+}
 
-	if (b & 0x03) != 0x00 { // Stimulus packets
-		if (b & 0x4) != 0 {
-			p.currPacket.Type = PktDWT
-		} else {
-			p.currPacket.Type = PktSWIT
-		}
-		p.decodeState = decodeData
-		p.procState = procData
-	} else if (b & 0x0F) == 0x00 {
-		switch b & 0xF0 {
-		case 0x00:
-			p.currPacket.Type = PktAsync
-			p.decodeState = decodeAsync
-			p.procState = procData
-		case 0x70:
-			p.currPacket.Type = PktOverflow
-			p.procState = procSendPkt
-		default:
-			p.currPacket.Type = PktTSLocal
-			p.decodeState = decodeLocalTS
-			p.procState = procData
-		}
-	} else if (b & 0x0B) == 0x08 {
-		p.currPacket.Type = PktExtension
-		p.decodeState = decodeExtension
-		p.procState = procData
-	} else if (b & 0xDF) == 0x94 {
-		if (b & 0x20) == 0x00 {
-			p.currPacket.Type = PktTSGlobal1
-			p.decodeState = decodeGlobalTS1
-		} else {
-			p.currPacket.Type = PktTSGlobal2
-			p.decodeState = decodeGlobalTS2
-		}
-		p.procState = procData
-	} else {
+func (p *PktProc) classifyHeader(b byte) error {
+	switch {
+	case (b & 0x03) != 0x00:
+		return p.classifyStimulusHeader(b)
+	case (b & 0x0F) == 0x00:
+		return p.classifySyncOrTimestampHeader(b)
+	case (b & 0x0B) == 0x08:
+		p.setPacketDecode(PktExtension, decodeExtension)
+	case (b & 0xDF) == 0x94:
+		p.classifyGlobalTimestampHeader(b)
+	default:
 		return p.setReservedHdrError("")
 	}
 	return nil
+}
+
+func (p *PktProc) classifyStimulusHeader(b byte) error {
+	if b&0x4 != 0 {
+		p.currPacket.Type = PktDWT
+	} else {
+		p.currPacket.Type = PktSWIT
+	}
+	p.decodeState = decodeData
+	p.procState = procData
+	return nil
+}
+
+func (p *PktProc) classifySyncOrTimestampHeader(b byte) error {
+	switch b & 0xF0 {
+	case 0x00:
+		p.setPacketDecode(PktAsync, decodeAsync)
+	case 0x70:
+		p.currPacket.Type = PktOverflow
+		p.procState = procSendPkt
+	default:
+		p.setPacketDecode(PktTSLocal, decodeLocalTS)
+	}
+	return nil
+}
+
+func (p *PktProc) classifyGlobalTimestampHeader(b byte) {
+	if b&0x20 == 0 {
+		p.setPacketDecode(PktTSGlobal1, decodeGlobalTS1)
+	} else {
+		p.setPacketDecode(PktTSGlobal2, decodeGlobalTS2)
+	}
+}
+
+func (p *PktProc) setPacketDecode(pktType PktType, state packetDecodeState) {
+	p.currPacket.Type = pktType
+	p.decodeState = state
+	p.procState = procData
 }
 
 func (p *PktProc) runDataDecodeState() error {
@@ -592,47 +657,58 @@ func (p *PktProc) runDataDecodeState() error {
 }
 
 func (p *PktProc) PktData() error {
-	payloadBytesReq := int(p.headerByte & 0x3)
+	payloadBytesReq := itmPayloadByteCount(p.headerByte)
 	payloadBytesGot := len(p.packetData) - 1
-
-	if payloadBytesReq == 3 {
-		payloadBytesReq = 4
-	}
 
 	if len(p.packetData) == 1 {
 		p.currPacket.SrcID = (p.headerByte >> 3) & 0x1F
 	}
 
 	if payloadBytesGot < payloadBytesReq {
-		remaining := payloadBytesReq - payloadBytesGot
-		start := len(p.packetData)
-		p.packetData = append(p.packetData, make([]byte, remaining)...)
-		n, err := io.ReadFull(p.dataReader, p.packetData[start:])
+		n, err := p.readPayloadBytes(payloadBytesReq - payloadBytesGot)
 		if err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-				p.packetData = p.packetData[:start+n]
-				p.refreshDataUsed()
-				return nil
-			}
 			return err
 		}
-		p.refreshDataUsed()
 		payloadBytesGot += n
 	}
 
 	if payloadBytesGot == payloadBytesReq {
-		value := uint32(p.packetData[1])
-		if payloadBytesReq >= 2 {
-			value |= (uint32(p.packetData[2]) << 8)
-		}
-		if payloadBytesReq == 4 {
-			value |= (uint32(p.packetData[3]) << 16)
-			value |= (uint32(p.packetData[4]) << 24)
-		}
-		p.currPacket.SetValue(value, uint8(payloadBytesReq))
+		p.currPacket.SetValue(payloadValue(p.packetData[1:], payloadBytesReq), uint8(payloadBytesReq))
 		p.procState = procSendPkt
 	}
 	return nil
+}
+
+func itmPayloadByteCount(header byte) int {
+	n := int(header & 0x3)
+	if n == 3 {
+		return 4
+	}
+	return n
+}
+
+func (p *PktProc) readPayloadBytes(remaining int) (int, error) {
+	start := len(p.packetData)
+	p.packetData = append(p.packetData, make([]byte, remaining)...)
+	n, err := io.ReadFull(p.dataReader, p.packetData[start:])
+	if err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			p.packetData = p.packetData[:start+n]
+			p.refreshDataUsed()
+			return n, nil
+		}
+		return n, err
+	}
+	p.refreshDataUsed()
+	return n, nil
+}
+
+func payloadValue(data []byte, size int) uint32 {
+	var value uint32
+	for i := range size {
+		value |= uint32(data[i]) << (uint(i) * 8)
+	}
+	return value
 }
 
 func (p *PktProc) readContBytes(limit int) bool {

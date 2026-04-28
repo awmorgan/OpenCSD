@@ -38,7 +38,7 @@ func (p *itmRawPacketPrinter) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.Str
 		fmt.Fprintf(&sb, "0x%02x ", b)
 	}
 	sb.WriteString("];\t")
-	sb.WriteString(itmPacketTypeName(itmPkt.Type))
+	sb.WriteString(itm.PktTypeName(itmPkt.Type))
 	sb.WriteString(" : description")
 	sb.WriteString("\n")
 	_, _ = io.WriteString(p.writer, sb.String())
@@ -47,37 +47,6 @@ func (p *itmRawPacketPrinter) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.Str
 func (p *itmRawPacketPrinter) MonitorEOT() {}
 
 func (p *itmRawPacketPrinter) MonitorReset(indexSOP ocsd.TrcIndex) {}
-
-func itmPacketTypeName(t itm.PktType) string {
-	switch t {
-	case itm.PktNotSync:
-		return "ITM_NOTSYNC"
-	case itm.PktIncompleteEOT:
-		return "ITM_INCOMPLETE_EOT"
-	case itm.PktAsync:
-		return "ITM_ASYNC"
-	case itm.PktOverflow:
-		return "ITM_OVERFLOW"
-	case itm.PktSWIT:
-		return "ITM_SWIT"
-	case itm.PktDWT:
-		return "ITM_DWT"
-	case itm.PktTSLocal:
-		return "ITM_TS_LOCAL"
-	case itm.PktTSGlobal1:
-		return "ITM_GTS_1"
-	case itm.PktTSGlobal2:
-		return "ITM_GTS_2"
-	case itm.PktExtension:
-		return "ITM_EXTENSION"
-	case itm.PktBadSequence:
-		return "ITM_BAD_SEQUENCE"
-	case itm.PktReserved:
-		return "ITM_RESERVED"
-	default:
-		return "ITM_RESERVED"
-	}
-}
 
 func TestITMSnapshotsAgainstGolden(t *testing.T) {
 	t.Parallel()
