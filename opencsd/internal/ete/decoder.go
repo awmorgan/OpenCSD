@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"sync/atomic"
+
 	"opencsd/internal/common"
 	"opencsd/internal/etmv4"
 	"opencsd/internal/ocsd"
-	"sync/atomic"
 )
 
 type traceElemEvent struct {
@@ -26,41 +27,6 @@ type SequencedTraceIterator interface {
 	NextSequenced() (uint64, *ocsd.TraceElement, error)
 }
 
-func (d *PktDecode) traceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
-	if d == nil || elem == nil {
-		return nil
-	}
-	queueIndex := indexSOP
-	if queueIndex == 0 && elem.ElemType == ocsd.GenElemEOTrace {
-		switch {
-		case d.lastElemIndex != 0:
-			queueIndex = d.lastElemIndex + 1
-		case d.lastPacketIndex != 0:
-			queueIndex = d.lastPacketIndex
-		}
-	} else if queueIndex != 0 {
-		d.lastElemIndex = queueIndex
-		d.sawActivity = true
-	}
-	queued := cloneTraceElement(elem)
-	queued.TraceID = trcChanID
-
-	seq := queuedTraceElemSeq.Add(1)
-	if d.OutSink != nil {
-		if err := d.OutSink(seq, queueIndex, trcChanID, &queued); err != nil {
-			return err
-		}
-	}
-	d.pendingElements = append(d.pendingElements, traceElemEvent{
-		seq:     seq,
-		index:   queueIndex,
-		traceID: queued.TraceID,
-		elem:    queued,
-	})
-
-	return nil
-}
-
 type PktDecode struct {
 	inner           *etmv4.PktDecode
 	pendingElements []traceElemEvent
@@ -76,15 +42,22 @@ type PktDecode struct {
 }
 
 func NewPktDecode(cfg *Config) (*PktDecode, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("%w: ETE config cannot be nil", ocsd.ErrInvalidParamVal)
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
 	}
+
 	inner, err := etmv4.NewPktDecode(cfg.ToETMv4Config())
 	if err != nil {
 		return nil, err
 	}
-	decoder := &PktDecode{inner: inner}
-	return decoder, nil
+	return &PktDecode{inner: inner}, nil
+}
+
+func validateConfig(cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("%w: ETE config cannot be nil", ocsd.ErrInvalidParamVal)
+	}
+	return nil
 }
 
 // NewConfiguredPktDecodeWithDeps creates an ETE decoder and injects dependencies.
@@ -95,34 +68,34 @@ func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMe
 	if err != nil {
 		return nil, err
 	}
-	decoder.inner.MemAccess = mem
-	decoder.inner.InstrDecode = instr
+	decoder.SetInterfaces(mem, instr)
 	decoder.Source = source
 	decoder.OutSink = outSink
 	return decoder, nil
 }
 
-// (removed) SetElementSink is no longer used; Elements() and drainInner use NextElement().
+// SetInterfaces updates the optional memory and instruction decode dependencies.
+func (d *PktDecode) SetInterfaces(mem common.TargetMemAccess, instr common.InstrDecode) {
+	if d == nil || d.inner == nil {
+		return
+	}
+	d.inner.MemAccess = mem
+	d.inner.InstrDecode = instr
+}
 
 // NewConfiguredPipeline creates and wires a typed ETE processor/decoder pair.
 func NewConfiguredPipeline(instID int, cfg *Config) (*etmv4.Processor, *PktDecode, error) {
-	if cfg == nil {
-		return nil, nil, fmt.Errorf("%w: ETE config cannot be nil", ocsd.ErrInvalidParamVal)
-	}
-
-	proc := NewProcessor(cfg)
-	// In the default pipeline, inject proc as the pull source.
-	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, nil, nil, proc, nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	return proc, decoder, nil
+	return newConfiguredPipeline(instID, cfg, nil, nil, false)
 }
 
 // NewConfiguredPipelineWithDeps creates and wires an ETE processor/decoder pair with dependencies.
 func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*etmv4.Processor, *PktDecode, error) {
-	if cfg == nil {
-		return nil, nil, fmt.Errorf("%w: ETE config cannot be nil", ocsd.ErrInvalidParamVal)
+	return newConfiguredPipeline(instID, cfg, mem, instr, true)
+}
+
+func newConfiguredPipeline(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode, attachPush bool) (*etmv4.Processor, *PktDecode, error) {
+	if err := validateConfig(cfg); err != nil {
+		return nil, nil, err
 	}
 
 	proc := NewProcessor(cfg)
@@ -130,7 +103,9 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 	if err != nil {
 		return nil, nil, err
 	}
-	proc.SetPktOut(&pushSink{d: decoder})
+	if attachPush {
+		proc.SetPktOut(&pushSink{d: decoder})
+	}
 	return proc, decoder, nil
 }
 
@@ -141,8 +116,48 @@ func (d *PktDecode) ApplyFlags(flags uint32) error {
 	return d.inner.ApplyFlags(flags)
 }
 
+func (d *PktDecode) traceElemIn(indexSOP ocsd.TrcIndex, trcChanID uint8, elem *ocsd.TraceElement) error {
+	if d == nil || elem == nil {
+		return nil
+	}
+
+	queueIndex := d.queueIndex(indexSOP, elem)
+	queued := cloneTraceElement(elem)
+	queued.TraceID = trcChanID
+
+	seq := queuedTraceElemSeq.Add(1)
+	if d.OutSink != nil {
+		if err := d.OutSink(seq, queueIndex, trcChanID, &queued); err != nil {
+			return err
+		}
+	}
+
+	d.pendingElements = append(d.pendingElements, traceElemEvent{
+		seq:     seq,
+		index:   queueIndex,
+		traceID: queued.TraceID,
+		elem:    queued,
+	})
+	return nil
+}
+
+func (d *PktDecode) queueIndex(indexSOP ocsd.TrcIndex, elem *ocsd.TraceElement) ocsd.TrcIndex {
+	if indexSOP != 0 {
+		d.lastElemIndex = indexSOP
+		d.sawActivity = true
+		return indexSOP
+	}
+	if elem.ElemType != ocsd.GenElemEOTrace {
+		return 0
+	}
+	if d.lastElemIndex != 0 {
+		return d.lastElemIndex + 1
+	}
+	return d.lastPacketIndex
+}
+
 // drainInner pulls all buffered elements from the inner ETMv4 decoder and
-// processes them through TraceElemIn for index fixup and buffering.
+// processes them through traceElemIn for index fixup and buffering.
 func (d *PktDecode) drainInner() error {
 	for {
 		idx, trcChanID, elem, err := d.inner.NextElement()
@@ -158,18 +173,14 @@ func (d *PktDecode) drainInner() error {
 	}
 }
 
-// pushSink adapts `PktDecode` to the `ocsd.PacketProcessor[etmv4.TracePacket]`
-// interface for push-mode pipelines without exposing a public `Write` on
-// `PktDecode` itself.
+// pushSink adapts PktDecode to the ocsd.PacketProcessor[etmv4.TracePacket]
+// interface for push-mode pipelines without exposing a public Write on PktDecode itself.
 type pushSink struct {
 	d *PktDecode
 }
 
 func (p *pushSink) Write(indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket) error {
-	p.d.lastPacketIndex = indexSOP
-	if indexSOP != 0 {
-		p.d.sawActivity = true
-	}
+	p.d.recordPacketIndex(indexSOP)
 	if err := p.d.inner.Write(indexSOP, pkt); err != nil {
 		return err
 	}
@@ -179,6 +190,13 @@ func (p *pushSink) Write(indexSOP ocsd.TrcIndex, pkt *etmv4.TracePacket) error {
 func (p *pushSink) Close() error                       { return p.d.Close() }
 func (p *pushSink) Flush() error                       { return p.d.Flush() }
 func (p *pushSink) Reset(indexSOP ocsd.TrcIndex) error { return p.d.Reset(indexSOP) }
+
+func (d *PktDecode) recordPacketIndex(index ocsd.TrcIndex) {
+	d.lastPacketIndex = index
+	if index != 0 {
+		d.sawActivity = true
+	}
+}
 
 func (d *PktDecode) Close() error {
 	if err := d.inner.Close(); err != nil {
@@ -195,6 +213,10 @@ func (d *PktDecode) Flush() error {
 }
 
 func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
+	d.pendingElements = d.pendingElements[:0]
+	d.lastPacketIndex = 0
+	d.lastElemIndex = 0
+	d.sawActivity = false
 	d.pullEOFDone = false
 	return d.inner.Reset(indexSOP)
 }
@@ -204,41 +226,74 @@ func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 // sink is wired, it fetches the next packet, decodes it, and returns the first
 // resulting element.
 func (d *PktDecode) NextSequenced() (uint64, *ocsd.TraceElement, error) {
+	if e, ok := d.popPendingElement(); ok {
+		return e.seq, elementFromEvent(e), nil
+	}
+
+	if err := d.fillPendingFromSource(); err != nil {
+		return 0, nil, err
+	}
+
+	if e, ok := d.popPendingElement(); ok {
+		return e.seq, elementFromEvent(e), nil
+	}
+	return 0, nil, io.EOF
+}
+
+func (d *PktDecode) fillPendingFromSource() error {
 	for len(d.pendingElements) == 0 && d.Source != nil {
 		pkt, err := d.Source.NextPacket()
-		if errors.Is(err, io.EOF) {
+		switch {
+		case errors.Is(err, io.EOF):
+			return d.handleSourceEOF()
+		case errors.Is(err, ocsd.ErrWait):
+			return ocsd.ErrWait
+		case err != nil:
 			d.Source = nil
-			if !d.pullEOFDone {
-				d.pullEOFDone = true
-				if closeErr := d.Close(); closeErr != nil {
-					return 0, nil, closeErr
-				}
-			}
-			return 0, nil, io.EOF
+			return err
 		}
-		if errors.Is(err, ocsd.ErrWait) {
-			return 0, nil, ocsd.ErrWait
-		}
-		if err != nil {
-			d.Source = nil
-			return 0, nil, err
-		}
-		if wErr := d.inner.Write(pkt.Index, &pkt); wErr != nil {
-			return 0, nil, wErr
-		}
-		if drainErr := d.drainInner(); drainErr != nil {
-			return 0, nil, drainErr
+
+		if err := d.writePacket(&pkt); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+func (d *PktDecode) writePacket(pkt *etmv4.Packet) error {
+	d.recordPacketIndex(pkt.Index)
+	if err := d.inner.Write(pkt.Index, pkt); err != nil {
+		return err
+	}
+	return d.drainInner()
+}
+
+func (d *PktDecode) handleSourceEOF() error {
+	d.Source = nil
+	if d.pullEOFDone {
+		return io.EOF
+	}
+	d.pullEOFDone = true
+	if err := d.Close(); err != nil {
+		return err
+	}
+	return io.EOF
+}
+
+func (d *PktDecode) popPendingElement() (traceElemEvent, bool) {
 	if len(d.pendingElements) == 0 {
-		return 0, nil, io.EOF
+		return traceElemEvent{}, false
 	}
 	e := d.pendingElements[0]
 	d.pendingElements = d.pendingElements[1:]
+	return e, true
+}
+
+func elementFromEvent(e traceElemEvent) *ocsd.TraceElement {
 	elem := e.elem
 	elem.Index = e.index
 	elem.TraceID = e.traceID
-	return e.seq, &elem, nil
+	return &elem
 }
 
 func (d *PktDecode) Next() (*ocsd.TraceElement, error) {

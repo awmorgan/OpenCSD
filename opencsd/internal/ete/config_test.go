@@ -3,6 +3,7 @@ package ete
 import (
 	"testing"
 
+	"opencsd/internal/etmv4"
 	"opencsd/internal/ocsd"
 )
 
@@ -12,15 +13,25 @@ func TestNewConfigDefaults(t *testing.T) {
 		t.Fatalf("NewConfig returned nil")
 	}
 
-	if cfg.RegDevArch != 0x47705A13 {
-		t.Fatalf("unexpected RegDevArch default: 0x%08x", cfg.RegDevArch)
+	tests := []struct {
+		name string
+		got  uint32
+		want uint32
+	}{
+		{name: "RegDevArch", got: cfg.RegDevArch, want: defaultDevArch},
+		{name: "RegIdr0", got: cfg.RegIdr0, want: defaultIDR0},
+		{name: "RegIdr1", got: cfg.RegIdr1, want: defaultIDR1},
+		{name: "RegIdr2", got: cfg.RegIdr2, want: defaultIDR2},
+		{name: "RegConfigr", got: cfg.RegConfigr, want: defaultConfigR},
 	}
-	if cfg.RegIdr0 != 0x28000EA1 || cfg.RegIdr1 != 0x4100FFF3 || cfg.RegIdr2 != 0x00000488 {
-		t.Fatalf("unexpected default IDR values: idr0=0x%08x idr1=0x%08x idr2=0x%08x", cfg.RegIdr0, cfg.RegIdr1, cfg.RegIdr2)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.want {
+				t.Fatalf("got 0x%08x, want 0x%08x", tt.got, tt.want)
+			}
+		})
 	}
-	if cfg.RegConfigr != 0xC1 {
-		t.Fatalf("unexpected RegConfigr default: 0x%08x", cfg.RegConfigr)
-	}
+
 	if cfg.ArchVer != ocsd.ArchAA64 {
 		t.Fatalf("unexpected ArchVer default: %v", cfg.ArchVer)
 	}
@@ -38,29 +49,20 @@ func TestToETMv4Config_MapsDevArchVersionAndZerosETMOnlyRegs(t *testing.T) {
 	cfg.RegIdr11 = 0x33333333
 	cfg.RegIdr12 = 0x44444444
 	cfg.RegIdr13 = 0x55555555
-	cfg.RegConfigr = 0x0           // Clear it to ensure ToETMv4Config sets the WFI/WFE bit
-	cfg.ArchVer = ocsd.ArchUnknown // Clear it to ensure ToETMv4Config forces AA64
+	cfg.RegConfigr = 0x0
+	cfg.ArchVer = ocsd.ArchUnknown
 
 	// maj=0x9 (bits 12-15), min=0x7 (bits 16-19)
-	cfg.RegDevArch = (0x9 << 12) | (0x7 << 16)
+	cfg.RegDevArch = (0x9 << devArchMajorShift) | (0x7 << devArchMinorShift)
 
 	v4 := cfg.ToETMv4Config()
 	if v4 == nil {
 		t.Fatalf("ToETMv4Config returned nil")
 	}
+	assertETMv4OnlyRegsZero(t, v4)
+	assertIDR1Version(t, v4.RegIdr1, 0x9, 0x7)
 
-	if v4.RegIdr9 != 0 || v4.RegIdr10 != 0 || v4.RegIdr11 != 0 || v4.RegIdr12 != 0 || v4.RegIdr13 != 0 {
-		t.Fatalf("expected ETMv4-only IDRs 9-13 to be zeroed")
-	}
-
-	maj := (v4.RegIdr1 >> 8) & 0xF
-	min := (v4.RegIdr1 >> 4) & 0xF
-	if maj != 0x9 || min != 0x7 {
-		t.Fatalf("unexpected maj/min from RegDevArch: maj=%d min=%d", maj, min)
-	}
-
-	// NEW: Verify ETE overrides
-	if (v4.RegConfigr & (1 << 17)) == 0 {
+	if v4.RegConfigr&configWFIWFEBit == 0 {
 		t.Fatalf("expected RegConfigr bit 17 to be forced high for WFI/WFE branch tracing")
 	}
 	if v4.ArchVer != ocsd.ArchAA64 {
@@ -70,8 +72,6 @@ func TestToETMv4Config_MapsDevArchVersionAndZerosETMOnlyRegs(t *testing.T) {
 
 func TestToETMv4Config_DevArchZeroClearsMajMinOverride(t *testing.T) {
 	cfg := NewConfig()
-
-	// Seed non-zero maj/min in IDR1 to ensure DevArch override takes effect.
 	cfg.RegIdr1 = 0x00000FF0
 	cfg.RegDevArch = 0
 
@@ -79,10 +79,21 @@ func TestToETMv4Config_DevArchZeroClearsMajMinOverride(t *testing.T) {
 	if v4 == nil {
 		t.Fatalf("ToETMv4Config returned nil")
 	}
+	assertIDR1Version(t, v4.RegIdr1, 0, 0)
+}
 
-	maj := (v4.RegIdr1 >> 8) & 0xF
-	min := (v4.RegIdr1 >> 4) & 0xF
-	if maj != 0 || min != 0 {
-		t.Fatalf("expected maj/min to be cleared from zero RegDevArch, got maj=%d min=%d", maj, min)
+func assertETMv4OnlyRegsZero(t *testing.T, cfg *etmv4.Config) {
+	t.Helper()
+	if cfg.RegIdr9 != 0 || cfg.RegIdr10 != 0 || cfg.RegIdr11 != 0 || cfg.RegIdr12 != 0 || cfg.RegIdr13 != 0 {
+		t.Fatalf("expected ETMv4-only IDRs 9-13 to be zeroed")
+	}
+}
+
+func assertIDR1Version(t *testing.T, idr1, wantMaj, wantMin uint32) {
+	t.Helper()
+	maj := (idr1 >> idr1MajorShift) & devArchVersionMask
+	min := (idr1 >> idr1MinorShift) & devArchVersionMask
+	if maj != wantMaj || min != wantMin {
+		t.Fatalf("unexpected IDR1 version: maj=%d min=%d, want maj=%d min=%d", maj, min, wantMaj, wantMin)
 	}
 }

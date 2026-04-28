@@ -8,9 +8,7 @@ import (
 
 func TestSequencedDrainFromPendingQueue(t *testing.T) {
 	d := &PktDecode{}
-	elem := ocsd.NewTraceElement()
-	elem.SetType(ocsd.GenElemEvent)
-	elem.TraceID = 6
+	elem := ocsd.NewTraceElementWithType(ocsd.GenElemEvent)
 
 	if err := d.traceElemIn(9, 6, elem); err != nil {
 		t.Fatalf("traceElemIn failed: %v", err)
