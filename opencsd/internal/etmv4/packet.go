@@ -309,6 +309,11 @@ func (p *TracePacket) EffectiveType() PktType {
 	return p.Type
 }
 
+// PktTypeName returns the canonical packet type string used by packet printers.
+func PktTypeName(t PktType) string {
+	return t.String()
+}
+
 // ensure PktType meets Stringer requirements
 var _ fmt.Stringer = PktType(0)
 

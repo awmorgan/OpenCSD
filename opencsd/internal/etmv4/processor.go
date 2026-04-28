@@ -123,11 +123,15 @@ func (p *Processor) SetPktRawMonitor(mon ocsd.PacketMonitor) {
 // SetReader attaches a pull-style raw byte stream for PacketReader consumers.
 func (p *Processor) SetReader(reader io.Reader) {
 	p.packetReader = reader
+	p.resetReaderState()
+	p.resetProcessorState()
+}
+
+func (p *Processor) resetReaderState() {
 	p.packetReadIndex = 0
 	p.packetReadEOF = false
 	p.packetReadEOT = false
 	p.pendingPackets = p.pendingPackets[:0]
-	p.resetProcessorState()
 }
 
 // Write is the explicit data-path entrypoint used by split interfaces.
@@ -138,55 +142,82 @@ func (p *Processor) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error)
 // NextPacket returns the next packet from the attached reader.
 func (p *Processor) NextPacket() (Packet, error) {
 	for {
-		if len(p.pendingPackets) > 0 {
-			pkt := p.pendingPackets[0]
-			p.pendingPackets = p.pendingPackets[1:]
+		if pkt, ok := p.popPendingPacket(); ok {
 			return pkt, nil
 		}
-
 		if p.packetReader == nil {
 			return Packet{}, ocsd.ErrWait
 		}
-
 		if p.packetReadEOF {
-			if p.packetReadEOT {
-				return Packet{}, io.EOF
-			}
-			p.collectPackets = true
-			err := p.onEOT()
-			p.collectPackets = false
-			p.packetReadEOT = true
-			if err != nil && !errors.Is(err, ocsd.ErrWait) {
+			if err := p.finishReaderEOT(); err != nil {
 				return Packet{}, err
 			}
 			continue
 		}
-
-		buf := make([]byte, packetReaderChunkSize)
-		n, err := p.packetReader.Read(buf)
-		if n > 0 {
-			p.collectPackets = true
-			processed, procErr := p.processData(p.packetReadIndex, buf[:n])
-			p.collectPackets = false
-			p.packetReadIndex += ocsd.TrcIndex(processed)
-			if procErr != nil && !errors.Is(procErr, ocsd.ErrWait) {
-				return Packet{}, procErr
-			}
-			if processed != uint32(n) {
-				return Packet{}, fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, n)
-			}
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				p.packetReadEOF = true
-				continue
-			}
+		if err := p.readPacketChunk(); err != nil {
 			return Packet{}, err
 		}
-		if n == 0 {
-			return Packet{}, io.ErrNoProgress
+	}
+}
+
+func (p *Processor) popPendingPacket() (Packet, bool) {
+	if len(p.pendingPackets) == 0 {
+		return Packet{}, false
+	}
+	pkt := p.pendingPackets[0]
+	p.pendingPackets = p.pendingPackets[1:]
+	return pkt, true
+}
+
+func (p *Processor) finishReaderEOT() error {
+	if p.packetReadEOT {
+		return io.EOF
+	}
+
+	p.collectPackets = true
+	err := p.onEOT()
+	p.collectPackets = false
+	p.packetReadEOT = true
+	if err != nil && !errors.Is(err, ocsd.ErrWait) {
+		return err
+	}
+	return nil
+}
+
+func (p *Processor) readPacketChunk() error {
+	buf := make([]byte, packetReaderChunkSize)
+	n, err := p.packetReader.Read(buf)
+	if n > 0 {
+		if procErr := p.processReaderBytes(buf[:n]); procErr != nil {
+			return procErr
 		}
 	}
+	if errors.Is(err, io.EOF) {
+		p.packetReadEOF = true
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return io.ErrNoProgress
+	}
+	return nil
+}
+
+func (p *Processor) processReaderBytes(data []byte) error {
+	p.collectPackets = true
+	processed, err := p.processData(p.packetReadIndex, data)
+	p.collectPackets = false
+
+	p.packetReadIndex += ocsd.TrcIndex(processed)
+	if err != nil && !errors.Is(err, ocsd.ErrWait) {
+		return err
+	}
+	if processed != uint32(len(data)) {
+		return fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, len(data))
+	}
+	return nil
 }
 
 // Packets provides a standard Go 1.23 iterator over the trace packets.

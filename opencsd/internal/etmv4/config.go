@@ -59,158 +59,155 @@ type Config struct {
 	CoreProf      ocsd.CoreProfile
 }
 
-func (c *Config) LSasInstP0() bool {
-	return (c.RegIdr0 & 0x6) == 0x6
+const (
+	idr0LSasInstP0Mask       uint32 = 0x6
+	idr0DataTraceMask        uint32 = 0x18
+	idr0BranchBroadcastBit   uint32 = 0x20
+	idr0CondTraceBit         uint32 = 0x40
+	idr0CycleCountIBit       uint32 = 0x80
+	idr0RetStackBit          uint32 = 0x200
+	idr0CondTypeMask         uint32 = 0x3000
+	idr0CondTypeASPR         uint32 = 0x1000
+	idr0QFilterBit           uint32 = 0x4000
+	idr0TrcExcpDataBit       uint32 = 0x20000
+	idr0EteTSMarkerBit       uint32 = 0x800000
+	idr0CommitOpt1Bit        uint32 = 0x20000000
+	idr0CommTransP0ClearMask uint32 = 0x40000000
+
+	idr2VmidOptBit       uint32 = 0x20000000
+	idr2VmidOptV45Bit    uint32 = 1 << 30
+	idr2WfiwfeBranchBit  uint32 = 0x80000000
+	configDataAddrBit    uint32 = 1 << 16
+	configDataValueBit   uint32 = 1 << 17
+	configBranchBroadBit uint32 = 1 << 3
+	configCCIEnableBit   uint32 = 1 << 4
+	configCIDEnableBit   uint32 = 1 << 6
+	configVMIDEnableBit  uint32 = 1 << 7
+	configVMIDOptBit     uint32 = 1 << 15
+	configTSEnableBit    uint32 = 1 << 11
+	configRetStackBit    uint32 = 1 << 12
+)
+
+var condITraceTypes = map[uint32]CondITraceType{
+	1: CondTrLd,
+	2: CondTrSt,
+	3: CondTrLdSt,
+	7: CondTrAll,
 }
 
-func (c *Config) HasDataTrace() bool {
-	return (c.RegIdr0 & 0x18) == 0x18
+func hasAll(value, mask uint32) bool                     { return value&mask == mask }
+func hasAny(value, mask uint32) bool                     { return value&mask != 0 }
+func field(value uint32, shift uint, mask uint32) uint32 { return (value >> shift) & mask }
+
+func bits32or64(encoded uint32) uint32 {
+	if encoded == 0 {
+		return 0
+	}
+	if encoded == 0x8 {
+		return 64
+	}
+	return 32
 }
 
-func (c *Config) HasBranchBroadcast() bool {
-	return (c.RegIdr0 & 0x20) == 0x20
-}
+func (c *Config) LSasInstP0() bool { return hasAll(c.RegIdr0, idr0LSasInstP0Mask) }
 
-func (c *Config) HasCondTrace() bool {
-	return (c.RegIdr0 & 0x40) == 0x40
-}
+func (c *Config) HasDataTrace() bool { return hasAll(c.RegIdr0, idr0DataTraceMask) }
 
-func (c *Config) HasCycleCountI() bool {
-	return (c.RegIdr0 & 0x80) == 0x80
-}
+func (c *Config) HasBranchBroadcast() bool { return hasAll(c.RegIdr0, idr0BranchBroadcastBit) }
 
-func (c *Config) HasRetStack() bool {
-	return (c.RegIdr0 & 0x200) == 0x200
-}
+func (c *Config) HasCondTrace() bool { return hasAll(c.RegIdr0, idr0CondTraceBit) }
 
-func (c *Config) NumEvents() uint8 {
-	return uint8(((c.RegIdr0 >> 10) & 0x3) + 1)
-}
+func (c *Config) HasCycleCountI() bool { return hasAll(c.RegIdr0, idr0CycleCountIBit) }
+
+func (c *Config) HasRetStack() bool { return hasAll(c.RegIdr0, idr0RetStackBit) }
+
+func (c *Config) NumEvents() uint8 { return uint8(field(c.RegIdr0, 10, 0x3) + 1) }
 
 func (c *Config) HasCondType() CondType {
-	if (c.RegIdr0 & 0x3000) == 0x1000 {
+	if c.RegIdr0&idr0CondTypeMask == idr0CondTypeASPR {
 		return CondHasAspr
 	}
 	return CondPassFail
 }
 
-func (c *Config) QSuppType() QSuppType {
-	return QSuppType((c.RegIdr0 >> 15) & 0x3)
-}
+func (c *Config) QSuppType() QSuppType { return QSuppType(field(c.RegIdr0, 15, 0x3)) }
 
-func (c *Config) HasQElem() bool {
-	return c.QSuppType() != QNone
-}
+func (c *Config) HasQElem() bool { return c.QSuppType() != QNone }
 
-func (c *Config) HasQFilter() bool {
-	return (c.RegIdr0&0x4000) == 0x4000 && c.QSuppType() != QNone
-}
+func (c *Config) HasQFilter() bool { return hasAll(c.RegIdr0, idr0QFilterBit) && c.HasQElem() }
 
-func (c *Config) HasTrcExcpData() bool {
-	return (c.RegIdr0 & 0x20000) == 0x20000
-}
+func (c *Config) HasTrcExcpData() bool { return hasAll(c.RegIdr0, idr0TrcExcpDataBit) }
 
 func (c *Config) EteHasTSMarker() bool {
-	return c.FullVersion() >= 0x51 && (c.RegIdr0&0x800000) == 0x800000
+	return c.FullVersion() >= 0x51 && hasAll(c.RegIdr0, idr0EteTSMarkerBit)
 }
 
 func (c *Config) TimeStampSize() uint32 {
-	tsSizeF := (c.RegIdr0 >> 24) & 0x1F
-	if tsSizeF == 0x6 {
+	switch field(c.RegIdr0, 24, 0x1F) {
+	case 0x6:
 		return 48
-	}
-	if tsSizeF == 0x8 {
+	case 0x8:
 		return 64
+	default:
+		return 0
 	}
-	return 0
 }
 
-func (c *Config) CommitOpt1() bool {
-	return (c.RegIdr0&0x20000000) == 0x20000000 && c.HasCycleCountI()
-}
+func (c *Config) CommitOpt1() bool { return hasAll(c.RegIdr0, idr0CommitOpt1Bit) && c.HasCycleCountI() }
 
-func (c *Config) CommTransP0() bool {
-	return (c.RegIdr0 & 0x40000000) == 0x0
-}
+func (c *Config) CommTransP0() bool { return c.RegIdr0&idr0CommTransP0ClearMask == 0 }
 
-func (c *Config) MajVersion() uint8 {
-	return uint8((c.RegIdr1 >> 8) & 0xF)
-}
+func (c *Config) MajVersion() uint8 { return uint8(field(c.RegIdr1, 8, 0xF)) }
 
-func (c *Config) MinVersion() uint8 {
-	return uint8((c.RegIdr1 >> 4) & 0xF)
-}
+func (c *Config) MinVersion() uint8 { return uint8(field(c.RegIdr1, 4, 0xF)) }
 
-func (c *Config) FullVersion() uint8 {
-	return (c.MajVersion() << 4) | c.MinVersion()
-}
+func (c *Config) FullVersion() uint8 { return (c.MajVersion() << 4) | c.MinVersion() }
 
 func (c *Config) IaSizeMax() uint32 {
-	if (c.RegIdr2 & 0x1F) == 0x8 {
+	if field(c.RegIdr2, 0, 0x1F) == 0x8 {
 		return 64
 	}
 	return 32
 }
 
 func (c *Config) CidSize() uint32 {
-	if ((c.RegIdr2 >> 5) & 0x1F) == 0x4 {
+	if field(c.RegIdr2, 5, 0x1F) == 0x4 {
 		return 32
 	}
 	return 0
 }
 
 func (c *Config) VmidSize() uint32 {
-	vmidszF := (c.RegIdr2 >> 10) & 0x1F
+	vmidszF := field(c.RegIdr2, 10, 0x1F)
 	if vmidszF == 1 {
 		return 8
-	} else if c.FullVersion() > 0x40 {
-		switch vmidszF {
-		case 2:
-			return 16
-		case 4:
-			return 32
-		}
 	}
-	return 0
-}
-
-func (c *Config) DaSize() uint32 {
-	daSizeF := (c.RegIdr2 >> 15) & 0x1F
-	if daSizeF > 0 {
-		if daSizeF == 0x8 {
-			return 64
-		}
+	if c.FullVersion() <= 0x40 {
+		return 0
+	}
+	switch vmidszF {
+	case 2:
+		return 16
+	case 4:
 		return 32
+	default:
+		return 0
 	}
-	return 0
 }
 
-func (c *Config) DvSize() uint32 {
-	dvSizeF := (c.RegIdr2 >> 20) & 0x1F
-	if dvSizeF > 0 {
-		if dvSizeF == 0x8 {
-			return 64
-		}
-		return 32
-	}
-	return 0
-}
+func (c *Config) DaSize() uint32 { return bits32or64(field(c.RegIdr2, 15, 0x1F)) }
 
-func (c *Config) CcSize() uint32 {
-	return ((c.RegIdr2 >> 25) & 0xF) + 12
-}
+func (c *Config) DvSize() uint32 { return bits32or64(field(c.RegIdr2, 20, 0x1F)) }
 
-func (c *Config) VmidOpt() bool {
-	return (c.RegIdr2&0x20000000) == 0x20000000 && c.MinVersion() > 0
-}
+func (c *Config) CcSize() uint32 { return field(c.RegIdr2, 25, 0xF) + 12 }
+
+func (c *Config) VmidOpt() bool { return hasAll(c.RegIdr2, idr2VmidOptBit) && c.MinVersion() > 0 }
 
 func (c *Config) WfiwfeBranch() bool {
-	return (c.RegIdr2&0x80000000) != 0 && c.FullVersion() >= 0x43
+	return hasAny(c.RegIdr2, idr2WfiwfeBranchBit) && c.FullVersion() >= 0x43
 }
 
-func (c *Config) MaxSpecDepth() uint32 {
-	return c.RegIdr8
-}
+func (c *Config) MaxSpecDepth() uint32 { return c.RegIdr8 }
 
 func (c *Config) P0_Key_Max() uint32 {
 	if c.RegIdr9 == 0 {
@@ -219,100 +216,51 @@ func (c *Config) P0_Key_Max() uint32 {
 	return c.RegIdr9
 }
 
-func (c *Config) P1_Key_Max() uint32 {
-	return c.RegIdr10
-}
+func (c *Config) P1_Key_Max() uint32      { return c.RegIdr10 }
+func (c *Config) P1_Spcl_Key_Max() uint32 { return c.RegIdr11 }
+func (c *Config) CondKeyMax() uint32      { return c.RegIdr12 }
+func (c *Config) CondSpecKeyMax() uint32  { return c.RegIdr13 }
+func (c *Config) CondKeyMaxIncr() uint32  { return c.RegIdr12 - c.RegIdr13 }
+func (c *Config) TraceID() uint8          { return uint8(c.RegTraceidr & 0x7F) }
 
-func (c *Config) P1_Spcl_Key_Max() uint32 {
-	return c.RegIdr11
-}
-
-func (c *Config) CondKeyMax() uint32 {
-	return c.RegIdr12
-}
-
-func (c *Config) CondSpecKeyMax() uint32 {
-	return c.RegIdr13
-}
-
-func (c *Config) CondKeyMaxIncr() uint32 {
-	return c.RegIdr12 - c.RegIdr13
-}
-
-func (c *Config) TraceID() uint8 {
-	return uint8(c.RegTraceidr & 0x7F)
-}
-
-func (c *Config) EnabledLSP0Trace() bool {
-	return (c.RegConfigr & 0x6) != 0
-}
+func (c *Config) EnabledLSP0Trace() bool { return hasAny(c.RegConfigr, 0x6) }
 
 func (c *Config) EnabledDVTrace() bool {
-	return c.HasDataTrace() && c.EnabledLSP0Trace() && (c.RegConfigr&(1<<17)) != 0
+	return c.HasDataTrace() && c.EnabledLSP0Trace() && hasAny(c.RegConfigr, configDataValueBit)
 }
 
 func (c *Config) EnabledDATrace() bool {
-	return c.HasDataTrace() && c.EnabledLSP0Trace() && (c.RegConfigr&(1<<16)) != 0
+	return c.HasDataTrace() && c.EnabledLSP0Trace() && hasAny(c.RegConfigr, configDataAddrBit)
 }
 
-func (c *Config) EnabledDataTrace() bool {
-	return c.EnabledDATrace() || c.EnabledDVTrace()
-}
+func (c *Config) EnabledDataTrace() bool { return c.EnabledDATrace() || c.EnabledDVTrace() }
 
-func (c *Config) LSP0Type() LSP0Type {
-	return LSP0Type((c.RegConfigr & 0x6) >> 1)
-}
+func (c *Config) LSP0Type() LSP0Type { return LSP0Type((c.RegConfigr & 0x6) >> 1) }
 
-func (c *Config) EnabledBrBroad() bool {
-	return (c.RegConfigr & (1 << 3)) != 0
-}
+func (c *Config) EnabledBrBroad() bool { return hasAny(c.RegConfigr, configBranchBroadBit) }
 
-func (c *Config) EnabledCCI() bool {
-	return (c.RegConfigr & (1 << 4)) != 0
-}
+func (c *Config) EnabledCCI() bool { return hasAny(c.RegConfigr, configCCIEnableBit) }
 
-func (c *Config) EnabledCID() bool {
-	return (c.RegConfigr & (1 << 6)) != 0
-}
+func (c *Config) EnabledCID() bool { return hasAny(c.RegConfigr, configCIDEnableBit) }
 
-func (c *Config) EnabledVMID() bool {
-	return (c.RegConfigr & (1 << 7)) != 0
-}
+func (c *Config) EnabledVMID() bool { return hasAny(c.RegConfigr, configVMIDEnableBit) }
 
 func (c *Config) EnabledVMIDOpt() bool {
-	vmidOptVal := (c.RegConfigr & (1 << 15)) != 0
-	if !c.VmidOpt() {
-		vmidOptVal = false
-		if c.FullVersion() >= 0x45 {
-			vmidOptVal = (c.RegIdr2 & (1 << 30)) != 0
-		}
+	if c.VmidOpt() {
+		return hasAny(c.RegConfigr, configVMIDOptBit)
 	}
-	return vmidOptVal
+	return c.FullVersion() >= 0x45 && hasAny(c.RegIdr2, idr2VmidOptV45Bit)
 }
 
 func (c *Config) EnabledCondITrace() CondITraceType {
-	switch (c.RegConfigr >> 8) & 0x7 {
-	case 1:
-		return CondTrLd
-	case 2:
-		return CondTrSt
-	case 3:
-		return CondTrLdSt
-	case 7:
-		return CondTrAll
-	default:
-		return CondTrDis
+	if typ, ok := condITraceTypes[field(c.RegConfigr, 8, 0x7)]; ok {
+		return typ
 	}
+	return CondTrDis
 }
 
-func (c *Config) EnabledTS() bool {
-	return (c.RegConfigr & (1 << 11)) != 0
-}
+func (c *Config) EnabledTS() bool { return hasAny(c.RegConfigr, configTSEnableBit) }
 
-func (c *Config) EnabledRetStack() bool {
-	return (c.RegConfigr & (1 << 12)) != 0
-}
+func (c *Config) EnabledRetStack() bool { return hasAny(c.RegConfigr, configRetStackBit) }
 
-func (c *Config) EnabledQE() bool {
-	return (c.RegConfigr & (3 << 13)) != 0
-}
+func (c *Config) EnabledQE() bool { return hasAny(c.RegConfigr, 3<<13) }

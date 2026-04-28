@@ -84,7 +84,7 @@ func (p *etmv4RawPacketPrinter) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.S
 		fmt.Fprintf(&sb, "0x%02x ", b)
 	}
 	sb.WriteString("];\t")
-	sb.WriteString(etmPkt.EffectiveType().String())
+	sb.WriteString(etmv4.PktTypeName(etmPkt.EffectiveType()))
 	sb.WriteString(" : description\n")
 	_, _ = io.WriteString(p.writer, sb.String())
 }

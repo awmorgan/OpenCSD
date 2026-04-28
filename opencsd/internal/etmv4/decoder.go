@@ -223,6 +223,12 @@ func (d *PktDecode) ApplyFlags(flags uint32) error {
 	return nil
 }
 
+// SetInterfaces updates optional decoder dependencies.
+func (d *PktDecode) SetInterfaces(mem common.TargetMemAccess, instr common.InstrDecode) {
+	d.MemAccess = mem
+	d.InstrDecode = instr
+}
+
 // SetElementSink implements ocsd.TraceElementSink.
 // (removed) SetElementSink is no longer used; Elements() uses NextElement().
 
@@ -311,32 +317,46 @@ func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 // next packet from Source, decodes it, and yields elements one at a time.
 func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
 	for d.elemBufPos >= len(d.elemBuf) && d.Source != nil {
-		d.elemBuf = d.elemBuf[:0]
-		d.elemBufPos = 0
-		pkt, err := d.Source.NextPacket()
-		if errors.Is(err, io.EOF) {
-			d.Source = nil
-			if !d.pullEOFDone {
-				d.pullEOFDone = true
-				if closeErr := d.Close(); closeErr != nil {
-					return 0, 0, ocsd.TraceElement{}, closeErr
-				}
-			}
-			continue
-		}
-		if err != nil {
-			if !errors.Is(err, ocsd.ErrWait) {
-				d.Source = nil
-			}
+		if err := d.fillElemBufferFromSource(); err != nil {
 			return 0, 0, ocsd.TraceElement{}, err
 		}
-		if wErr := d.Write(0, &pkt); wErr != nil {
-			return 0, 0, ocsd.TraceElement{}, wErr
-		}
 	}
+	return d.popNextElement()
+}
+
+func (d *PktDecode) fillElemBufferFromSource() error {
+	d.clearElemBuffer()
+	pkt, err := d.Source.NextPacket()
+	switch {
+	case errors.Is(err, io.EOF):
+		d.Source = nil
+		return d.handleSourceEOF()
+	case err != nil:
+		if !errors.Is(err, ocsd.ErrWait) {
+			d.Source = nil
+		}
+		return err
+	default:
+		return d.Write(0, &pkt)
+	}
+}
+
+func (d *PktDecode) clearElemBuffer() {
+	d.elemBuf = d.elemBuf[:0]
+	d.elemBufPos = 0
+}
+
+func (d *PktDecode) handleSourceEOF() error {
+	if d.pullEOFDone {
+		return nil
+	}
+	d.pullEOFDone = true
+	return d.Close()
+}
+
+func (d *PktDecode) popNextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
 	if d.elemBufPos >= len(d.elemBuf) {
-		d.elemBuf = d.elemBuf[:0]
-		d.elemBufPos = 0
+		d.clearElemBuffer()
 		return 0, 0, ocsd.TraceElement{}, io.EOF
 	}
 	e := d.elemBuf[d.elemBufPos]
@@ -2187,27 +2207,22 @@ func NewConfiguredPktDecodeWithDeps(instID int, cfg *Config, mem common.TargetMe
 	if err != nil {
 		return nil, err
 	}
-	decoder.MemAccess = mem
-	decoder.InstrDecode = instr
+	decoder.SetInterfaces(mem, instr)
 	decoder.Source = source
 	return decoder, nil
 }
 
 // NewConfiguredPipeline creates and wires a typed ETMv4 processor/decoder pair.
 func NewConfiguredPipeline(instID int, cfg *Config) (*Processor, *PktDecode, error) {
-	proc, err := NewConfiguredProcessor(cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	decoder, err := NewConfiguredPktDecodeWithDeps(instID, cfg, nil, nil, proc)
-	if err != nil {
-		return nil, nil, err
-	}
-	return proc, decoder, nil
+	return newConfiguredPipeline(instID, cfg, nil, nil, false)
 }
 
 // NewConfiguredPipelineWithDeps creates and wires an ETMv4 processor/decoder pair with dependencies.
 func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode) (*Processor, *PktDecode, error) {
+	return newConfiguredPipeline(instID, cfg, mem, instr, true)
+}
+
+func newConfiguredPipeline(instID int, cfg *Config, mem common.TargetMemAccess, instr common.InstrDecode, attachPush bool) (*Processor, *PktDecode, error) {
 	proc, err := NewConfiguredProcessor(cfg)
 	if err != nil {
 		return nil, nil, err
@@ -2216,7 +2231,9 @@ func NewConfiguredPipelineWithDeps(instID int, cfg *Config, mem common.TargetMem
 	if err != nil {
 		return nil, nil, err
 	}
-	proc.SetPktOut(decoder)
+	if attachPush {
+		proc.SetPktOut(decoder)
+	}
 	return proc, decoder, nil
 }
 
