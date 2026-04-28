@@ -56,7 +56,7 @@ func (p *etmv3RawPacketPrinter) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.S
 		fmt.Fprintf(&sb, "0x%02x ", b)
 	}
 	sb.WriteString("];\t")
-	sb.WriteString(etmv3PacketTypeName(etmPkt.Type))
+	sb.WriteString(etmv3.PktTypeName(etmPkt.Type))
 	sb.WriteString(" : description")
 	sb.WriteString("\n")
 	_, _ = io.WriteString(p.writer, sb.String())
@@ -65,62 +65,6 @@ func (p *etmv3RawPacketPrinter) MonitorRawData(indexSOP ocsd.TrcIndex, pkt fmt.S
 func (p *etmv3RawPacketPrinter) MonitorEOT() {}
 
 func (p *etmv3RawPacketPrinter) MonitorReset(indexSOP ocsd.TrcIndex) {}
-
-// etmv3PacketTypeName maps the Go ETMv3 PktType to the C++ packet type name exactly.
-func etmv3PacketTypeName(t etmv3.PktType) string {
-	switch t {
-	case etmv3.PktNotSync:
-		return "NOTSYNC"
-	case etmv3.PktIncompleteEOT:
-		return "INCOMPLETE_EOT."
-	case etmv3.PktBranchAddress:
-		return "BRANCH_ADDRESS"
-	case etmv3.PktASync:
-		return "A_SYNC"
-	case etmv3.PktCycleCount:
-		return "CYCLE_COUNT"
-	case etmv3.PktISync:
-		return "I_SYNC"
-	case etmv3.PktISyncCycle:
-		return "I_SYNC_CYCLE"
-	case etmv3.PktTrigger:
-		return "TRIGGER"
-	case etmv3.PktPHdr:
-		return "P_HDR"
-	case etmv3.PktStoreFail:
-		return "STORE_FAIL"
-	case etmv3.PktOOOData:
-		return "OOO_DATA"
-	case etmv3.PktOOOAddrPlc:
-		return "OOO_ADDR_PLC"
-	case etmv3.PktNormData:
-		return "NORM_DATA"
-	case etmv3.PktDataSuppressed:
-		return "DATA_SUPPRESSED"
-	case etmv3.PktValNotTraced:
-		return "VAL_NOT_TRACED"
-	case etmv3.PktIgnore:
-		return "IGNORE"
-	case etmv3.PktContextID:
-		return "CONTEXT_ID"
-	case etmv3.PktVMID:
-		return "VMID"
-	case etmv3.PktExceptionEntry:
-		return "EXCEPTION_ENTRY"
-	case etmv3.PktExceptionExit:
-		return "EXCEPTION_EXIT"
-	case etmv3.PktTimestamp:
-		return "TIMESTAMP"
-	case etmv3.PktBadSequence:
-		return "BAD_SEQUENCE"
-	case etmv3.PktBadTraceMode:
-		return "BAD_TRACEMODE"
-	case etmv3.PktReserved:
-		return "I_RESERVED"
-	default:
-		return "I_RESERVED"
-	}
-}
 
 func TestETMv3SnapshotsAgainstGolden(t *testing.T) {
 	t.Parallel()

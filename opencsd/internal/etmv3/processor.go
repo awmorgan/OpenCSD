@@ -117,15 +117,14 @@ func (p *PktProc) StatsInit() { p.statsInit = true }
 
 // ResetStats zeroes all decode statistics fields.
 func (p *PktProc) ResetStats() {
-	p.Stats.Version = ocsd.VerNum
-	p.Stats.Revision = ocsd.StatsRevision
-	p.Stats.ChannelTotal = 0
-	p.Stats.ChannelUnsynced = 0
-	p.Stats.BadHeaderErrs = 0
-	p.Stats.BadSequenceErrs = 0
-	p.Stats.Demux.FrameBytes = 0
-	p.Stats.Demux.NoIDBytes = 0
-	p.Stats.Demux.ValidIDBytes = 0
+	p.Stats = defaultDecodeStats()
+}
+
+func defaultDecodeStats() ocsd.DecodeStats {
+	return ocsd.DecodeStats{
+		Version:  ocsd.VerNum,
+		Revision: ocsd.StatsRevision,
+	}
 }
 
 // StatsAddTotalCount adds to the total channel bytes counter.
@@ -174,73 +173,80 @@ func (p *PktProc) Write(index ocsd.TrcIndex, dataBlock []byte) (uint32, error) {
 
 // NextPacket returns the next packet from the attached reader.
 func (p *PktProc) NextPacket() (Packet, error) {
-	// if any packets already decoded, return the first
-	if len(p.localPending) > 0 {
-		pkt := p.localPending[0]
-		p.localPending = p.localPending[1:]
-		return pkt, nil
-	}
-
-	// no reader attached: either wait or EOF if already at EOT
-	if p.packetReader == nil {
-		if p.packetReadEOT {
-			return Packet{}, io.EOF
-		}
-		return Packet{}, ocsd.ErrWait
-	}
-
-	// read a chunk from the attached reader
-	buf := make([]byte, packetReaderChunkSize)
-	n, err := p.packetReader.Read(buf)
-
-	// process any bytes read
-	if n > 0 {
-		processed, pkts, procErr := p.processData(p.packetReadIndex, buf[:n])
-		p.packetReadIndex += ocsd.TrcIndex(processed)
-		if procErr != nil {
-			return Packet{}, procErr
-		}
-		if processed != uint32(n) {
-			return Packet{}, fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, n)
-		}
-		if len(pkts) > 0 {
-			p.localPending = append(p.localPending, pkts...)
-		}
-		// if processing produced packets, return one
-		if len(p.localPending) > 0 {
-			pkt := p.localPending[0]
-			p.localPending = p.localPending[1:]
+	for {
+		if pkt, ok := p.popPendingPacket(); ok {
 			return pkt, nil
 		}
-	}
-
-	// handle read error (including EOF)
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			// flush any final packet(s)
-			p.packetReadEOF = true
-			pkts, eotErr := p.OnEOT()
-			// mark end-of-trace delivered
-			p.packetReadEOT = true
-			if eotErr != nil {
-				return Packet{}, eotErr
-			}
-			// if OnEOT produced packets, return one
-			if len(pkts) > 0 {
-				p.localPending = append(p.localPending, pkts...)
-			}
-			if len(p.localPending) > 0 {
-				pkt := p.localPending[0]
-				p.localPending = p.localPending[1:]
-				return pkt, nil
-			}
-			return Packet{}, io.EOF
+		if p.packetReader == nil {
+			return p.nextPacketWithoutReader()
 		}
-		return Packet{}, err
+		if err := p.readPacketChunk(); err != nil {
+			return Packet{}, err
+		}
 	}
+}
 
-	// no progress made - avoid spinning forever
+func (p *PktProc) popPendingPacket() (Packet, bool) {
+	if len(p.localPending) == 0 {
+		return Packet{}, false
+	}
+	pkt := p.localPending[0]
+	p.localPending = p.localPending[1:]
+	return pkt, true
+}
+
+func (p *PktProc) nextPacketWithoutReader() (Packet, error) {
+	if p.packetReadEOT {
+		return Packet{}, io.EOF
+	}
 	return Packet{}, ocsd.ErrWait
+}
+
+func (p *PktProc) readPacketChunk() error {
+	buf := make([]byte, packetReaderChunkSize)
+	n, err := p.packetReader.Read(buf)
+	if n > 0 {
+		if procErr := p.processReaderBytes(buf[:n]); procErr != nil {
+			return procErr
+		}
+		if len(p.localPending) > 0 {
+			return nil
+		}
+	}
+	if errors.Is(err, io.EOF) {
+		return p.finishReaderEOT()
+	}
+	if err != nil {
+		return err
+	}
+	return ocsd.ErrWait
+}
+
+func (p *PktProc) processReaderBytes(data []byte) error {
+	processed, pkts, err := p.processData(p.packetReadIndex, data)
+	p.packetReadIndex += ocsd.TrcIndex(processed)
+	if err != nil {
+		return err
+	}
+	if processed != uint32(len(data)) {
+		return fmt.Errorf("%w: packet reader consumed %d of %d bytes", ocsd.ErrPktInterpFail, processed, len(data))
+	}
+	p.localPending = append(p.localPending, pkts...)
+	return nil
+}
+
+func (p *PktProc) finishReaderEOT() error {
+	p.packetReadEOF = true
+	pkts, err := p.OnEOT()
+	p.packetReadEOT = true
+	if err != nil {
+		return err
+	}
+	p.localPending = append(p.localPending, pkts...)
+	if len(p.localPending) == 0 {
+		return io.EOF
+	}
+	return nil
 }
 
 // Close handles end-of-trace control without op multiplexing.

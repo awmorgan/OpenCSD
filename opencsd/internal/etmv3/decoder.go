@@ -141,14 +141,16 @@ func (d *PktDecode) OutputTraceElementIdx(idx ocsd.TrcIndex, traceID uint8, elem
 	}
 	elem.Index = idx
 	elem.TraceID = traceID
+	d.enqueueTraceElement(idx, traceID, elem)
+	return nil
+}
 
-	// Always buffer elements for pull consumers.
+func (d *PktDecode) enqueueTraceElement(idx ocsd.TrcIndex, traceID uint8, elem *ocsd.TraceElement) {
 	d.pendingElements = append(d.pendingElements, traceElemEvent{
 		index:   idx,
 		traceID: traceID,
 		elem:    cloneQueuedElem(elem),
 	})
-	return nil
 }
 
 // AccessMemory reads target memory.
@@ -196,12 +198,17 @@ func (d *PktDecode) Reset(indexSOP ocsd.TrcIndex) error {
 // NextElement returns the next queued trace element or pulls from Source.
 func (d *PktDecode) NextElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
 	for len(d.pendingElements) == 0 {
-		err := d.processNext()
-		if err != nil {
+		if err := d.processNext(); err != nil {
 			return 0, 0, ocsd.TraceElement{}, err
 		}
 	}
+	return d.popPendingElement()
+}
 
+func (d *PktDecode) popPendingElement() (ocsd.TrcIndex, uint8, ocsd.TraceElement, error) {
+	if len(d.pendingElements) == 0 {
+		return 0, 0, ocsd.TraceElement{}, io.EOF
+	}
 	e := d.pendingElements[0]
 	d.pendingElements = d.pendingElements[1:]
 	return e.index, e.traceID, e.elem, nil
@@ -226,26 +233,30 @@ func (d *PktDecode) processNext() error {
 	}
 
 	pkt, err := d.Source.NextPacket()
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			d.Source = nil
-			_ = d.Close()
-			d.flushOutputElements()
-			return nil
-		}
+	switch {
+	case errors.Is(err, io.EOF):
+		return d.finishSource()
+	case err != nil:
 		return err
+	default:
+		return d.processSourcePacket(&pkt)
 	}
+}
 
-	d.CurrPacketIn = &pkt
-	d.IndexCurrPkt = pkt.Index
-
-	err = d.processPacket()
-	if err != nil {
-		return err
-	}
-
+func (d *PktDecode) finishSource() error {
+	d.Source = nil
+	_ = d.Close()
 	d.flushOutputElements()
+	return nil
+}
 
+func (d *PktDecode) processSourcePacket(pkt *Packet) error {
+	d.CurrPacketIn = pkt
+	d.IndexCurrPkt = pkt.Index
+	if err := d.processPacket(); err != nil {
+		return err
+	}
+	d.flushOutputElements()
 	return nil
 }
 

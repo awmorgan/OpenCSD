@@ -123,3 +123,46 @@ func TestConfig(t *testing.T) {
 		t.Error("expected AltBranch")
 	}
 }
+
+func TestTraceModeTable(t *testing.T) {
+	tests := []struct {
+		name string
+		ctrl uint32
+		want TraceMode
+	}{
+		{name: "instr only", ctrl: 0, want: TMInstrOnly},
+		{name: "instr data value", ctrl: ctrlDataVal, want: TMIDataVal},
+		{name: "instr data address", ctrl: ctrlDataAddr, want: TMIDataAddr},
+		{name: "instr data value address", ctrl: ctrlDataVal | ctrlDataAddr, want: TMIDataValAddr},
+		{name: "data only value", ctrl: ctrlDataOnly, want: TMDataOnlyVal},
+		{name: "data only address", ctrl: ctrlDataOnly | ctrlDataAddr, want: TMDataOnlyAddr},
+		{name: "data only value address", ctrl: ctrlDataOnly | ctrlDataVal | ctrlDataAddr, want: TMDataOnlyValAddr},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{RegCtrl: tt.ctrl}
+			if got := cfg.TraceMode(); got != tt.want {
+				t.Fatalf("TraceMode() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestContextIDBytesTable(t *testing.T) {
+	tests := []struct {
+		field uint32
+		want  int
+	}{
+		{field: 0, want: 0},
+		{field: 1, want: 1},
+		{field: 2, want: 2},
+		{field: 3, want: 4},
+	}
+	for _, tt := range tests {
+		cfg := &Config{RegCtrl: tt.field << 14}
+		if got := cfg.CtxtIDBytes(); got != tt.want {
+			t.Fatalf("CtxtIDBytes(field=%d) = %d, want %d", tt.field, got, tt.want)
+		}
+	}
+}

@@ -108,3 +108,18 @@ func TestUpdateAddress_Panic(t *testing.T) {
 		t.Fatalf("Address mismatch for 64-bit update: expected 0xFFFFFFFFFFFFFFFF, got %#x", p.Addr)
 	}
 }
+
+func TestPacketTypeNameAndReasonHelpers(t *testing.T) {
+	if got := PktTypeName(PktBranchAddress); got != "BRANCH_ADDRESS" {
+		t.Fatalf("PktTypeName(PktBranchAddress) = %q", got)
+	}
+	if got := PktTypeName(PktType(999)); got != "I_RESERVED" {
+		t.Fatalf("PktTypeName(unknown) = %q", got)
+	}
+
+	p := &Packet{}
+	p.ISyncInfo.Reason = ocsd.ISyncTraceRestartAfterOverflow
+	if got := p.ISyncStr(); got != "Restart Overflow" {
+		t.Fatalf("ISyncStr() = %q", got)
+	}
+}

@@ -48,25 +48,35 @@ const (
 
 // TraceMode returns the effective trace mode based on the control register
 func (c *Config) TraceMode() TraceMode {
+	addr, val := c.DataAddrTrace(), c.DataValTrace()
 	if c.InstrTrace() {
-		if c.DataAddrTrace() && c.DataValTrace() {
-			return TMIDataValAddr
-		}
-		if c.DataAddrTrace() {
-			return TMIDataAddr
-		}
-		if c.DataValTrace() {
-			return TMIDataVal
-		}
+		return instrTraceMode(addr, val)
+	}
+	return dataOnlyTraceMode(addr, val)
+}
+
+func instrTraceMode(addr, val bool) TraceMode {
+	switch {
+	case addr && val:
+		return TMIDataValAddr
+	case addr:
+		return TMIDataAddr
+	case val:
+		return TMIDataVal
+	default:
 		return TMInstrOnly
 	}
-	if c.DataAddrTrace() && c.DataValTrace() {
+}
+
+func dataOnlyTraceMode(addr, val bool) TraceMode {
+	switch {
+	case addr && val:
 		return TMDataOnlyValAddr
-	}
-	if c.DataAddrTrace() {
+	case addr:
 		return TMDataOnlyAddr
+	default:
+		return TMDataOnlyVal
 	}
-	return TMDataOnlyVal
 }
 
 func (c *Config) InstrTrace() bool    { return (c.RegCtrl & ctrlDataOnly) == 0 }
@@ -86,17 +96,10 @@ func (c *Config) AltBranch() bool {
 	return (c.RegIDR&idrAltBranch) != 0 && c.MinorRev() >= 4
 }
 
+var ctxtIDByteCounts = [...]int{0, 1, 2, 4}
+
 func (c *Config) CtxtIDBytes() int {
-	switch (c.RegCtrl >> 14) & 0x3 {
-	case 1:
-		return 1
-	case 2:
-		return 2
-	case 3:
-		return 4
-	default:
-		return 0
-	}
+	return ctxtIDByteCounts[(c.RegCtrl>>14)&0x3]
 }
 
 func (c *Config) HasVirtExt() bool { return (c.RegCCER & ccerVirtExt) != 0 }

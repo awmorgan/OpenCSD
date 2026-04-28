@@ -343,58 +343,50 @@ func (p *Packet) UpdateAtomFromPHdr(pHdr uint8, cycleAccurate bool) bool {
 	return isValid
 }
 
+type pktTypeInfo struct {
+	name string
+	desc string
+}
+
+var pktTypeInfos = map[PktType]pktTypeInfo{
+	PktNotSync:        {"NOTSYNC", "Trace Stream not synchronised"},
+	PktIncompleteEOT:  {"INCOMPLETE_EOT.", "Incomplete packet at end of trace data."},
+	PktBranchAddress:  {"BRANCH_ADDRESS", "Branch address."},
+	PktASync:          {"A_SYNC", "Alignment Synchronisation."},
+	PktCycleCount:     {"CYCLE_COUNT", "Cycle Count."},
+	PktISync:          {"I_SYNC", "Instruction Packet synchronisation."},
+	PktISyncCycle:     {"I_SYNC_CYCLE", "Instruction Packet synchronisation with cycle count."},
+	PktTrigger:        {"TRIGGER", "Trace Trigger Event."},
+	PktPHdr:           {"P_HDR", "Atom P-header."},
+	PktStoreFail:      {"STORE_FAIL", "Data Store Failed."},
+	PktOOOData:        {"OOO_DATA", "Out of Order data value packet."},
+	PktOOOAddrPlc:     {"OOO_ADDR_PLC", "Out of Order data address placeholder."},
+	PktNormData:       {"NORM_DATA", "Data trace packet."},
+	PktDataSuppressed: {"DATA_SUPPRESSED", "Data trace suppressed."},
+	PktValNotTraced:   {"VAL_NOT_TRACED", "Data trace value not traced."},
+	PktIgnore:         {"IGNORE", "Packet ignored."},
+	PktContextID:      {"CONTEXT_ID", "Context ID change."},
+	PktVMID:           {"VMID", "VMID change."},
+	PktExceptionEntry: {"EXCEPTION_ENTRY", "Exception entry data marker."},
+	PktExceptionExit:  {"EXCEPTION_EXIT", "Exception return."},
+	PktTimestamp:      {"TIMESTAMP", "Timestamp Value."},
+	PktBadSequence:    {"BAD_SEQUENCE", "Invalid sequence for packet type."},
+	PktBadTraceMode:   {"BAD_TRACEMODE", "Invalid packet type for this trace mode."},
+	PktReserved:       {"I_RESERVED", "Reserved Packet Header"},
+}
+
+// PktTypeName returns the C++ packet type token used by snapshot packet monitors.
+func PktTypeName(pt PktType) string {
+	name, _ := packetTypeNameDesc(pt)
+	return name
+}
+
 // packetTypeNameDesc returns the C++ name and description strings for a packet type.
 func packetTypeNameDesc(pt PktType) (string, string) {
-	switch pt {
-	case PktNotSync:
-		return "NOTSYNC", "Trace Stream not synchronised"
-	case PktIncompleteEOT:
-		return "INCOMPLETE_EOT.", "Incomplete packet at end of trace data."
-	case PktBranchAddress:
-		return "BRANCH_ADDRESS", "Branch address."
-	case PktASync:
-		return "A_SYNC", "Alignment Synchronisation."
-	case PktCycleCount:
-		return "CYCLE_COUNT", "Cycle Count."
-	case PktISync:
-		return "I_SYNC", "Instruction Packet synchronisation."
-	case PktISyncCycle:
-		return "I_SYNC_CYCLE", "Instruction Packet synchronisation with cycle count."
-	case PktTrigger:
-		return "TRIGGER", "Trace Trigger Event."
-	case PktPHdr:
-		return "P_HDR", "Atom P-header."
-	case PktStoreFail:
-		return "STORE_FAIL", "Data Store Failed."
-	case PktOOOData:
-		return "OOO_DATA", "Out of Order data value packet."
-	case PktOOOAddrPlc:
-		return "OOO_ADDR_PLC", "Out of Order data address placeholder."
-	case PktNormData:
-		return "NORM_DATA", "Data trace packet."
-	case PktDataSuppressed:
-		return "DATA_SUPPRESSED", "Data trace suppressed."
-	case PktValNotTraced:
-		return "VAL_NOT_TRACED", "Data trace value not traced."
-	case PktIgnore:
-		return "IGNORE", "Packet ignored."
-	case PktContextID:
-		return "CONTEXT_ID", "Context ID change."
-	case PktVMID:
-		return "VMID", "VMID change."
-	case PktExceptionEntry:
-		return "EXCEPTION_ENTRY", "Exception entry data marker."
-	case PktExceptionExit:
-		return "EXCEPTION_EXIT", "Exception return."
-	case PktTimestamp:
-		return "TIMESTAMP", "Timestamp Value."
-	case PktBadSequence:
-		return "BAD_SEQUENCE", "Invalid sequence for packet type."
-	case PktBadTraceMode:
-		return "BAD_TRACEMODE", "Invalid packet type for this trace mode."
-	default:
-		return "I_RESERVED", "Reserved Packet Header"
+	if info, ok := pktTypeInfos[pt]; ok {
+		return info.name, info.desc
 	}
+	return "I_RESERVED", "Reserved Packet Header"
 }
 
 func (p *Packet) addrValStr() string {
@@ -474,13 +466,22 @@ func (p *Packet) writeAtomStrCA(sb *strings.Builder) {
 	}
 }
 
-func (p *Packet) writeISyncStr(sb *strings.Builder) {
-	reasons := []string{"Periodic", "Trace Enable", "Restart Overflow", "Debug Exit"}
-	reason := "Unknown"
-	if int(p.ISyncInfo.Reason) < len(reasons) {
-		reason = reasons[p.ISyncInfo.Reason]
+var isyncReasonNames = map[ocsd.ISyncReason]string{
+	ocsd.ISyncPeriodic:                  "Periodic",
+	ocsd.ISyncTraceEnable:               "Trace Enable",
+	ocsd.ISyncTraceRestartAfterOverflow: "Restart Overflow",
+	ocsd.ISyncDebugExit:                 "Debug Exit",
+}
+
+func isyncReasonName(reason ocsd.ISyncReason) string {
+	if name, ok := isyncReasonNames[reason]; ok {
+		return name
 	}
-	fmt.Fprintf(sb, "(%s); ", reason)
+	return "Unknown"
+}
+
+func (p *Packet) writeISyncStr(sb *strings.Builder) {
+	fmt.Fprintf(sb, "(%s); ", isyncReasonName(p.ISyncInfo.Reason))
 	if !p.ISyncInfo.NoAddress {
 		if p.ISyncInfo.HasLSipAddr {
 			fmt.Fprintf(sb, "Data Instr Addr=0x%08x; ", uint32(p.Addr))
@@ -621,18 +622,7 @@ func (p *Packet) ISAStr() string {
 }
 
 func (p *Packet) ISyncStr() string {
-	switch p.ISyncInfo.Reason {
-	case ocsd.ISyncPeriodic:
-		return "Periodic"
-	case ocsd.ISyncTraceEnable:
-		return "Trace Enable"
-	case ocsd.ISyncTraceRestartAfterOverflow:
-		return "Restart Overflow"
-	case ocsd.ISyncDebugExit:
-		return "Debug Exit"
-	default:
-		return "Unknown"
-	}
+	return isyncReasonName(p.ISyncInfo.Reason)
 }
 
 func (p *Packet) AtomStr() string {
