@@ -95,7 +95,9 @@ func TestTraceListerGoldens(t *testing.T) {
 			if strings.HasSuffix(tc.name, "juno_r1_1_badopcode.ppl") {
 				t.Setenv("OPENCSD_ERR_ON_AA64_BAD_OPCODE", "1")
 			}
-
+			if strings.HasSuffix(tc.name, "juno_r1_1_rangelimit.ppl") {
+				t.Setenv("OPENCSD_INSTR_RANGE_LIMIT", "100")
+			}
 			outPath := args[3]
 			err := run(args)
 			if tc.expectedRunError == "" {
@@ -214,10 +216,7 @@ func explicitTraceListerGoldenCases(t *testing.T) []listerGoldenCase {
 		{decoder: "etmv4", goldenName: "juno_r1_1", snapshotName: "juno_r1_1"},
 		{decoder: "etmv4", goldenName: "juno_r1_1_badopcode", snapshotName: "juno_r1_1"},
 		{decoder: "etmv4", goldenName: "juno_r1_1_badopcode_flag", snapshotName: "juno_r1_1"},
-		{
-			decoder: "etmv4", goldenName: "juno_r1_1_rangelimit", snapshotName: "juno_r1_1",
-			normalizeReason: "legacy ETMv4 range-limit recovery behavior differs from C++ golden output",
-		},
+		{decoder: "etmv4", goldenName: "juno_r1_1_rangelimit", snapshotName: "juno_r1_1"},
 		{
 			decoder:            "etmv4",
 			goldenName:         "test-file-mem-offsets",
